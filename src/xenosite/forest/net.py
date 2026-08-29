@@ -6,6 +6,7 @@ from rdkit.Chem.rdchem import Mol
 from typing import Generator
 from xenosite.forest.base import AtomTracker
 from xenosite.forest import rulesets
+from xenosite.forest.utils import unmapped_smiles
 import ast
 import tqdm
 
@@ -25,8 +26,13 @@ class Rxn(NamedTuple):
 
 
 def reordering(mol: Mol):
-    reorder = ast.literal_eval(mol.GetProp("_smilesAtomOutputOrder"))
-    return {v: n for n, v in enumerate(reorder)}
+    """Map mol GetIdx() -> position in unmapped canonical SMILES output order."""
+    copy = Mol(mol)
+    for atom in copy.GetAtoms():
+        atom.SetAtomMapNum(0)
+    MolToSmiles(copy, isomericSmiles=False)
+    order = ast.literal_eval(copy.GetProp("_smilesAtomOutputOrder"))
+    return {v: n for n, v in enumerate(order)}
 
 
 def metabolites(rule: rulesets.RuleSet, reactant: str) -> Generator[Rxn, None, None]:
@@ -101,10 +107,10 @@ class MetaboliteNetwork(nx.DiGraph):
         if isinstance(x, str):
             m = MolFromSmiles(x)
             assert m
-            return MolToSmiles(m, isomericSmiles=False)
+            return unmapped_smiles(m, isomericSmiles=False)
 
         if isinstance(x, Mol):
-            return MolToSmiles(x, isomericSmiles=False)
+            return unmapped_smiles(x, isomericSmiles=False)
 
         raise ValueError(f"Invalid type {type(x)}")
 

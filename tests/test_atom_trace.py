@@ -108,6 +108,9 @@ def test_do_not_tag_atoms_skips_tags_maps_reorder():
 class _CarbonToOxygen(SmartsReactionRule):
     smarts = ["[C:1]Cl>>[O:1].[Cl:2]"]
 
+    def __init__(self):
+        super().__init__(name="CarbonToOxygen")
+
 
 def test_element_change_oxygen_is_not_added():
     mol = MolFromSmiles("CCl")
@@ -167,9 +170,16 @@ def test_trace_every_rule(rule_cls):
         if atom.HasProp("react_atom_idx"):
             assert atom_no(atom.GetIdx()) not in t.added()
 
-    smi = MolToSmiles(p, canonical=False)
-    maps = [int(x) for x in re.findall(r":(\d+)", smi)]
-    assert maps == sorted(maps)
+    # Conserved atoms appear in origin order on the mol (unmapped insertions allowed).
+    # canonical=False SMILES follows this layout for chains; rings may DFS.
+    origins = []
+    for atom in p.GetAtoms():
+        if atom.GetAtomicNum() == 1:
+            continue
+        orig = t.origin(atom_no(atom.GetIdx()))
+        if orig is not None:
+            origins.append(orig)
+    assert origins == sorted(origins)
 
 
 def test_multistep_bfs_maps_refer_to_original_carbons():

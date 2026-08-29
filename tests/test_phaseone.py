@@ -1,5 +1,6 @@
 from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
 from xenosite.forest import rules, bfs
+from xenosite.forest.utils import unmapped_smiles
 import pytest
 
 
@@ -30,7 +31,7 @@ def cmp_pathway(pathway, target):
 
     assert smi == target[0]
     assert sites == target[1]
-    assert [MolToSmiles(m) for m in path] == [MolToSmiles(MolFromSmiles(s)) for s in target[2]]  # type: ignore
+    assert [unmapped_smiles(m) for m in path] == [MolToSmiles(MolFromSmiles(s)) for s in target[2]]  # type: ignore
 
 
 def test_dehydrogenation():

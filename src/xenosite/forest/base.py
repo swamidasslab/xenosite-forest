@@ -9,7 +9,7 @@ import re
 from collections import defaultdict, deque
 
 # Third Party
-from .utils import clean, merge, load
+from .utils import clean, merge, load, unmapped_smiles
 from rdkit import Chem, rdBase
 from rdkit.Chem.rdmolfiles import (
     MolToSmiles,
@@ -47,7 +47,7 @@ def can_smi(line="", rdmol=None):
 
     if rdmol:
         SanitizeMol(rdmol, catchErrors=True)
-        line = MolToSmiles(rdmol)
+        line = unmapped_smiles(rdmol)
 
     if "." in line:
         return list(itertools.chain(*[can_smi(line=x) for x in line.split(".")]))
@@ -57,7 +57,7 @@ def can_smi(line="", rdmol=None):
 
     rdmol = MolFromSmiles(smi)
     if rdmol:
-        out = MolToSmiles(rdmol)
+        out = unmapped_smiles(rdmol)
     else:
         out = smi
 
@@ -232,7 +232,6 @@ class AtomTracker(object):
                 initial_tags[idx] = {"idx": [idx], "depth": [0]}
 
             self._save_tags(mol, initial_tags)
-            self._stamp_origin_maps(mol, initial_tags)
 
     def tag(self, product, reactant, strict=True, **kwargs):
         """Copies all atom tags from reactant and updates the tags in product."""
@@ -451,9 +450,8 @@ class AtomTracker(object):
                 rec["idx"][i] = old_to_new[rec["idx"][i]]
             self._save_tags(product, tags)
 
-        self.add_current_idx_as_atom_prop(
-            product, propname=self.previous_index_prop_name
-        )
+        # Keep current_idx as the reactant GetIdx() so a wrapping RuleSet.metabolize
+        # can tag() again. Next-step metabolize resets it via add_current_idx_as_atom_prop.
         self._stamp_origin_maps(product, tags, level=0)
         return product
 
@@ -864,7 +862,7 @@ class QueryMol(object):
 
         all_paths = {}
 
-            current2originalidx = {
+        current2originalidx = {
             a.GetIdx(): int(a.GetProp("idx"))
             for a in mol.GetAtoms()
             if a.GetAtomicNum() != 0
@@ -1407,6 +1405,8 @@ class ReactionRule(AtomTracker):
             unique = False
             unique_smi = []
 
+        # Maps must not be present for CanonicalRankAtoms or SMARTS matching.
+        self._clear_atom_maps(mol)
         topol_equiv = self.topol_equiv(mol)
         if only_emit_topologically_distinct_sites:
             try:
@@ -1417,7 +1417,6 @@ class ReactionRule(AtomTracker):
 
         tagging = tag_atoms and not do_not_tag_atoms
         if tagging:
-            self._clear_atom_maps(mol)
             self.initialize_tags(mol)
             AtomTracker.add_current_idx_as_atom_prop(
                 mol, propname=AtomTracker.previous_index_prop_name
@@ -1509,7 +1508,7 @@ class ReactionRule(AtomTracker):
             if tuple(site) in sites:
 
                 if just_smiles:
-                    yield list(map(MolToSmiles, metabolite))
+                    yield list(map(unmapped_smiles, metabolite))
 
                 else:
                     yield tuple(site), metabolite
