@@ -57,16 +57,19 @@ Useful flags: `--all-paths`, `--depth N`, `--phase1` (Phase I site strings), `--
 
 ## Rulesets and papers
 
-Pass these names to `bfs(..., ruleset=...)` or `load_ruleset(...)`. Full rule lists, aliases, and BibTeX are in **[`docs/rulesets.md`](docs/rulesets.md)**.
+Pass these names to `bfs(..., ruleset=...)` or `load_ruleset(...)`. Full rule lists, Rainbow colors/hex codes, aliases, and BibTeX are in **[`docs/rulesets.md`](docs/rulesets.md)**.
 
 | Ruleset | What it enumerates | Matched paper |
 | --- | --- | --- |
-| `PhaseOneRS` | Phase I in five Rainbow colors (SO, DH, HD, RD, UO) | Dang et al., Metabolic Rainbow, *JCIM* 2020. DOI [10.1021/acs.jcim.9b00836](https://doi.org/10.1021/acs.jcim.9b00836) |
+| `PhaseOneRS` | Phase I: SO, UO, DH, HD, RD | Dang et al., Metabolic Rainbow, *JCIM* 2020. DOI [10.1021/acs.jcim.9b00836](https://doi.org/10.1021/acs.jcim.9b00836) |
+| `SO` / `UO` / `DH` / `HD` / `RD` | One Rainbow color each (see hex table in docs) | Same Rainbow paper; Forest rule lists differ slightly for HD/RD/DH |
 | `QuinoneFormationRS` (`QF`) | Quinone, quinone-imine, and quinone-methide structures | Hughes & Swamidass, *Chem. Res. Toxicol.* 2017. DOI [10.1021/acs.chemrestox.6b00385](https://doi.org/10.1021/acs.chemrestox.6b00385) |
 | `Bioactivation` (`BA`) | Quinone, epoxidation, nitroaromatic reduction, thiophene S-oxidation | Hughes et al., *Chem. Res. Toxicol.* 2021. DOI [10.1021/acs.chemrestox.0c00417](https://doi.org/10.1021/acs.chemrestox.0c00417) |
 | `Full` | Complete Metabolic Forest generator (Phase I, conjugations, quinone, tautomerization) | Hughes et al., Metabolic Forest, *JCIM* 2020. DOI [10.1021/acs.jcim.0c00360](https://doi.org/10.1021/acs.jcim.0c00360) |
 
-Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://doi.org/10.1021/acscentsci.5b00131)), N-dealkylation ([10.1021/acs.chemrestox.7b00191](https://doi.org/10.1021/acs.chemrestox.7b00191)), UGT glucuronidation ([10.1093/bioinformatics/btw350](https://doi.org/10.1093/bioinformatics/btw350)).
+Rainbow colorblind-safe hex (Wong / Okabe–Ito, closest to the paper figures): **SO** Stable Oxygenation red `#D55E00`, **UO** Unstable Oxygenation orange `#E69F00`, **DH** Dehydrogenation green `#009E73`, **HD** Hydrolysis blue `#56B4E9`, **RD** Reduction purple `#CC79A7`.
+
+Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://doi.org/10.1021/acscentsci.5b00131)), N-dealkylation ([10.1021/acs.chemrestox.7b00191](https://doi.org/10.1021/acs.chemrestox.7b00191)), UGT glucuronidation ([10.1093/bioinformatics/btw350](https://doi.org/10.1093/bioinformatics/btw350)), glutathione reactivity ([10.1021/acs.chemrestox.5b00017](https://doi.org/10.1021/acs.chemrestox.5b00017)).
 
 ## Documentation
 
@@ -113,6 +116,8 @@ cd xenosite-metabolite
 uv sync --extra network --group dev
 uv run pytest -n auto
 ```
+
+Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) (setuptools-scm). Tag a release as `vX.Y.Z` (for example `v0.1.0`). On that commit the version is `X.Y.Z`. On later untagged commits it becomes the next patch with a dev suffix and short commit, for example `0.1.1.dev3+gabc1234`. Read it at runtime as `xenosite.metabolite.__version__`.
 
 ## License
 
