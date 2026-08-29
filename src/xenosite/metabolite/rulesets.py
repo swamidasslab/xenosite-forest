@@ -168,21 +168,25 @@ class RuleSet(Phase1Site, ReactionRule):
 
     >>> reactant = Chem.MolFromSmiles("CC")
     >>> product = Chem.MolFromSmiles("OCCO")
-    >>> smi,path,rdmols = next(StableOxygenationRS.find_path(reactant,product,depth=2,phase1=True))
-    >>> path
-        [('Hydroxylation', frozenset({'1.h'})), ('Hydroxylation', frozenset({'3.h'}))]
+    >>> smi, path, rdmols = next(StableOxygenationRS.find_path(reactant, product, depth=2, phase1=True))
+    >>> [name for name, site in path]
+    ['Hydroxylation', 'Hydroxylation']
+    >>> [sorted(site) for name, site in path]
+    [['1.h'], ['3.h']]
 
     >>> reactant = Chem.MolFromSmiles("OC=CC=CC=CC=CN")
     >>> product = Chem.MolFromSmiles('N=CC=CC=CC=CC=O')
-    >>> smi,path,rdmols = next(DehydrogenationRS.find_path(reactant,product,phase1=True))
-    >>> path
-        [('Dehydrogenation', frozenset({'1.h', '10.h'}))]
+    >>> smi, path, rdmols = next(DehydrogenationRS.find_path(reactant, product, phase1=True))
+    >>> path[0][0]
+    'Dehydrogenation'
+    >>> sorted(path[0][1])
+    ['1.h', '10.h']
 
     >>> reactant = Chem.MolFromSmiles("C=C")
     >>> product = Chem.MolFromSmiles('C1OC1')
-    >>> smi,path,rdmols = next(StableOxygenationRS.find_path(reactant,product,phase1=True))
-    >>> path
-        [('Epoxidation', frozenset({'1.2'}))]
+    >>> smi, path, rdmols = next(StableOxygenationRS.find_path(reactant, product, phase1=True))
+    >>> path[0][0], sorted(path[0][1])
+    ('Epoxidation', ['1.2'])
 
 
    """
