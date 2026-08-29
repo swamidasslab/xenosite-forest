@@ -1,0 +1,84 @@
+# Tag-gated release: a v* tag only produces release artifacts if tests pass.
+# Pushing a tag always creates the git tag; this workflow refuses to publish
+# a GitHub Release (and later PyPI) unless the suite is green.
+#
+# Harder enforcement (block creating tags unless checks pass) needs a GitHub
+# Ruleset on tag refs requiring this workflow — optional org/repo setting.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package and test extras
+        run: uv sync --extra network --group dev
+      - name: Show package version
+        run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
+      - name: Require clean release version on tags
+        # Reject dirty/dev/local versions so PyPI never sees +g… tags by mistake.
+        run: |
+          ver=$(uv run python -c "import xenosite.forest as m; print(m.__version__)")
+          echo "version=$ver"
+          case "$ver" in
+            *dev*|*+*|*.d[0-9]*)
+              echo "Tagged builds must resolve to a clean X.Y.Z (got $ver)"
+              echo "Tag a clean commit and ensure the working tree matches the tag."
+              exit 1
+              ;;
+          esac
+      - name: Run tests in parallel
+        run: uv run pytest -n auto
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

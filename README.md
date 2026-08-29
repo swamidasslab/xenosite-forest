@@ -119,6 +119,8 @@ uv run pytest -n auto
 
 Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) (setuptools-scm). Tag a release as `vX.Y.Z` (for example `v0.1.0`). On that commit the version is `X.Y.Z`. On later untagged commits it becomes the next patch with a dev suffix and short commit, for example `0.1.1.dev3+gabc1234`. Read it at runtime as `xenosite.forest.__version__`.
 
+Pushing a `v*` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml): tests must pass and the resolved version must be a clean `X.Y.Z` before a GitHub Release (and dist artifacts) are published. A red tag workflow means do not treat that tag as released. To *block* creating tags unless checks pass, add a GitHub Ruleset on `refs/tags/v*` that requires the `release` / `test` status checks.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
