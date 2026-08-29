@@ -45,7 +45,7 @@ for site, products in rules.Hydroxylation().metabolites(Chem.MolFromSmiles("CCC"
 print(sorted({rule.name for rule in PhaseOneRS}))
 ```
 
-A longer walkthrough is in [`examples/tutorial.ipynb`](examples/tutorial.ipynb). API notes are in [`docs/usage.md`](docs/usage.md).
+A longer walkthrough is in [`examples/tutorial.ipynb`](examples/tutorial.ipynb). API notes are in [`docs/usage.md`](docs/usage.md). Rulesets and their papers are in [`docs/rulesets.md`](docs/rulesets.md).
 
 ### Command line
 
@@ -55,9 +55,23 @@ xenosite-metabolite CCO CC=O --ruleset PhaseOneRS --depth 1
 
 Useful flags: `--all-paths`, `--depth N`, `--phase1` (Phase I site strings), `--max N`, `--ruleset NAME`.
 
+## Rulesets and papers
+
+Pass these names to `bfs(..., ruleset=...)` or `load_ruleset(...)`. Full rule lists, aliases, and BibTeX are in **[`docs/rulesets.md`](docs/rulesets.md)**.
+
+| Ruleset | What it enumerates | Matched paper |
+| --- | --- | --- |
+| `PhaseOneRS` | Phase I in five Rainbow colors (SO, DH, HD, RD, UO) | Dang et al., Metabolic Rainbow, *JCIM* 2020. DOI [10.1021/acs.jcim.9b00836](https://doi.org/10.1021/acs.jcim.9b00836) |
+| `QuinoneFormationRS` (`QF`) | Quinone, quinone-imine, and quinone-methide structures | Hughes & Swamidass, *Chem. Res. Toxicol.* 2017. DOI [10.1021/acs.chemrestox.6b00385](https://doi.org/10.1021/acs.chemrestox.6b00385) |
+| `Bioactivation` (`BA`) | Quinone, epoxidation, nitroaromatic reduction, thiophene S-oxidation | Hughes et al., *Chem. Res. Toxicol.* 2021. DOI [10.1021/acs.chemrestox.0c00417](https://doi.org/10.1021/acs.chemrestox.0c00417) |
+| `Full` | Complete Metabolic Forest generator (Phase I, conjugations, quinone, tautomerization) | Hughes et al., Metabolic Forest, *JCIM* 2020. DOI [10.1021/acs.jcim.0c00360](https://doi.org/10.1021/acs.jcim.0c00360) |
+
+Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://doi.org/10.1021/acscentsci.5b00131)), N-dealkylation ([10.1021/acs.chemrestox.7b00191](https://doi.org/10.1021/acs.chemrestox.7b00191)), UGT glucuronidation ([10.1093/bioinformatics/btw350](https://doi.org/10.1093/bioinformatics/btw350)).
+
 ## Documentation
 
-- **[`docs/usage.md`](docs/usage.md)** — public API, rulesets, and pathway search
+- **[`docs/rulesets.md`](docs/rulesets.md)** — every built-in ruleset, Rainbow colors, and publication BibTeX
+- **[`docs/usage.md`](docs/usage.md)** — public API and pathway search
 - **[`examples/tutorial.ipynb`](examples/tutorial.ipynb)** — interactive tutorial
 - **[xenosite.org](https://xenosite.org)** — XenoSite models for sites of metabolism and reactivity
 

@@ -61,6 +61,8 @@ path = next(rs.find_path(reactant, product, depth=2))
 
 Built-in names include `Full`, `PhaseOneRS`, `Bioactivation`, `QuinoneFormationRS`, and the Phase I groups `SO`, `DH`, `HD`, `RD`, and `UO`. Pass any of those strings to `bfs(..., ruleset=...)` or `load_ruleset(...)`.
 
+Which ruleset matches which paper (Rainbow, quinone, bioactivation, and others) is in **[rulesets.md](rulesets.md)**.
+
 ## Command line
 
 ```bash

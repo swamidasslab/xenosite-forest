@@ -59,6 +59,7 @@ include = [
     "src/xenosite",
     "tests",
     "examples",
+    "docs",
     "LICENSE",
     "README.md",
     "CITATION.cff",
