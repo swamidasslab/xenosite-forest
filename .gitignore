@@ -1,6 +1,9 @@
 # Caches and virtualenvs
 .venv/
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 .hypothesis/
 .ruff_cache/
 .mypy_cache/
