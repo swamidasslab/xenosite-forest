@@ -26,4 +26,4 @@ jobs:
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
       - name: Run tests in parallel
-        run: uv run pytest -n auto
+        run: uv run pytest -n auto --cov=xenosite.forest --cov-report=term-missing

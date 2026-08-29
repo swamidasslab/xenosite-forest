@@ -51,7 +51,7 @@ jobs:
               ;;
           esac
       - name: Run tests in parallel
-        run: uv run pytest -n auto
+        run: uv run pytest -n auto --cov=xenosite.forest --cov-report=term-missing
 
   build:
     needs: test

@@ -116,6 +116,7 @@ git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
 uv sync --extra network --group dev
 uv run pytest -n auto
+uv run pytest --cov=xenosite.forest
 ```
 
 Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) (setuptools-scm). Tag a release as `vX.Y.Z` (for example `v0.1.0`). On that commit the version is `X.Y.Z`. On later untagged commits it becomes the next patch with a dev suffix and short commit, for example `0.1.1.dev3+gabc1234`. Read it at runtime as `xenosite.forest.__version__`.
