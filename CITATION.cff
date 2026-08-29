@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: If you use this software, please cite the Metabolic Forest paper.
+title: xenosite.metabolite
+authors:
+  - family-names: Hughes
+    given-names: Tyler B.
+  - family-names: Dang
+    given-names: Na Le
+  - family-names: Kumar
+    given-names: Ayush
+  - family-names: Flynn
+    given-names: Noah R.
+  - family-names: Swamidass
+    given-names: S. Joshua
+    email: swamidass@gmail.com
+license: MIT
+repository-code: https://github.com/swamidasslab/xenosite-metabolite
+url: https://xenosite.org
+preferred-citation:
+  type: article
+  title: "Metabolic Forest: Predicting the Diverse Structures of Drug Metabolites"
+  authors:
+    - family-names: Hughes
+      given-names: Tyler B.
+    - family-names: Dang
+      given-names: Na Le
+    - family-names: Kumar
+      given-names: Ayush
+    - family-names: Flynn
+      given-names: Noah R.
+    - family-names: Swamidass
+      given-names: S. Joshua
+  journal: Journal of Chemical Information and Modeling
+  year: 2020
+  volume: "60"
+  issue: "10"
+  pages: 4702-4716
+  doi: 10.1021/acs.jcim.0c00360
+  url: https://doi.org/10.1021/acs.jcim.0c00360
