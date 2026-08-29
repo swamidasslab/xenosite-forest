@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xenosite-metabolite"
+version = "0.1.0"
+description = "Metabolic Forest: enumerate metabolite structures from reaction rules"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "S. Joshua Swamidass", email = "swamidass@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "rdkit>=2023.9.1",
+]
+keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
+
+[project.optional-dependencies]
+network = [
+    "networkx>=3.2.1",
+    "tqdm>=4.66.0",
+]
+
+[project.urls]
+Homepage = "https://xenosite.org"
+Repository = "https://github.com/swamidasslab/xenosite-metabolite"
+Issues = "https://github.com/swamidasslab/xenosite-metabolite/issues"
+Paper = "https://doi.org/10.1021/acs.jcim.0c00360"
+
+[project.scripts]
+xenosite-metabolite = "xenosite.metabolite.bfs:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.1.0",
+    "pytest-xdist[psutil]>=3.5.0",
+    "pytest-timeout>=2.3.0",
+    "networkx>=3.2.1",
+    "tqdm>=4.66.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/xenosite"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/xenosite",
+    "tests",
+    "examples",
+    "LICENSE",
+    "README.md",
+    "CITATION.cff",
+]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules -n auto --timeout=120"
+testpaths = ["tests", "src/xenosite/metabolite"]
+pythonpath = ["src"]
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
+# Avoid collecting optional network helpers unless explicitly requested
+norecursedirs = [".git", ".venv", "build", "dist"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

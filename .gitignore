@@ -1,0 +1,32 @@
+# Caches and virtualenvs
+.venv/
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.python-version
+
+# Build artifacts
+build/
+dist/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.bak
+
+# Secrets and local env
+.env
+.env.*
+
+# Local data (never ship)
+data/
+_api
+.cenv
+.devcontainer
