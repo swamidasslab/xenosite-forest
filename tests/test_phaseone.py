@@ -1,5 +1,5 @@
 from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
-from xenosite.metabolite import rules, bfs
+from xenosite.forest import rules, bfs
 import pytest
 
 

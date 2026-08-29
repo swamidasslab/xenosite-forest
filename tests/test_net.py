@@ -2,8 +2,8 @@ import pytest
 
 nx = pytest.importorskip("networkx")
 
-from xenosite.metabolite.net import MetaboliteNetwork
-from xenosite.metabolite.phaseone import PhaseOneRS
+from xenosite.forest.net import MetaboliteNetwork
+from xenosite.forest.phaseone import PhaseOneRS
 
 
 def test_expand_and_paths():

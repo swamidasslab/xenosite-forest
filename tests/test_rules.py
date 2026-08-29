@@ -1,5 +1,5 @@
 import pytest
-from xenosite.metabolite import rules
+from xenosite.forest import rules
 from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
 from rdkit.Chem.rdmolops import RemoveStereochemistry
 

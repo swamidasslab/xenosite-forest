@@ -4,8 +4,8 @@ from typing import NamedTuple, Iterable
 from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
 from rdkit.Chem.rdchem import Mol
 from typing import Generator
-from xenosite.metabolite.base import AtomTracker
-from xenosite.metabolite import rulesets
+from xenosite.forest.base import AtomTracker
+from xenosite.forest import rulesets
 import ast
 import tqdm
 

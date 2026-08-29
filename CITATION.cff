@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: If you use this software, please cite the Metabolic Forest paper.
-title: xenosite.metabolite
+title: xenosite.forest
 authors:
   - family-names: Hughes
     given-names: Tyler B.
@@ -14,7 +14,7 @@ authors:
     given-names: S. Joshua
     email: swamidass@gmail.com
 license: MIT
-repository-code: https://github.com/swamidasslab/xenosite-metabolite
+repository-code: https://github.com/swamidasslab/xenosite-forest
 url: https://xenosite.org
 preferred-citation:
   type: article

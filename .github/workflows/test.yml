@@ -24,6 +24,6 @@ jobs:
       - name: Install package and test extras
         run: uv sync --extra network --group dev
       - name: Show package version
-        run: uv run python -c "import xenosite.metabolite as m; print(m.__version__)"
+        run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
       - name: Run tests in parallel
         run: uv run pytest -n auto

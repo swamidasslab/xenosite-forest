@@ -164,7 +164,7 @@ class RuleSet(Phase1Site, ReactionRule):
     """Collections of rules used to generate metabolic pahtways.
 
     >>> from rdkit import Chem
-    >>> from xenosite.metabolite.rulesets import StableOxygenationRS, DehydrogenationRS
+    >>> from xenosite.forest.rulesets import StableOxygenationRS, DehydrogenationRS
 
     >>> reactant = Chem.MolFromSmiles("CC")
     >>> product = Chem.MolFromSmiles("OCCO")

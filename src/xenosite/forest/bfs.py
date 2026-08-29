@@ -51,7 +51,7 @@ def bfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="xenosite-metabolite",
+        prog="xenosite-forest",
         description="Find metabolic pathways between reactant and product SMILES.",
     )
     parser.add_argument(

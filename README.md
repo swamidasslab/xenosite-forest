@@ -1,4 +1,4 @@
-# xenosite.metabolite
+# xenosite.forest
 
 Python implementation of **Metabolic Forest**: enumerate explicit metabolite structures from reaction rules, and search pathways that connect a reactant to a putative product.
 
@@ -9,19 +9,19 @@ If you use this software, please cite the Metabolic Forest paper (DOI and BibTeX
 ## Install
 
 ```bash
-uv add xenosite-metabolite
+uv add xenosite-forest
 ```
 
 or
 
 ```bash
-pip install xenosite-metabolite
+pip install xenosite-forest
 ```
 
 Optional NetworkX helpers for building a metabolite graph:
 
 ```bash
-uv add "xenosite-metabolite[network]"
+uv add "xenosite-forest[network]"
 ```
 
 Requires **Python 3.10+** and RDKit.
@@ -30,7 +30,7 @@ Requires **Python 3.10+** and RDKit.
 
 ```python
 from rdkit import Chem
-from xenosite.metabolite import bfs, rules, PhaseOneRS
+from xenosite.forest import bfs, rules, PhaseOneRS
 
 # Pathway from ethanol to acetaldehyde
 smiles, steps, mols = next(bfs(["CCO", "CC=O"], ruleset="PhaseOneRS"))
@@ -50,7 +50,7 @@ A longer walkthrough is in [`examples/tutorial.ipynb`](examples/tutorial.ipynb).
 ### Command line
 
 ```bash
-xenosite-metabolite CCO CC=O --ruleset PhaseOneRS --depth 1
+xenosite-forest CCO CC=O --ruleset PhaseOneRS --depth 1
 ```
 
 Useful flags: `--all-paths`, `--depth N`, `--phase1` (Phase I site strings), `--max N`, `--ruleset NAME`.
@@ -78,7 +78,7 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[`examples/tutorial.ipynb`](examples/tutorial.ipynb)** — interactive tutorial
 - **[xenosite.org](https://xenosite.org)** — XenoSite models for sites of metabolism and reactivity
 
-Import the package as `xenosite.metabolite`. `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be installed alongside this one.
+Import the package as `xenosite.forest`. `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be installed alongside this one.
 
 ## Citation
 
@@ -111,13 +111,13 @@ A machine-readable citation is also in [`CITATION.cff`](CITATION.cff).
 ## Development
 
 ```bash
-git clone https://github.com/swamidasslab/xenosite-metabolite.git
-cd xenosite-metabolite
+git clone https://github.com/swamidasslab/xenosite-forest.git
+cd xenosite-forest
 uv sync --extra network --group dev
 uv run pytest -n auto
 ```
 
-Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) (setuptools-scm). Tag a release as `vX.Y.Z` (for example `v0.1.0`). On that commit the version is `X.Y.Z`. On later untagged commits it becomes the next patch with a dev suffix and short commit, for example `0.1.1.dev3+gabc1234`. Read it at runtime as `xenosite.metabolite.__version__`.
+Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) (setuptools-scm). Tag a release as `vX.Y.Z` (for example `v0.1.0`). On that commit the version is `X.Y.Z`. On later untagged commits it becomes the next patch with a dev suffix and short commit, for example `0.1.1.dev3+gabc1234`. Read it at runtime as `xenosite.forest.__version__`.
 
 ## License
 

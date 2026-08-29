@@ -1,5 +1,5 @@
 import pytest
-from xenosite.metabolite.base import AromaticSystems
+from xenosite.forest.base import AromaticSystems
 from rdkit.Chem.rdmolfiles import MolFromSmiles
 
 

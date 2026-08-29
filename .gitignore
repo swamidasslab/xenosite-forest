@@ -13,7 +13,7 @@ __pycache__/
 # Build artifacts
 build/
 dist/
-src/xenosite/metabolite/_version.py
+src/xenosite/forest/_version.py
 
 # Editors and OS
 .vscode/

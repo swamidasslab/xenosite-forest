@@ -1,6 +1,6 @@
 from rdkit.Chem.rdchem import Mol
-from xenosite.metabolite.base import AtomTracker
-from xenosite.metabolite.bfs import bfs
+from xenosite.forest.base import AtomTracker
+from xenosite.forest.bfs import bfs
 from collections import defaultdict
 
 

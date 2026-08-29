@@ -1,7 +1,7 @@
 """
 Tests adapted from:
-xenosite.metabolite.tests.Debug
-xenosite.metabolite.tests.Debug2
+xenosite.forest.tests.Debug
+xenosite.forest.tests.Debug2
 """
 
 from rdkit.Chem.rdmolfiles import (
@@ -10,9 +10,9 @@ from rdkit.Chem.rdmolfiles import (
     # MolToSmiles,
 )
 from rdkit.Chem.rdmolops import SanitizeMol
-from xenosite.metabolite import rules
-from xenosite.metabolite.rulesets import RuleSet
-from xenosite.metabolite.base import can_smi
+from xenosite.forest import rules
+from xenosite.forest.rulesets import RuleSet
+from xenosite.forest.base import can_smi
 import collections
 import pytest
 

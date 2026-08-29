@@ -52,7 +52,7 @@ ReductiveDehalogenation bonds
 SulfurOxidation atoms
 SulfurReduction bonds
 
->>> from xenosite.metabolite.bfs import bfs
+>>> from xenosite.forest.bfs import bfs
 >>> next(bfs(['CCN','CCO'],phase1=True,outmols=False))
 "(['CCN', 'CCO'], [('Dealkylation', frozenset({'2.3'}))])"
 

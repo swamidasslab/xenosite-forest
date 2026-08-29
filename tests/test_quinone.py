@@ -1,8 +1,8 @@
 import pytest
-from xenosite.metabolite.rules import QuinoneFormation
+from xenosite.forest.rules import QuinoneFormation
 from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
 from rdkit.Chem.rdmolops import RemoveStereochemistry
-from xenosite.metabolite.base import AromaticSystems, Resonate
+from xenosite.forest.base import AromaticSystems, Resonate
 
 
 examples = [

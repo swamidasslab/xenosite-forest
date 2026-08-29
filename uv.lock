@@ -600,7 +600,7 @@ wheels = [
 ]
 
 [[package]]
-name = "xenosite-metabolite"
+name = "xenosite-forest"
 source = { editable = "." }
 dependencies = [
     { name = "rdkit" },

@@ -1,7 +1,7 @@
 import pytest
 from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
 from rdkit.Chem.rdmolops import RemoveStereochemistry
-from xenosite.metabolite.base import AromaticSystems, Resonate
+from xenosite.forest.base import AromaticSystems, Resonate
 
 from test_quinone import examples
 
