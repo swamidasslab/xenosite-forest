@@ -103,9 +103,9 @@ def test_matt_problem2():
     dealk_tests("Oc1c(C(=O)Nc2cccnc2)c(=O)n2CCc3cccc1c23")
 
 
-@pytest.mark.xfail(reason="needs working ndealk model")
-def test_matt_problem4(self):
-    rmol = MolFromMolBlock(self.nevirapine)
+@pytest.mark.xfail(reason="N-dealkylation site labeling on nevirapine is still incomplete")
+def test_matt_problem4():
+    rmol = MolFromSmiles(nevirapine)
 
     mg = RuleSet(rules=[rules.Dealkylation()])
 
@@ -131,7 +131,6 @@ def test_unique_metabolites():
 
             key = frozenset([model] + site)
             canonical_metabolites = set(can_smi(rdmol=m))
-            print(canonical_metabolites, metabolite_registry[key], key)
 
             assert not canonical_metabolites.issubset(metabolite_registry[key])
 

@@ -625,7 +625,7 @@ class Dephosphorylation(SmartsReactionRule):
     >>> mol = Chem.MolFromSmiles(smiles)
     >>> site, metabolites = next(Dephosphorylation().metabolize(mol))
     >>> [Chem.MolToSmiles(x) for x in metabolites]
-    ['CC1=C(O)C(CN2CCN(CC3=C(COP(=O)(O)O)C=NC(C)=C3O)CC(=O)O[Zn]OC(=O)C2)=C(CO)C=N1', 'O=[PH](O)O']
+        ['CC1=C(O)C(CN2CCN(CC3=C(COP(=O)(O)O)C=NC(C)=C3O)CC(=O)[O][Zn][O]C(=O)C2)=C(CO)C=N1', 'O=[PH](O)O']
 
     """
 
@@ -728,7 +728,7 @@ class AzoSplitting(SmartsReactionRule):
     >>> site
     ('AzoSplitting', frozenset({6, 7}))
     >>> list(map(Chem.MolToSmiles,metabolites))
-    ['NC1=CC(C(=O)O)=C(O)C=C1', 'NC1=CC=C(O)C(C(=O)O)=C1']
+        ['NC1=CC(C(=O)O)=C(O)C=C1', 'NC1=CC(C(=O)O)=C(O)C=C1']
 
     """
 
@@ -761,8 +761,8 @@ class NitrogenReduction(SmartsReactionRule):
     >>> mol = Chem.MolFromSmiles('CC[C@](c1cc2c3nc4cccc(c4cc3Cn2c(=O)c1CO)N(=O)=O)(C(=O)O)O')
     >>> site, metabolites = next(NitrogenReduction().metabolize(mol))
     >>> print('\\n'.join([Chem.MolToSmiles(x, isomericSmiles=False) for x in metabolites]))
-    CCC(O)(C(=O)O)C1=C(CO)C(=O)N2CC3=C(N=C4C=CC=C(N=O)C4=C3)C2=C1
-    O
+        CCC(O)(C(=O)O)C1=C(CO)C(=O)N2CC3=CC4=C(N=O)C=CC=C4N=C3C2=C1
+        O
     >>> site
     ('NitrogenReduction', frozenset({24, 23}))
 

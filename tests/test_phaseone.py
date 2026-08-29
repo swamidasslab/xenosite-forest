@@ -63,8 +63,6 @@ def test_dehydration1():
 def test_dehydrogenation1():
     result = next(bfs(["CCO", "C=CO"], phase1=True))
 
-    print(result)
-
     cmp_pathway(
         result,
         ("C=CO", [("Dehydrogenation", {"2.h", "1.h"})], ["CCO", "C=CO"]),
@@ -143,7 +141,7 @@ def test_dehydration2():
     )
 
 
-@pytest.mark.xfail(reason="broken cannonization?")
+@pytest.mark.xfail(reason="canonical SMILES mismatch for this nitro reduction path")
 def test_nitrogen_reduction1():
     result = next(
         bfs(

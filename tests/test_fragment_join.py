@@ -3,7 +3,7 @@ from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
 from rdkit.Chem.rdmolops import RemoveStereochemistry
 from xenosite.metabolite.base import AromaticSystems, Resonate
 
-from .test_quinone import examples
+from test_quinone import examples
 
 
 def can_mol(m):

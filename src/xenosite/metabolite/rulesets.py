@@ -96,7 +96,7 @@ class Phase1Site(object):
         >>> mol = Chem.MolFromSmiles("CCC")
         >>> original_sites = {"field":frozenset([0]), "field2" : frozenset([1])}
         >>> Phase1Site().add_topologically_equivalent_sites(mol, original_sites)
-        {'field2': frozenset([1]), 'field': frozenset([0, 2])}
+        {'field': frozenset({0, 2}), 'field2': frozenset({1})}
 
         """
         out = {}
@@ -118,7 +118,7 @@ class Phase1Site(object):
             for f in self.sdf_site_fields if mol.HasProp(f)
         }
         colors_to_sites = {
-            f: re.split('\s|,', v)
+            f: re.split(r'\s|,', v)
             for f, v in list(colors_to_sites.items()) if v
         }
         colors_to_sites = {
@@ -170,19 +170,19 @@ class RuleSet(Phase1Site, ReactionRule):
     >>> product = Chem.MolFromSmiles("OCCO")
     >>> smi,path,rdmols = next(StableOxygenationRS.find_path(reactant,product,depth=2,phase1=True))
     >>> path
-    [('Hydroxylation', frozenset(['1.h'])), ('Hydroxylation', frozenset(['3.h']))]
+        [('Hydroxylation', frozenset({'1.h'})), ('Hydroxylation', frozenset({'3.h'}))]
 
     >>> reactant = Chem.MolFromSmiles("OC=CC=CC=CC=CN")
     >>> product = Chem.MolFromSmiles('N=CC=CC=CC=CC=O')
     >>> smi,path,rdmols = next(DehydrogenationRS.find_path(reactant,product,phase1=True))
     >>> path
-    [('Dehydrogenation', frozenset(['10.h', '1.h']))]
+        [('Dehydrogenation', frozenset({'1.h', '10.h'}))]
 
     >>> reactant = Chem.MolFromSmiles("C=C")
     >>> product = Chem.MolFromSmiles('C1OC1')
     >>> smi,path,rdmols = next(StableOxygenationRS.find_path(reactant,product,phase1=True))
     >>> path
-    [('Epoxidation', frozenset(['1.2']))]
+        [('Epoxidation', frozenset({'1.2'}))]
 
 
    """
@@ -383,25 +383,25 @@ class RuleSet(Phase1Site, ReactionRule):
         >>> mol = Chem.MolFromSmiles('CC(C)C')
 
         >>> [x[0] for x in RS.metabolites(mol)]
-        [('Hydroxylation', frozenset([0])), ('Hydroxylation', frozenset([1]))]
+        [('Hydroxylation', frozenset({0})), ('Hydroxylation', frozenset({1}))]
 
         >>> [x[0] for x in RS.metabolites(mol,sites=frozenset([0]))]
-        [('Hydroxylation', frozenset([0]))]
+        [('Hydroxylation', frozenset({0}))]
 
         >>> [x[0] for x in RS.metabolites(mol,sites=frozenset([1]))]
-        [('Hydroxylation', frozenset([1]))]
+        [('Hydroxylation', frozenset({1}))]
 
         >>> [x[0] for x in RS.metabolites(mol,sites=frozenset([0,1]))]
-        [('Hydroxylation', frozenset([0])), ('Hydroxylation', frozenset([1]))]
+        [('Hydroxylation', frozenset({0})), ('Hydroxylation', frozenset({1}))]
 
         >>> RS2 = RuleSet([all_rules.Dealkylation(),all_rules.Hydroxylation()])
         >>> mol = Chem.MolFromSmiles('CC(C)C')
 
         >>> [x[0] for x in RS2.metabolites(mol,sites={'Hydroxylation':frozenset([0])})]
-        [('Hydroxylation', frozenset([0]))]
+        [('Hydroxylation', frozenset({0}))]
 
         >>> [x[0] for x in RS2.metabolites(mol)]
-        [('Dealkylation', frozenset([0, 1])), ('Dealkylation', frozenset([0, 1])), ('Dealkylation', frozenset([0, 1])), ('Hydroxylation', frozenset([0])), ('Hydroxylation', frozenset([1]))]
+        [('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Hydroxylation', frozenset({0})), ('Hydroxylation', frozenset({1}))]
 
 
         """

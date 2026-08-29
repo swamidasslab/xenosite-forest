@@ -89,7 +89,7 @@ def merge(intervals):
     """Merge a list of overlapping lists into a single list of disjoint sets.
 
     >>> merge([[0,1,2,3,4],[0,5,6],[7,8,9]])
-    [set([0, 1, 2, 3, 4, 5, 6]), set([8, 9, 7])]
+        [{0, 1, 2, 3, 4, 5, 6}, {8, 9, 7}]
 
     """
     if not intervals:

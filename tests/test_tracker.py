@@ -57,7 +57,6 @@ def test_tracker():
         r: dict = AtomTracker.tags(record, depth=d) # type: ignore
 
         for tag, info in list(r.items()):
-            print(tag, info)
             idx = info['idx'][info['depth'].index(d)]
 
             if depth in r:
