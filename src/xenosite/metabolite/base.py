@@ -8,7 +8,7 @@ import re
 from collections import defaultdict
 
 # Third Party
-from .utils import PyMolPredictorBase, clean, merge, load
+from .utils import clean, merge, load
 from rdkit import Chem, rdBase
 from rdkit.Chem.rdmolfiles import (
     MolToSmiles,
@@ -973,7 +973,8 @@ class EditMol(QueryMol):
         if isinstance(atom, int):
             atom = mol.GetAtomWithIdx(atom)
 
-        total_hydrogens = atom.GetNumExplicitHs() + atom.GetNumImplicitHs()
+        atom.UpdatePropertyCache(strict=False)
+        total_hydrogens = atom.GetTotalNumHs()
         if total_hydrogens > 0:
             atom.SetNoImplicit(True)
             atom.SetNumExplicitHs(total_hydrogens + change)
@@ -1178,20 +1179,9 @@ class Resonate(ConjugatedSystems, EditMol):
                 yield tuple(outputs)
 
 
-class ReactionRule(PyMolPredictorBase, AtomTracker):
+class ReactionRule(AtomTracker):
     """Template for all rules."""
 
-    # Unused methods from PyMolPredictorBase are set to None, based on
-    # https://docs.python.org/3/library/exceptions.html#NotImplementedError:
-    #  "(NotImplementedError)...should not be used to indicate that an operator or method is not
-    # meant to be supported at all in that case either leave the operator or method undefined or,
-    # if a subclass, set it to None."
-    predict = None
-    structure = None
-    all_structures = None
-    scored_metabolites = None
-    read = None
-    predict_structures = None
     sites_on = "atoms"
     phase1_sites_on = "bonds"
 

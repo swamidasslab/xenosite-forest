@@ -134,7 +134,7 @@ class MetaboliteNetwork(nx.DiGraph):
                     self.add_edge(*e)
                     self.edges[e]["rxn"] = self.edges[e].get("rxn", set())
                     self.edges[e]["rxn"].add(m)
-            except Exception as e:
-                print(f"Error expanding {n}")
+            except Exception:
+                pass
             finally:
                 self.nodes[n]["expanded"] = True

@@ -1,164 +1,126 @@
-"""Command line tool for performing BFS between a reactant and putative product."""
+"""Find metabolic pathways between a reactant and an optional product."""
 
-# Standard Library
 import argparse
 import sys
 
+from rdkit import rdBase
 
-# Third Party
-from .base import load
 from .phaseone import PhaseOneRS
-#from .report import AnnotatedReactions
 from .rulesets import RULESETS, load_ruleset
-from rdkit import Chem, rdBase
+from .utils import load
 
-RULESETS['PhaseOneRS'] = PhaseOneRS
+RULESETS["PhaseOneRS"] = PhaseOneRS
 
-# Prevents spammy rdkit messages
-rdBase.DisableLog('rdApp.*')
+rdBase.DisableLog("rdApp.*")
 
 
-def bfs(molstrings, ruleset='Full', termination_ruleset=None, **kwargs):
-    """Run bfs to find paths linking reactants and an optional putative product.
+def bfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
+    """Run BFS to find paths linking reactants and an optional putative product.
 
     Args:
-        - outmols: output rdmols and sites in addition to string
+        molstrings: SMILES strings, RDKit mols, or a mix.
+        ruleset: named ruleset, RuleSet instance, or list of those.
+        termination_ruleset: optional ruleset whose rule names stop expansion.
+        **kwargs: forwarded to RuleSet.find_path (depth, phase1, all_paths, ...).
     """
-
     inputs = load(molstrings)
 
     if None in inputs:
-        raise ValueError('Problem with input.')
+        raise ValueError("Problem with input.")
 
-    RST = load_ruleset(ruleset)
+    rules = load_ruleset(ruleset)
 
     if termination_ruleset is not None:
-        TRS = load_ruleset(termination_ruleset)
-        termination_rulenames = TRS.rulenames
+        termination_rulenames = load_ruleset(termination_ruleset).rulenames
     else:
         termination_rulenames = []
 
     if len(inputs) > 2:
         for num, mol in enumerate(inputs):
-            if not mol.HasProp('_Name'):
-                mol.SetProp('_Name', 'Molecule%d' % num)
-            for line in RST.find_path(
-                    mol, termination_rulenames=termination_rulenames,
-                    **kwargs):
-                yield line
+            if not mol.HasProp("_Name"):
+                mol.SetProp("_Name", "Molecule%d" % num)
+            yield from rules.find_path(
+                mol, termination_rulenames=termination_rulenames, **kwargs
+            )
+        return
 
-    else:
-
-        for line in RST.find_path(
-                *inputs, termination_rulenames=termination_rulenames,
-                **kwargs):
-            yield line
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='metfor')
-
-    parser.add_argument(
-        '-a',
-        '--all_paths',
-        action="store_true",
-        help="Output all valid paths, instead of just the first one.")
-
-    parser.add_argument('-b', '--do_not_tag_atoms', action='store_true')
-
-    parser.add_argument(
-        '-c', '--clean', action="store_true", help="do not circle SOMs")
-
-    parser.add_argument(
-        '-d', '--depth', default=1, type=int, help="The maximum search depth.")
-
-    parser.add_argument(
-        '-e',
-        '--phase1',
-        action='store_true',
-        help=
-        "Instead of outputting sites as frozensets, output Phase I site strings."
+    yield from rules.find_path(
+        *inputs, termination_rulenames=termination_rulenames, **kwargs
     )
 
-    parser.add_argument(
-        '-g',
-        '--align',
-        action='store_true',
-        help='Align each reaction based on maximum common substructure.')
 
-    parser.add_argument('-i', '--sites')
-
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="xenosite-metabolite",
+        description="Find metabolic pathways between reactant and product SMILES.",
+    )
     parser.add_argument(
-        '-l', '--limit_to_phase1_sites_in_sdf', action='store_true')
-
+        "molecules",
+        nargs="+",
+        help="Reactant SMILES, or reactant and product SMILES.",
+    )
     parser.add_argument(
-        '-m',
-        '--max',
-        type=int,
-        help="Terminate after returning a specified number of metabolites")
-
-    parser.add_argument(
-        '-n',
-        '--numbered',
+        "-a",
+        "--all-paths",
+        dest="all_paths",
         action="store_true",
-        help="Intersperse atom index numbered images.")
-
+        help="Output all valid paths, instead of just the first one.",
+    )
     parser.add_argument(
-        '-o', '--osdf', default='', help="File to which to save path(s)")
-
+        "-b",
+        "--do-not-tag-atoms",
+        dest="do_not_tag_atoms",
+        action="store_true",
+        help="Do not record atom-index tags on products.",
+    )
     parser.add_argument(
-        '-r',
-        '--ruleset',
-        default='Full',
-        help="Specifies the ruleset to be used.")
-
-    parser.add_argument('-t', '--atom_paths', action="store_true")
-
-    parser.add_argument('-u', '--metabolite_table', default='')
-
+        "-d",
+        "--depth",
+        default=1,
+        type=int,
+        help="Maximum search depth.",
+    )
     parser.add_argument(
-        '-w', '--row_num', help="add row numbers to html report")
-
+        "-e",
+        "--phase1",
+        action="store_true",
+        help="Format sites as Phase I strings instead of frozensets.",
+    )
     parser.add_argument(
-        '-x', '--html', help='html file to which to write report.')
-
-    parser.add_argument('-y', '--termination_ruleset')
-
+        "-m",
+        "--max",
+        dest="max_paths",
+        type=int,
+        help="Stop after returning this many paths.",
+    )
     parser.add_argument(
-        '-z',
-        '--pdf_dir',
-        help='Directory in which to save individual molecule PDFs.')
+        "-r",
+        "--ruleset",
+        default="Full",
+        help="Ruleset to use (default: Full).",
+    )
+    parser.add_argument(
+        "-y",
+        "--termination-ruleset",
+        dest="termination_ruleset",
+        help="Optional ruleset whose reactions terminate the search.",
+    )
 
-    # parser.add_argument(
-    # '-p',
-    # '--pdf_dir',
-    # action="store_true",
-    # help='Directory in which to save individual molecule PDFs.')
+    args = parser.parse_args(argv)
+    kwargs = {
+        "ruleset": args.ruleset,
+        "termination_ruleset": args.termination_ruleset,
+        "all_paths": args.all_paths,
+        "do_not_tag_atoms": args.do_not_tag_atoms,
+        "depth": args.depth,
+        "phase1": args.phase1,
+    }
 
-    ####################################################################################################
-
-    opts, args = parser.parse_known_args()
-
-    visualize = False
-    if opts.pdf_dir or opts.html or opts.osdf:
-
-        visualize = True
-        #AR = AnnotatedReactions(**vars(opts))
-
-    for rxnnum, (smi, rules_and_sites, mols) in enumerate(
-            bfs(args, **vars(opts))):
-
-        if opts.max and rxnnum >= opts.max:
+    for rxnnum, (smi, rules_and_sites, _mols) in enumerate(bfs(args.molecules, **kwargs)):
+        if args.max_paths is not None and rxnnum >= args.max_paths:
             break
+        sys.stdout.write(str((smi, rules_and_sites)) + "\n")
 
-        if visualize:
-            AR.add(
-                mols,
-                rules_and_sites=rules_and_sites,
-                rxnnum=rxnnum,
-                **vars(opts))
 
-        sys.stdout.write(str((smi, rules_and_sites)) + '\n')
-
-    if visualize:
-        AR(**vars(opts))
+if __name__ == "__main__":
+    main()
