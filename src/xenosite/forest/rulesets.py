@@ -69,6 +69,7 @@ class Phase1Site(object):
                  strict=False,
                  *args,
                  **kwargs):
+        # Site strings are 1-based atom numbers, same scale as AtomTrace / SMILES maps.
 
         self.index_root = index_root
         self.strict = strict

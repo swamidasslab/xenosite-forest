@@ -15,7 +15,7 @@ class Rxn(NamedTuple):
     product: str
     type: str
     site: tuple
-    map: tuple[tuple[int, ...], tuple[int, ...]]  # from reactant idx to product indx
+    map: tuple[tuple[int, ...], tuple[int, ...]]  # SMILES output order, not AtomTrace atom numbers
 
     def __eq__(self, other):
         return self[:-1] == other[:-1]
@@ -49,6 +49,8 @@ def metabolites(rule: rulesets.RuleSet, reactant: str) -> Generator[Rxn, None, N
         prod_reord = reordering(p)
         mapping = []
 
+        # Tag idx values are 0-based GetIdx(); remap to SMILES output order
+        # (not AtomTrace 1-based atom numbers).
         for _, info in record.items():
             if len(info["depth"]) != 2:
                 continue

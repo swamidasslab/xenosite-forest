@@ -7,7 +7,7 @@ Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI 
 ## Public API
 
 ```python
-from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS
+from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace
 ```
 
 | Symbol | Role |
@@ -18,6 +18,7 @@ from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULES
 | `load_ruleset(name)` | Look up a named ruleset (`"Full"`, `"PhaseOneRS"`, `"QuinoneFormationRS"`, …) |
 | `PhaseOneRS` | Phase I rules used in Metabolic Forest |
 | `RULESETS` | Registry of built-in rulesets |
+| `AtomTrace(mol)` | 1-based atom-mapping history on a tagged metabolite |
 
 `xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
 
@@ -33,6 +34,46 @@ for site, products in rules.QuinoneFormation().metabolites(mol):
 ```
 
 Each `site` is `(rule_name, atom_or_bond_indices)`. Products are RDKit molecules.
+
+## Indexing
+
+Two scales. Mixing them is the confusing part.
+
+| Scale | What | Values |
+| --- | --- | --- |
+| **Atom number** (public) | `AtomTrace`, SMILES `:N`, `GetAtomMapNum()`, Phase I `1.h` | **1-based.** `0` on a map number means unmapped / new, not atom zero. |
+| **Depth / step** | `t.depths`, `map(start_depth=0)`, reaction count | **0-based.** Depth 0 is the original reactant. These are not atom numbers. |
+| **RDKit index** (internal only) | `GetIdx()`, `react_atom_idx`, `current_idx`, `ATOM_INDEX_PATHS` | **0-based.** Never export. |
+
+Convert with `xenosite.forest.trace.atom_no` (GetIdx → atom number) and `rdkit_idx` (atom number → GetIdx).
+
+## Atom tracing
+
+After a reaction (unless `do_not_tag_atoms=True`), each product carries origin map numbers and an `AtomTrace`. Atom numbers are 1-based; depths are 0-based.
+
+```python
+from rdkit import Chem
+from xenosite.forest import AtomTrace, rules
+
+mol = Chem.MolFromSmiles("CCO")
+_, products = next(rules.Hydroxylation().metabolize(mol))
+p = products[0]
+t = AtomTrace(p)
+
+Chem.MolToSmiles(p, canonical=False)
+# e.g. [CH2:1](O)[CH2:2][OH:3]  — :N is origin at depth 0; the new O has no map
+
+t.map()       # {1: 1, 2: 3, 3: 4}  depth-0 atom number -> current atom number
+t.follow(1)   # (1, 1)
+t.origin(2)   # None if current atom 2 is the new O
+t.added()     # frozenset of new 1-based atom numbers
+t.removed()   # frozenset of depth-0 atom numbers that disappeared
+t.depths      # (0, 1)
+```
+
+Canonical `MolToSmiles` may scramble atom order; reactant-aligned order uses `canonical=False`. Map numbers still appear in canonical SMILES, so `:N` alignment works either way.
+
+`do_not_tag_atoms=True` skips tags, maps, and reorder.
 
 ## Search a pathway
 

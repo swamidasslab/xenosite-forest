@@ -9,6 +9,7 @@ from .bfs import bfs
 from .phaseone import PhaseOneRS
 from . import rules
 from .rulesets import RULESETS, RuleSet, load_ruleset
+from .trace import AtomTrace
 
 __all__ = [
     "__version__",
@@ -18,4 +19,5 @@ __all__ = [
     "RuleSet",
     "load_ruleset",
     "rules",
+    "AtomTrace",
 ]
