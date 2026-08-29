@@ -1,6 +1,15 @@
 # Tag-gated release: a v* tag only produces release artifacts if tests pass.
 # Pushing a tag always creates the git tag; this workflow refuses to publish
-# a GitHub Release (and later PyPI) unless the suite is green.
+# a GitHub Release / PyPI upload unless the suite is green.
+#
+# PyPI uses Trusted Publishing (OIDC) — no API token secret. One-time setup:
+#   1. GitHub → Settings → Environments → create "pypi"
+#   2. PyPI → Publishing → add pending trusted publisher:
+#        owner: swamidasslab
+#        repo: xenosite-forest
+#        workflow: release.yml
+#        environment: pypi
+# Docs: https://docs.pypi.org/trusted-publishers/
 #
 # Harder enforcement (block creating tags unless checks pass) needs a GitHub
 # Ruleset on tag refs requiring this workflow — optional org/repo setting.
@@ -82,3 +91,20 @@ jobs:
           files: dist/*
           generate_release_notes: true
           fail_on_unmatched_files: true
+
+  pypi-publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/xenosite-forest
+    permissions:
+      id-token: write # mandatory for Trusted Publishing (OIDC)
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
