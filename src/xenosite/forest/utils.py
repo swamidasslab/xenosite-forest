@@ -5,6 +5,14 @@ import itertools
 from rdkit import Chem
 
 
+def unmapped_smiles(mol, **kwargs):
+    """SMILES with atom-map numbers cleared so structure identity ignores `:N` maps."""
+    mol = Chem.Mol(mol)
+    for atom in mol.GetAtoms():
+        atom.SetAtomMapNum(0)
+    return Chem.MolToSmiles(mol, **kwargs)
+
+
 def load(inp, single=False):
     """Construct RDKit molecules from SMILES, files, mol blocks, or existing mols.
 

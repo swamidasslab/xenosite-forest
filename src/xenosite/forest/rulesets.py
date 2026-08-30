@@ -8,6 +8,7 @@ from collections import OrderedDict, defaultdict
 from . import rules as all_rules
 from .base import (AtomTracker, ReactionRule, can_smi,
                                         clean)
+from .utils import unmapped_smiles
 from rdkit import Chem, rdBase
 
 # Prevents spammy rdkit messages
@@ -69,6 +70,7 @@ class Phase1Site(object):
                  strict=False,
                  *args,
                  **kwargs):
+        # Site strings are 1-based atom numbers, same scale as AtomTrace / SMILES maps.
 
         self.index_root = index_root
         self.strict = strict
@@ -351,7 +353,7 @@ class RuleSet(Phase1Site, ReactionRule):
             
             fsite = sorted(sites)
 
-            fline = str((list(map(Chem.MolToSmiles, mols)), fsite))
+            fline = str((list(map(unmapped_smiles, mols)), fsite))
 
             if fline not in seen:
                 seen.add(fline)

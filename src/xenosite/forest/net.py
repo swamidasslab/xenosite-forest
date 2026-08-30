@@ -6,6 +6,7 @@ from rdkit.Chem.rdchem import Mol
 from typing import Generator
 from xenosite.forest.base import AtomTracker
 from xenosite.forest import rulesets
+from xenosite.forest.utils import unmapped_smiles
 import ast
 import tqdm
 
@@ -15,7 +16,7 @@ class Rxn(NamedTuple):
     product: str
     type: str
     site: tuple
-    map: tuple[tuple[int, ...], tuple[int, ...]]  # from reactant idx to product indx
+    map: tuple[tuple[int, ...], tuple[int, ...]]  # SMILES output order, not AtomTrace atom numbers
 
     def __eq__(self, other):
         return self[:-1] == other[:-1]
@@ -25,8 +26,13 @@ class Rxn(NamedTuple):
 
 
 def reordering(mol: Mol):
-    reorder = ast.literal_eval(mol.GetProp("_smilesAtomOutputOrder"))
-    return {v: n for n, v in enumerate(reorder)}
+    """Map mol GetIdx() -> position in unmapped canonical SMILES output order."""
+    copy = Mol(mol)
+    for atom in copy.GetAtoms():
+        atom.SetAtomMapNum(0)
+    MolToSmiles(copy, isomericSmiles=False)
+    order = ast.literal_eval(copy.GetProp("_smilesAtomOutputOrder"))
+    return {v: n for n, v in enumerate(order)}
 
 
 def metabolites(rule: rulesets.RuleSet, reactant: str) -> Generator[Rxn, None, None]:
@@ -49,6 +55,8 @@ def metabolites(rule: rulesets.RuleSet, reactant: str) -> Generator[Rxn, None, N
         prod_reord = reordering(p)
         mapping = []
 
+        # Tag idx values are 0-based GetIdx(); remap to SMILES output order
+        # (not AtomTrace 1-based atom numbers).
         for _, info in record.items():
             if len(info["depth"]) != 2:
                 continue
@@ -99,10 +107,10 @@ class MetaboliteNetwork(nx.DiGraph):
         if isinstance(x, str):
             m = MolFromSmiles(x)
             assert m
-            return MolToSmiles(m, isomericSmiles=False)
+            return unmapped_smiles(m, isomericSmiles=False)
 
         if isinstance(x, Mol):
-            return MolToSmiles(x, isomericSmiles=False)
+            return unmapped_smiles(x, isomericSmiles=False)
 
         raise ValueError(f"Invalid type {type(x)}")
 

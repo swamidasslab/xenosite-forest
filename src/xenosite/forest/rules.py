@@ -17,6 +17,7 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
+from .utils import unmapped_smiles
 
 # Prevents spammy rdkit messages
 rdBase.DisableLog("rdApp.*")
@@ -267,7 +268,7 @@ class Hydrogenation(ResonancePairRule):
 
     >>> mol = Chem.MolFromSmiles('CC(=O)N=C1C=CC(=O)C=C1')
     >>> site, metabolites = next(Hydrogenation().metabolites_from_sites(mol, frozenset({8, 3})))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'CC(=O)NC1=CC=C(O)C=C1'
 
     """
@@ -378,10 +379,10 @@ class Epoxidation(ResonanceRule):
 
     >>> E = Epoxidation()
     >>> site,metabolites = next(E.metabolites_from_sites(aromatic,[4,5]))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'C=CC1=CC(Cl)=CC2OC12'
     >>> site,metabolites = next(E.metabolites_from_sites(kekulized,[4,5]))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'C=CC1=CC(Cl)=CC2OC12'
 
     """
@@ -397,7 +398,7 @@ class Acetylation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('C1=CC(=C(C=C1N)C(=O)O)O')
     >>> site, metabolites = next(Acetylation().metabolize(mol))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'CC(=O)NC1=CC(C(=O)O)=C(O)C=C1'
     """
 
@@ -412,7 +413,7 @@ class Glutathionation(SmartsReactionRule):
     >>> site, metabolites = next(G.metabolize(mol))
     >>> site
     ('Glutathionation', frozenset({6}))
-    >>> [Chem.MolToSmiles(m, isomericSmiles=False) for m in metabolites]
+    >>> [unmapped_smiles(m, isomericSmiles=False) for m in metabolites]
     ['NC(CCC(=O)NC(CSC(CO)C1=CC=CC=C1)C(=O)NCC(=O)O)C(=O)O']
 
     """
@@ -435,7 +436,7 @@ class Dealkylation(SmartsReactionRule):
     >>> site, metabolites = next(D.metabolize(mol))
     >>> site
     ('Dealkylation', frozenset({0, 1}))
-    >>> list(map(Chem.MolToSmiles,metabolites))
+    >>> list(map(unmapped_smiles,metabolites))
     ['CO', 'CO']
 
     """
@@ -466,7 +467,7 @@ class Hydrolysis(SmartsReactionRule):
     >>> site, metabolites = next(Hydrolysis().metabolize(mol))
     >>> site
     ('Hydrolysis', frozenset({8, 6}))
-    >>> [Chem.MolToSmiles(m) for m in metabolites]
+    >>> [unmapped_smiles(m) for m in metabolites]
     ['O=C(O)C1=CC=CC=C1', 'CC(C)(C)O']
 
     """
@@ -485,7 +486,7 @@ class ReductiveDehalogenation(SmartsReactionRule):
     >>> RD = ReductiveDehalogenation()
     >>> mol = Chem.MolFromSmiles('ClCC(=O)C(NC(=O)c1cc(Cl)c(c(c1)Cl)CO)(CC)C')
     >>> site, metabolites = next(RD.metabolites_from_sites(mol,[0,1]))
-    >>> [Chem.MolToSmiles(m) for m in metabolites]
+    >>> [unmapped_smiles(m) for m in metabolites]
     ['Cl', 'CCC(C)(NC(=O)C1=CC(Cl)=C(CO)C(Cl)=C1)C(C)=O']
 
     """
@@ -502,7 +503,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('ClCC(=O)C(NC(=O)c1cc(Cl)c(c(c1)Cl)CO)(CC)C')
     >>> site, metabolites = next(OxidativeDehalogenation().metabolize(mol))
-    >>> [Chem.MolToSmiles(x) for x in metabolites]
+    >>> [unmapped_smiles(x) for x in metabolites]
     ['Cl', 'CCC(C)(NC(=O)C1=CC(Cl)=C(CO)C(Cl)=C1)C(=O)CO']
 
     """
@@ -529,7 +530,7 @@ class NitrogenOxidation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('CCC(=C)C')
     >>> site, metabolites = next(Hydroxylation().metabolites_from_sites(mol,[frozenset({0})]))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'C=C(C)CCO'
 
     """
@@ -549,7 +550,7 @@ class SulfurOxidation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('O=C(c1ccc(cc1)C(C(=O)O)C)c2sccc2')
     >>> site, metabolites = next(SulfurOxidation().metabolize(mol))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'CC(C(=O)O)C1=CC=C(C(=O)C2=CC=C[S+]2[O-])C=C1'
     >>> site[1]
     frozenset({14})
@@ -575,7 +576,7 @@ class Hydroxylation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('CCC(=C)C')
     >>> site, metabolites = next(Hydroxylation().metabolites_from_sites(mol,[frozenset({0})]))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'C=C(C)CCO'
 
     """
@@ -589,7 +590,7 @@ class OxygenReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('Oc1ccccc1')
     >>> site, metabolites = next(Dehydration().metabolites_from_sites(mol,[frozenset({1,0})]))
-    >>> [Chem.MolToSmiles(x) for x in metabolites]
+    >>> [unmapped_smiles(x) for x in metabolites]
     ['C1=CC=CC=C1', 'O']
 
     """
@@ -602,7 +603,7 @@ class Dehydration(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('Oc1ccccc1')
     >>> site, metabolites = next(Dehydration().metabolites_from_sites(mol,[frozenset({1,0})]))
-    >>> [Chem.MolToSmiles(x) for x in metabolites]
+    >>> [unmapped_smiles(x) for x in metabolites]
     ['C1=CC=CC=C1', 'O']
 
     """
@@ -624,7 +625,7 @@ class Dephosphorylation(SmartsReactionRule):
     >>> smiles = 'O=C1O[Zn]OC(=O)CN(CCN(C1)Cc1c(cnc(c1O)C)COP(=O)(O)O)Cc1c(cnc(c1O)C)COP(=O)(O)O'
     >>> mol = Chem.MolFromSmiles(smiles)
     >>> site, metabolites = next(Dephosphorylation().metabolize(mol))
-    >>> [Chem.MolToSmiles(x) for x in metabolites]
+    >>> [unmapped_smiles(x) for x in metabolites]
         ['CC1=C(O)C(CN2CCN(CC3=C(COP(=O)(O)O)C=NC(C)=C3O)CC(=O)[O][Zn][O]C(=O)C2)=C(CO)C=N1', 'O=[PH](O)O']
 
     """
@@ -641,7 +642,7 @@ class BenzodioxoleReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('COc1cc(cc(c1OC)OC)[C@@H]1c2cc3OCOc3cc2C[C@@H]2[C@@H]1C(=O)OC2')
     >>> site, metabolites = next(BenzodioxoleReduction().metabolize(mol))
-    >>> [Chem.MolToSmiles(x, isomericSmiles=False) for x in metabolites]
+    >>> [unmapped_smiles(x, isomericSmiles=False) for x in metabolites]
     ['COC1=CC(C2C3=C(C=C(O)C(O)=C3)CC3COC(=O)C32)=CC(OC)=C1OC', 'C']
 
     """
@@ -669,7 +670,7 @@ class SulfurReduction(SmartsReactionRule):
     >>> site, metabolites = next(SR.metabolites_from_sites(mol,[7,6]))
     >>> site
     ('SulfurReduction', frozenset({6, 7}))
-    >>> [Chem.MolToSmiles(m) for m in metabolites]
+    >>> [unmapped_smiles(m) for m in metabolites]
     ['SC1=CC=CC=C1', 'SC1=CC=CC=C1']
 
     """
@@ -685,7 +686,7 @@ class Glucuronidation(SmartsReactionRule):
     """
     >>> mol = Chem.MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
     >>> site, metabolites = next(Glucuronidation().metabolize(mol))
-    >>> print('\\n'.join([Chem.MolToSmiles(x) for x in metabolites]))
+    >>> print('\\n'.join([unmapped_smiles(x) for x in metabolites]))
     CC(=O)NC1=CC=C(OC2OC(C(=O)O)C(O)C(O)C2O)C=C1
 
     """
@@ -701,7 +702,7 @@ class Sulfation(SmartsReactionRule):
     """
     >>> mol = Chem.MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
     >>> site, metabolites = next(Sulfation().metabolize(mol))
-    >>> print('\\n'.join([Chem.MolToSmiles(x) for x in metabolites]))
+    >>> print('\\n'.join([unmapped_smiles(x) for x in metabolites]))
     CC(=O)NC1=CC=C(OS(=O)(=O)O)C=C1
 
     >>> site
@@ -727,7 +728,7 @@ class AzoSplitting(SmartsReactionRule):
     >>> site,metabolites = next(AzoSplitting().metabolize(mol))
     >>> site
     ('AzoSplitting', frozenset({6, 7}))
-    >>> list(map(Chem.MolToSmiles,metabolites))
+    >>> list(map(unmapped_smiles,metabolites))
         ['NC1=CC(C(=O)O)=C(O)C=C1', 'NC1=CC(C(=O)O)=C(O)C=C1']
 
     """
@@ -742,7 +743,7 @@ class EpoxideOpening(SmartsReactionRule):
     >>> site,metabolites = next(EpoxideOpening().metabolize(mol))
     >>> site
     ('EpoxideOpening', frozenset({6, 7}))
-    >>> list(map(Chem.MolToSmiles,metabolites))
+    >>> list(map(unmapped_smiles,metabolites))
     ['OCCC1=CC=CC=C1']
 
     """
@@ -760,7 +761,7 @@ class NitrogenReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('CC[C@](c1cc2c3nc4cccc(c4cc3Cn2c(=O)c1CO)N(=O)=O)(C(=O)O)O')
     >>> site, metabolites = next(NitrogenReduction().metabolize(mol))
-    >>> print('\\n'.join([Chem.MolToSmiles(x, isomericSmiles=False) for x in metabolites]))
+    >>> print('\\n'.join([unmapped_smiles(x, isomericSmiles=False) for x in metabolites]))
         CCC(O)(C(=O)O)C1=C(CO)C(=O)N2CC3=CC4=C(N=O)C=CC=C4N=C3C2=C1
         O
     >>> site
@@ -786,7 +787,7 @@ class NitroaromaticReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('[O-][N+](C1=CC2=C(C=C1)NC(CN=C2C3=CC=CC=C3Cl)=O)=O')
     >>> site, metabolites = next(NitroaromaticReduction().metabolize(mol))
-    >>> print('\\n'.join([Chem.MolToSmiles(x) for x in metabolites]))
+    >>> print('\\n'.join([unmapped_smiles(x) for x in metabolites]))
     O
     O=NC1=CC2=C(C=C1)NC(=O)CN=C2C1=CC=CC=C1Cl
     >>> site
@@ -812,7 +813,7 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('O=C(c1ccc(cc1)C(C(=O)O)C)c2sccc2')
     >>> site, metabolites = next(ThiopheneSulfurOxidation().metabolize(mol))
-    >>> Chem.MolToSmiles(metabolites[0])
+    >>> unmapped_smiles(metabolites[0])
     'CC(C(=O)O)C1=CC=C(C(=O)C2=CC=C[S+]2[O-])C=C1'
     >>> site[1]
     frozenset({14})

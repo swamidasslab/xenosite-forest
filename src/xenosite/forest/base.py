@@ -1,14 +1,15 @@
 """Defines reaction archetypes to be parameterized or customized in rules.py"""
 
 # Standard Library
+import ast
 import collections
 import copy
 import itertools
 import re
-from collections import defaultdict
+from collections import defaultdict, deque
 
 # Third Party
-from .utils import clean, merge, load
+from .utils import clean, merge, load, unmapped_smiles
 from rdkit import Chem, rdBase
 from rdkit.Chem.rdmolfiles import (
     MolToSmiles,
@@ -46,7 +47,7 @@ def can_smi(line="", rdmol=None):
 
     if rdmol:
         SanitizeMol(rdmol, catchErrors=True)
-        line = MolToSmiles(rdmol)
+        line = unmapped_smiles(rdmol)
 
     if "." in line:
         return list(itertools.chain(*[can_smi(line=x) for x in line.split(".")]))
@@ -56,7 +57,7 @@ def can_smi(line="", rdmol=None):
 
     rdmol = MolFromSmiles(smi)
     if rdmol:
-        out = MolToSmiles(rdmol)
+        out = unmapped_smiles(rdmol)
     else:
         out = smi
 
@@ -109,11 +110,13 @@ class AtomTracker(object):
         [
             a.SetProp(propname, str(a.GetIdx()))
             for a in mol.GetAtoms()
-            if a.GetAtomicNum != 1
+            if a.GetAtomicNum() != 1
         ]
 
     @classmethod
     def tags(cls, record, depth=None, idx=None, strict=True, compact=False, **kwargs):
+        # Tag records use 0-based RDKit indices (GetIdx()). compact_tags()
+        # converts those to 1-based atom numbers (SMILES :N) when compact=True.
 
         if isinstance(record, list):
             return itertools.chain(
@@ -124,9 +127,9 @@ class AtomTracker(object):
             )
         if isinstance(record, Mol):
             try:
-                record = eval(record.GetProp(cls.tag_name))
+                record = ast.literal_eval(record.GetProp(cls.tag_name))
 
-            except (KeyError, SyntaxError) as err:
+            except (KeyError, SyntaxError, ValueError) as err:
 
                 if strict:
                     raise err
@@ -157,6 +160,8 @@ class AtomTracker(object):
 
     @staticmethod
     def compact_tags(record, adjust_root_by=1):
+        # 1-based atom numbers (SMILES / map convention). Internal idx lists stay
+        # 0-based RDKit GetIdx(); this is the bridge used by AtomTrace.
         return {
             k: {d: i + adjust_root_by for d, i in zip(v["depth"], v["idx"])}
             for k, v in list(record.items())
@@ -212,6 +217,8 @@ class AtomTracker(object):
         return metabolite_index_to_reversed_index_record
 
     def initialize_tags(self, mol):
+        # Tags use 0-based RDKit indices (GetIdx()). Public AtomTrace converts to
+        # 1-based atom numbers.
 
         if not mol.HasProp(self.tag_name):
 
@@ -237,7 +244,9 @@ class AtomTracker(object):
 
         old_to_new_atom_indexes = self._old_to_new_atom_indexes(product)
 
-        new_atom_indexes = [a.GetIdx() for a in product.GetAtoms()]
+        new_atom_indexes = [
+            a.GetIdx() for a in product.GetAtoms() if a.GetAtomicNum() != 1
+        ]
 
         for atom_unique_tag, record in list(new_tags.items()):
 
@@ -286,12 +295,165 @@ class AtomTracker(object):
         return new_tags
 
     def _old_to_new_atom_indexes(self, mol):
+        # 0-based RDKit indices. current_idx / react_atom_idx are GetIdx() on
+        # the reactant; values are GetIdx() on this product.
 
-        return {
-            int(a.GetProp(self.previous_index_prop_name)): a.GetIdx()
-            for a in mol.GetAtoms()
-            if a.HasProp(self.previous_index_prop_name)
-        }
+        mapping = {}
+        for a in mol.GetAtoms():
+            if a.HasProp(self.previous_index_prop_name):
+                mapping[int(a.GetProp(self.previous_index_prop_name))] = a.GetIdx()
+            elif a.HasProp("react_atom_idx"):
+                mapping[int(a.GetProp("react_atom_idx"))] = a.GetIdx()
+        return mapping
+
+    def _clear_atom_maps(self, mol):
+        for atom in mol.GetAtoms():
+            atom.SetAtomMapNum(0)
+
+    def _current_to_origin(self, tags, last_depth, level=0):
+        """Map current 0-based idx -> origin GetIdx() at ``level``, or None if added."""
+        origin_of = {}
+        for rec in tags.values():
+            if last_depth not in rec["depth"]:
+                continue
+            cur = rec["idx"][rec["depth"].index(last_depth)]
+            if level in rec["depth"]:
+                origin_of[cur] = rec["idx"][rec["depth"].index(level)]
+            else:
+                origin_of[cur] = None
+        return origin_of
+
+    def _stamp_origin_maps(self, mol, tags=None, level=0):
+        """Set molAtomMapNumber to the 1-based origin atom number at ``level``.
+
+        New atoms stay 0 (unmapped). Hydrogens are never mapped.
+        """
+        from .trace import atom_no
+
+        if tags is None:
+            try:
+                tags = self.tags(mol)
+            except (KeyError, SyntaxError, ValueError):
+                return
+
+        depths = self.depths(tags)
+        if not depths:
+            return
+        last_depth = max(depths)
+        origin_of = self._current_to_origin(tags, last_depth, level=level)
+
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                atom.SetAtomMapNum(0)
+                continue
+            orig = origin_of.get(atom.GetIdx())
+            if orig is None:
+                atom.SetAtomMapNum(0)
+            else:
+                atom.SetAtomMapNum(atom_no(orig))
+
+    def _reactant_aligned_order(self, mol, origin_of):
+        """Atom order following level-0 reactant order, with additions interleaved.
+
+        Walk surviving atoms in increasing origin index. After each survivor,
+        emit new atoms attached to it (BFS over the new-atom subgraph). If a
+        new atom bridges two survivors, attach it after the lower origin.
+        Each disconnected fragment is ordered on its own.
+        """
+        n_atoms = mol.GetNumAtoms()
+        order = []
+        emitted = set()
+
+        def neighbors(idx):
+            return [a.GetIdx() for a in mol.GetAtomWithIdx(idx).GetNeighbors()]
+
+        def is_heavy_new(idx):
+            return origin_of.get(idx) is None and mol.GetAtomWithIdx(idx).GetAtomicNum() != 1
+
+        def component_min_survivor_origin(start):
+            seen = set()
+            stack = [start]
+            min_orig = None
+            while stack:
+                a = stack.pop()
+                if a in seen:
+                    continue
+                seen.add(a)
+                for ni in neighbors(a):
+                    if is_heavy_new(ni):
+                        stack.append(ni)
+                    elif origin_of.get(ni) is not None:
+                        o = origin_of[ni]
+                        if min_orig is None or o < min_orig:
+                            min_orig = o
+            return min_orig
+
+        for frag in Chem.GetMolFrags(mol, asMols=False):
+            survivors = sorted(
+                (i for i in frag if origin_of.get(i) is not None),
+                key=lambda i: origin_of[i],
+            )
+            for s in survivors:
+                if s not in emitted:
+                    order.append(s)
+                    emitted.add(s)
+                queue = deque()
+                for ni in neighbors(s):
+                    if ni in emitted or not is_heavy_new(ni):
+                        continue
+                    if component_min_survivor_origin(ni) == origin_of[s]:
+                        queue.append(ni)
+                while queue:
+                    nidx = queue.popleft()
+                    if nidx in emitted:
+                        continue
+                    order.append(nidx)
+                    emitted.add(nidx)
+                    for ni in neighbors(nidx):
+                        if ni not in emitted and is_heavy_new(ni):
+                            queue.append(ni)
+            for i in frag:
+                if i not in emitted and mol.GetAtomWithIdx(i).GetAtomicNum() != 1:
+                    order.append(i)
+                    emitted.add(i)
+            for i in frag:
+                if i not in emitted:
+                    order.append(i)
+                    emitted.add(i)
+
+        for i in range(n_atoms):
+            if i not in emitted:
+                order.append(i)
+        return order
+
+    def _align_and_stamp(self, product):
+        """Renumber to reactant-aligned order, rewrite last-depth tags, stamp maps."""
+        try:
+            tags = self.tags(product)
+        except (KeyError, SyntaxError, ValueError):
+            return product
+
+        depths = self.depths(tags)
+        if not depths:
+            return product
+        last_depth = max(depths)
+        origin_of = self._current_to_origin(tags, last_depth, level=0)
+        new_order = self._reactant_aligned_order(product, origin_of)
+
+        if new_order != list(range(product.GetNumAtoms())):
+            product = RenumberAtoms(product, new_order)
+            old_to_new = {old: new for new, old in enumerate(new_order)}
+            for rec in tags.values():
+                if last_depth not in rec["depth"]:
+                    continue
+                i = rec["depth"].index(last_depth)
+                rec["idx"][i] = old_to_new[rec["idx"][i]]
+            self._save_tags(product, tags)
+
+        # Keep current_idx as the reactant GetIdx() so a wrapping RuleSet.metabolize
+        # can tag() again. Next-step metabolize resets it via add_current_idx_as_atom_prop.
+        self._stamp_origin_maps(product, tags, level=0)
+        return product
 
     def _save_tags(self, mol, tags):
         if isinstance(tags, defaultdict):
@@ -703,7 +865,7 @@ class QueryMol(object):
         current2originalidx = {
             a.GetIdx(): int(a.GetProp("idx"))
             for a in mol.GetAtoms()
-            if a.GetAtomicNum != 0
+            if a.GetAtomicNum() != 0
         }
 
         for pair in itertools.combinations(current2originalidx, 2):
@@ -1243,6 +1405,8 @@ class ReactionRule(AtomTracker):
             unique = False
             unique_smi = []
 
+        # Maps must not be present for CanonicalRankAtoms or SMARTS matching.
+        self._clear_atom_maps(mol)
         topol_equiv = self.topol_equiv(mol)
         if only_emit_topologically_distinct_sites:
             try:
@@ -1251,7 +1415,8 @@ class ReactionRule(AtomTracker):
                 # SanitizeMol(mol, SanitizeFlags.SANITIZE_CLEANUP, catchErrors=True)
                 topol_equiv = self.topol_equiv(mol)
 
-        if tag_atoms:
+        tagging = tag_atoms and not do_not_tag_atoms
+        if tagging:
             self.initialize_tags(mol)
             AtomTracker.add_current_idx_as_atom_prop(
                 mol, propname=AtomTracker.previous_index_prop_name
@@ -1259,13 +1424,22 @@ class ReactionRule(AtomTracker):
 
         seen = []
         skipped = []
-        for site, metabolites in self.metabolites(
+        products_iter = self.metabolites(
             mol,
             format_output_site=format_output_site,
             do_not_tag_atoms=do_not_tag_atoms,
             strict=strict,
             **kwargs
-        ):
+        )
+        while True:
+            if tagging:
+                self._clear_atom_maps(mol)
+            try:
+                site, metabolites = next(products_iter)
+            except StopIteration:
+                if tagging:
+                    self._stamp_origin_maps(mol)
+                break
 
             if only_largest_fragment:
                 metabolites = [x for x in metabolites if x]
@@ -1284,9 +1458,13 @@ class ReactionRule(AtomTracker):
 
                 seen.append(topsite)
 
-            if not do_not_tag_atoms:
+            if tagging:
+                aligned = []
                 for metabolite in metabolites:
                     self.tag(metabolite, reactant=mol, strict=strict)
+                    aligned.append(self._align_and_stamp(metabolite))
+                metabolites = aligned
+                self._stamp_origin_maps(mol)
 
             if format_output_site:
                 outsite = self.format_site(site)
@@ -1330,7 +1508,7 @@ class ReactionRule(AtomTracker):
             if tuple(site) in sites:
 
                 if just_smiles:
-                    yield list(map(MolToSmiles, metabolite))
+                    yield list(map(unmapped_smiles, metabolite))
 
                 else:
                     yield tuple(site), metabolite
@@ -1405,8 +1583,10 @@ class SmartsReactionRule(ReactionRule):
             self._kekulize(mol)
 
         self._remove_props(mol)
+        self._clear_atom_maps(mol)
 
         for rxn_num, rxn in enumerate(self.rxns):
+            self._clear_atom_maps(mol)
             for prod_num, prod in enumerate(rxn.RunReactants([mol])):
 
                 products = list(prod)
@@ -1439,11 +1619,16 @@ class SmartsReactionRule(ReactionRule):
     def _copy_props(
         self,
         mol,
-        props_to_copy={"react_atom_idx": AtomTracker.previous_index_prop_name},
+        props_to_copy=None,
     ):
 
+        if props_to_copy is None:
+            props_to_copy = {
+                "react_atom_idx": AtomTracker.previous_index_prop_name
+            }
+
         if isinstance(mol, list):
-            return [self._copy_props(x) for x in mol]
+            return [self._copy_props(x, props_to_copy) for x in mol]
 
         for atom in mol.GetAtoms():
             for old, new in list(props_to_copy.items()):
