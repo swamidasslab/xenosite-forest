@@ -19,6 +19,7 @@ def canon_smi(obj, **kwargs):
     Accepts a SMILES string, an RDKit mol, or a sequence of those. Mol inputs
     have atom-map numbers cleared first. Each structure is parsed and re-emitted
     with this RDKit, so two writings of the same molecule compare equal.
+    Do not pass kekuleSmiles=True: Kekulé form is not unique across RDKit versions.
 
     >>> canon_smi('[10*]C1=CC2=CC=CC=C2C=C1') == canon_smi('[10*]C1=CC2=C(C=CC=C2)C=C1')
     True
