@@ -1,6 +1,6 @@
-from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
+from rdkit.Chem.rdmolfiles import MolFromSmiles
 from xenosite.forest import rules, bfs
-from xenosite.forest.utils import unmapped_smiles
+from xenosite.forest.utils import canon_smi
 import pytest
 
 
@@ -29,9 +29,9 @@ def test_rule_modification():
 def cmp_pathway(pathway, target):
     smi, sites, path = pathway
 
-    assert smi == target[0]
+    assert canon_smi(smi) == canon_smi(target[0])
     assert sites == target[1]
-    assert [unmapped_smiles(m) for m in path] == [MolToSmiles(MolFromSmiles(s)) for s in target[2]]  # type: ignore
+    assert canon_smi(path) == canon_smi(target[2])
 
 
 def test_dehydrogenation():
