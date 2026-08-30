@@ -774,7 +774,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "networkx", marker = "extra == 'network'", specifier = ">=3.2.1" },
-    { name = "rdkit", specifier = ">=2023.9.1" },
+    { name = "rdkit", specifier = ">=2022.3.3" },
     { name = "tqdm", marker = "extra == 'network'", specifier = ">=4.66.0" },
 ]
 provides-extras = ["network"]

@@ -24,7 +24,7 @@ Optional NetworkX helpers for building a metabolite graph:
 uv add "xenosite-forest[network]"
 ```
 
-Requires **Python 3.10+** and RDKit.
+Requires **Python 3.10–3.13** and **RDKit 2022.03+**.
 
 ## Quick start
 

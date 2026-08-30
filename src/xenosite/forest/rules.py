@@ -17,7 +17,7 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
-from .utils import unmapped_smiles
+from .utils import canon_smi
 
 # Prevents spammy rdkit messages
 rdBase.DisableLog("rdApp.*")
@@ -37,10 +37,10 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
 
     Both input molecules produce the same quinone, NAPQI, for the site [4,7].
 
-    >>> next(QFG.metabolites_from_sites(apap_arom,[4,7], just_smiles=True))
-    ['CC(=O)N=C1C=CC(=O)C=C1']
-    >>> next(QFG.metabolites_from_sites(apap_kek,[4,7], just_smiles=True))
-    ['CC(=O)N=C1C=CC(=O)C=C1']
+    >>> canon_smi(next(QFG.metabolites_from_sites(apap_arom,[4,7], just_smiles=True))) == canon_smi(['CC(=O)N=C1C=CC(=O)C=C1'])
+    True
+    >>> canon_smi(next(QFG.metabolites_from_sites(apap_kek,[4,7], just_smiles=True))) == canon_smi(['CC(=O)N=C1C=CC(=O)C=C1'])
+    True
 
     This rule considers pairs of ring carbon to be sites of quinone formation.
     >>> site, metabolites = next(QFG.metabolites_from_sites(apap_arom,[4,7]))
@@ -53,8 +53,8 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
     four rings, do to this large molecule's entirely aromatic structure.
 
     >>> benzopyrene = Chem.MolFromSmiles('c1ccc2c(c1)cc3ccc4cccc5c4c3c2cc5')
-    >>> next(QFG.metabolites_from_sites(benzopyrene,[0,12], just_smiles=True))
-    ['O=C1C=CC2=C3C=CC4=CC(=O)C=C5C=CC(=CC2=C1)C3=C54']
+    >>> canon_smi(next(QFG.metabolites_from_sites(benzopyrene,[0,12], just_smiles=True))) == canon_smi(['O=C1C=CC2=C3C=CC4=CC(=O)C=C5C=CC(=CC2=C1)C3=C54'])
+    True
 
     The loss of aromaticity inherent in quinone formation requires that there be an
     odd number of atoms betweeen each pair of carbons. For example, in the previous
@@ -191,8 +191,8 @@ class Dehydrogenation(ResonancePairRule):
 
     >>> D = Dehydrogenation()
     >>> mol = Chem.MolFromSmiles('OC=CC=CC=CC=CN')
-    >>> next(D.metabolites_from_sites(mol,[9,0],just_smiles=True))
-    ['N=CC=CC=CC=CC=O']
+    >>> canon_smi(next(D.metabolites_from_sites(mol,[9,0],just_smiles=True))) == canon_smi(['N=CC=CC=CC=CC=O'])
+    True
 
     """
 
@@ -268,8 +268,8 @@ class Hydrogenation(ResonancePairRule):
 
     >>> mol = Chem.MolFromSmiles('CC(=O)N=C1C=CC(=O)C=C1')
     >>> site, metabolites = next(Hydrogenation().metabolites_from_sites(mol, frozenset({8, 3})))
-    >>> unmapped_smiles(metabolites[0])
-    'CC(=O)NC1=CC=C(O)C=C1'
+    >>> canon_smi(metabolites[0]) == canon_smi('CC(=O)NC1=CC=C(O)C=C1')
+    True
 
     """
 
@@ -379,11 +379,11 @@ class Epoxidation(ResonanceRule):
 
     >>> E = Epoxidation()
     >>> site,metabolites = next(E.metabolites_from_sites(aromatic,[4,5]))
-    >>> unmapped_smiles(metabolites[0])
-    'C=CC1=CC(Cl)=CC2OC12'
+    >>> canon_smi(metabolites[0]) == canon_smi('C=CC1=CC(Cl)=CC2OC12')
+    True
     >>> site,metabolites = next(E.metabolites_from_sites(kekulized,[4,5]))
-    >>> unmapped_smiles(metabolites[0])
-    'C=CC1=CC(Cl)=CC2OC12'
+    >>> canon_smi(metabolites[0]) == canon_smi('C=CC1=CC(Cl)=CC2OC12')
+    True
 
     """
 
@@ -398,8 +398,8 @@ class Acetylation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('C1=CC(=C(C=C1N)C(=O)O)O')
     >>> site, metabolites = next(Acetylation().metabolize(mol))
-    >>> unmapped_smiles(metabolites[0])
-    'CC(=O)NC1=CC(C(=O)O)=C(O)C=C1'
+    >>> canon_smi(metabolites[0]) == canon_smi('CC(=O)NC1=CC(C(=O)O)=C(O)C=C1')
+    True
     """
 
     smarts = "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]"
@@ -413,8 +413,8 @@ class Glutathionation(SmartsReactionRule):
     >>> site, metabolites = next(G.metabolize(mol))
     >>> site
     ('Glutathionation', frozenset({6}))
-    >>> [unmapped_smiles(m, isomericSmiles=False) for m in metabolites]
-    ['NC(CCC(=O)NC(CSC(CO)C1=CC=CC=C1)C(=O)NCC(=O)O)C(=O)O']
+    >>> canon_smi(metabolites, isomericSmiles=False) == canon_smi(['NC(CCC(=O)NC(CSC(CO)C1=CC=CC=C1)C(=O)NCC(=O)O)C(=O)O'], isomericSmiles=False)
+    True
 
     """
 
@@ -436,8 +436,8 @@ class Dealkylation(SmartsReactionRule):
     >>> site, metabolites = next(D.metabolize(mol))
     >>> site
     ('Dealkylation', frozenset({0, 1}))
-    >>> list(map(unmapped_smiles,metabolites))
-    ['CO', 'CO']
+    >>> canon_smi(metabolites) == canon_smi(['CO', 'CO'])
+    True
 
     """
 
@@ -467,8 +467,8 @@ class Hydrolysis(SmartsReactionRule):
     >>> site, metabolites = next(Hydrolysis().metabolize(mol))
     >>> site
     ('Hydrolysis', frozenset({8, 6}))
-    >>> [unmapped_smiles(m) for m in metabolites]
-    ['O=C(O)C1=CC=CC=C1', 'CC(C)(C)O']
+    >>> canon_smi(metabolites) == canon_smi(['O=C(O)C1=CC=CC=C1', 'CC(C)(C)O'])
+    True
 
     """
 
@@ -486,8 +486,8 @@ class ReductiveDehalogenation(SmartsReactionRule):
     >>> RD = ReductiveDehalogenation()
     >>> mol = Chem.MolFromSmiles('ClCC(=O)C(NC(=O)c1cc(Cl)c(c(c1)Cl)CO)(CC)C')
     >>> site, metabolites = next(RD.metabolites_from_sites(mol,[0,1]))
-    >>> [unmapped_smiles(m) for m in metabolites]
-    ['Cl', 'CCC(C)(NC(=O)C1=CC(Cl)=C(CO)C(Cl)=C1)C(C)=O']
+    >>> canon_smi(metabolites) == canon_smi(['Cl', 'CCC(C)(NC(=O)C1=CC(Cl)=C(CO)C(Cl)=C1)C(C)=O'])
+    True
 
     """
 
@@ -503,8 +503,8 @@ class OxidativeDehalogenation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('ClCC(=O)C(NC(=O)c1cc(Cl)c(c(c1)Cl)CO)(CC)C')
     >>> site, metabolites = next(OxidativeDehalogenation().metabolize(mol))
-    >>> [unmapped_smiles(x) for x in metabolites]
-    ['Cl', 'CCC(C)(NC(=O)C1=CC(Cl)=C(CO)C(Cl)=C1)C(=O)CO']
+    >>> canon_smi(metabolites) == canon_smi(['Cl', 'CCC(C)(NC(=O)C1=CC(Cl)=C(CO)C(Cl)=C1)C(=O)CO'])
+    True
 
     """
 
@@ -530,8 +530,8 @@ class NitrogenOxidation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('CCC(=C)C')
     >>> site, metabolites = next(Hydroxylation().metabolites_from_sites(mol,[frozenset({0})]))
-    >>> unmapped_smiles(metabolites[0])
-    'C=C(C)CCO'
+    >>> canon_smi(metabolites[0]) == canon_smi('C=C(C)CCO')
+    True
 
     """
 
@@ -550,8 +550,8 @@ class SulfurOxidation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('O=C(c1ccc(cc1)C(C(=O)O)C)c2sccc2')
     >>> site, metabolites = next(SulfurOxidation().metabolize(mol))
-    >>> unmapped_smiles(metabolites[0])
-    'CC(C(=O)O)C1=CC=C(C(=O)C2=CC=C[S+]2[O-])C=C1'
+    >>> canon_smi(metabolites[0]) == canon_smi('CC(C(=O)O)C1=CC=C(C(=O)C2=CC=C[S+]2[O-])C=C1')
+    True
     >>> site[1]
     frozenset({14})
 
@@ -576,8 +576,8 @@ class Hydroxylation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('CCC(=C)C')
     >>> site, metabolites = next(Hydroxylation().metabolites_from_sites(mol,[frozenset({0})]))
-    >>> unmapped_smiles(metabolites[0])
-    'C=C(C)CCO'
+    >>> canon_smi(metabolites[0]) == canon_smi('C=C(C)CCO')
+    True
 
     """
 
@@ -590,8 +590,8 @@ class OxygenReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('Oc1ccccc1')
     >>> site, metabolites = next(Dehydration().metabolites_from_sites(mol,[frozenset({1,0})]))
-    >>> [unmapped_smiles(x) for x in metabolites]
-    ['C1=CC=CC=C1', 'O']
+    >>> canon_smi(metabolites) == canon_smi(['C1=CC=CC=C1', 'O'])
+    True
 
     """
 
@@ -603,8 +603,8 @@ class Dehydration(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('Oc1ccccc1')
     >>> site, metabolites = next(Dehydration().metabolites_from_sites(mol,[frozenset({1,0})]))
-    >>> [unmapped_smiles(x) for x in metabolites]
-    ['C1=CC=CC=C1', 'O']
+    >>> canon_smi(metabolites) == canon_smi(['C1=CC=CC=C1', 'O'])
+    True
 
     """
 
@@ -625,8 +625,8 @@ class Dephosphorylation(SmartsReactionRule):
     >>> smiles = 'O=C1O[Zn]OC(=O)CN(CCN(C1)Cc1c(cnc(c1O)C)COP(=O)(O)O)Cc1c(cnc(c1O)C)COP(=O)(O)O'
     >>> mol = Chem.MolFromSmiles(smiles)
     >>> site, metabolites = next(Dephosphorylation().metabolize(mol))
-    >>> [unmapped_smiles(x) for x in metabolites]
-        ['CC1=C(O)C(CN2CCN(CC3=C(COP(=O)(O)O)C=NC(C)=C3O)CC(=O)[O][Zn][O]C(=O)C2)=C(CO)C=N1', 'O=[PH](O)O']
+    >>> canon_smi(metabolites) == canon_smi(['CC1=C(O)C(CN2CCN(CC3=C(COP(=O)(O)O)C=NC(C)=C3O)CC(=O)[O][Zn][O]C(=O)C2)=C(CO)C=N1', 'O=[PH](O)O'])
+    True
 
     """
 
@@ -642,8 +642,8 @@ class BenzodioxoleReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('COc1cc(cc(c1OC)OC)[C@@H]1c2cc3OCOc3cc2C[C@@H]2[C@@H]1C(=O)OC2')
     >>> site, metabolites = next(BenzodioxoleReduction().metabolize(mol))
-    >>> [unmapped_smiles(x, isomericSmiles=False) for x in metabolites]
-    ['COC1=CC(C2C3=C(C=C(O)C(O)=C3)CC3COC(=O)C32)=CC(OC)=C1OC', 'C']
+    >>> canon_smi(metabolites, isomericSmiles=False) == canon_smi(['COC1=CC(C2C3=C(C=C(O)C(O)=C3)CC3COC(=O)C32)=CC(OC)=C1OC', 'C'], isomericSmiles=False)
+    True
 
     """
 
@@ -670,8 +670,8 @@ class SulfurReduction(SmartsReactionRule):
     >>> site, metabolites = next(SR.metabolites_from_sites(mol,[7,6]))
     >>> site
     ('SulfurReduction', frozenset({6, 7}))
-    >>> [unmapped_smiles(m) for m in metabolites]
-    ['SC1=CC=CC=C1', 'SC1=CC=CC=C1']
+    >>> canon_smi(metabolites) == canon_smi(['SC1=CC=CC=C1', 'SC1=CC=CC=C1'])
+    True
 
     """
 
@@ -686,8 +686,8 @@ class Glucuronidation(SmartsReactionRule):
     """
     >>> mol = Chem.MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
     >>> site, metabolites = next(Glucuronidation().metabolize(mol))
-    >>> print('\\n'.join([unmapped_smiles(x) for x in metabolites]))
-    CC(=O)NC1=CC=C(OC2OC(C(=O)O)C(O)C(O)C2O)C=C1
+    >>> canon_smi(metabolites) == canon_smi(['CC(=O)NC1=CC=C(OC2OC(C(=O)O)C(O)C(O)C2O)C=C1'])
+    True
 
     """
 
@@ -702,8 +702,8 @@ class Sulfation(SmartsReactionRule):
     """
     >>> mol = Chem.MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
     >>> site, metabolites = next(Sulfation().metabolize(mol))
-    >>> print('\\n'.join([unmapped_smiles(x) for x in metabolites]))
-    CC(=O)NC1=CC=C(OS(=O)(=O)O)C=C1
+    >>> canon_smi(metabolites) == canon_smi(['CC(=O)NC1=CC=C(OS(=O)(=O)O)C=C1'])
+    True
 
     >>> site
     ('Sulfation', frozenset({8, 7}))
@@ -728,8 +728,8 @@ class AzoSplitting(SmartsReactionRule):
     >>> site,metabolites = next(AzoSplitting().metabolize(mol))
     >>> site
     ('AzoSplitting', frozenset({6, 7}))
-    >>> list(map(unmapped_smiles,metabolites))
-        ['NC1=CC(C(=O)O)=C(O)C=C1', 'NC1=CC(C(=O)O)=C(O)C=C1']
+    >>> canon_smi(metabolites) == canon_smi(['NC1=CC(C(=O)O)=C(O)C=C1', 'NC1=CC(C(=O)O)=C(O)C=C1'])
+    True
 
     """
 
@@ -743,8 +743,8 @@ class EpoxideOpening(SmartsReactionRule):
     >>> site,metabolites = next(EpoxideOpening().metabolize(mol))
     >>> site
     ('EpoxideOpening', frozenset({6, 7}))
-    >>> list(map(unmapped_smiles,metabolites))
-    ['OCCC1=CC=CC=C1']
+    >>> canon_smi(metabolites) == canon_smi(['OCCC1=CC=CC=C1'])
+    True
 
     """
 
@@ -761,9 +761,8 @@ class NitrogenReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('CC[C@](c1cc2c3nc4cccc(c4cc3Cn2c(=O)c1CO)N(=O)=O)(C(=O)O)O')
     >>> site, metabolites = next(NitrogenReduction().metabolize(mol))
-    >>> print('\\n'.join([unmapped_smiles(x, isomericSmiles=False) for x in metabolites]))
-        CCC(O)(C(=O)O)C1=C(CO)C(=O)N2CC3=CC4=C(N=O)C=CC=C4N=C3C2=C1
-        O
+    >>> canon_smi(metabolites, isomericSmiles=False) == canon_smi(['CCC(O)(C(=O)O)C1=C(CO)C(=O)N2CC3=CC4=C(N=O)C=CC=C4N=C3C2=C1', 'O'], isomericSmiles=False)
+    True
     >>> site
     ('NitrogenReduction', frozenset({24, 23}))
 
@@ -787,9 +786,8 @@ class NitroaromaticReduction(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('[O-][N+](C1=CC2=C(C=C1)NC(CN=C2C3=CC=CC=C3Cl)=O)=O')
     >>> site, metabolites = next(NitroaromaticReduction().metabolize(mol))
-    >>> print('\\n'.join([unmapped_smiles(x) for x in metabolites]))
-    O
-    O=NC1=CC2=C(C=C1)NC(=O)CN=C2C1=CC=CC=C1Cl
+    >>> canon_smi(metabolites) == canon_smi(['O', 'O=NC1=CC2=C(C=C1)NC(=O)CN=C2C1=CC=CC=C1Cl'])
+    True
     >>> site
     ('NitroaromaticReduction', frozenset({0, 1}))
 
@@ -813,8 +811,8 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
 
     >>> mol = Chem.MolFromSmiles('O=C(c1ccc(cc1)C(C(=O)O)C)c2sccc2')
     >>> site, metabolites = next(ThiopheneSulfurOxidation().metabolize(mol))
-    >>> unmapped_smiles(metabolites[0])
-    'CC(C(=O)O)C1=CC=C(C(=O)C2=CC=C[S+]2[O-])C=C1'
+    >>> canon_smi(metabolites[0]) == canon_smi('CC(C(=O)O)C1=CC=C(C(=O)C2=CC=C[S+]2[O-])C=C1')
+    True
     >>> site[1]
     frozenset({14})
 

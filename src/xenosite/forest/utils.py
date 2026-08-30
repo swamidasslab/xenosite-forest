@@ -13,6 +13,29 @@ def unmapped_smiles(mol, **kwargs):
     return Chem.MolToSmiles(mol, **kwargs)
 
 
+def canon_smi(obj, **kwargs):
+    """Canonical SMILES for structure identity, stable across RDKit versions.
+
+    Accepts a SMILES string, an RDKit mol, or a sequence of those. Mol inputs
+    have atom-map numbers cleared first. Each structure is parsed and re-emitted
+    with this RDKit, so two writings of the same molecule compare equal.
+    Do not pass kekuleSmiles=True: Kekulé form is not unique across RDKit versions.
+
+    >>> canon_smi('[10*]C1=CC2=CC=CC=C2C=C1') == canon_smi('[10*]C1=CC2=C(C=CC=C2)C=C1')
+    True
+    """
+    if isinstance(obj, (list, tuple)):
+        return [canon_smi(x, **kwargs) for x in obj]
+    if isinstance(obj, str):
+        smi = obj
+    else:
+        smi = unmapped_smiles(obj, **kwargs)
+    mol = Chem.MolFromSmiles(smi)
+    if mol is None:
+        return smi
+    return Chem.MolToSmiles(mol, **kwargs)
+
+
 def load(inp, single=False):
     """Construct RDKit molecules from SMILES, files, mol blocks, or existing mols.
 
