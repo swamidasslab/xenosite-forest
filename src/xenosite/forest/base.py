@@ -792,11 +792,8 @@ class QueryMol(object):
         # This will be modified by the search function defined below.
         valid_paths = []
 
-        def search(mol, end, path=None):
+        def search(mol, end, path):
             """Searches for end idx by extending path."""
-
-            if path is None:
-                path = []
 
             if end == path[-1]:
                 # valid_paths is modified in place, as it was initialized
@@ -1377,6 +1374,9 @@ class ReactionRule(AtomTracker):
 
     def format_site(self, site, just_rule_name=False):
 
+        if just_rule_name and isinstance(site, (tuple, list)):
+            return site[0]
+
         if isinstance(site, tuple):
             return tuple(
                 [self.format_site(x, just_rule_name=just_rule_name) for x in site]
@@ -1388,10 +1388,7 @@ class ReactionRule(AtomTracker):
         if isinstance(site, str):
             return site.split("_")[0]
 
-        if just_rule_name and isinstance(site, (tuple, list)):
-            return site[0]
-        else:
-            return site
+        return site
 
     def metabolize(
         self,
