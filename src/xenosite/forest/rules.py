@@ -520,22 +520,27 @@ class OxidativeDehalogenation(SmartsReactionRule):
 
 
 class NitrogenOxidation(SmartsReactionRule):
-    """Adds a hydroxyl to carbons, nitrogens, and sulfurs.
+    """P450-like N-oxidation of trivalent nitrogen.
 
-    Attaches hydroxyls to:
+    - N-H (amines, pyrrole-like N) -> hydroxylamine / N-OH.
+    - Primary amine NH2 -> nitroso.
+    - Tertiary amine or pyridine-like N (no H) -> N-oxide.
 
-    - Carbons with at least one hydrogen.
-    - Nitrogens of valence 3.
-    - Sulfurs of valence 2 or 4.
+    Adding OH or =O to an already fully substituted N (pyridine N-OH,
+    pyrrole N=O, tertiary amine N-OH) would be pentavalent and is not emitted.
 
-    >>> mol = Chem.MolFromSmiles('CCC(=C)C')
-    >>> site, metabolites = next(Hydroxylation().metabolites_from_sites(mol,[frozenset({0})]))
-    >>> canon_smi(metabolites[0]) == canon_smi('C=C(C)CCO')
+    >>> mol = Chem.MolFromSmiles('CCN')
+    >>> site, metabolites = next(NitrogenOxidation().metabolize(mol))
+    >>> canon_smi(metabolites[0]) == canon_smi('CCNO')
     True
 
     """
 
-    smarts = ["[#7v3:1]>>[*:1]O", "[#7v3:1]>>[*:1]=O"]
+    smarts = [
+        "[#7v3h:1]>>[*:1]O",
+        "[#7v3H2:1]>>[*:1]=O",
+        "[#7v3H0:1]>>[*&H0&+:1][O-]",
+    ]
     phase1_sites_on = "atoms"
 
 

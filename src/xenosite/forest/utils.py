@@ -1,8 +1,12 @@
 """Molecule loading and cleanup helpers."""
 
 import itertools
+import warnings
 
-from rdkit import Chem
+from rdkit import Chem, rdBase
+
+# Prevents spammy rdkit messages during sanitization probes.
+rdBase.DisableLog("rdApp.*")
 
 
 def unmapped_smiles(mol, **kwargs):
@@ -94,25 +98,98 @@ def _load_from_string(inp):
     return load(inp.split())
 
 
+def _mol_smiles(mol):
+    try:
+        return Chem.MolToSmiles(mol)
+    except Exception:
+        return "<unwritable>"
+
+
+def is_rdkit_valid(mol):
+    """True if ``mol`` sanitizes and round-trips through SMILES."""
+    if mol is None:
+        return False
+    smi = _mol_smiles(mol)
+    if not smi or smi == "<unwritable>":
+        return False
+    return Chem.MolFromSmiles(smi) is not None
+
+
+def _sanitize_kekulize(mol, reset_hs=False):
+    if reset_hs:
+        for atom in mol.GetAtoms():
+            atom.SetNoImplicit(True)
+            atom.SetNumExplicitHs(0)
+        Chem.SanitizeMol(mol, Chem.SanitizeFlags.SANITIZE_CLEANUP, catchErrors=True)
+    for atom in mol.GetAtoms():
+        atom.SetNoImplicit(False)
+    Chem.SanitizeMol(mol)
+    try:
+        Chem.Kekulize(mol, clearAromaticFlags=True)
+    except ValueError:
+        pass
+    smi = Chem.MolToSmiles(mol)
+    if Chem.MolFromSmiles(smi) is None:
+        raise ValueError("SMILES round-trip failed: %s" % smi)
+    return mol
+
+
+def sanitize_reason(mol):
+    """Short RDKit sanitization error for ``mol``, or None if it is valid."""
+    try:
+        _sanitize_kekulize(Chem.Mol(mol), reset_hs=False)
+        return None
+    except Exception as err:
+        msg = str(err).strip().split("\n")[0]
+        return msg or err.__class__.__name__
+
+
+def sanitize_metabolite(mol):
+    """Return a sanitized copy of ``mol``, or None if it is RDKit-invalid.
+
+    Prefer keeping existing hydrogens (so imidazole [nH] is not lost). If that
+    fails, reset explicit hydrogens — some reaction products keep leftover Hs —
+    and sanitize again.
+    """
+    for reset_hs in (False, True):
+        try:
+            return _sanitize_kekulize(Chem.Mol(mol), reset_hs=reset_hs)
+        except Exception:
+            continue
+    return None
+
+
+def _warn_invalid_metabolite(mol, reason=None):
+    smi = _mol_smiles(mol)
+    reason = reason or sanitize_reason(mol) or "RDKit sanitization failed"
+    warnings.warn(
+        "Dropping RDKit-invalid metabolite %s (%s)" % (smi, reason),
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 def clean(mol):
-    """Split mol into a list of sanitized, kekulized fragments."""
+    """Split mol into sanitized, kekulized fragments.
+
+    If any fragment is RDKit-invalid, the whole product set is dropped with a
+    warning. Leaving leftover fragments from a failed reaction would emit
+    chemically incomplete structures (for example acetaldehyde from a failed
+    quinone formation).
+    """
     if isinstance(mol, (list, tuple)):
-        return list(itertools.chain.from_iterable(clean(x) for x in mol))
+        parts = [clean(x) for x in mol]
+        if any(len(part) == 0 for part in parts):
+            return []
+        return list(itertools.chain.from_iterable(parts))
 
     out = []
     for frag in Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False):
-        for atom in frag.GetAtoms():
-            atom.SetNoImplicit(True)
-            atom.SetNumExplicitHs(0)
-        Chem.SanitizeMol(frag, Chem.SanitizeFlags.SANITIZE_CLEANUP, catchErrors=True)
-        for atom in frag.GetAtoms():
-            atom.SetNoImplicit(False)
-        Chem.SanitizeMol(frag, catchErrors=True)
-        try:
-            Chem.Kekulize(frag, clearAromaticFlags=True)
-        except ValueError:
-            pass
-        out.append(frag)
+        sanitized = sanitize_metabolite(frag)
+        if sanitized is None:
+            _warn_invalid_metabolite(frag)
+            return []
+        out.append(sanitized)
     return out
 
 

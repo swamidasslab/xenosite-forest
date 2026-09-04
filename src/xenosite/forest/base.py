@@ -6,10 +6,19 @@ import collections
 import copy
 import itertools
 import re
+import warnings
 from collections import defaultdict, deque
 
 # Third Party
-from .utils import clean, merge, load, unmapped_smiles, canon_smi
+from .utils import (
+    clean,
+    merge,
+    load,
+    unmapped_smiles,
+    canon_smi,
+    is_rdkit_valid,
+    _mol_smiles,
+)
 from rdkit import Chem, rdBase
 from rdkit.Chem.rdmolfiles import (
     MolToSmiles,
@@ -1443,14 +1452,31 @@ class ReactionRule(AtomTracker):
                     self._stamp_origin_maps(mol)
                 break
 
+            metabolites = [x for x in metabolites if x]
+            if not metabolites:
+                continue
+
+            valid = []
+            for metabolite in metabolites:
+                if is_rdkit_valid(metabolite):
+                    valid.append(metabolite)
+                    continue
+                warnings.warn(
+                    "Dropping RDKit-invalid %s metabolite %s"
+                    % (self.name, _mol_smiles(metabolite)),
+                    UserWarning,
+                    stacklevel=2,
+                )
+            if not valid:
+                continue
+            metabolites = valid
+
             if only_largest_fragment:
-                metabolites = [x for x in metabolites if x]
-                if metabolites:
-                    metabolites = [
-                        sorted(
-                            metabolites, key=lambda x: x.GetNumAtoms(), reverse=True
-                        )[0]
-                    ]
+                metabolites = [
+                    sorted(
+                        metabolites, key=lambda x: x.GetNumAtoms(), reverse=True
+                    )[0]
+                ]
 
             if only_emit_topologically_distinct_sites:
                 topsite = self.site_to_topol_site(site, topol_equiv)
@@ -1481,7 +1507,7 @@ class ReactionRule(AtomTracker):
                 else:
                     unique_smi.append(unique_metabolites)
 
-            yield outsite, [x for x in metabolites if x]
+            yield outsite, metabolites
 
     def metabolites(self, mol, **kwargs):
         """Should return a tuple of lists. The first element will be the site, the second element
@@ -1587,9 +1613,25 @@ class SmartsReactionRule(ReactionRule):
         self._remove_props(mol)
         self._clear_atom_maps(mol)
 
+        try:
+            mol.UpdatePropertyCache(strict=False)
+        except Exception:
+            return
+
         for rxn_num, rxn in enumerate(self.rxns):
             self._clear_atom_maps(mol)
-            for prod_num, prod in enumerate(rxn.RunReactants([mol])):
+            try:
+                reactant_products = rxn.RunReactants((mol,))
+            except RuntimeError:
+                warnings.warn(
+                    "Skipping %s on unsanitizable reactant %s"
+                    % (self.name, _mol_smiles(mol)),
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return
+
+            for prod_num, prod in enumerate(reactant_products):
 
                 products = list(prod)
                 site = self._get_site(products, mapid_site=self.mapid_site)

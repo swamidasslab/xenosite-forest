@@ -1,7 +1,6 @@
-from rdkit.Chem.rdmolfiles import MolFromSmiles
-from xenosite.forest import rules, bfs
-from xenosite.forest.utils import canon_smi
-import pytest
+from rdkit.Chem.rdmolfiles import MolFromSmiles, MolToSmiles
+from xenosite.forest import rules, bfs, PhaseOneRS
+from xenosite.forest.utils import canon_smi, unmapped_smiles, is_rdkit_valid, clean
 
 
 def test_rule_modification():
@@ -142,7 +141,6 @@ def test_dehydration2():
     )
 
 
-@pytest.mark.xfail(reason="canonical SMILES mismatch for this nitro reduction path")
 def test_nitrogen_reduction1():
     result = next(
         bfs(
@@ -210,3 +208,51 @@ def test_sulfer_reduction():
         result,
         ("CCS", [("SulfurReduction", {"3.4"})], ["CCSO", "CCS"]),
     )
+
+
+HISTIDINE = "NC(Cc1cnc[nH]1)C(=O)O"
+
+
+def _phase1_histidine_products():
+    mol = MolFromSmiles(HISTIDINE)
+    out = []
+    for (rxn, site), mets in PhaseOneRS.metabolites(mol):
+        for m in mets:
+            out.append((rxn, site, unmapped_smiles(m), m))
+    return out
+
+
+def test_histidine_phase1_does_not_emit_invalid_metabolites():
+    products = _phase1_histidine_products()
+    assert products
+    invalid = [
+        (rxn, site, smi)
+        for rxn, site, smi, mol in products
+        if MolFromSmiles(smi) is None or not is_rdkit_valid(mol)
+    ]
+    assert invalid == []
+
+
+def test_histidine_nitrogen_oxidation_is_chemically_valid():
+    mol = MolFromSmiles(HISTIDINE)
+    smiles = []
+    for _, mets in rules.NitrogenOxidation().metabolize(mol):
+        smiles.extend(canon_smi(m) for m in mets)
+
+    # hydroxylamine and nitroso on the amino group; N-OH on pyrrole N;
+    # N-oxide on the pyridine-like imidazole N. No pentavalent N.
+    assert canon_smi("O=C(O)C(CC1=CN=CN1)NO") in smiles
+    assert canon_smi("O=NC(CC1=CN=CN1)C(=O)O") in smiles
+    assert canon_smi("NC(CC1=CN=CN1O)C(=O)O") in smiles
+    assert canon_smi("NC(CC1=C[N+]([O-])=CN1)C(=O)O") in smiles
+    assert canon_smi("NC(CC1=CN(O)=CN1)C(=O)O") not in smiles
+    assert canon_smi("NC(CC1=CN=CN1=O)C(=O)O") not in smiles
+    assert all(MolFromSmiles(s) is not None for s in smiles)
+
+
+def test_clean_preserves_imidazole_nh():
+    mol = MolFromSmiles(HISTIDINE)
+    cleaned = clean(mol)
+    assert len(cleaned) == 1
+    assert MolFromSmiles(MolToSmiles(cleaned[0])) is not None
+

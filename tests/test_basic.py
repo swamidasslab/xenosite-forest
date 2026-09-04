@@ -14,7 +14,6 @@ from xenosite.forest import rules
 from xenosite.forest.rulesets import RuleSet
 from xenosite.forest.base import can_smi
 import collections
-import pytest
 
 
 def test_epoxide_opening_aromatic():
@@ -103,7 +102,6 @@ def test_matt_problem2():
     dealk_tests("Oc1c(C(=O)Nc2cccnc2)c(=O)n2CCc3cccc1c23")
 
 
-@pytest.mark.xfail(reason="N-dealkylation site labeling on nevirapine is still incomplete")
 def test_matt_problem4():
     rmol = MolFromSmiles(nevirapine)
 

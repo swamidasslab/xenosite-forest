@@ -74,11 +74,6 @@ examples = {
             "C=CC(=O)CO",
             "C(CC(=O)N[C@@H](CSCCC(=O)CO)C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
         ),
-        # (
-        #     "NotButadieneReactiveMetaboliteSoWillNotConjugateToGSH",
-        #     "CC=CC(=O)CO",
-        #     "C(CC(=O)N[C@@H](CSCCC(=O)CO)C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-        # ),
     ],
     "Hydrogenation": [
         (
@@ -306,7 +301,7 @@ examples = {
         ("TautomerizationTest2", "OC1=CCCCC1", "O=C1CCCCC1"),
         ("TautomerizationTest3", "O=C1C=CCCC1", "OC1=CC=CCC1"),
         ("TautomerizationTest4", "OC1=CC=CCC1", "O=C1C=CCCC1"),
-        # ("TautomerizationTest5", "Oc1ccccc1", "O=C1CC=CC=C1"),
+        ("TautomerizationTest5", "Oc1ccccc1", "O=C1CC=CC=C1"),
     ],
     "NitrogenOxidation": [
         ("NitrogenOxidation_Demo1_SRT", "CCCN", "CCCNO"),
@@ -318,7 +313,7 @@ examples = {
         (
             "Reaction3183_3757_SulfurOxidation6_SRT",
             "c1ccc2c(c1)Sc1c(N2CCC2CCCCN2)cc(cc1)S(C)(C)C",
-            "CS(C)(C)C1C=CC2SC3=CC=CC=C3N(O)(CCC3CCCCN3)C=2C=1",
+            "CS(C)(C)C1=CC2=C(C=C1)SC1=CC=CC=C1[N+]2([O-])CCC1CCCCN1",
         ),
     ],
     "NitrogenReduction": [
@@ -479,5 +474,10 @@ def test_rule(rule, reactant, product):
             predicted = MolToSmiles(p)
             if predicted and canonical_product == can_smi(predicted):
                 return
-            
+
     assert False, f"Failed to find {product} in {reactant}"
+
+
+def test_glutathionation_skips_beta_substituted_enone():
+    mol = MolFromSmiles("CC=CC(=O)CO")
+    assert list(rules.Glutathionation().metabolites(mol)) == []
