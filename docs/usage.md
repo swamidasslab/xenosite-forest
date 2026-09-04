@@ -20,7 +20,7 @@ from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULES
 | `RULESETS` | Registry of built-in rulesets |
 | `AtomTrace(mol)` | 1-based atom-mapping history on a tagged metabolite |
 
-`xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`. In a notebook, `net`, `net.draw()`, `net.grid()`, and `net.draw_path(path)` render the graph with structure drawings and Metabolic Rainbow edge colors. Defaults are publication-friendly (white figure background). Useful `draw(...)` options: `nodes=[...]`, `reaction_types`, `max_generation`, `background`, `mol_background`, `mol_border`; `prune(...)` returns a filtered copy; `Drawing.save("figure.pdf")` / `net.save_draw(...)` write SVG (always) or PDF/PS (via `rsvg-convert` or ImageMagick).
+`xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
 
 ## Enumerate metabolites
 
