@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import warnings
+import logging
 
 import pytest
 from rdkit import Chem
@@ -48,7 +48,7 @@ def test_refresh_mol_allows_runreactants_on_resonance_copy():
     assert len(prods) >= 1
 
 
-def test_metabolites_continues_after_runreactants_runtime_error():
+def test_metabolites_continues_after_runreactants_runtime_error(caplog):
     """A failed rxn must not abort later SMARTS on the same reactant."""
 
     class TwoRxns(SmartsReactionRule):
@@ -69,11 +69,10 @@ def test_metabolites_continues_after_runreactants_runtime_error():
     rule.rxns[0].RunReactants = boom
 
     mol = Chem.MolFromSmiles(ETHANE)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        rows = list(rule.metabolites(mol))
+    caplog.set_level(logging.DEBUG)
+    rows = list(rule.metabolites(mol))
 
-    assert any("Skipping TwoRxns rxn 0" in str(w.message) for w in caught)
+    assert any("Skipping TwoRxns rxn 0" in r.message for r in caplog.records)
     assert rows, "second SMARTS should still yield after first RunReactants fails"
     # Restore in case the instance is reused (defensive).
     rule.rxns[0].RunReactants = real0

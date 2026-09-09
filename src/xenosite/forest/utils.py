@@ -1,12 +1,14 @@
 """Molecule loading and cleanup helpers."""
 
 import itertools
-import warnings
+import logging
 
 from rdkit import Chem, rdBase
 
 # Prevents spammy rdkit messages during sanitization probes.
 rdBase.DisableLog("rdApp.*")
+
+_log = logging.getLogger(__name__)
 
 
 def refresh_mol(mol):
@@ -181,23 +183,14 @@ def sanitize_metabolite(mol):
     return None
 
 
-def _warn_invalid_metabolite(mol, reason=None):
-    smi = _mol_smiles(mol)
-    reason = reason or sanitize_reason(mol) or "RDKit sanitization failed"
-    warnings.warn(
-        "Dropping RDKit-invalid metabolite %s (%s)" % (smi, reason),
-        UserWarning,
-        stacklevel=3,
-    )
-
-
 def clean(mol):
     """Split mol into sanitized, kekulized fragments.
 
-    If any fragment is RDKit-invalid, the whole product set is dropped with a
-    warning. Leaving leftover fragments from a failed reaction would emit
-    chemically incomplete structures (for example acetaldehyde from a failed
-    quinone formation).
+    If any fragment is RDKit-invalid, the whole product set is dropped.
+    Details are logged at DEBUG only so default runs stay quiet.
+    Leaving leftover fragments from a failed reaction would emit chemically
+    incomplete structures (for example acetaldehyde from a failed quinone
+    formation).
     """
     if isinstance(mol, (list, tuple)):
         parts = [clean(x) for x in mol]
@@ -209,7 +202,11 @@ def clean(mol):
     for frag in Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False):
         sanitized = sanitize_metabolite(frag)
         if sanitized is None:
-            _warn_invalid_metabolite(frag)
+            _log.debug(
+                "Dropping RDKit-invalid metabolite %s (%s)",
+                _mol_smiles(frag),
+                sanitize_reason(frag) or "RDKit sanitization failed",
+            )
             return []
         out.append(sanitized)
     return out

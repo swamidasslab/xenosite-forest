@@ -5,8 +5,8 @@ import ast
 import collections
 import copy
 import itertools
+import logging
 import re
-import warnings
 from collections import defaultdict, deque
 
 # Third Party
@@ -47,6 +47,8 @@ from rdkit.Chem import AllChem
 
 # Prevents spammy rdkit messages
 rdBase.DisableLog("rdApp.*")
+
+_log = logging.getLogger(__name__)
 
 
 def can_smi(line="", rdmol=None):
@@ -1462,11 +1464,10 @@ class ReactionRule(AtomTracker):
                 if is_rdkit_valid(metabolite):
                     valid.append(metabolite)
                     continue
-                warnings.warn(
-                    "Dropping RDKit-invalid %s metabolite %s"
-                    % (self.name, _mol_smiles(metabolite)),
-                    UserWarning,
-                    stacklevel=2,
+                _log.debug(
+                    "Dropping RDKit-invalid %s metabolite %s",
+                    self.name,
+                    _mol_smiles(metabolite),
                 )
             if not valid:
                 continue
@@ -1620,11 +1621,11 @@ class SmartsReactionRule(ReactionRule):
             try:
                 reactant_products = rxn.RunReactants((mol,))
             except RuntimeError:
-                warnings.warn(
-                    "Skipping %s rxn %d on unsanitizable reactant %s"
-                    % (self.name, rxn_num, _mol_smiles(mol)),
-                    UserWarning,
-                    stacklevel=2,
+                _log.debug(
+                    "Skipping %s rxn %d on unsanitizable reactant %s",
+                    self.name,
+                    rxn_num,
+                    _mol_smiles(mol),
                 )
                 continue
 
