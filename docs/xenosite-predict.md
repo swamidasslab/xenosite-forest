@@ -35,6 +35,8 @@ Regressions live in `tests/test_rdkit_valence.py` (diphenhydramine, ibuprofen, s
 
 **Folded into this package** (v0.2.3+): conjugation rules default to bare `*` adducts; optional `star_label` / `as_star=False`; `include_thiol` and `load_ruleset("GlutathionationNoThiol")`. See [usage](usage.md#conjugation-phase-ii).
 
+**UGT SOM** (v0.2.5+): `Glucuronidation` reports a **single-atom** site — the oxygen that receives GlcA (acid OH or phenolic/alcoholic OH). Earlier versions included neighboring mapped atoms in the site.
+
 Predict head → forest:
 
 | Predict head | Forest |
