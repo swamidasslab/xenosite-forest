@@ -188,6 +188,8 @@ Modeling the Bioactivation and Subsequent Reactivity of Drugs.
 
 Rainbow Phase I does not include conjugations.
 
+xenosite-predict uses `Glucuronidation` for UGT and `Glutathionation` for GSH/protein, but **DNA and cyanide drop the substrate-thiol SMARTS** (`[#16h1`). See [xenosite-predict notes](xenosite-predict.md).
+
 ## Tautomerization
 
 `TautomerizationRS` (`TT`) has a single `Tautomerization` rule. Metabolic Forest includes it because tautomers appear in known pathways even though tautomerization is not usually labeled as metabolism. Rainbow excluded tautomerization from the five colors (it was part of the ~7.7% of Phase I records left out of the Rainbow dataset).
@@ -331,7 +333,7 @@ gsh = RuleSet([rules.Glutathionation()], name="glutathionation")
 }
 ```
 
-The broader multitask reactivity model (GSH, cyanide, protein, DNA) is Hughes et al., *ACS Cent. Sci.* **2016**, *2*, 529–537. **DOI:** [10.1021/acscentsci.6b00162](https://doi.org/10.1021/acscentsci.6b00162). On the web: [xenosite.org](https://xenosite.org) (Reactivity).
+The broader multitask reactivity model (GSH, cyanide, protein, DNA) is Hughes et al., *ACS Cent. Sci.* **2016**, *2*, 529–537. **DOI:** [10.1021/acscentsci.6b00162](https://doi.org/10.1021/acscentsci.6b00162). On the web: [xenosite.org](https://xenosite.org) (Reactivity). DNA and cyanide should not use the thiol-disulfide SMARTS; see [xenosite-predict notes](xenosite-predict.md).
 
 ## Metabolic Forest (this package)
 
