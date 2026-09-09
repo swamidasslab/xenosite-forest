@@ -1,20 +1,18 @@
 # Notes from xenosite-predict
 
-Downstream package: sibling [`xenosite-predict`](https://github.com/swamidasslab/xenosite-predict) (`../xenosite-predict`). It enumerates Phase I and conjugate structures with this library. Two adapters live there until this package grows the same behavior.
+Downstream package: sibling [`xenosite-predict`](https://github.com/swamidasslab/xenosite-predict) (`../xenosite-predict`). It enumerates Phase I and conjugate structures with this library.
 
 ## RDKit 2026 valence caches
 
-Python-2 XenoNet and older RDKit compute implicit/explicit hydrogens lazily inside `RunReactants` and `MolToSmiles`. RDKit 2026 asserts those caches already exist (`getNumImplicitHs` / `getValence` without `calcImplicitValence`). Resonance copies from `join_fragments` look like valid mols but have an empty cache, so `Dehydrogenation` dies on the first aromatic drug.
+**Folded into this package** (v0.2.2+): `refresh_mol` / `UpdatePropertyCache(strict=False)` before `RunReactants` and SMILES, including `clean` fragments and unique-key SMILES. Failed reactants **continue** to the next SMARTS / resonance copy instead of aborting the rule.
 
-This checkout already calls `UpdatePropertyCache(strict=False)` in `SmartsReactionRule.metabolites` and skips the rule on `RuntimeError`. The **installed wheel** xenosite-predict was using did not. Predict therefore shims the call sites it hits:
+Predict’s temporary shim was:
 
 [`../xenosite-predict/src/xenosite/predict/forest_rdkit.py`](../../xenosite-predict/src/xenosite/predict/forest_rdkit.py)
 
-That file replaces `SmartsReactionRule.metabolites`, `_kekulize`, `clean`, `can_smi`, and `RuleSet.metabolites` (unique-key SMILES). Please fold the same refreshes into this tree (including `clean` fragments and unique SMILES), and **do not `return` the whole rule** when one resonance copy fails — skip that copy and continue.
+Regressions live in `tests/test_rdkit_valence.py` (diphenhydramine, ibuprofen, skip-and-continue).
 
 ### Examples that crashed on the unpatched wheel, then enumerated
-
-These are from the 327-molecule descriptor suite vs Python-2 XenoNet. On RDKit 2026.03.5, `PhaseOneRS.metabolites(..., unique=True)` raised a valence precondition until the shim. After the shim they produce metabolites (diphenhydramine and ibuprofen are in predict’s `tests/test_forest_rdkit.py`).
 
 | Name / note | SMILES |
 | --- | --- |
@@ -33,34 +31,25 @@ These are from the 327-molecule descriptor suite vs Python-2 XenoNet. On RDKit 2
 | Penicillin G core | `CC1(C)SC2C(NC(=O)Cc3ccccc3)C(=O)N21` |
 | Sudoxicam-like | `CN1C(C(=O)Nc2nccs2)=C(O)c2ccccc2S1(=O)=O` |
 
-On the 327-molecule suite the shim took **171 crashes → 0**. Shared Phase I edge *weights* already matched Python-2; the crash was structure enumeration, not ONNX.
-
 ## Conjugation rules (DNA / cyanide vs GSH)
 
-Forest ships `Glucuronidation` and `Glutathionation` under `CJ`. Predict maps:
+**Folded into this package** (v0.2.3+): conjugation rules default to bare `*` adducts; optional `star_label` / `as_star=False`; `include_thiol` and `load_ruleset("GlutathionationNoThiol")`. See [usage](usage.md#conjugation-phase-ii).
 
-| Predict head | Forest ruleset |
+Predict head → forest:
+
+| Predict head | Forest |
 | --- | --- |
-| `ugt` | `CJ.Glucuronidation` |
-| `reactivity.gsh` | `CJ.Glutathionation` |
-| `reactivity.protein` | `CJ.Glutathionation` (star label `Protein`) |
-| `reactivity.dna` | glutathionation **without** the thiol-disulfide SMARTS |
-| `reactivity.cyanide` | same as DNA |
+| `ugt` | `Glucuronidation(star_label="GlcA")` or `CJ.Glucuronidation` |
+| `reactivity.gsh` | `Glutathionation(star_label="GSH")` |
+| `reactivity.protein` | `Glutathionation(star_label="Protein")` (star-only) |
+| `reactivity.dna` | `Glutathionation(include_thiol=False, star_label="DNA")` or `GlutathionationNoThiol` |
+| `reactivity.cyanide` | `Glutathionation(include_thiol=False, star_label="Cyanide")` (label is `Cyanide`, not `CN`) |
 
-`Glutathionation.smarts` includes `[#16h1:1]>>…` (substrate thiol → mixed disulfide). That is a GSH reaction, not DNA or cyanide. Predict subclasses:
+Predict’s older adapter ([`conjugates.py`](../../xenosite-predict/src/xenosite/predict/conjugates.py)) can drop once it calls these options. Forest keeps AtomTracker on star products; `mol_to_cxsmiles` copies before stripping props so tracing is unchanged.
 
-```python
-class GlutathionationNoThiol(Glutathionation):
-    smarts = [s for s in Glutathionation.smarts if "[#16h1" not in s]
-```
+### Examples where GSH vs DNA/Cyanide output differs
 
-Adapter: [`../xenosite-predict/src/xenosite/predict/conjugates.py`](../../xenosite-predict/src/xenosite/predict/conjugates.py).
-
-Please add a built-in variant (or a flag) that keeps epoxide, C–Cl, and terminal alkene and drops `[#16h1`. Dummy `*` atoms in predict are labeled with CXSMILES (`GlcA` / `GSH` / `Protein` / `DNA` / `CN`); forest can keep emitting a bare `*`.
-
-### Examples where GSH vs DNA/CN output differs
-
-Thiol substrates match `[#16h1` and must **not** appear as DNA/CN conjugates:
+Thiol substrates match `[#16h1` and must **not** appear as DNA/Cyanide conjugates:
 
 | Note | SMILES |
 | --- | --- |
@@ -68,7 +57,7 @@ Thiol substrates match `[#16h1` and must **not** appear as DNA/CN conjugates:
 | Thiophenol | `Sc1ccccc1` |
 | Cysteine-like thiol | `SC[C@H](N)C(=O)O` |
 
-Electrophiles that **should** still conjugate for GSH, DNA, and CN (no thiol SMARTS):
+Electrophiles that **should** still conjugate for GSH, DNA, and Cyanide (no thiol SMARTS):
 
 | Note | SMILES |
 | --- | --- |

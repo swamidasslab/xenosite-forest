@@ -20,7 +20,8 @@ Metabolic Forest groups 24 reaction rules into eight rulesets: the five Rainbow 
 | `HydrolysisRS` | `HD` (`Hydrolysis`) | Hydrolysis (Forest definition; see below) |
 | `ReductionRS` | `RD` (`Reduction`) | Reduction (Forest definition; see below) |
 | `QuinoneFormationRS` | `QF` (`QuinoneFormation`) | Quinone / quinone-imine / quinone-methide |
-| `ConjugationRS` | `CJ` (`Conjugation`) | Phase II conjugations |
+| `ConjugationRS` | `CJ` (`Conjugation`) | Phase II conjugations (default: bare `*` adducts) |
+| `GlutathionationNoThiolRS` | `GlutathionationNoThiol` | Glutathionation without substrate-thiol SMARTS |
 | `TautomerizationRS` | `TT` (`Tautomerization`) | Tautomerization |
 | `Bioactivation` | `BA` (`BioactivationPathways`) | Four common bioactivation routes |
 | `ThiopheneSulfurOxidationRS` | `TSO` (`ThiopheneSulfurOxidation`) | Thiophene S-oxidation alone |
@@ -186,9 +187,11 @@ Modeling the Bioactivation and Subsequent Reactivity of Drugs.
 - `Glutathionation`
 - `Sulfation`
 
-Rainbow Phase I does not include conjugations.
+Products **default to bare `*` adducts**. Pass `as_star=False` for the full chemical group, or `star_label=...` for CXSMILES (`GlcA` / `GSH` / `Protein` / `DNA` / `Cyanide`). `Protein`, `DNA`, and `Cyanide` are star-only.
 
-xenosite-predict uses `Glucuronidation` for UGT and `Glutathionation` for GSH/protein, but **DNA and cyanide drop the substrate-thiol SMARTS** (`[#16h1`). See [xenosite-predict notes](xenosite-predict.md).
+`GlutathionationNoThiol` (`load_ruleset("GlutathionationNoThiol")`) is the same epoxide / C–Cl / alkene SMARTS as GSH without `[#16h1` (for DNA / cyanide). Details and examples: [usage](usage.md#conjugation-phase-ii) and [xenosite-predict notes](xenosite-predict.md).
+
+Rainbow Phase I does not include conjugations.
 
 ## Tautomerization
 
@@ -285,7 +288,8 @@ A Simple Model Predicts UGT-Mediated Metabolism.
 ```python
 from xenosite.forest import rules, RuleSet
 
-ugt = RuleSet([rules.Glucuronidation()], name="ugt")
+ugt = RuleSet([rules.Glucuronidation(star_label="GlcA")], name="ugt")
+# Full sugar: rules.Glucuronidation(as_star=False)
 ```
 
 ```bibtex
@@ -314,9 +318,11 @@ Site of Reactivity Models Predict Molecular Reactivity of Diverse Chemicals with
 **DOI:** [10.1021/acs.chemrestox.5b00017](https://doi.org/10.1021/acs.chemrestox.5b00017)
 
 ```python
-from xenosite.forest import rules, RuleSet
+from xenosite.forest import rules, RuleSet, load_ruleset
 
-gsh = RuleSet([rules.Glutathionation()], name="glutathionation")
+gsh = RuleSet([rules.Glutathionation(star_label="GSH")], name="glutathionation")
+protein = RuleSet([rules.Glutathionation(star_label="Protein")], name="protein")
+dna = load_ruleset("GlutathionationNoThiol")  # or Glutathionation(include_thiol=False, star_label="DNA")
 ```
 
 ```bibtex
@@ -333,7 +339,7 @@ gsh = RuleSet([rules.Glutathionation()], name="glutathionation")
 }
 ```
 
-The broader multitask reactivity model (GSH, cyanide, protein, DNA) is Hughes et al., *ACS Cent. Sci.* **2016**, *2*, 529–537. **DOI:** [10.1021/acscentsci.6b00162](https://doi.org/10.1021/acscentsci.6b00162). On the web: [xenosite.org](https://xenosite.org) (Reactivity). DNA and cyanide should not use the thiol-disulfide SMARTS; see [xenosite-predict notes](xenosite-predict.md).
+The broader multitask reactivity model (GSH, cyanide, protein, DNA) is Hughes et al., *ACS Cent. Sci.* **2016**, *2*, 529–537. **DOI:** [10.1021/acscentsci.6b00162](https://doi.org/10.1021/acscentsci.6b00162). On the web: [xenosite.org](https://xenosite.org) (Reactivity). DNA and cyanide use `include_thiol=False` / `GlutathionationNoThiol` with `star_label="DNA"` or `"Cyanide"` (star-only; never the GSH peptide). See [usage](usage.md#conjugation-phase-ii).
 
 ## Metabolic Forest (this package)
 

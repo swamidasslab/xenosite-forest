@@ -35,6 +35,49 @@ for site, products in rules.QuinoneFormation().metabolites(mol):
 
 Each `site` is `(rule_name, atom_or_bond_indices)`. Products are RDKit molecules.
 
+## Conjugation (Phase II)
+
+`Acetylation`, `Glucuronidation`, `Glutathionation`, and `Sulfation` inherit `ConjugationRule`. **By default** products are bare `*` adducts (the conjugate group is collapsed). Opt in to the full chemical adduct or a CXSMILES label:
+
+```python
+from rdkit import Chem
+from xenosite.forest import rules, load_ruleset
+from xenosite.forest.utils import mol_to_cxsmiles
+
+mol = Chem.MolFromSmiles("c1ccccc1O")
+
+# Default: bare star
+_, products = next(rules.Glucuronidation().metabolites(mol))
+Chem.MolToSmiles(products[0])  # '*Oc1ccccc1'
+
+# CXSMILES label on the dummy
+_, products = next(rules.Glucuronidation(star_label="GlcA").metabolites(mol))
+mol_to_cxsmiles(products[0])  # '*Oc1ccccc1 |$GlcA;;;;;;;$|'
+
+# Full glucuronide
+_, products = next(rules.Glucuronidation(as_star=False).metabolites(mol))
+```
+
+| Option | Meaning |
+| --- | --- |
+| `as_star=True` (default) | Collapse the conjugate group to a dummy `*` |
+| `star_label=None` (default) | Bare `*` / plain SMILES |
+| `star_label="GlcA"\|"GSH"\|…` | Set CX `atomLabel` on dummies; prefer `mol_to_cxsmiles` |
+| `as_star=False` | Emit the full chemical adduct (GlcA, GSH, acetyl, sulfate) |
+
+`Glutathionation` also takes `include_thiol=True` (default). Set `include_thiol=False` (or `load_ruleset("GlutathionationNoThiol")`) to drop the substrate-thiol disulfide SMARTS for DNA / cyanide-style reactivity.
+
+| Label | Typical setup | Full structure? |
+| --- | --- | --- |
+| (none) | `Glutathionation()` | yes, with `as_star=False` |
+| `GSH` | `Glutathionation(star_label="GSH")` | yes, with `as_star=False` |
+| `Protein` | `Glutathionation(star_label="Protein")` | **no** (star-only) |
+| `DNA` | `Glutathionation(include_thiol=False, star_label="DNA")` | **no** |
+| `Cyanide` | `Glutathionation(include_thiol=False, star_label="Cyanide")` | **no** |
+| `GlcA` | `Glucuronidation(star_label="GlcA")` | yes, with `as_star=False` |
+
+The SMILES token before `|` is always valid on its own and depicts a bare `*`. See [rulesets](rulesets.md#conjugation) and [xenosite-predict notes](xenosite-predict.md).
+
 ## Indexing
 
 Two scales. Mixing them is the confusing part.
