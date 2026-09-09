@@ -790,11 +790,13 @@ class Glucuronidation(ConjugationRule):
 
     """
 
+    # Attachment oxygen is always map :1 so SOM is a single atom.
     smarts = [
-        "[#6:1][#6:2](=[O,N,P,S:3])[#8:4]>>\
-                        O1C(C(=O)O)C(O)C(O)C(O)C([*:4][*:2](=[#8:3])[*:1])1",
+        "[#8:1][#6:2](=[O,N,P,S:3])[#6:4]>>\
+                        O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1",
         "[#8H1:1][#6:2]>>O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2])1",
     ]
+    mapid_site = [1]
 
 
 class Sulfation(ConjugationRule):
