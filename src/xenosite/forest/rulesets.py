@@ -585,6 +585,12 @@ ConjugationRS.add_rule(all_rules.Glucuronidation())
 ConjugationRS.add_rule(all_rules.Glutathionation())
 ConjugationRS.add_rule(all_rules.Sulfation())
 
+GlutathionationNoThiolRS = RuleSet(
+    rules=[all_rules.Glutathionation(include_thiol=False, name='Glutathionation')],
+    name='GlutathionationNoThiol',
+    longname='Glutathionation without thiol disulfide',
+)
+
 DehydrogenationRS = RuleSet(name='DH', longname='Dehydrogenation')
 DehydrogenationRS.add_rule(all_rules.Dehydrogenation())
 

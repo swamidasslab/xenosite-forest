@@ -17,10 +17,80 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
-from .utils import canon_smi
+from .utils import (
+    apply_star_conjugate,
+    canon_smi,
+    mol_to_cxsmiles,
+    unmapped_smiles,
+)
 
 # Prevents spammy rdkit messages
 rdBase.DisableLog("rdApp.*")
+
+# Labels that are abstract (no real adduct molecule in the SMARTS).
+STAR_ONLY_LABELS = frozenset({"Protein", "DNA", "Cyanide"})
+
+
+class ConjugationRule(SmartsReactionRule):
+    """Phase II conjugation with optional star collapse and CX ``atomLabel``.
+
+    By default products are bare ``*`` adducts (the conjugate group is collapsed).
+    Pass ``as_star=False`` for the full chemical adduct (GlcA, GSH, acetyl,
+    sulfate). Labels ``Protein``, ``DNA``, and ``Cyanide`` are star-only.
+    """
+
+    as_star = True
+    star_label = None
+
+    def __init__(self, as_star=None, star_label=None, *args, **kwargs):
+        if as_star is None:
+            as_star = type(self).as_star
+        if star_label is None:
+            star_label = type(self).star_label
+        if star_label in STAR_ONLY_LABELS and as_star is False:
+            raise ValueError(
+                "%r cannot emit a full conjugate structure; use a star adduct"
+                % (star_label,)
+            )
+        if star_label in STAR_ONLY_LABELS:
+            as_star = True
+        self.as_star = as_star
+        self.star_label = star_label
+        super(ConjugationRule, self).__init__(*args, **kwargs)
+
+    def metabolites(self, mol, **kwargs):
+        for site, products in super(ConjugationRule, self).metabolites(mol, **kwargs):
+            if self.as_star:
+                products = [
+                    apply_star_conjugate(p, label=self.star_label) for p in products if p
+                ]
+            yield site, products
+
+    def metabolites_from_sites(
+        self,
+        mol,
+        sites,
+        just_smiles=False,
+        deplete_sites=False,
+        tag_atoms=True,
+        **kwargs
+    ):
+        sites = self._cast_sites(sites)
+
+        for site, metabolite in self.metabolize(mol, **kwargs):
+            if tuple(site) in sites:
+                if just_smiles:
+                    if self.star_label:
+                        yield [mol_to_cxsmiles(m) for m in metabolite]
+                    else:
+                        yield list(map(unmapped_smiles, metabolite))
+                else:
+                    yield tuple(site), metabolite
+
+                if deplete_sites:
+                    sites.remove(tuple(site))
+                    if not sites:
+                        break
 
 
 class QuinoneFormation(AromaticSystems, ResonancePairRule):
@@ -393,11 +463,13 @@ class Epoxidation(ResonanceRule):
         )
 
 
-class Acetylation(SmartsReactionRule):
+class Acetylation(ConjugationRule):
     """Adds an acetyl to OH, NH, and SH.
 
+    Defaults to a bare ``*`` adduct. Use ``as_star=False`` for the full acetyl.
+
     >>> mol = Chem.MolFromSmiles('C1=CC(=C(C=C1N)C(=O)O)O')
-    >>> site, metabolites = next(Acetylation().metabolize(mol))
+    >>> site, metabolites = next(Acetylation(as_star=False).metabolize(mol))
     >>> canon_smi(metabolites[0]) == canon_smi('CC(=O)NC1=CC(C(=O)O)=C(O)C=C1')
     True
     """
@@ -405,10 +477,16 @@ class Acetylation(SmartsReactionRule):
     smarts = "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]"
 
 
-class Glutathionation(SmartsReactionRule):
-    """Adds glutathione to epoxide, halogen, and sulfur motifs.
+class Glutathionation(ConjugationRule):
+    """Adds glutathione to epoxide, halogen, thiol, and terminal alkene motifs.
 
-    >>> G = Glutathionation()
+    Defaults to a bare ``*`` adduct. Use ``as_star=False`` for the full GSH
+    peptide. ``star_label`` may be ``GSH``, ``Protein``, ``DNA``, or ``Cyanide``
+    (CXSMILES). ``Protein`` / ``DNA`` / ``Cyanide`` are star-only. Set
+    ``include_thiol=False`` to drop the substrate-thiol disulfide SMARTS (DNA /
+    cyanide reactivity).
+
+    >>> G = Glutathionation(as_star=False)
     >>> mol = Chem.MolFromSmiles('c1ccccc1-C1OC1')
     >>> site, metabolites = next(G.metabolize(mol))
     >>> site
@@ -418,7 +496,7 @@ class Glutathionation(SmartsReactionRule):
 
     """
 
-    smarts = [
+    _ALL_SMARTS = [
         "[#6:1]1[#8:2][#6:3]1>>\
                 C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
         "[#6:1][Cl:2]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
@@ -426,6 +504,18 @@ class Glutathionation(SmartsReactionRule):
         "[#6H2:1]=[#6:2]>>C(CC(=O)N[C@@H](CS([*:1]-[*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
     ]
     mapid_site = [1]
+
+    def __init__(self, include_thiol=True, as_star=None, star_label=None, **kwargs):
+        smarts = list(self._ALL_SMARTS)
+        if not include_thiol:
+            smarts = [s for s in smarts if "[#16h1" not in s]
+        self.include_thiol = include_thiol
+        super(Glutathionation, self).__init__(
+            as_star=as_star,
+            star_label=star_label,
+            rxns=smarts,
+            **kwargs
+        )
 
 
 class Dealkylation(SmartsReactionRule):
@@ -687,10 +777,14 @@ class SulfurReduction(SmartsReactionRule):
     ]
 
 
-class Glucuronidation(SmartsReactionRule):
-    """
+class Glucuronidation(ConjugationRule):
+    """Glucuronidation of acids and phenols.
+
+    Defaults to a bare ``*`` adduct. Use ``as_star=False`` for the full GlcA, or
+    ``star_label="GlcA"`` for a CXSMILES-labeled star.
+
     >>> mol = Chem.MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
-    >>> site, metabolites = next(Glucuronidation().metabolize(mol))
+    >>> site, metabolites = next(Glucuronidation(as_star=False).metabolize(mol))
     >>> canon_smi(metabolites) == canon_smi(['CC(=O)NC1=CC=C(OC2OC(C(=O)O)C(O)C(O)C2O)C=C1'])
     True
 
@@ -703,10 +797,10 @@ class Glucuronidation(SmartsReactionRule):
     ]
 
 
-class Sulfation(SmartsReactionRule):
+class Sulfation(ConjugationRule):
     """
     >>> mol = Chem.MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
-    >>> site, metabolites = next(Sulfation().metabolize(mol))
+    >>> site, metabolites = next(Sulfation(as_star=False).metabolize(mol))
     >>> canon_smi(metabolites) == canon_smi(['CC(=O)NC1=CC=C(OS(=O)(=O)O)C=C1'])
     True
 
@@ -715,14 +809,17 @@ class Sulfation(SmartsReactionRule):
 
     """
 
-    def __init__(self):
+    def __init__(self, as_star=None, star_label=None, **kwargs):
         super(Sulfation, self).__init__(
-            [
+            as_star=as_star,
+            star_label=star_label,
+            rxns=[
                 "[#6:1][#8:2]>>[*:1][*:2]S(=O)(=O)O",
                 "[#6:1]1=[#6:2][#6:3]2[#8:7][#6:4]2[#6:5]=[#6:6]1>>\
                     [*:1]1=[*:2][*:3]=[*:4](-S(C)(=O)(=O))[*:5]=[*:6]1",
             ],
-            [1, 2],
+            mapid_site=[1, 2],
+            **kwargs
         )
 
 

@@ -215,6 +215,99 @@ def clean(mol):
     return out
 
 
+_PARENT_ATOM_PROPS = ("current_idx", "react_atom_idx")
+
+
+def _atom_from_reactant(atom):
+    """True when ``atom`` was copied from the reactant (has a parent index prop)."""
+    return any(atom.HasProp(p) for p in _PARENT_ATOM_PROPS)
+
+
+def collapse_conjugate_to_star(product):
+    """Replace newly added conjugate atoms with a dummy ``*`` at each attachment.
+
+    Parent atoms are those carrying ``current_idx`` / ``react_atom_idx`` from
+    ``SmartsReactionRule`` / AtomTracker. Atoms without those props are treated
+    as the conjugate group.
+    """
+    if product is None:
+        return product
+
+    new_atoms = set()
+    for atom in product.GetAtoms():
+        if atom.GetAtomicNum() == 1:
+            continue
+        if not _atom_from_reactant(atom):
+            new_atoms.add(atom.GetIdx())
+    if not new_atoms:
+        return Chem.Mol(product)
+
+    attach = set()
+    for bond in product.GetBonds():
+        a, b = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        a_new, b_new = a in new_atoms, b in new_atoms
+        if a_new == b_new:
+            continue
+        attach.add(b if a_new else a)
+    if not attach:
+        return Chem.Mol(product)
+
+    def _after_remove(idx):
+        return idx - sum(1 for n in new_atoms if n < idx)
+
+    rw = Chem.RWMol(product)
+    for idx in sorted(new_atoms, reverse=True):
+        rw.RemoveAtom(idx)
+    for pa in sorted(_after_remove(a) for a in attach):
+        dummy = rw.AddAtom(Chem.Atom(0))
+        rw.AddBond(pa, dummy, Chem.BondType.SINGLE)
+    mol = rw.GetMol()
+    Chem.SanitizeMol(mol, catchErrors=True)
+    refresh_mol(mol)
+    return mol
+
+
+def label_star_atoms(mol, label):
+    """Set CX ``atomLabel`` on dummy (atomic number 0) atoms. Mutates ``mol``."""
+    if mol is None or not label:
+        return mol
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 0:
+            atom.SetProp("atomLabel", label)
+    return mol
+
+
+def mol_to_cxsmiles(mol, isomericSmiles=False):
+    """Non-isomeric CXSMILES when possible; else plain SMILES.
+
+    Clears non-``atomLabel`` atom props so the CX block only carries labels.
+    The token before ``|`` is valid on its own and depicts a bare ``*``.
+    """
+    if mol is None:
+        return None
+    mol = Chem.Mol(mol)
+    for atom in mol.GetAtoms():
+        label = atom.GetProp("atomLabel") if atom.HasProp("atomLabel") else None
+        for prop in list(atom.GetPropNames()):
+            atom.ClearProp(prop)
+        if label is not None:
+            atom.SetProp("atomLabel", label)
+    refresh_mol(mol)
+    try:
+        out = Chem.MolToCXSmiles(mol, isomericSmiles)
+    except Exception:
+        return unmapped_smiles(mol, isomericSmiles=isomericSmiles)
+    return out or unmapped_smiles(mol, isomericSmiles=isomericSmiles)
+
+
+def apply_star_conjugate(mol, label=None):
+    """Collapse a full conjugate to a star adduct; optionally set ``atomLabel``."""
+    collapsed = collapse_conjugate_to_star(mol)
+    if label:
+        label_star_atoms(collapsed, label)
+    return collapsed
+
+
 def merge(intervals):
     """Merge a list of overlapping lists into a single list of disjoint sets.
 
