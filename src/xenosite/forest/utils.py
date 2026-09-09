@@ -9,11 +9,32 @@ from rdkit import Chem, rdBase
 rdBase.DisableLog("rdApp.*")
 
 
+def refresh_mol(mol):
+    """Fill valence caches without failing on odd valences (RDKit 2026).
+
+    Resonance copies from ``join_fragments`` can look valid but have an empty
+    implicit-H cache. RDKit 2026 asserts those caches exist inside
+    ``RunReactants`` and ``MolToSmiles``.
+    """
+    if mol is None:
+        return mol
+    if isinstance(mol, (list, tuple)):
+        for item in mol:
+            refresh_mol(item)
+        return mol
+    try:
+        mol.UpdatePropertyCache(strict=False)
+    except Exception:
+        pass
+    return mol
+
+
 def unmapped_smiles(mol, **kwargs):
     """SMILES with atom-map numbers cleared so structure identity ignores `:N` maps."""
     mol = Chem.Mol(mol)
     for atom in mol.GetAtoms():
         atom.SetAtomMapNum(0)
+    refresh_mol(mol)
     return Chem.MolToSmiles(mol, **kwargs)
 
 
@@ -128,6 +149,7 @@ def _sanitize_kekulize(mol, reset_hs=False):
         Chem.Kekulize(mol, clearAromaticFlags=True)
     except ValueError:
         pass
+    refresh_mol(mol)
     smi = Chem.MolToSmiles(mol)
     if Chem.MolFromSmiles(smi) is None:
         raise ValueError("SMILES round-trip failed: %s" % smi)

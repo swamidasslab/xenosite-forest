@@ -8,7 +8,7 @@ from collections import OrderedDict, defaultdict
 from . import rules as all_rules
 from .base import (AtomTracker, ReactionRule, can_smi,
                                         clean)
-from .utils import unmapped_smiles
+from .utils import refresh_mol, unmapped_smiles
 from rdkit import Chem, rdBase
 
 # Prevents spammy rdkit messages
@@ -430,7 +430,9 @@ class RuleSet(Phase1Site, ReactionRule):
 
                 if unique:
                     fline = '_'.join([
-                        '.'.join(map(Chem.MolToSmiles, metabolites)),
+                        '.'.join(
+                            Chem.MolToSmiles(refresh_mol(m)) for m in metabolites
+                        ),
                         rule.name,
                         str(site)
                     ])

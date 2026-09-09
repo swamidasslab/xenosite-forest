@@ -18,6 +18,7 @@ from .utils import (
     canon_smi,
     is_rdkit_valid,
     _mol_smiles,
+    refresh_mol,
 )
 from rdkit import Chem, rdBase
 from rdkit.Chem.rdmolfiles import (
@@ -1612,11 +1613,7 @@ class SmartsReactionRule(ReactionRule):
 
         self._remove_props(mol)
         self._clear_atom_maps(mol)
-
-        try:
-            mol.UpdatePropertyCache(strict=False)
-        except Exception:
-            return
+        refresh_mol(mol)
 
         for rxn_num, rxn in enumerate(self.rxns):
             self._clear_atom_maps(mol)
@@ -1624,12 +1621,12 @@ class SmartsReactionRule(ReactionRule):
                 reactant_products = rxn.RunReactants((mol,))
             except RuntimeError:
                 warnings.warn(
-                    "Skipping %s on unsanitizable reactant %s"
-                    % (self.name, _mol_smiles(mol)),
+                    "Skipping %s rxn %d on unsanitizable reactant %s"
+                    % (self.name, rxn_num, _mol_smiles(mol)),
                     UserWarning,
                     stacklevel=2,
                 )
-                return
+                continue
 
             for prod_num, prod in enumerate(reactant_products):
 
@@ -1659,6 +1656,7 @@ class SmartsReactionRule(ReactionRule):
             Kekulize(mol, clearAromaticFlags=True)
         except ValueError:
             pass
+        refresh_mol(mol)
 
     def _copy_props(
         self,
