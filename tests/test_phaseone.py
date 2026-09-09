@@ -256,3 +256,16 @@ def test_clean_preserves_imidazole_nh():
     assert len(cleaned) == 1
     assert MolFromSmiles(MolToSmiles(cleaned[0])) is not None
 
+
+def test_clean_drops_whole_set_if_any_fragment_invalid():
+    """Failed quinone/dealk must not emit the leftover aldehyde as a metabolite.
+
+    ``clean`` is all-or-nothing on a product list: if any fragment is
+    RDKit-invalid, the whole set is dropped.
+    """
+    leftover = MolFromSmiles("CC=O")
+    invalid = MolFromSmiles("[NH2]=c1nc(=O)cs1", sanitize=False)
+    assert leftover is not None and invalid is not None
+    assert clean([leftover, invalid]) == []
+    assert len(clean([leftover, MolFromSmiles("CCO")])) == 2
+
