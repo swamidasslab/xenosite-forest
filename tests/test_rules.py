@@ -448,6 +448,11 @@ def test_rule_exists(rule):
     rules.__dict__[rule]
 
 
+_CONJUGATION_RULES = frozenset(
+    {"Acetylation", "Glucuronidation", "Glutathionation", "Sulfation"}
+)
+
+
 @pytest.mark.parametrize(
     "rule, reactant, product",
     [(rule, e[1], e[2]) for rule, exs in examples.items() for e in exs],
@@ -463,7 +468,11 @@ def test_rule(rule, reactant, product):
             "Oxidative dehalogenation does not emit this substitution under current RDKit"
         )
 
-    R = rules.__dict__[rule]()
+    # Historical examples assert full chemical adducts, not star collapse.
+    if rule in _CONJUGATION_RULES:
+        R = rules.__dict__[rule](as_star=False)
+    else:
+        R = rules.__dict__[rule]()
 
     canonical_product = can_smi(product)
     r = MolFromSmiles(reactant)
@@ -480,4 +489,4 @@ def test_rule(rule, reactant, product):
 
 def test_glutathionation_skips_beta_substituted_enone():
     mol = MolFromSmiles("CC=CC(=O)CO")
-    assert list(rules.Glutathionation().metabolites(mol)) == []
+    assert list(rules.Glutathionation(as_star=False).metabolites(mol)) == []

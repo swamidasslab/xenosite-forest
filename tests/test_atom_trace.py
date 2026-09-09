@@ -27,12 +27,17 @@ _FALLBACK_REACTANTS = {
     "ThiopheneSulfurOxidation": "O=C(c1ccc(cc1)C(C(=O)O)C)c2sccc2",
 }
 
+# Base classes in rules.py that are not runnable reaction rules.
+_SKIP_RULE_CLASSES = frozenset({"ConjugationRule"})
+
 
 def _rule_classes():
     return [
         cls
         for _, cls in inspect.getmembers(rules, inspect.isclass)
-        if issubclass(cls, ReactionRule) and cls.__module__ == rules.__name__
+        if issubclass(cls, ReactionRule)
+        and cls.__module__ == rules.__name__
+        and cls.__name__ not in _SKIP_RULE_CLASSES
     ]
 
 
