@@ -82,9 +82,12 @@ include = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules -n auto --timeout=120"
-testpaths = ["tests", "src/xenosite/forest"]
-pythonpath = ["src"]
+addopts = "--doctest-modules -n auto --timeout=120 --import-mode=importlib"
+# Collect from src (not src/xenosite/forest) so importlib resolves xenosite.forest.*
+# and xenosite stays a PEP 420 namespace package (no xenosite/__init__.py).
+testpaths = ["tests", "src"]
+pythonpath = ["src", "tests"]
+consider_namespace_packages = true
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 # Avoid collecting optional network helpers unless explicitly requested
 norecursedirs = [".git", ".venv", "build", "dist"]
