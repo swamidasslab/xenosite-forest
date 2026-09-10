@@ -189,7 +189,7 @@ Modeling the Bioactivation and Subsequent Reactivity of Drugs.
 
 Products **default to bare `*` adducts**. Pass `as_star=False` for the full chemical group, or `star_label=...` for CXSMILES (`GlcA` / `GSH` / `Protein` / `DNA` / `Cyanide`). `Protein`, `DNA`, and `Cyanide` are star-only.
 
-`GlutathionationNoThiol` (`load_ruleset("GlutathionationNoThiol")`) is the same epoxide / C–Cl / alkene SMARTS as GSH without `[#16h1` (for DNA / cyanide). Details and examples: [usage](usage.md#conjugation-phase-ii) and [xenosite-predict notes](xenosite-predict.md).
+`GlutathionationNoThiol` (`load_ruleset("GlutathionationNoThiol")`) is the same electrophile SMARTS as GSH without `[#16h1` (for DNA / cyanide). Details and examples: [usage](usage.md#conjugation-phase-ii) and [xenosite-predict notes](xenosite-predict.md).
 
 Rainbow Phase I does not include conjugations.
 
@@ -310,7 +310,7 @@ On the web: [xenosite.org/ugt](https://xenosite.org/ugt).
 
 ## Glutathionation
 
-Rule: `Glutathionation`. Enumerates glutathione conjugates (epoxide, halogen, and sulfur motifs). Matched to the glutathione site-of-reactivity XenoSite model.
+Rule: `Glutathionation`. High-sensitivity enumeration of glutathione conjugates of epoxides, aziridines, C–halogen (F/Cl/Br/I), thiols, terminal alkenes, Michael β-carbons (enones / quinones / quinone-imines), aldehyde thiohemiacetals, sulfonate esters, and isocyanates / isothiocyanates. Matched to the glutathione site-of-reactivity XenoSite model.
 
 Hughes, T. B.; Miller, G. P.; Swamidass, S. J.
 Site of Reactivity Models Predict Molecular Reactivity of Diverse Chemicals with Glutathione.

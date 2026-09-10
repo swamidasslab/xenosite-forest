@@ -65,4 +65,14 @@ Electrophiles that **should** still conjugate for GSH, DNA, and Cyanide (no thio
 | --- | --- |
 | Styrene oxide | `c1ccccc1C1OC1` |
 | Benzyl chloride | `ClCc1ccccc1` |
+| Benzyl bromide / iodide | `BrCc1ccccc1` / `ICc1ccccc1` |
 | Terminal alkene | `C=CC` |
+| Benzoquinone (Michael) | `O=C1C=CC(=O)C=C1` |
+| NAPQI | `CC(=O)N=C1C=CC(=O)C=C1` |
+| Formaldehyde / acetaldehyde | `C=O` / `CC=O` |
+| Benzaldehyde | `O=Cc1ccccc1` |
+| N-Phenylaziridine | `C1CN1c1ccccc1` |
+| Methyl mesylate | `COS(=O)(=O)C` |
+| Phenyl isocyanate | `O=C=Nc1ccccc1` |
+
+**Reactivity conjugation SMARTS** (high sensitivity / low specificity): epoxide, aziridine, C–halogen (F/Cl/Br/I), thiol (GSH/protein only), terminal alkene (`CH2=`), Michael β-CH enone/quinone/quinone-imine, aldehyde thiohemiacetal, sulfonate ester (`C–OSO₂`), and isocyanate / isothiocyanate. Enumerate plausible adducts if a site were positive — not how likely that is.
