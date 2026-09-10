@@ -478,13 +478,20 @@ class Acetylation(ConjugationRule):
 
 
 class Glutathionation(ConjugationRule):
-    """Adds glutathione to epoxide, halogen, thiol, and terminal alkene motifs.
+    """Adds glutathione to common soft-electrophile motifs.
 
     Defaults to a bare ``*`` adduct. Use ``as_star=False`` for the full GSH
     peptide. ``star_label`` may be ``GSH``, ``Protein``, ``DNA``, or ``Cyanide``
     (CXSMILES). ``Protein`` / ``DNA`` / ``Cyanide`` are star-only. Set
     ``include_thiol=False`` to drop the substrate-thiol disulfide SMARTS (DNA /
     cyanide reactivity).
+
+    SMARTS are high-sensitivity / low-specificity structure enumerators: if a
+    site were positive, these are the adducts that would most likely form.
+    Coverage includes epoxides, aziridines, C–halogen (F/Cl/Br/I), thiols,
+    terminal alkenes, Michael β-carbons (enones / quinones / quinone-imines),
+    aldehyde thiohemiacetals, sulfonate esters, and isocyanates /
+    isothiocyanates.
 
     >>> G = Glutathionation(as_star=False)
     >>> mol = Chem.MolFromSmiles('c1ccccc1-C1OC1')
@@ -496,12 +503,23 @@ class Glutathionation(ConjugationRule):
 
     """
 
+    _GSH = "C(CC(=O)N[C@@H](CS({attach}))C(=O)NCC(=O)O)[C@@H](C(=O)O)N"
     _ALL_SMARTS = [
-        "[#6:1]1[#8:2][#6:3]1>>\
-                C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-        "[#6:1][Cl:2]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-        "[#16h1:1]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-        "[#6H2:1]=[#6:2]>>C(CC(=O)N[C@@H](CS([*:1]-[*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+        "[#6:1]1[#8:2][#6:3]1>>" + _GSH.format(attach="[*:1][*:3][*:2]"),
+        "[#6:1][F,Cl,Br,I:2]>>" + _GSH.format(attach="[*:1]"),
+        "[#16h1:1]>>" + _GSH.format(attach="[*:1]"),
+        "[#6H2:1]=[#6:2]>>" + _GSH.format(attach="[*:1]-[*:2]"),
+        # Michael: β-CH (not CH2) of enone / quinone / quinone-imine → enol adduct.
+        "[#6H1:1]=[#6:2][#6:3]=[#8,#7:4]>>"
+        + _GSH.format(attach="[*:1][*:2]=[*:3][*:4]"),
+        # Aldehyde → thiohemiacetal (formaldehyde is H2; others H1).
+        "[#6;H1,H2:1]=[#8:2]>>" + _GSH.format(attach="[*:1]([*:2])"),
+        # Aziridine ring opening (epoxide analog).
+        "[#6:1]1[#7:2][#6:3]1>>" + _GSH.format(attach="[*:1][*:3][*:2]"),
+        # Sulfonate / sulfate ester alkylation (C–OSO2–).
+        "[#6:1][#8:2]S(=O)(=O)>>" + _GSH.format(attach="[*:1]"),
+        # Isocyanate / isothiocyanate → thiocarbamate / dithiocarbamate.
+        "[#7:1]=[#6:2]=[#8,#16:3]>>" + _GSH.format(attach="[*:2](=[*:3])[*:1]"),
     ]
     mapid_site = [1]
 
