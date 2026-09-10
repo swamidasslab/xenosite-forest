@@ -19,25 +19,56 @@ PHENOL = "c1ccccc1O"
 BENZOIC_ACID = "c1ccccc1C(=O)O"
 STYRENE_OXIDE = "c1ccccc1C1OC1"
 BENZYL_CHLORIDE = "ClCc1ccccc1"
+BENZYL_BROMIDE = "BrCc1ccccc1"
+BENZYL_IODIDE = "ICc1ccccc1"
 TERMINAL_ALKENE = "C=CC"
 ALIPHATIC_THIOL = "CCS"
 THIOPHENOL = "Sc1ccccc1"
 CYSTEINE_LIKE = "SC[C@H](N)C(=O)O"
+BENZOQUINONE = "O=C1C=CC(=O)C=C1"
+NAPQI = "CC(=O)N=C1C=CC(=O)C=C1"
+MENADIONE = "CC1=CC(=O)c2ccccc2C1=O"
+BETA_ENONE = "CC=CC(=O)CO"
+CINNAMALDEHYDE = "O=CC=Cc1ccccc1"
+FORMALDEHYDE = "C=O"
+ACETALDEHYDE = "CC=O"
+BENZALDEHYDE = "O=Cc1ccccc1"
+METHYLGLYOXAL = "CC(=O)C=O"
+FURFURAL = "O=Cc1ccco1"
+N_PHENYLAZIRIDINE = "C1CN1c1ccccc1"
+METHYL_MESYLATE = "COS(=O)(=O)C"
+BENZYL_MESYLATE = "CS(=O)(=O)OCc1ccccc1"
+PHENYL_ISOCYANATE = "O=C=Nc1ccccc1"
+PHENYL_ISOTHIOCYANATE = "S=C=Nc1ccccc1"
+# Lookalikes that must not match the dedicated SMARTS (other rules may still fire).
+AZETIDINE_PHENYL = "C1CCN1c1ccccc1"
+PYRROLIDINE = "C1CCNC1"
+SULFONAMIDE = "CS(=O)(=O)Nc1ccccc1"
+SULFONE = "CS(=O)(=O)C"
+SULFONIC_ACID = "CS(=O)(=O)O"
+BENZONITRILE = "N#Cc1ccccc1"
+ACETANILIDE = "CC(=O)Nc1ccccc1"
+CARBODIIMIDE = "N=C=Nc1ccccc1"
 
 # One probe substrate per conjugation SMARTS (UGT / GSH / Protein / DNA / Cyanide).
-# GlutathionationNoThiol drops the thiol SMARTS, so DNA/Cyanide alkene is rxn index 2.
+# Glutathionation indices: 0 epoxide, 1 halide, 2 thiol, 3 alkene, 4 Michael,
+# 5 aldehyde, 6 aziridine, 7 sulfonate, 8 isocyanate.
+# NoThiol drops thiol → aldehyde=4, aziridine=5, sulfonate=6, isocyanate=7.
 _CONJUGATION_SMARTS_PROBES = [
     # (id, rule factory, smiles, smarts rxn index)
     ("ugt_acid", lambda: Glucuronidation(star_label="GlcA"), BENZOIC_ACID, 0),
     ("ugt_phenol", lambda: Glucuronidation(star_label="GlcA"), PHENOL, 1),
     ("gsh_epoxide", lambda: Glutathionation(star_label="GSH"), STYRENE_OXIDE, 0),
     ("gsh_chloride", lambda: Glutathionation(star_label="GSH"), BENZYL_CHLORIDE, 1),
+    ("gsh_bromide", lambda: Glutathionation(star_label="GSH"), BENZYL_BROMIDE, 1),
     ("gsh_thiol", lambda: Glutathionation(star_label="GSH"), ALIPHATIC_THIOL, 2),
     ("gsh_alkene", lambda: Glutathionation(star_label="GSH"), TERMINAL_ALKENE, 3),
+    ("gsh_michael", lambda: Glutathionation(star_label="GSH"), BENZOQUINONE, 4),
     ("protein_epoxide", lambda: Glutathionation(star_label="Protein"), STYRENE_OXIDE, 0),
     ("protein_chloride", lambda: Glutathionation(star_label="Protein"), BENZYL_CHLORIDE, 1),
     ("protein_thiol", lambda: Glutathionation(star_label="Protein"), ALIPHATIC_THIOL, 2),
     ("protein_alkene", lambda: Glutathionation(star_label="Protein"), TERMINAL_ALKENE, 3),
+    ("protein_michael", lambda: Glutathionation(star_label="Protein"), BENZOQUINONE, 4),
     (
         "dna_epoxide",
         lambda: Glutathionation(include_thiol=False, star_label="DNA"),
@@ -57,6 +88,12 @@ _CONJUGATION_SMARTS_PROBES = [
         2,
     ),
     (
+        "dna_michael",
+        lambda: Glutathionation(include_thiol=False, star_label="DNA"),
+        BENZOQUINONE,
+        3,
+    ),
+    (
         "cyanide_epoxide",
         lambda: Glutathionation(include_thiol=False, star_label="Cyanide"),
         STYRENE_OXIDE,
@@ -73,6 +110,28 @@ _CONJUGATION_SMARTS_PROBES = [
         lambda: Glutathionation(include_thiol=False, star_label="Cyanide"),
         TERMINAL_ALKENE,
         2,
+    ),
+    (
+        "cyanide_michael",
+        lambda: Glutathionation(include_thiol=False, star_label="Cyanide"),
+        BENZOQUINONE,
+        3,
+    ),
+    ("gsh_aldehyde", lambda: Glutathionation(star_label="GSH"), ACETALDEHYDE, 5),
+    (
+        "dna_aldehyde",
+        lambda: Glutathionation(include_thiol=False, star_label="DNA"),
+        ACETALDEHYDE,
+        4,
+    ),
+    ("gsh_aziridine", lambda: Glutathionation(star_label="GSH"), N_PHENYLAZIRIDINE, 6),
+    ("gsh_sulfonate", lambda: Glutathionation(star_label="GSH"), METHYL_MESYLATE, 7),
+    ("gsh_isocyanate", lambda: Glutathionation(star_label="GSH"), PHENYL_ISOCYANATE, 8),
+    (
+        "dna_aziridine",
+        lambda: Glutathionation(include_thiol=False, star_label="DNA"),
+        N_PHENYLAZIRIDINE,
+        5,
     ),
 ]
 
@@ -219,3 +278,139 @@ def test_ugt_som_is_oxygen(probe_id, smi, rxn_idx, expected_o):
         assert site == frozenset({expected_o}), (
             f"{probe_id}: expected SOM {{{expected_o}}}, got {sorted(site)}"
         )
+
+
+@pytest.mark.parametrize(
+    "smi, expected_soms, product_substr",
+    [
+        # Canonical SMILES; Michael β-carbons match high reactivity.gsh atoms.
+        (BENZOQUINONE, {2, 3, 6, 7}, "*C1C=C(O)C=CC1=O"),
+        (NAPQI, {5, 6, 9, 10}, None),
+        (MENADIONE, {2}, "*C1C(=O)c2ccccc2C(O)=C1C"),
+        (BETA_ENONE, {1}, None),
+        (CINNAMALDEHYDE, {3}, None),
+    ],
+)
+def test_glutathionation_michael_acceptors(smi, expected_soms, product_substr):
+    can = Chem.MolToSmiles(Chem.MolFromSmiles(smi))
+    hits = _sites_for_rxn(Glutathionation(star_label="GSH"), can, 4)
+    assert hits, f"no Michael products for {can}"
+    soms = {next(iter(site)) for site, _ in hits}
+    assert expected_soms <= soms, f"{can}: expected {expected_soms} ⊆ {soms}"
+    for site, products in hits:
+        assert len(site) == 1
+        assert "*" in _smiles(products[0])
+    if product_substr:
+        assert any(product_substr == _smiles(p[0]) for _, p in hits)
+
+
+@pytest.mark.parametrize("smi", [BENZYL_BROMIDE, BENZYL_IODIDE])
+def test_glutathionation_benzyl_bromide_iodide(smi):
+    can = Chem.MolToSmiles(Chem.MolFromSmiles(smi))
+    hits = _sites_for_rxn(Glutathionation(star_label="GSH"), can, 1)
+    assert hits
+    for site, products in hits:
+        assert site == frozenset({1})
+        assert _smiles(products[0]) == "*Cc1ccccc1"
+
+
+@pytest.mark.parametrize(
+    "rule_factory",
+    [
+        lambda: Glutathionation(star_label="GSH"),
+        lambda: Glutathionation(star_label="Protein"),
+        lambda: Glutathionation(include_thiol=False, star_label="DNA"),
+        lambda: Glutathionation(include_thiol=False, star_label="Cyanide"),
+    ],
+)
+def test_reactivity_heads_enumerate_benzoquinone(rule_factory):
+    assert _has_products(rule_factory(), BENZOQUINONE)
+
+
+@pytest.mark.parametrize(
+    "smi, carbonyl_idx, product_smi",
+    [
+        # Canonical SMILES; SOM is the aldehyde carbon (high reactivity.gsh).
+        (FORMALDEHYDE, 0, "*CO"),
+        (ACETALDEHYDE, 1, "*C(C)O"),
+        (BENZALDEHYDE, 1, "*C(O)c1ccccc1"),
+        (METHYLGLYOXAL, 3, "*C(O)C(C)=O"),
+        (FURFURAL, 1, "*C(O)c1ccco1"),
+    ],
+)
+def test_glutathionation_aldehyde_thiohemiacetal(smi, carbonyl_idx, product_smi):
+    can = Chem.MolToSmiles(Chem.MolFromSmiles(smi))
+    mol = Chem.MolFromSmiles(can)
+    assert mol.GetAtomWithIdx(carbonyl_idx).GetSymbol() == "C"
+    assert mol.GetAtomWithIdx(carbonyl_idx).GetTotalNumHs() >= 1
+    hits = _sites_for_rxn(Glutathionation(star_label="GSH"), can, 5)
+    assert hits, f"no aldehyde products for {can}"
+    soms = {next(iter(site)) for site, _ in hits}
+    assert carbonyl_idx in soms, f"{can}: expected carbonyl {carbonyl_idx} in {soms}"
+    for site, products in hits:
+        assert len(site) == 1
+        assert site == frozenset({carbonyl_idx})
+        assert _smiles(products[0]) == product_smi
+
+
+def test_benzaldehyde_includes_carbonyl_thiohemiacetal():
+    """Aromatic aldehydes must include carbonyl C adduct (ring hits OK; low specificity)."""
+    can = Chem.MolToSmiles(Chem.MolFromSmiles(BENZALDEHYDE))
+    hits = _sites_for_rxn(Glutathionation(star_label="GSH"), can, 5)
+    assert hits
+    soms = {next(iter(site)) for site, _ in hits}
+    assert 1 in soms
+    assert any(_smiles(p[0]) == "*C(O)c1ccccc1" for _, p in hits)
+
+
+@pytest.mark.parametrize(
+    "smi, rxn_idx, expected_soms, product_smi",
+    [
+        (N_PHENYLAZIRIDINE, 6, {5, 6}, "*CCNc1ccccc1"),
+        (METHYL_MESYLATE, 7, {0}, "*C"),
+        (BENZYL_MESYLATE, 7, {5}, "*Cc1ccccc1"),
+        (PHENYL_ISOCYANATE, 8, {2}, "*C(=O)Nc1ccccc1"),
+        (PHENYL_ISOTHIOCYANATE, 8, {2}, "*C(=S)Nc1ccccc1"),
+    ],
+)
+def test_glutathionation_aziridine_sulfonate_isocyanate(
+    smi, rxn_idx, expected_soms, product_smi
+):
+    can = Chem.MolToSmiles(Chem.MolFromSmiles(smi))
+    hits = _sites_for_rxn(Glutathionation(star_label="GSH"), can, rxn_idx)
+    assert hits, f"no products for rxn {rxn_idx} on {can}"
+    soms = {next(iter(site)) for site, _ in hits}
+    assert expected_soms <= soms
+    for site, products in hits:
+        assert len(site) == 1
+        assert _smiles(products[0]) == product_smi
+
+
+@pytest.mark.parametrize(
+    "smi, rxn_idx, reason",
+    [
+        # Aziridine lookalikes (4+/acyclic N, pyridine, epoxide).
+        (AZETIDINE_PHENYL, 6, "azetidine"),
+        (PYRROLIDINE, 6, "pyrrolidine"),
+        ("CCNc1ccccc1", 6, "aniline"),
+        ("c1ccncc1", 6, "pyridine"),
+        (STYRENE_OXIDE, 6, "epoxide"),
+        # Sulfonate lookalikes (no C–O–SO2 alkylator).
+        (SULFONAMIDE, 7, "sulfonamide"),
+        (SULFONE, 7, "sulfone"),
+        (SULFONIC_ACID, 7, "sulfonic acid"),
+        ("CS(C)=O", 7, "sulfoxide"),
+        # Isocyanate lookalikes.
+        (BENZONITRILE, 8, "nitrile"),
+        (ACETANILIDE, 8, "amide"),
+        ("O=C=O", 8, "CO2"),
+        ("CC#N", 8, "acetonitrile"),
+        (CARBODIIMIDE, 8, "carbodiimide"),
+    ],
+)
+def test_glutathionation_lookalikes_miss_dedicated_smarts(smi, rxn_idx, reason):
+    """Similar motifs must not accidentally match aziridine/sulfonate/isocyanate SMARTS."""
+    can = Chem.MolToSmiles(Chem.MolFromSmiles(smi))
+    hits = _sites_for_rxn(Glutathionation(star_label="GSH"), can, rxn_idx)
+    assert hits == [], f"{reason} ({can}) unexpectedly matched rxn {rxn_idx}: {hits}"
+

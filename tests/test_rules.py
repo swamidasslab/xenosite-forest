@@ -487,6 +487,13 @@ def test_rule(rule, reactant, product):
     assert False, f"Failed to find {product} in {reactant}"
 
 
-def test_glutathionation_skips_beta_substituted_enone():
+def test_glutathionation_michael_on_beta_substituted_enone():
+    """β-substituted enones are Michael acceptors (high reactivity scores)."""
     mol = MolFromSmiles("CC=CC(=O)CO")
-    assert list(rules.Glutathionation(as_star=False).metabolites(mol)) == []
+    hits = list(rules.Glutathionation().metabolites(mol))
+    assert hits
+    soms = {next(iter(site)) for (_, site), _ in hits}
+    assert 1 in soms
+    for (_, site), products in hits:
+        assert len(site) == 1
+        assert "*" in MolToSmiles(products[0])
