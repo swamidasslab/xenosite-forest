@@ -625,6 +625,9 @@ UnstableOxygenationRS = RuleSet(name='UO', longname='Unstable Oxygenation')
 UnstableOxygenationRS.add_rule(all_rules.Dealkylation())
 UnstableOxygenationRS.add_rule(all_rules.OxidativeDehalogenation())
 
+NDealkylationRS = RuleSet(name='ND', longname='N-Dealkylation')
+NDealkylationRS.add_rule(all_rules.NDealkylation())
+
 Full = RuleSet(
     rules=[
         ConjugationRS, DehydrogenationRS, HydrolysisRS, QuinoneFormationRS,

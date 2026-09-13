@@ -568,6 +568,24 @@ class Dealkylation(SmartsReactionRule):
     sites_on = "bonds"
 
 
+class NDealkylation(Dealkylation):
+    """N-dealkylation: Dealkylation products whose formation site includes nitrogen.
+
+    Reuses Dealkylation SMARTS; drops O-/S-/C-only sites. Short-circuits when the
+    reactant has no nitrogen atoms.
+    """
+
+    def metabolites(self, mol, kekulize=True, **kwargs):
+        if not any(atom.GetAtomicNum() == 7 for atom in mol.GetAtoms()):
+            return
+        for site_key, products in super(NDealkylation, self).metabolites(
+            mol, kekulize=kekulize, **kwargs
+        ):
+            _rule, site = site_key
+            if any(mol.GetAtomWithIdx(i).GetAtomicNum() == 7 for i in site):
+                yield site_key, products
+
+
 class Hydrolysis(SmartsReactionRule):
     """Cleaves the single bond in carbonyls and adds oxygen to the carbon.
 

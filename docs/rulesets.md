@@ -247,7 +247,7 @@ On the web: [xenosite.org/epoxidation](https://xenosite.org/epoxidation).
 
 ## N-dealkylation
 
-Rule: `Dealkylation` (SMARTS also cover O-/S-/C-dealkylation and oxidative deamination patterns). Matched to the N-dealkylation XenoSite model.
+Rule: `NDealkylation` (ruleset `ND`). Subclasses `Dealkylation` and keeps only products whose formation site includes a nitrogen atom; short-circuits when the molecule has no nitrogen. Matched to the N-dealkylation XenoSite model. Broad `Dealkylation` (O-/S-/C-/N) remains on `UO`.
 
 Dang, N. L.; Hughes, T. B.; Miller, G. P.; Swamidass, S. J.
 Computationally Assessing the Bioactivation of Drugs by N-Dealkylation.
@@ -255,9 +255,9 @@ Computationally Assessing the Bioactivation of Drugs by N-Dealkylation.
 **DOI:** [10.1021/acs.chemrestox.7b00191](https://doi.org/10.1021/acs.chemrestox.7b00191)
 
 ```python
-from xenosite.forest import rules, RuleSet
+from xenosite.forest import load_ruleset, rules
 
-dealkylation = RuleSet([rules.Dealkylation()], name="dealkylation")
+ndealk = load_ruleset("ND")  # or RuleSet([rules.NDealkylation()], name="ND")
 ```
 
 ```bibtex

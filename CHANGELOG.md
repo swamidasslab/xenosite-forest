@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-09-13
+
+### Added
+
+- `NDealkylation` rule and `ND` ruleset: Dealkylation products filtered to nitrogen-containing formation sites (for the N-dealkylation XenoSite model). Short-circuits when the molecule has no nitrogen. Broad `Dealkylation` on `UO` is unchanged.
+
 ## [0.2.6] - 2026-09-09
 
 ### Fixed
@@ -43,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - RDKit valence / property-cache handling around `RunReactants` and SMILES (refresh before react; skip unsanitizable reactants).
 
+[0.2.7]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.2.7
 [0.2.6]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.2.6
 [0.2.5]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.2.5
 [0.2.4]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.2.4
