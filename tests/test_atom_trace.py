@@ -25,6 +25,7 @@ _FALLBACK_REACTANTS = {
     "SulfurReduction": "c1ccccc1SSc1ccccc1",
     "NitroaromaticReduction": "[O-][N+](C1=CC2=C(C=C1)NC(CN=C2C3=CC=CC=C3Cl)=O)=O",
     "ThiopheneSulfurOxidation": "O=C(c1ccc(cc1)C(C(=O)O)C)c2sccc2",
+    "NDealkylation": "CN(C)Cc1ccccc1",
 }
 
 # Base classes in rules.py that are not runnable reaction rules.
