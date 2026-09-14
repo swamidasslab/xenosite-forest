@@ -407,7 +407,7 @@ class RuleSet(Phase1Site, ReactionRule):
         [('Hydroxylation', frozenset({0}))]
 
         >>> [x[0] for x in RS2.metabolites(mol)]
-        [('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Hydroxylation', frozenset({0})), ('Hydroxylation', frozenset({1}))]
+        [('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Dealkylation', frozenset({0, 1})), ('Hydroxylation', frozenset({0})), ('Hydroxylation', frozenset({1}))]
 
 
         """
