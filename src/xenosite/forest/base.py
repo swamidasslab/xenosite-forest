@@ -115,7 +115,18 @@ class AtomTracker(object):
 
     @staticmethod
     def site_to_topol_site(site, topol_equiv):
-        return site[0], frozenset([topol_equiv[x] for x in site[1]])
+        """Map a ``(rule_name, atom_idxs)`` site to a topology identity.
+
+        Rule suffixes (``_SmartsReactionRuleRxn0``, ``_12``, …) are stripped so
+        matches share a pathway label. Atom indices become a sorted multiset of
+        topological ranks (same signal as predict ``atoms.cipRank`` /
+        XenoSite UI dedup).
+        """
+        name = site[0]
+        if isinstance(name, str):
+            name = name.split("_", 1)[0]
+        ranks = tuple(sorted(topol_equiv[x] for x in site[1]))
+        return name, ranks
 
     @staticmethod
     def add_current_idx_as_atom_prop(mol, propname="idx"):
@@ -1481,12 +1492,13 @@ class ReactionRule(AtomTracker):
                 ]
 
             if only_emit_topologically_distinct_sites:
+                # Match XenoSite UI: pathway + topo ranks + product SMILES.
+                # Do not collapse distinct products that share a topo site class.
                 topsite = self.site_to_topol_site(site, topol_equiv)
-
-                if topsite in seen:
+                identity = (topsite[0], topsite[1], can_smi_set(metabolites))
+                if identity in seen:
                     continue
-
-                seen.append(topsite)
+                seen.append(identity)
 
             if tagging:
                 aligned = []
