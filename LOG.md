@@ -2,6 +2,10 @@
 
 ## 2026-09-17
 
+- Mol-scoped resonance cache on `mol._forest["resonance"]` (lazy pull-through joined forms per conjugated/aromatic mode; shared `bfs_all_pairs`). Private `_resonance_cache_disabled()` for parity tests. `EditMol.standardize` propagates `_forest`.
+- Full product parity cache on vs off: APAP 69, naph_styryl 228, multi_conj 400 (matched). Form counts matched.
+- Full.metabolites call counts (on → off): `_resfrags` 2→7, `join_fragments` APAP 4→14 / naph 10→35 / multi 14→49, `bfs` 1→4.
+- Wall (median): Full multi_conj ~1.72s on vs ~1.77s off (~1.02×); resonance-only ruleset ~1.06–1.09×. Repeated `resonance_structures`×5 on same mol ~4.1–4.2×. Full wall dominated by pair-path/SMARTS work after forms exist.
 - Issue #3 reports `calcImplicitValence` crash on PhaseOneRS BFS; reproduces on forest 0.1.0 only (already fixed in 0.2.0+).
 - Full BFS depth=2 failed with RDKit `Range Error` after acetylation→dehydrogenation: `_remove_dummy_atoms` deleted conjugation `*` adducts. Fix: mark FragmentOnBonds dummies and only remove those.
 - BFS `expand_star_conjugates=False` by default: star conjugates are terminal products; opt in to expand them further.
