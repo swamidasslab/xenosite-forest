@@ -5,9 +5,15 @@ from __future__ import annotations
 from rdkit import Chem
 
 from xenosite.forest import bfs
+from xenosite.forest.rules import Acetylation
 from xenosite.forest.utils import has_star_conjugate
 
 ISSUE3_PARENT = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
+
+
+def _star_acetyl():
+    parent = Chem.MolFromSmiles(ISSUE3_PARENT)
+    return next(m for _, mols in Acetylation().metabolize(parent) for m in mols)
 
 
 def test_has_star_conjugate():
@@ -15,29 +21,33 @@ def test_has_star_conjugate():
     assert not has_star_conjugate(Chem.MolFromSmiles("CCN"))
 
 
+def test_bfs_emits_star_acetyl_from_parent():
+    """Star adducts are still returned as products (depth 1)."""
+    saw = False
+    for _, steps, mols in bfs(ISSUE3_PARENT, ruleset="Full", depth=1):
+        if steps and steps[0][0] == "Acetylation":
+            saw = True
+            assert any(has_star_conjugate(m) for m in mols)
+            break
+    assert saw
+
+
 def test_bfs_default_does_not_expand_star_conjugates():
-    """Star adducts are emitted, but not metabolized further at depth>1."""
-    rows = list(bfs(ISSUE3_PARENT, ruleset="Full", depth=2))
-    assert any(
-        steps and steps[0][0] == "Acetylation" and len(steps) == 1 for _, steps, _ in rows
-    )
-    # No depth-2 path whose first step is Acetylation (star not expanded).
-    assert not any(
-        steps and len(steps) >= 2 and steps[0][0] == "Acetylation"
-        for _, steps, _ in rows
-    )
+    """Starting from a star adduct, default BFS yields nothing."""
+    star = _star_acetyl()
+    assert has_star_conjugate(star)
+    rows = list(bfs(star, ruleset="Full", depth=1))
+    assert rows == []
 
 
 def test_bfs_expand_star_conjugates_allows_depth2_after_acetylation():
-    rows = list(
-        bfs(
-            ISSUE3_PARENT,
-            ruleset="Full",
-            depth=2,
-            expand_star_conjugates=True,
-        )
-    )
-    assert any(
-        steps and len(steps) >= 2 and steps[0][0] == "Acetylation"
-        for _, steps, _ in rows
-    )
+    star = _star_acetyl()
+    n = 0
+    for _, steps, _ in bfs(
+        star, ruleset="Full", depth=1, expand_star_conjugates=True
+    ):
+        n += 1
+        if n >= 1:
+            assert steps
+            break
+    assert n >= 1
