@@ -504,6 +504,7 @@ class RuleSet(Phase1Site, ReactionRule):
                               quit_if_not_ended_in_termination_rulenames=True,
                               strict=True,
                               expand_star_conjugates=False,
+                              shuffle_rng=None,
                               **kwargs):
 
         if isinstance(depth, str):
@@ -530,7 +531,11 @@ class RuleSet(Phase1Site, ReactionRule):
 
         next_mols = []
 
-        for resmol, path, product_paths in resmols_and_paths:
+        frontier = list(resmols_and_paths)
+        if shuffle_rng is not None:
+            shuffle_rng.shuffle(frontier)
+
+        for resmol, path, product_paths in frontier:
 
             if not resmol:
                 continue
@@ -544,8 +549,12 @@ class RuleSet(Phase1Site, ReactionRule):
                 if rulename in termination_rulenames:
                     continue
 
-            for next_step, next_products in self.metabolize(
-                    resmol, strict=strict, **kwargs):
+            reactions = self.metabolize(resmol, strict=strict, **kwargs)
+            if shuffle_rng is not None:
+                reactions = list(reactions)
+                shuffle_rng.shuffle(reactions)
+
+            for next_step, next_products in reactions:
 
                 if limit_to_phase1_sites_in_sdf:
                     next_rule, next_site = next_step
@@ -553,7 +562,11 @@ class RuleSet(Phase1Site, ReactionRule):
                     if not next_site & colors_to_sites['all']:
                         continue
 
-                for next_product in clean(next_products):
+                products = list(clean(next_products))
+                if shuffle_rng is not None:
+                    shuffle_rng.shuffle(products)
+
+                for next_product in products:
 
                     if expand_star_conjugates or not has_star_conjugate(
                             next_product):
@@ -588,6 +601,9 @@ class RuleSet(Phase1Site, ReactionRule):
 
         if current_level < depth:
 
+            if shuffle_rng is not None:
+                shuffle_rng.shuffle(next_mols)
+
             for pro, pat, propath in self._metabolite_paths_bfs(
                     next_mols,
                     desired_endpoint_structures=desired_endpoint_structures,
@@ -599,6 +615,7 @@ class RuleSet(Phase1Site, ReactionRule):
                     quit_if_not_ended_in_termination_rulenames=
                     quit_if_not_ended_in_termination_rulenames,
                     expand_star_conjugates=expand_star_conjugates,
+                    shuffle_rng=shuffle_rng,
                     **kwargs):
 
                 yield pro, pat, propath

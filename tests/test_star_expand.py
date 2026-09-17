@@ -53,7 +53,16 @@ def test_bfs_expand_star_conjugates_metabolizes_star():
     assert n >= 1
 
 
-def test_dfs_samples_two_step_pathway_quickly():
+def test_bfs_shuffle_rng_and_max_paths():
+    """BFS accepts shuffle_rng; max_paths caps yields when set."""
+    import random
+
+    rows = list(
+        bfs("CCO", ruleset="Full", depth=1, shuffle_rng=random.Random(0), max_paths=3)
+    )
+    assert len(rows) == 3
+    unlimited = list(bfs("CCO", ruleset="Full", depth=1, max_paths=None))
+    assert len(unlimited) >= 3
     """DFS reaches a length-2 path without enumerating the full BFS frontier."""
     depth2 = None
     for smi, steps, _ in dfs(ISSUE3_PARENT, ruleset="Full", depth=2):

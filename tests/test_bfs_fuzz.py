@@ -106,10 +106,13 @@ def _sample_dfs_two_step(
     *,
     expand_star_conjugates: bool = False,
     seed: int = 0,
-    sample: int = _SAMPLE_DEPTH2,
-    max_yields: int = _MAX_YIELDS,
+    sample: int | None = _SAMPLE_DEPTH2,
+    max_paths: int | None = _MAX_YIELDS,
 ) -> tuple[int, int]:
-    """Return (n_yields, n_depth2) after randomly sampling DFS pathways."""
+    """Return (n_yields, n_depth2) after randomly sampling DFS pathways.
+
+    ``sample`` / ``max_paths`` are optional caps (``None`` = unlimited).
+    """
     rng = random.Random(seed)
     n = 0
     depth2 = 0
@@ -119,11 +122,12 @@ def _sample_dfs_two_step(
         depth=2,
         expand_star_conjugates=expand_star_conjugates,
         shuffle_rng=rng,
+        max_paths=max_paths,
     ):
         n += 1
         if steps and len(steps) >= 2:
             depth2 += 1
-        if depth2 >= sample or n >= max_yields:
+        if sample is not None and depth2 >= sample:
             break
     return n, depth2
 
@@ -161,7 +165,7 @@ def test_full_dfs_two_step_issue3_with_star_expand():
         expand_star_conjugates=True,
         seed=1,
         sample=20,
-        max_yields=200,
+        max_paths=200,
     )
     assert n > 0
     assert depth2 >= 1
