@@ -11,7 +11,7 @@ from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from hypothesis.database import DirectoryBasedExampleDatabase
 from rdkit import Chem
 
-from xenosite.forest import Linearization, StepPlan
+from xenosite.forest import StepPlan
 from xenosite.forest.base import can_smi_set
 from xenosite.forest.rules import Epoxidation, NDealkylation, QuinoneFormation
 from xenosite.forest.utils import unmapped_smiles
@@ -39,6 +39,14 @@ _MAX_HEAVY = 28
 _MAX_STAMPED = 12
 
 
+def _smi_sets(product_lists):
+    return [
+        frozenset(unmapped_smiles(m) for m in products)
+        for _, products in product_lists
+        if products
+    ]
+
+
 @st.composite
 def corpus_smiles(draw):
     return draw(st.sampled_from(_CORPUS))
@@ -47,49 +55,36 @@ def corpus_smiles(draw):
 def test_benzene_prep_linearizations_agree():
     """Both OH orders for para-quinone prep yield the same hydroquinone."""
     mol = Chem.MolFromSmiles("c1ccccc1")
-    plans = QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
-    layered = [p for p in plans if len(p) == 3]
-    assert layered
-    finals = []
-    for order in layered[0].iter_linearizations():
-        result = Linearization(order[:-1]).apply(mol, toward=order[-1].site)
-        assert result
-        finals.append(frozenset(unmapped_smiles(m) for m in result))
-    assert len(set(finals)) == 1
-    got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(next(iter(finals))))))
+    plan = next(p for p in QuinoneFormation().phase1_steps(mol, frozenset({0, 3})) if len(p) == 3)
+    finals = _smi_sets(plan.apply_all_prefixes(mol))
+    assert finals and len(set(finals)) == 1
+    got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(finals[0]))))
     assert got == Chem.MolToSmiles(Chem.MolFromSmiles("Oc1ccc(O)cc1"))
 
 
 def test_epoxidation_linearization_replays_product():
     mol = Chem.MolFromSmiles("C=C")
-    site, products = next(
+    _, products = next(
         Epoxidation().metabolize(mol, attach_phase1_steps=True, tag_atoms=False)
     )
     plan = StepPlan.from_mol(products[0])
     expected = can_smi_set(products)
-    for order in plan.iter_linearizations():
-        result = Linearization(order).apply(mol)
+    for _lin, result in plan.apply_all(mol):
         assert result
         assert can_smi_set(result) == expected
 
 
 def test_ndealkylation_linearization_replays_product():
     mol = Chem.MolFromSmiles("CCN")
-    site, products = next(
+    _, products = next(
         NDealkylation().metabolize(mol, attach_phase1_steps=True, tag_atoms=False)
     )
     plan = StepPlan.from_mol(products[0])
     expected = can_smi_set(products)
-    matched = False
-    for order in plan.iter_linearizations():
-        result = Linearization(order).apply(mol)
-        if not result:
-            continue
-        got = can_smi_set(result)
-        if expected == got or expected <= got or got <= expected:
-            matched = True
-            break
-    assert matched
+    assert any(
+        expected == got or expected <= got or got <= expected
+        for got in (can_smi_set(r) for _lin, r in plan.apply_all(mol) if r)
+    )
 
 
 @given(smiles=corpus_smiles())
@@ -116,28 +111,17 @@ def test_quinone_linearizations_prep_agree_or_full_match(smiles: str):
                 return
             plan = StepPlan.from_mol(product)
             target = unmapped_smiles(product)
-            prep_endpoints = []
-            full_hits = []
-            for order in plan.iter_linearizations():
-                full = Linearization(order).apply(mol)
-                if full:
-                    smis = frozenset(unmapped_smiles(m) for m in full)
-                    full_hits.append(smis)
-                    assert target in smis
 
-                if len(order) > 1 and order[-1].rule == "Dehydrogenation":
-                    mid = Linearization(order[:-1]).apply(
-                        mol, toward=order[-1].site
-                    )
-                    if mid:
-                        prep_endpoints.append(
-                            frozenset(unmapped_smiles(m) for m in mid)
-                        )
-
-            if prep_endpoints:
-                assert len(set(prep_endpoints)) == 1
+            full_hits = _smi_sets(plan.apply_all(mol))
+            for smis in full_hits:
+                assert target in smis
             if full_hits:
                 assert len(set(full_hits)) == 1
+
+            if len(plan) > 1:
+                prep_hits = _smi_sets(plan.apply_all_prefixes(mol))
+                if prep_hits:
+                    assert len(set(prep_hits)) == 1
 
 
 @given(smiles=st.sampled_from(("C=C", "CC=C", "C=Cc1ccccc1", "CCN", "CCNC")))
@@ -154,7 +138,7 @@ def test_degenerate_bond_rules_replay(smiles: str):
 
     for rule in (Epoxidation(), NDealkylation()):
         try:
-            site, products = next(
+            _site, products = next(
                 rule.metabolize(mol, attach_phase1_steps=True, tag_atoms=False)
             )
         except StopIteration:
@@ -163,8 +147,7 @@ def test_degenerate_bond_rules_replay(smiles: str):
         plan = StepPlan.from_mol(products[0])
         assert len(plan) == 1
         expected = can_smi_set(products)
-        for order in plan.iter_linearizations():
-            result = Linearization(order).apply(mol)
+        for _lin, result in plan.apply_all(mol):
             assert result
             got = can_smi_set(result)
             assert expected == got or expected <= got or got <= expected

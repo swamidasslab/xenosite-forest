@@ -8,7 +8,7 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem.rdmolfiles import MolFromSmiles
 
-from xenosite.forest.step_plan import AtomRef, Linearization, Step, StepPlan
+from xenosite.forest.step_plan import AtomRef, Step, StepPlan
 from xenosite.forest.utils import unmapped_smiles
 
 
@@ -139,11 +139,11 @@ def test_benzene_prep_linearization_apply_agrees():
         ),
     )
     plan = StepPlan.layers([[h0, h3], [dh]])
-    prep_smiles = []
-    for order in plan.iter_linearizations():
-        prep = Linearization(order[:-1]).apply(mol, toward=order[-1].site)
-        assert prep
-        prep_smiles.append(frozenset(unmapped_smiles(p) for p in prep))
-    assert len(set(prep_smiles)) == 1
+    prep_smiles = [
+        frozenset(unmapped_smiles(p) for p in products)
+        for _lin, products in plan.apply_all_prefixes(mol)
+        if products
+    ]
+    assert prep_smiles and len(set(prep_smiles)) == 1
     got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(next(iter(prep_smiles))))))
     assert got == Chem.MolToSmiles(Chem.MolFromSmiles("Oc1ccc(O)cc1"))

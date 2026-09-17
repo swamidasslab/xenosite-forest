@@ -403,6 +403,24 @@ class Linearization:
             currents = nxt
         return currents
 
+    def apply_prefix(self, mol, n_drop: int = 1, **kwargs) -> list:
+        """Apply all but the last ``n_drop`` steps.
+
+        Sites of the dropped trailing steps are passed as ``toward`` so
+        multi-fragment steps keep pieces needed for the omitted suffix.
+        """
+        n_drop = int(n_drop)
+        if n_drop <= 0:
+            return self.apply(mol, **kwargs)
+        if n_drop >= len(self.steps):
+            return [Chem.Mol(mol)]
+        toward = []
+        for step in self.steps[-n_drop:]:
+            toward.extend(step.site)
+        return Linearization(self.steps[:-n_drop]).apply(
+            mol, toward=toward, **kwargs
+        )
+
 
 class StepPlan:
     """Partial order over :class:`Step` nodes.
@@ -558,6 +576,25 @@ class StepPlan:
     ) -> list:
         """Apply an ordered sequence of steps (typically from ``iter_linearizations``)."""
         return Linearization(tuple(order)).apply(mol, toward=toward, **kwargs)
+
+    def iter_as_linearizations(self) -> Iterator[Linearization]:
+        """Yield each total order as a :class:`Linearization`."""
+        for order in self.iter_linearizations():
+            yield Linearization(order)
+
+    def apply_all(self, mol, **kwargs) -> list:
+        """Apply every linearization; return ``[(Linearization, products), ...]``."""
+        out = []
+        for lin in self.iter_as_linearizations():
+            out.append((lin, lin.apply(mol, **kwargs)))
+        return out
+
+    def apply_all_prefixes(self, mol, n_drop: int = 1, **kwargs) -> list:
+        """Apply every linearization prefix (drop trailing steps); same return shape."""
+        out = []
+        for lin in self.iter_as_linearizations():
+            out.append((lin, lin.apply_prefix(mol, n_drop=n_drop, **kwargs)))
+        return out
 
     def iter_linearizations(self) -> Iterator[tuple[Step, ...]]:
         """Lazily yield every total order consistent with ``precedes``."""
