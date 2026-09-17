@@ -420,10 +420,6 @@ class Linearization:
             currents = nxt
         return currents
 
-    def apply_prefix(self, mol, n_drop: int = 1, **kwargs) -> list:
-        """Deprecated alias for ``apply(..., drop_last=n_drop)``."""
-        return self.apply(mol, drop_last=n_drop, **kwargs)
-
 
 class StepPlan:
     """Partial order over :class:`Step` nodes.
@@ -584,21 +580,6 @@ class StepPlan:
         """Yield each total order as a :class:`Linearization`."""
         for order in self.iter_linearizations():
             yield Linearization(order)
-
-    def apply_all(self, mol, drop_last: int = 0, **kwargs) -> list:
-        """Apply every linearization; return ``[(Linearization, products), ...]``.
-
-        ``drop_last`` is forwarded to :meth:`Linearization.apply` (omit trailing
-        steps but retain fragments toward their sites).
-        """
-        out = []
-        for lin in self.iter_as_linearizations():
-            out.append((lin, lin.apply(mol, drop_last=drop_last, **kwargs)))
-        return out
-
-    def apply_all_prefixes(self, mol, n_drop: int = 1, **kwargs) -> list:
-        """Alias for ``apply_all(..., drop_last=n_drop)``."""
-        return self.apply_all(mol, drop_last=n_drop, **kwargs)
 
     def iter_linearizations(self) -> Iterator[tuple[Step, ...]]:
         """Lazily yield every total order consistent with ``precedes``."""

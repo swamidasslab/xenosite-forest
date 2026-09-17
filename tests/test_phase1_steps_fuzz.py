@@ -42,7 +42,7 @@ _MAX_STAMPED = 12
 def _smi_sets(product_lists):
     return [
         frozenset(unmapped_smiles(m) for m in products)
-        for _, products in product_lists
+        for products in product_lists
         if products
     ]
 
@@ -55,8 +55,12 @@ def corpus_smiles(draw):
 def test_benzene_prep_linearizations_agree():
     """Both OH orders for para-quinone prep yield the same hydroquinone."""
     mol = Chem.MolFromSmiles("c1ccccc1")
-    plan = next(p for p in QuinoneFormation().phase1_steps(mol, frozenset({0, 3})) if len(p) == 3)
-    finals = _smi_sets(plan.apply_all(mol, drop_last=1))
+    plan = next(
+        p for p in QuinoneFormation().phase1_steps(mol, frozenset({0, 3})) if len(p) == 3
+    )
+    finals = _smi_sets(
+        lin.apply(mol, drop_last=1) for lin in plan.iter_as_linearizations()
+    )
     assert finals and len(set(finals)) == 1
     got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(finals[0]))))
     assert got == Chem.MolToSmiles(Chem.MolFromSmiles("Oc1ccc(O)cc1"))
@@ -69,7 +73,8 @@ def test_epoxidation_linearization_replays_product():
     )
     plan = StepPlan.from_mol(products[0])
     expected = can_smi_set(products)
-    for _lin, result in plan.apply_all(mol):
+    for lin in plan.iter_as_linearizations():
+        result = lin.apply(mol)
         assert result
         assert can_smi_set(result) == expected
 
@@ -83,7 +88,12 @@ def test_ndealkylation_linearization_replays_product():
     expected = can_smi_set(products)
     assert any(
         expected == got or expected <= got or got <= expected
-        for got in (can_smi_set(r) for _lin, r in plan.apply_all(mol) if r)
+        for got in (
+            can_smi_set(r)
+            for lin in plan.iter_as_linearizations()
+            for r in [lin.apply(mol)]
+            if r
+        )
     )
 
 
@@ -112,14 +122,19 @@ def test_quinone_linearizations_prep_agree_or_full_match(smiles: str):
             plan = StepPlan.from_mol(product)
             target = unmapped_smiles(product)
 
-            full_hits = _smi_sets(plan.apply_all(mol))
+            full_hits = _smi_sets(
+                lin.apply(mol) for lin in plan.iter_as_linearizations()
+            )
             for smis in full_hits:
                 assert target in smis
             if full_hits:
                 assert len(set(full_hits)) == 1
 
             if len(plan) > 1:
-                prep_hits = _smi_sets(plan.apply_all(mol, drop_last=1))
+                prep_hits = _smi_sets(
+                    lin.apply(mol, drop_last=1)
+                    for lin in plan.iter_as_linearizations()
+                )
                 if prep_hits:
                     assert len(set(prep_hits)) == 1
 
@@ -147,7 +162,8 @@ def test_degenerate_bond_rules_replay(smiles: str):
         plan = StepPlan.from_mol(products[0])
         assert len(plan) == 1
         expected = can_smi_set(products)
-        for _lin, result in plan.apply_all(mol):
+        for lin in plan.iter_as_linearizations():
+            result = lin.apply(mol)
             assert result
             got = can_smi_set(result)
             assert expected == got or expected <= got or got <= expected
