@@ -317,6 +317,7 @@ class RuleSet(Phase1Site, ReactionRule):
                   depth=1,
                   metabolite_table='',
                   openfilehandle=None,
+                  search='bfs',
                   **kwargs):
         """Find path between start and end mol.
 
@@ -326,6 +327,8 @@ class RuleSet(Phase1Site, ReactionRule):
             all_paths: if True, then generate all found paths between start and end (default False).
             outmols: output rdmols and sites in addition to string
             termination_rulenames: A list of rulenames that terminate the search.
+            search: ``\"bfs\"`` (default) or ``\"dfs\"``. DFS yields deep paths earlier,
+                which is better for sampling a few two-step pathways.
 
         """
 
@@ -344,12 +347,26 @@ class RuleSet(Phase1Site, ReactionRule):
             writer = self.initialize_metabolite_table(
                 openfilehandle, depth=depth)
 
-        for smi, sites, mols in self._metabolite_paths_bfs(
-            [(start, [], [start])],
+        if search == 'dfs':
+            path_iter = self._metabolite_paths_dfs(
+                start,
+                [],
+                [start],
                 desired_endpoint_structures=desired_endpoint_structures,
                 format_output_site=False,
                 depth=depth,
-                **kwargs):
+                **kwargs)
+        elif search == 'bfs':
+            path_iter = self._metabolite_paths_bfs(
+                [(start, [], [start])],
+                desired_endpoint_structures=desired_endpoint_structures,
+                format_output_site=False,
+                depth=depth,
+                **kwargs)
+        else:
+            raise ValueError("search must be 'bfs' or 'dfs', got %r" % (search,))
+
+        for smi, sites, mols in path_iter:
             
             fsite = sorted(sites)
 
@@ -585,6 +602,103 @@ class RuleSet(Phase1Site, ReactionRule):
                     **kwargs):
 
                 yield pro, pat, propath
+
+    def _metabolite_paths_dfs(self,
+                              resmol,
+                              path,
+                              product_paths,
+                              desired_endpoint_structures=None,
+                              depth=1,
+                              current_level=1,
+                              all_paths=False,
+                              phase1=False,
+                              termination_rulenames=None,
+                              quit_if_not_ended_in_termination_rulenames=True,
+                              strict=True,
+                              expand_star_conjugates=False,
+                              **kwargs):
+        """Depth-first pathway enumeration.
+
+        Yields a reaction path as soon as each product is formed, then recurses
+        into that product before siblings. Useful for sampling a few depth-N
+        pathways without waiting for a full BFS level to finish.
+        """
+
+        if isinstance(depth, str):
+            depth = int(depth)
+
+        if desired_endpoint_structures is None:
+            desired_endpoint_structures = []
+
+        if termination_rulenames is None:
+            termination_rulenames = []
+
+        if not resmol:
+            return
+
+        if not expand_star_conjugates and has_star_conjugate(resmol):
+            return
+
+        if quit_if_not_ended_in_termination_rulenames and termination_rulenames and path:
+            rulename = self.format_site(path[-1])[0]
+            if rulename in termination_rulenames:
+                return
+
+        for next_step, next_products in self.metabolize(
+                resmol, strict=strict, **kwargs):
+
+            for next_product in clean(next_products):
+
+                new_canonical_product = can_smi(rdmol=next_product)
+                if not new_canonical_product:
+                    continue
+                new_canonical_product = new_canonical_product[0]
+
+                if not desired_endpoint_structures or new_canonical_product in desired_endpoint_structures:
+
+                    emit = True
+                    if quit_if_not_ended_in_termination_rulenames:
+                        if termination_rulenames and self.format_site(
+                                next_step)[0] not in termination_rulenames:
+                            emit = False
+
+                    if emit:
+                        yield self._prep_output(
+                            new_canonical_product,
+                            path,
+                            next_step,
+                            product_paths,
+                            next_product,
+                            phase1=phase1)
+
+                        if new_canonical_product in desired_endpoint_structures and not all_paths:
+                            desired_endpoint_structures.remove(
+                                new_canonical_product)
+
+                            if not desired_endpoint_structures:
+                                return
+
+                if current_level < depth and (
+                        expand_star_conjugates
+                        or not has_star_conjugate(next_product)):
+                    for pro, pat, propath in self._metabolite_paths_dfs(
+                            next_product,
+                            path + [next_step],
+                            product_paths + [next_product],
+                            desired_endpoint_structures=desired_endpoint_structures,
+                            depth=depth,
+                            current_level=current_level + 1,
+                            all_paths=all_paths,
+                            phase1=phase1,
+                            termination_rulenames=termination_rulenames,
+                            quit_if_not_ended_in_termination_rulenames=
+                            quit_if_not_ended_in_termination_rulenames,
+                            expand_star_conjugates=expand_star_conjugates,
+                            strict=strict,
+                            **kwargs):
+                        yield pro, pat, propath
+                        if desired_endpoint_structures is not None and not desired_endpoint_structures and not all_paths:
+                            return
 
 
 ConjugationRS = RuleSet(name='CJ', longname='Conjugation')

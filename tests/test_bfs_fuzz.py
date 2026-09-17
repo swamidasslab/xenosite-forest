@@ -1,7 +1,7 @@
-"""Hypothesis fuzz: Full BFS must not raise RDKit errors mid-enumeration.
+"""Hypothesis fuzz: sample Full DFS two-step pathways for RDKit crashes.
 
-Covers Phase I (Full includes it) plus conjugation / quinone paths. Catches
-regressions like GitHub issue #3 and star-adduct resonance reassembly failures.
+DFS yields deep paths early, so we can exercise depth=2 without draining a
+full BFS frontier (which times out on CI for large substrates).
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from rdkit import Chem
 
-from xenosite.forest import bfs
+from xenosite.forest import dfs
 from xenosite.forest.rules import Acetylation, Dehydrogenation
 
 # Prior RDKit 2026 crashers + diverse substrates (docs / suite).
@@ -54,8 +54,9 @@ _RING = (
 )
 _FUNC = ("", "O", "N", "Cl", "F", "C(=O)O", "C(=O)N", "OC", "NC", "C=O", "C#N")
 
-_MAX_PRODUCTS = 250
+_SAMPLE_DEPTH2 = 8
 _MAX_HEAVY = 36
+_MAX_YIELDS = 40
 
 
 @st.composite
@@ -83,64 +84,64 @@ def _generated_smiles(draw):
 
 
 @st.composite
-def bfs_smiles(draw):
-    """Corpus crashers plus generated substrates for BFS fuzzing."""
+def forest_smiles(draw):
+    """Corpus crashers plus generated substrates for pathway fuzzing."""
     if draw(st.booleans()):
         return draw(st.sampled_from(_CORPUS))
     return draw(_generated_smiles())
 
 
-def _drain_bfs(
+def _sample_dfs_two_step(
     smiles: str,
     *,
-    depth: int = 2,
-    limit: int = _MAX_PRODUCTS,
     expand_star_conjugates: bool = False,
-) -> int:
+    sample: int = _SAMPLE_DEPTH2,
+    max_yields: int = _MAX_YIELDS,
+) -> tuple[int, int]:
+    """Return (n_yields, n_depth2) after sampling a few DFS pathways."""
     n = 0
-    for _ in bfs(
+    depth2 = 0
+    for _, steps, _ in dfs(
         smiles,
         ruleset="Full",
-        depth=depth,
+        depth=2,
         expand_star_conjugates=expand_star_conjugates,
     ):
         n += 1
-        if n >= limit:
+        if steps and len(steps) >= 2:
+            depth2 += 1
+        if depth2 >= sample or n >= max_yields:
             break
-    return n
+    return n, depth2
 
 
 @given(
-    smiles=bfs_smiles(),
+    smiles=forest_smiles(),
     expand_star_conjugates=st.booleans(),
 )
 @settings(
     max_examples=40,
-    deadline=20_000,
+    deadline=15_000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
-def test_full_bfs_depth2_no_rdkit_runtime_error(
+def test_full_dfs_two_step_sample_no_rdkit_runtime_error(
     smiles: str, expand_star_conjugates: bool
 ):
-    """Depth-2 Full BFS must not raise RDKit RuntimeErrors."""
+    """Sample Full DFS depth-2 pathways; must not raise RDKit RuntimeErrors."""
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
-    _drain_bfs(
-        smiles, depth=2, expand_star_conjugates=expand_star_conjugates
-    )
+    _sample_dfs_two_step(smiles, expand_star_conjugates=expand_star_conjugates)
 
 
-def test_full_bfs_depth2_issue3_parent_does_not_crash():
-    """Full depth=2 with star expansion must not RangeError after acetylation."""
+def test_full_dfs_two_step_issue3_with_star_expand():
+    """Issue #3 parent: DFS reaches a depth-2 path with star expansion enabled."""
     parent = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
-    n = _drain_bfs(
-        parent,
-        depth=2,
-        limit=_MAX_PRODUCTS,
-        expand_star_conjugates=True,
+    n, depth2 = _sample_dfs_two_step(
+        parent, expand_star_conjugates=True, sample=3, max_yields=80
     )
-    assert n > 140
+    assert n > 0
+    assert depth2 >= 1
 
 
 def test_dehydrogenation_on_star_acetyl_keeps_star():

@@ -14,17 +14,7 @@ RULESETS["PhaseOneRS"] = PhaseOneRS
 rdBase.DisableLog("rdApp.*")
 
 
-def bfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
-    """Run BFS to find paths linking reactants and an optional putative product.
-
-    Args:
-        molstrings: SMILES strings, RDKit mols, or a mix.
-        ruleset: named ruleset, RuleSet instance, or list of those.
-        termination_ruleset: optional ruleset whose rule names stop expansion.
-        **kwargs: forwarded to RuleSet.find_path (depth, phase1, all_paths,
-            expand_star_conjugates, ...). Star adducts are not expanded further
-            unless ``expand_star_conjugates=True``.
-    """
+def _run_search(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
     inputs = load(molstrings)
 
     if None in inputs:
@@ -48,6 +38,35 @@ def bfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
 
     yield from rules.find_path(
         *inputs, termination_rulenames=termination_rulenames, **kwargs
+    )
+
+
+def bfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
+    """Run BFS to find paths linking reactants and an optional putative product.
+
+    Args:
+        molstrings: SMILES strings, RDKit mols, or a mix.
+        ruleset: named ruleset, RuleSet instance, or list of those.
+        termination_ruleset: optional ruleset whose rule names stop expansion.
+        **kwargs: forwarded to RuleSet.find_path (depth, phase1, all_paths,
+            expand_star_conjugates, ...). Star adducts are not expanded further
+            unless ``expand_star_conjugates=True``.
+    """
+    kwargs.setdefault("search", "bfs")
+    yield from _run_search(
+        molstrings, ruleset=ruleset, termination_ruleset=termination_ruleset, **kwargs
+    )
+
+
+def dfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
+    """Depth-first pathway search (same arguments as ``bfs``).
+
+    Yields deep paths earlier than BFS, so sampling a few two-step pathways
+    does not require finishing the full breadth-first frontier.
+    """
+    kwargs["search"] = "dfs"
+    yield from _run_search(
+        molstrings, ruleset=ruleset, termination_ruleset=termination_ruleset, **kwargs
     )
 
 
@@ -113,6 +132,12 @@ def main(argv=None):
         action="store_true",
         help="Allow further metabolism of star (*) conjugate adducts (default: off).",
     )
+    parser.add_argument(
+        "--search",
+        choices=("bfs", "dfs"),
+        default="bfs",
+        help="Pathway search order (default: bfs).",
+    )
 
     args = parser.parse_args(argv)
     kwargs = {
@@ -123,9 +148,13 @@ def main(argv=None):
         "depth": args.depth,
         "phase1": args.phase1,
         "expand_star_conjugates": args.expand_star_conjugates,
+        "search": args.search,
     }
 
-    for rxnnum, (smi, rules_and_sites, _mols) in enumerate(bfs(args.molecules, **kwargs)):
+    search = dfs if args.search == "dfs" else bfs
+    for rxnnum, (smi, rules_and_sites, _mols) in enumerate(
+        search(args.molecules, **kwargs)
+    ):
         if args.max_paths is not None and rxnnum >= args.max_paths:
             break
         sys.stdout.write(str((smi, rules_and_sites)) + "\n")
