@@ -2,7 +2,9 @@
 
 ## 2026-09-17
 
-- Issue #3 reports `calcImplicitValence` crash on PhaseOneRS BFS; reproduces on forest 0.1.0 only (already fixed in 0.2.0+). No library change. Added Hypothesis depth-2 BFS fuzz + issue #3 SMILES regression lock.
+- Issue #3 reports `calcImplicitValence` crash on PhaseOneRS BFS; reproduces on forest 0.1.0 only (already fixed in 0.2.0+).
+- Full BFS depth=2 failed with RDKit `Range Error` after acetylation→dehydrogenation: `_remove_dummy_atoms` deleted conjugation `*` adducts. Fix: mark FragmentOnBonds dummies and only remove those.
+- Hypothesis fuzz: depth-2 BFS over PhaseOneRS and Full.
 
 ## 2026-09-13
 

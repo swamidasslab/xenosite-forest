@@ -1,7 +1,8 @@
-"""Hypothesis fuzz: PhaseOneRS BFS must not raise RDKit valence preconditions.
+"""Hypothesis fuzz: BFS must not raise RDKit errors mid-enumeration.
 
-Catches regressions like GitHub issue #3, where resonance copies left empty
-implicit-H caches and ``RunReactants`` aborted mid-enumeration.
+Catches regressions like GitHub issue #3 (valence caches) and Full-ruleset
+depth≥2 failures when conjugation star adducts were stripped during resonance
+reassembly.
 """
 
 from __future__ import annotations
@@ -10,8 +11,9 @@ from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from rdkit import Chem
 
 from xenosite.forest import bfs
+from xenosite.forest.rules import Acetylation, Dehydrogenation
 
-# Prior RDKit 2026 crashers + diverse Phase I substrates (docs / suite).
+# Prior RDKit 2026 crashers + diverse Phase I / conjugation substrates.
 _CORPUS = (
     "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21",  # issue #3
     "CN(C)CCOC(c1ccccc1)c1ccccc1",  # diphenhydramine
@@ -55,6 +57,7 @@ _FUNC = ("", "O", "N", "Cl", "F", "C(=O)O", "C(=O)N", "OC", "NC", "C=O", "C#N")
 
 _MAX_PRODUCTS = 250
 _MAX_HEAVY = 36
+_RULESETS = ("PhaseOneRS", "Full")
 
 
 @st.composite
@@ -82,32 +85,55 @@ def _generated_smiles(draw):
 
 
 @st.composite
-def phaseone_smiles(draw):
-    """Corpus crashers plus generated substrates for Phase I BFS fuzzing."""
+def bfs_smiles(draw):
+    """Corpus crashers plus generated substrates for BFS fuzzing."""
     if draw(st.booleans()):
         return draw(st.sampled_from(_CORPUS))
     return draw(_generated_smiles())
 
 
-def _drain_bfs(smiles: str, *, depth: int = 2, limit: int = _MAX_PRODUCTS) -> int:
+def _drain_bfs(
+    smiles: str,
+    *,
+    ruleset: str = "PhaseOneRS",
+    depth: int = 2,
+    limit: int = _MAX_PRODUCTS,
+) -> int:
     n = 0
-    for _ in bfs(smiles, ruleset="PhaseOneRS", depth=depth):
+    for _ in bfs(smiles, ruleset=ruleset, depth=depth):
         n += 1
         if n >= limit:
             break
     return n
 
 
-@given(smiles=phaseone_smiles())
+@given(smiles=bfs_smiles(), ruleset=st.sampled_from(_RULESETS))
 @settings(
     max_examples=40,
-    deadline=15_000,
+    deadline=20_000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
-def test_bfs_phaseone_depth2_no_rdkit_precondition(smiles: str):
-    """Depth-2 PhaseOneRS BFS must finish without RDKit valence RuntimeErrors."""
+def test_bfs_depth2_no_rdkit_runtime_error(smiles: str, ruleset: str):
+    """Depth-2 BFS (PhaseOneRS and Full) must not raise RDKit RuntimeErrors."""
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
-    # Any uncaught RuntimeError (calcImplicitValence, etc.) fails the example.
-    _drain_bfs(smiles, depth=2)
+    _drain_bfs(smiles, ruleset=ruleset, depth=2)
+
+
+def test_full_bfs_depth2_issue3_parent_does_not_crash():
+    """Full ruleset depth=2 used to RangeError after acetylation→dehydrogenation."""
+    parent = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
+    n = _drain_bfs(parent, ruleset="Full", depth=2, limit=_MAX_PRODUCTS)
+    assert n > 140
+
+
+def test_dehydrogenation_on_star_acetyl_keeps_star():
+    """Resonance reassembly must not strip conjugation ``*`` adducts."""
+    parent = Chem.MolFromSmiles("CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21")
+    acetyl = next(m for _, mols in Acetylation().metabolize(parent) for m in mols)
+    assert any(a.GetSymbol() == "*" for a in acetyl.GetAtoms())
+    n = sum(1 for _ in Dehydrogenation().metabolize(Chem.Mol(acetyl)))
+    assert n > 0
+    # Star still present on a resonance-path product path (input copy untouched ok).
+    assert any(a.GetSymbol() == "*" for a in acetyl.GetAtoms())

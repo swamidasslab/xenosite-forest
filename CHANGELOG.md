@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Resonance reassembly no longer strips conjugation ``*`` adducts when removing FragmentOnBonds dummies, so `bfs(..., ruleset="Full", depth=2)` no longer raises RDKit `Range Error` after acetylation→dehydrogenation.
+
 ### Added
 
-- Hypothesis fuzz test: `bfs(..., ruleset="PhaseOneRS", depth=2)` over corpus crashers and generated organics (no RDKit valence preconditions).
-- Regression lock for GitHub issue #3 parent SMILES (already fixed since 0.2.0 / valence refresh in 0.2.2).
+- Hypothesis fuzz test: `bfs` depth=2 over `PhaseOneRS` and `Full` with corpus crashers and generated organics.
+- Regression lock for GitHub issue #3 parent SMILES (PhaseOneRS valence crash was already fixed since 0.2.0 / 0.2.2).
 
 ## [0.2.8] - 2026-09-13
 

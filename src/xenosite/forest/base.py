@@ -707,25 +707,40 @@ class ConjugatedSystems(object):
         return mol
 
     def _remove_dummy_atoms(self, mol):
-        """Deletes dummy atoms from mol introduced by FragmentOnBonds."""
-        dummies = [atom.GetIdx() for atom in mol.GetAtoms() if atom.GetSymbol() == "*"]
+        """Delete FragmentOnBonds attachment dummies only.
+
+        Conjugation products may already carry a bare ``*`` adduct. Removing those
+        shifts atom indices and breaks ``_restore_bonds`` (Full BFS depth≥2).
+        """
+
+        def _fragment_dummy_idxs(m):
+            return [
+                atom.GetIdx()
+                for atom in m.GetAtoms()
+                if atom.GetSymbol() == "*"
+                and atom.HasProp("_forest_fragment_dummy")
+                and atom.GetBoolProp("_forest_fragment_dummy")
+            ]
+
+        dummies = _fragment_dummy_idxs(mol)
         while dummies:
             emol = Chem.rdchem.EditableMol(mol)
             emol.RemoveAtom(dummies.pop())
             mol = emol.GetMol()
-            dummies = [
-                atom.GetIdx() for atom in mol.GetAtoms() if atom.GetSymbol() == "*"
-            ]
+            dummies = _fragment_dummy_idxs(mol)
         return mol
 
     def _add_idx_prop_to_dummy_atoms(self, combined):
-        """Detects dummy atoms and adds idx prop."""
+        """Detect FragmentOnBonds dummies and assign idx props."""
         dummies = [x for x in combined.GetAtoms() if not x.HasProp("idx")]
         originals = [
             int(x.GetProp("idx")) for x in combined.GetAtoms() if x.HasProp("idx")
         ]
-        for idx, dummy in enumerate(dummies, start=max(originals) + 1):
+        start = max(originals) + 1 if originals else 0
+        for idx, dummy in enumerate(dummies, start=start):
             dummy.SetProp("idx", str(idx))
+            # Distinguish from conjugation star adducts (also atomic num 0).
+            dummy.SetBoolProp("_forest_fragment_dummy", True)
 
     def _recover_original_atom_order(self, combined):
         """Uses the idx atom property to reorder atoms by their indexes prior to fragmentation."""
