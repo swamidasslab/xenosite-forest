@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-17
+
+### Added
+
+- Public `Step` / `StepPlan` partial-order helpers (`iter_linearizations`, JSON, mol prop attach).
+- `ReactionRule.phase1_steps(mol, site)`: Phase I and `NDealkylation` return a degenerate singleton plan; `QuinoneFormation` returns multi-step prep + final dehydrogenation plans; other rules raise `NotImplementedError`.
+- Opt-in `attach_phase1_steps=True` on `metabolize` / rule `metabolites` to stamp `phase1_steps` on products.
+- Hypothesis fuzz that linearizations replay through Forest rules (prep agreement for quinone; full equality for degenerate bond rules when steps fire).
+
 ## [0.3.1] - 2026-09-17
 
 ### Changed
@@ -75,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - RDKit valence / property-cache handling around `RunReactants` and SMILES (refresh before react; skip unsanitizable reactants).
 
+[0.4.0]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.4.0
 [0.3.1]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.3.1
 [0.3.0]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.3.0
 [0.2.8]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.2.8

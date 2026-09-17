@@ -7,7 +7,7 @@ Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI 
 ## Public API
 
 ```python
-from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace
+from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace, Step, StepPlan
 ```
 
 | Symbol | Role |
@@ -19,8 +19,40 @@ from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULES
 | `PhaseOneRS` | Phase I rules used in Metabolic Forest |
 | `RULESETS` | Registry of built-in rulesets |
 | `AtomTrace(mol)` | 1-based atom-mapping history on a tagged metabolite |
+| `Step` / `StepPlan` | Named reaction at a site; partial order with lazy linearizations |
 
 `xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
+
+## Phase1-equivalent steps
+
+Some Forest rules correspond to one or more Phase I transformations. Ask a rule for plans with `phase1_steps(mol, site)` (0-based RDKit atom indices). Each plan is a `StepPlan` partial order; `iter_linearizations()` yields every consistent total order.
+
+| Rule family | `phase1_steps` |
+| --- | --- |
+| Phase I (`Hydroxylation`, `Epoxidation`, `Dehydrogenation`, …) and `NDealkylation` | Degenerate: one singleton plan for a valid site |
+| `QuinoneFormation` | Multi-step: prep layers (e.g. hydroxylation) then final dehydrogenation |
+| Other rules (conjugates, …) | `NotImplementedError` |
+
+```python
+from rdkit import Chem
+from xenosite.forest import StepPlan, rules
+
+mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
+for plan in plans:
+    for order in plan.iter_linearizations():
+        print([(s.rule, sorted(s.site)) for s in order])
+
+# Opt-in stamp on products (mol prop "phase1_steps")
+_, products = next(
+    rules.Epoxidation().metabolize(
+        Chem.MolFromSmiles("C=C"), attach_phase1_steps=True, tag_atoms=False
+    )
+)
+StepPlan.from_mol(products[0])
+```
+
+Sites in `Step` / `StepPlan` use **0-based** RDKit indices (same as reaction `site` frozensets), not 1-based atom numbers.
 
 ## Enumerate metabolites
 

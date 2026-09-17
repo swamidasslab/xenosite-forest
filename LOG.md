@@ -2,6 +2,8 @@
 
 ## 2026-09-17
 
+- Phase1-equivalent steps (`Step` / `StepPlan`): uniform `phase1_steps(mol, site)`; Phase I + NDealkylation degenerate singletons; QuinoneFormation SMARTS→prep layers + final DH; `attach_phase1_steps` stamps mol prop. `RenumberAtoms` during tag/align drops mol props — copy props across renumber so stamps survive.
+- Fuzz: aromatic Forest `Dehydrogenation` does not fire on typical phenols/hydroquinones, so quinone linearizations often cannot fully replay; assert prep-order agreement (with fragment keep toward DH sites) and full SMILES match only when every step fires. No BFS/DFS multi-product emit option needed for this.
 - Mol-scoped resonance cache on `mol._forest["resonance"]` (lazy pull-through joined forms per conjugated/aromatic mode; shared `bfs_all_pairs`). Private `_resonance_cache_disabled()` for parity tests. `EditMol.standardize` propagates `_forest`.
 - Full product parity cache on vs off: APAP 69, naph_styryl 228, multi_conj 400 (matched). Form counts matched.
 - Full.metabolites call counts (on → off): `_resfrags` 2→7, `join_fragments` APAP 4→14 / naph 10→35 / multi 14→49, `bfs` 1→4.
