@@ -8,6 +8,7 @@ import itertools
 import logging
 import re
 from collections import defaultdict, deque
+from contextlib import contextmanager
 
 # Third Party
 from .utils import (
@@ -49,6 +50,121 @@ from rdkit.Chem import AllChem
 rdBase.DisableLog("rdApp.*")
 
 _log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Mol-scoped resonance cache (mol._forest). Private toggle for parity tests.
+# ---------------------------------------------------------------------------
+
+_RESONANCE_CACHE_ENABLED = True
+
+
+def _set_resonance_cache_enabled(enabled):
+    """Private: enable/disable mol._forest resonance caching (tests / parity)."""
+    global _RESONANCE_CACHE_ENABLED
+    _RESONANCE_CACHE_ENABLED = bool(enabled)
+
+
+@contextmanager
+def _resonance_cache_disabled():
+    """Private: temporarily disable resonance caching for parity comparisons."""
+    prev = _RESONANCE_CACHE_ENABLED
+    _set_resonance_cache_enabled(False)
+    try:
+        yield
+    finally:
+        _set_resonance_cache_enabled(prev)
+
+
+def _forest_state(mol):
+    """Get-or-create the private ``mol._forest`` dict."""
+    forest = getattr(mol, "_forest", None)
+    if forest is None:
+        forest = {}
+        mol._forest = forest
+    return forest
+
+
+def _copy_forest(src, dst):
+    """Share ``src._forest`` onto ``dst`` (same object) when present."""
+    forest = getattr(src, "_forest", None)
+    if forest is not None:
+        dst._forest = forest
+
+
+def _resonance_cache(mol):
+    """Return the mol's ResonanceCache when caching is enabled, else None."""
+    if not _RESONANCE_CACHE_ENABLED:
+        return None
+    forest = _forest_state(mol)
+    cache = forest.get("resonance")
+    if cache is None:
+        cache = ResonanceCache()
+        forest["resonance"] = cache
+    return cache
+
+
+class _ModeResonanceCache(object):
+    """Lazily fills joined resonance forms for one systems mode (conjugated/aromatic)."""
+
+    def __init__(self, mode):
+        self.mode = mode
+        self._items = []  # (joined_mol, system)
+        self._done = False
+        self._gen = None
+        self.compute_count = 0
+
+    @property
+    def forms_materialized(self):
+        return len(self._items)
+
+    @property
+    def exhausted(self):
+        return self._done
+
+    def iter_joined(self, resonate, mol):
+        """Yield ``(Mol(copy), system)`` pull-through; fill cache on demand."""
+        i = 0
+        while True:
+            if i < len(self._items):
+                joined, system = self._items[i]
+                i += 1
+                yield Mol(joined), system
+                continue
+            if self._done:
+                return
+            if self._gen is None:
+                self.compute_count += 1
+                self._gen = self._produce(resonate, mol)
+            try:
+                item = next(self._gen)
+            except StopIteration:
+                self._done = True
+                self._gen = None
+                return
+            self._items.append(item)
+
+    def _produce(self, resonate, mol):
+        for res_frag, rest, bonds, system in resonate._resfrags(
+            mol, output_systems=True
+        ):
+            joined = resonate.join_fragments([res_frag] + list(rest), bonds)
+            yield joined, system
+
+
+class ResonanceCache(object):
+    """Per-substrate resonance state stored on ``mol._forest['resonance']``."""
+
+    def __init__(self):
+        self._modes = {}
+        self.bfs_paths = None
+        self.bfs_compute_count = 0
+
+    def mode(self, flag):
+        entry = self._modes.get(flag)
+        if entry is None:
+            entry = _ModeResonanceCache(flag)
+            self._modes[flag] = entry
+        return entry
 
 
 def can_smi(line="", rdmol=None):
@@ -870,6 +986,17 @@ class QueryMol(object):
         [[2, 3, 4], [2, 1, 0, 5, 4]]
         """
 
+        cache = _resonance_cache(mol)
+        # Only memoize the default alternating-bond BFS used by resonance rules.
+        if cache is not None and not kwargs:
+            if cache.bfs_paths is None:
+                cache.bfs_compute_count += 1
+                cache.bfs_paths = self._bfs_all_pairs_uncached(mol, **kwargs)
+            return cache.bfs_paths
+
+        return self._bfs_all_pairs_uncached(mol, **kwargs)
+
+    def _bfs_all_pairs_uncached(self, mol, **kwargs):
         AtomTracker.add_current_idx_as_atom_prop(mol)
 
         all_paths = {}
@@ -1057,6 +1184,7 @@ class QueryMol(object):
         """
 
         mol = Mol(inmol)
+        _copy_forest(inmol, mol)
         try:
             SanitizeMol(mol)
             Kekulize(mol, clearAromaticFlags=True)
@@ -1260,6 +1388,12 @@ class Resonate(ConjugatedSystems, EditMol):
 
         AtomTracker.add_current_idx_as_atom_prop(mol)
 
+        cache = _resonance_cache(mol)
+        if cache is not None:
+            for joined, _system in cache.mode(self.flag).iter_joined(self, mol):
+                yield joined
+            return
+
         for res_frag, rest_of_molecule, bond_types in self._resfrags(mol):
 
             yield self.join_fragments([res_frag] + rest_of_molecule, bond_types)
@@ -1275,6 +1409,17 @@ class Resonate(ConjugatedSystems, EditMol):
         """
 
         all_system_paths = self.bfs_all_pairs(mol)
+
+        cache = _resonance_cache(mol)
+        if cache is not None:
+            joined_iter = cache.mode(self.flag).iter_joined(self, mol)
+            for res_struct, system in joined_iter:
+                for pair in itertools.combinations(system, 2):
+                    if valid_atoms and not set(pair).issubset(valid_atoms):
+                        continue
+                    for path in all_system_paths[frozenset(pair)]:
+                        yield Mol(res_struct), pair, path
+            return
 
         for system_fragment, the_rest, bonds, system in self._resfrags(
             mol, output_systems=True
