@@ -1,16 +1,25 @@
-"""Hypothesis fuzz: sample Full DFS two-step pathways for RDKit crashes.
+"""Hypothesis fuzz: randomly sample Full DFS two-step pathways.
 
-DFS yields deep paths early, so we can exercise depth=2 without draining a
-full BFS frontier (which times out on CI for large substrates).
+DFS + shuffled branch order explores depth=2 without draining BFS. Example
+database lives in ``.hypothesis/`` (gitignored) and is restored on CI.
 """
 
 from __future__ import annotations
 
+import random
+from pathlib import Path
+
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis.database import DirectoryBasedExampleDatabase
 from rdkit import Chem
 
 from xenosite.forest import dfs
 from xenosite.forest.rules import Acetylation, Dehydrogenation
+
+# Repo-root example DB so local and CI share the same on-disk cache location.
+_HYPOTHESIS_DIR = Path(__file__).resolve().parents[1] / ".hypothesis" / "examples"
+_HYPOTHESIS_DIR.mkdir(parents=True, exist_ok=True)
+_HYPOTHESIS_DB = DirectoryBasedExampleDatabase(str(_HYPOTHESIS_DIR))
 
 # Prior RDKit 2026 crashers + diverse substrates (docs / suite).
 _CORPUS = (
@@ -54,9 +63,10 @@ _RING = (
 )
 _FUNC = ("", "O", "N", "Cl", "F", "C(=O)O", "C(=O)N", "OC", "NC", "C=O", "C#N")
 
-_SAMPLE_DEPTH2 = 8
+# Fair sample of two-step paths; bound total yields so CI stays under timeout.
+_SAMPLE_DEPTH2 = 50
+_MAX_YIELDS = 400
 _MAX_HEAVY = 36
-_MAX_YIELDS = 40
 
 
 @st.composite
@@ -95,10 +105,12 @@ def _sample_dfs_two_step(
     smiles: str,
     *,
     expand_star_conjugates: bool = False,
+    seed: int = 0,
     sample: int = _SAMPLE_DEPTH2,
     max_yields: int = _MAX_YIELDS,
 ) -> tuple[int, int]:
-    """Return (n_yields, n_depth2) after sampling a few DFS pathways."""
+    """Return (n_yields, n_depth2) after randomly sampling DFS pathways."""
+    rng = random.Random(seed)
     n = 0
     depth2 = 0
     for _, steps, _ in dfs(
@@ -106,6 +118,7 @@ def _sample_dfs_two_step(
         ruleset="Full",
         depth=2,
         expand_star_conjugates=expand_star_conjugates,
+        shuffle_rng=rng,
     ):
         n += 1
         if steps and len(steps) >= 2:
@@ -118,27 +131,37 @@ def _sample_dfs_two_step(
 @given(
     smiles=forest_smiles(),
     expand_star_conjugates=st.booleans(),
+    seed=st.integers(0, 2**32 - 1),
 )
 @settings(
-    max_examples=40,
-    deadline=15_000,
+    max_examples=50,
+    deadline=20_000,
+    database=_HYPOTHESIS_DB,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
 def test_full_dfs_two_step_sample_no_rdkit_runtime_error(
-    smiles: str, expand_star_conjugates: bool
+    smiles: str, expand_star_conjugates: bool, seed: int
 ):
-    """Sample Full DFS depth-2 pathways; must not raise RDKit RuntimeErrors."""
+    """Randomly sample Full DFS depth-2 pathways; no RDKit RuntimeErrors."""
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
-    _sample_dfs_two_step(smiles, expand_star_conjugates=expand_star_conjugates)
+    _sample_dfs_two_step(
+        smiles,
+        expand_star_conjugates=expand_star_conjugates,
+        seed=seed,
+    )
 
 
 def test_full_dfs_two_step_issue3_with_star_expand():
-    """Issue #3 parent: DFS reaches a depth-2 path with star expansion enabled."""
+    """Issue #3 parent: shuffled DFS reaches depth-2 with star expansion."""
     parent = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
     n, depth2 = _sample_dfs_two_step(
-        parent, expand_star_conjugates=True, sample=3, max_yields=80
+        parent,
+        expand_star_conjugates=True,
+        seed=1,
+        sample=20,
+        max_yields=200,
     )
     assert n > 0
     assert depth2 >= 1

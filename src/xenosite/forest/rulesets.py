@@ -616,12 +616,16 @@ class RuleSet(Phase1Site, ReactionRule):
                               quit_if_not_ended_in_termination_rulenames=True,
                               strict=True,
                               expand_star_conjugates=False,
+                              shuffle_rng=None,
                               **kwargs):
         """Depth-first pathway enumeration.
 
         Yields a reaction path as soon as each product is formed, then recurses
         into that product before siblings. Useful for sampling a few depth-N
         pathways without waiting for a full BFS level to finish.
+
+        If ``shuffle_rng`` is a ``random.Random`` (or compatible), reaction and
+        product order are shuffled so repeated samples explore different branches.
         """
 
         if isinstance(depth, str):
@@ -644,10 +648,18 @@ class RuleSet(Phase1Site, ReactionRule):
             if rulename in termination_rulenames:
                 return
 
-        for next_step, next_products in self.metabolize(
-                resmol, strict=strict, **kwargs):
+        reactions = self.metabolize(resmol, strict=strict, **kwargs)
+        if shuffle_rng is not None:
+            reactions = list(reactions)
+            shuffle_rng.shuffle(reactions)
 
-            for next_product in clean(next_products):
+        for next_step, next_products in reactions:
+
+            products = list(clean(next_products))
+            if shuffle_rng is not None:
+                shuffle_rng.shuffle(products)
+
+            for next_product in products:
 
                 new_canonical_product = can_smi(rdmol=next_product)
                 if not new_canonical_product:
@@ -694,6 +706,7 @@ class RuleSet(Phase1Site, ReactionRule):
                             quit_if_not_ended_in_termination_rulenames=
                             quit_if_not_ended_in_termination_rulenames,
                             expand_star_conjugates=expand_star_conjugates,
+                            shuffle_rng=shuffle_rng,
                             strict=strict,
                             **kwargs):
                         yield pro, pat, propath

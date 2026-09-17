@@ -91,7 +91,7 @@ pythonpath = ["src", "tests"]
 consider_namespace_packages = true
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 # Avoid collecting optional network helpers unless explicitly requested
-norecursedirs = [".git", ".venv", "build", "dist"]
+norecursedirs = [".git", ".venv", "build", "dist", ".hypothesis"]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

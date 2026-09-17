@@ -5,7 +5,7 @@
 - Issue #3 reports `calcImplicitValence` crash on PhaseOneRS BFS; reproduces on forest 0.1.0 only (already fixed in 0.2.0+).
 - Full BFS depth=2 failed with RDKit `Range Error` after acetylation→dehydrogenation: `_remove_dummy_atoms` deleted conjugation `*` adducts. Fix: mark FragmentOnBonds dummies and only remove those.
 - BFS `expand_star_conjugates=False` by default: star conjugates are terminal products; opt in to expand them further.
-- Added `dfs` pathway search; fuzz samples a few Full DFS two-step pathways instead of draining BFS.
+- Added `dfs` pathway search with optional ``shuffle_rng``; fuzz randomly samples Full DFS two-step pathways and persists the Hypothesis example DB (``.hypothesis``, cached on CI).
 
 ## 2026-09-13
 

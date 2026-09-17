@@ -62,7 +62,9 @@ def dfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
     """Depth-first pathway search (same arguments as ``bfs``).
 
     Yields deep paths earlier than BFS, so sampling a few two-step pathways
-    does not require finishing the full breadth-first frontier.
+    does not require finishing the full breadth-first frontier. Pass
+    ``shuffle_rng`` (e.g. ``random.Random(seed)``) to randomize reaction /
+    product order between samples.
     """
     kwargs["search"] = "dfs"
     yield from _run_search(
