@@ -63,6 +63,9 @@ def test_bfs_shuffle_rng_and_max_paths():
     assert len(rows) == 3
     unlimited = list(bfs("CCO", ruleset="Full", depth=1, max_paths=None))
     assert len(unlimited) >= 3
+
+
+def test_dfs_samples_two_step_pathway_quickly():
     """DFS reaches a length-2 path without enumerating the full BFS frontier."""
     depth2 = None
     for smi, steps, _ in dfs(ISSUE3_PARENT, ruleset="Full", depth=2):
