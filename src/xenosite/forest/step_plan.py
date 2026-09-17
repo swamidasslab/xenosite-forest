@@ -15,6 +15,10 @@ from rdkit import Chem
 
 from .base import AtomTracker, _copy_forest, _forest_state
 
+# Private storage key for StepPlan.attach_to_mol / from_mol / try_from_mol.
+# Callers must use those APIs; do not read or write this prop directly.
+_PHASE1_STEPS_PROP = "phase1_steps"
+
 
 # ---------------------------------------------------------------------------
 # Rule registry (name -> ReactionRule instance)
@@ -560,15 +564,33 @@ class StepPlan:
         return cls(steps, precedes)
 
     @classmethod
+    def try_from_mol(cls, mol) -> StepPlan | None:
+        """Return the attached :class:`StepPlan`, or ``None`` if absent.
+
+        Prefer this over inspecting mol props directly so storage can change
+        without a public API break.
+        """
+        if not mol.HasProp(_PHASE1_STEPS_PROP):
+            return None
+        return cls.from_json(json.loads(mol.GetProp(_PHASE1_STEPS_PROP)))
+
+    @classmethod
     def from_mol(cls, mol) -> StepPlan:
-        """Read the ``phase1_steps`` mol property."""
-        if not mol.HasProp("phase1_steps"):
-            raise ValueError("mol has no phase1_steps property")
-        return cls.from_json(json.loads(mol.GetProp("phase1_steps")))
+        """Read the attached :class:`StepPlan` from ``mol``.
+
+        Raises ``ValueError`` if none is attached; use :meth:`try_from_mol`
+        when absence is expected.
+        """
+        plan = cls.try_from_mol(mol)
+        if plan is None:
+            raise ValueError("mol has no attached StepPlan")
+        return plan
 
     def attach_to_mol(self, mol) -> None:
-        """Stamp ``phase1_steps`` JSON onto ``mol``."""
-        mol.SetProp("phase1_steps", json.dumps(self.to_json(), separators=(",", ":")))
+        """Attach this plan to ``mol`` (storage is an implementation detail)."""
+        mol.SetProp(
+            _PHASE1_STEPS_PROP, json.dumps(self.to_json(), separators=(",", ":"))
+        )
 
     def apply_linearization(
         self, mol, order: Sequence[Step], toward=None, **kwargs

@@ -352,6 +352,11 @@ class Dehydrogenation(ResonancePairRule):
             query_smarts=[
                 ("single2double", "[#6h:1][#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#8H:2]"),
                 (("single2double", "addPlus1"), "[#6h:1][#7D3:2]"),
+                # Quinoid / phenol ends: ring C without H bonded to OH or NH
+                # (existing patterns require #6h and miss hydroquinone / NAPQI).
+                ("single2double", "[#6H0:1][#8H:2]"),
+                ("single2double", "[#6H0:1][#7D2H1,#7D1H2:2]"),
+                (("single2double", "addPlus1"), "[#6H0:1][#7D3:2]"),
             ],
             phase1_sites_on="atom_hydrogen",
             sites_on="atom_pairs",

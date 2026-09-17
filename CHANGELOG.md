@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Public `AtomRef` / `Step` / `StepPlan` / `Linearization`: reactant-stable sites (origin or created-by), partial orders, `Step.apply` / `Linearization.apply` with `mol._forest["atom_refs"]` creation index and opt-in `resolve_site`.
+- `Linearization.apply(..., toward=, drop_last=)` for fragment retention and prep-only replay.
 - `ReactionRule.phase1_steps(mol, site)`: Phase I and `NDealkylation` return a degenerate singleton plan; `QuinoneFormation` returns multi-step prep + final dehydrogenation (`AtomRef` ends for new O); other rules raise `NotImplementedError`.
-- Opt-in `attach_phase1_steps=True` on `metabolize` / rule `metabolites` to stamp `phase1_steps` on products.
+- Opt-in `attach_phase1_steps=True` on `metabolize` / rule `metabolites` / rulesets. Attach and read plans with `StepPlan.attach_to_mol` / `from_mol` / `try_from_mol` (storage is private; do not read mol props by name).
+- `Dehydrogenation` query SMARTS for quinoid ends (`#6H0` bonded to OH / NH / tertiary N) so Forest DH can form hydroquinone→benzoquinone and APAP→NAPQI; quinone `StepPlan` full Forest apply works for those cases.
 - Hypothesis fuzz via library `Linearization.apply` (prep agreement; full equality when all steps fire).
 
 ## [0.3.1] - 2026-09-17

@@ -1733,14 +1733,14 @@ class ReactionRule(AtomTracker):
             yield outsite, metabolites
 
     def _attach_phase1_steps_to_products(self, mol, outsite, metabolites):
-        """Stamp phase1_steps on products that do not already carry the prop."""
+        """Stamp phase1_steps on products that do not already carry a plan."""
         from .step_plan import StepPlan
 
-        missing = [m for m in metabolites if not m.HasProp("phase1_steps")]
+        missing = [m for m in metabolites if StepPlan.try_from_mol(m) is None]
         if not missing:
             return
         # Subclasses (e.g. QuinoneFormation) may stamp only selected fragments.
-        if any(m.HasProp("phase1_steps") for m in metabolites):
+        if any(StepPlan.try_from_mol(m) is not None for m in metabolites):
             return
         if not self.phase1_equivalent:
             raise NotImplementedError(

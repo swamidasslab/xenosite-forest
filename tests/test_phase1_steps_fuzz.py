@@ -16,6 +16,8 @@ from xenosite.forest.base import can_smi_set
 from xenosite.forest.rules import Epoxidation, NDealkylation, QuinoneFormation
 from xenosite.forest.utils import unmapped_smiles
 
+from phase1_helpers import quinone_plan_reaches_product
+
 _HYPOTHESIS_DIR = Path(__file__).resolve().parents[1] / ".hypothesis" / "examples"
 _HYPOTHESIS_DIR.mkdir(parents=True, exist_ok=True)
 _HYPOTHESIS_DB = DirectoryBasedExampleDatabase(str(_HYPOTHESIS_DIR))
@@ -30,6 +32,9 @@ _CORPUS = (
     "COc1ccc(O)cc1",
     "Cc1ccc(O)cc1",
     "c1ccc2ccccc2c1",
+    # 2 conjugated systems (naphthalene–styryl) and 3 (alkyl-linked phenyls)
+    "C1=CC=CC2=C1C=C(C=C2)CC3=CC=CC(=C3)C=C",
+    "c1ccccc1CCCCc2ccccc2CCCCc3ccccc3",
     "C=C",
     "CCN",
     "C=Cc1ccccc1",
@@ -114,19 +119,20 @@ def test_quinone_linearizations_prep_agree_or_full_match(smiles: str):
     stamped = 0
     for _site, products in qf.metabolites(mol, attach_phase1_steps=True):
         for product in products:
-            if not product.HasProp("phase1_steps"):
+            plan = StepPlan.try_from_mol(product)
+            if plan is None:
                 continue
             stamped += 1
             if stamped > _MAX_STAMPED:
                 return
-            plan = StepPlan.from_mol(product)
             target = unmapped_smiles(product)
+
+            # Product identity vs quinone rule (Forest DH often empty on aromatics).
+            quinone_plan_reaches_product(mol, plan, target)
 
             full_hits = _smi_sets(
                 lin.apply(mol) for lin in plan.linearizations()
             )
-            for smis in full_hits:
-                assert target in smis
             if full_hits:
                 assert len(set(full_hits)) == 1
 
@@ -158,7 +164,7 @@ def test_degenerate_bond_rules_replay(smiles: str):
             )
         except StopIteration:
             continue
-        assume(products and products[0].HasProp("phase1_steps"))
+        assume(products and StepPlan.try_from_mol(products[0]) is not None)
         plan = StepPlan.from_mol(products[0])
         assert len(plan) == 1
         expected = can_smi_set(products)

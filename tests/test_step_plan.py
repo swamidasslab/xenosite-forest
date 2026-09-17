@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from rdkit import Chem
 from rdkit.Chem.rdmolfiles import MolFromSmiles
@@ -64,15 +62,15 @@ def test_json_round_trip():
 def test_from_mol_and_attach():
     mol = MolFromSmiles("CCO")
     plan = StepPlan.singleton("Hydroxylation", {0})
+    assert StepPlan.try_from_mol(mol) is None
     plan.attach_to_mol(mol)
+    assert StepPlan.try_from_mol(mol) == plan
     assert StepPlan.from_mol(mol) == plan
-    raw = json.loads(mol.GetProp("phase1_steps"))
-    assert raw["steps"][0]["rule"] == "Hydroxylation"
 
 
 def test_from_mol_missing_prop():
     mol = MolFromSmiles("C")
-    with pytest.raises(ValueError, match="phase1_steps"):
+    with pytest.raises(ValueError, match="attached StepPlan"):
         StepPlan.from_mol(mol)
 
 

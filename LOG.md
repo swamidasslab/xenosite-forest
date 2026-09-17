@@ -2,9 +2,11 @@
 
 ## 2026-09-17
 
+- Forest `Dehydrogenation` missed quinoid products because query SMARTS required `#6h`. Added `#6H0`–`[#8H]` / `#6H0`–NH / `#6H0`–`[#7D3]` (+`addPlus1`) query SMARTS. Hydroquinone→benzoquinone and APAP→NAPQI now emit from Forest DH; quinone StepPlan full `apply` works for those cases. Full suite: 916 passed, 15 xfailed (no new failures).
+- Public stamp API: `StepPlan.try_from_mol` / `from_mol` / `attach_to_mol` (dropped `has_on_mol`). Docs cover rule ask, metabolize/ruleset stamp, resolve + `linearizations().apply` / `drop_last`. Ready to ship 0.4.0.
 - `AtomRef` + `Step`/`Linearization.apply`: deferred sites (new O after hydroxylation) resolve via `mol._forest["atom_refs"]` (private schema documented next to `_forest_state`); not AtomTracker tags. Quinone DH ends use `added_by` refs. `toward=` / `drop_last=` keep fragments for omitted suffix sites. Creation index stays in `Step.apply` for now; optional rule-side recording deferred (TODO).
-- Phase1-equivalent steps (`Step` / `StepPlan`): uniform `phase1_steps(mol, site)`; Phase I + NDealkylation degenerate singletons; QuinoneFormation SMARTS→prep layers + final DH; `attach_phase1_steps` stamps mol prop. `RenumberAtoms` during tag/align drops mol props — copy props across renumber so stamps survive.
-- Fuzz uses library apply only. Aromatic Forest `Dehydrogenation` often still cannot fire; prep-order agreement + full match when steps succeed.
+- Phase1-equivalent steps (`Step` / `StepPlan`): uniform `phase1_steps(mol, site)`; Phase I + NDealkylation degenerate singletons; QuinoneFormation SMARTS→prep layers + final DH; `attach_phase1_steps` stamps via StepPlan API. `RenumberAtoms` during tag/align drops mol props — copy props across renumber so stamps survive.
+- Fuzz uses library apply only. Product identity vs quinone checked via prep+`QuinoneFormation` when Forest DH apply is empty (now often non-empty after quinoid DH SMARTS).
 - Mol-scoped resonance cache on `mol._forest["resonance"]` (lazy pull-through joined forms per conjugated/aromatic mode; shared `bfs_all_pairs`). Private `_resonance_cache_disabled()` for parity tests. `EditMol.standardize` propagates `_forest`.
 - Full product parity cache on vs off: APAP 69, naph_styryl 228, multi_conj 400 (matched). Form counts matched.
 - Full.metabolites call counts (on → off): `_resfrags` 2→7, `join_fragments` APAP 4→14 / naph 10→35 / multi 14→49, `bfs` 1→4.
