@@ -971,6 +971,29 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
     mapid_site = [1]
 
 
+# Phase I rules (and N-dealkylation) expose degenerate phase1_steps singletons.
+for _phase1_rule in (
+    Dehydrogenation,
+    Dephosphorylation,
+    EpoxideOpening,
+    Hydrolysis,
+    Dehydration,
+    Hydrogenation,
+    NitrogenReduction,
+    OxygenReduction,
+    ReductiveDehalogenation,
+    SulfurReduction,
+    Hydroxylation,
+    Epoxidation,
+    SulfurOxidation,
+    NitrogenOxidation,
+    Dealkylation,
+    OxidativeDehalogenation,
+    NDealkylation,
+):
+    _phase1_rule.phase1_equivalent = True
+
+
 if __name__ == "__main__":
     import doctest
 

@@ -1511,6 +1511,8 @@ class ReactionRule(AtomTracker):
 
     sites_on = "atoms"
     phase1_sites_on = "bonds"
+    # When True, phase1_steps returns a degenerate singleton plan for valid sites.
+    phase1_equivalent = False
 
     def __init__(
         self,
@@ -1555,6 +1557,32 @@ class ReactionRule(AtomTracker):
     def __iter__(self):
         return iter([self])
 
+    def phase1_steps(self, mol, site, **kwargs):
+        """Return Phase1-equivalent :class:`~xenosite.forest.step_plan.StepPlan` list.
+
+        Public signature is ``(mol, site)``. Subclasses that are Phase I set
+        ``phase1_equivalent = True`` for a degenerate singleton plan. Others
+        raise ``NotImplementedError``. Private underscore kwargs may be used
+        by subclasses for efficiency.
+        """
+        if not self.phase1_equivalent:
+            raise NotImplementedError(
+                "%s does not define Phase1-equivalent steps" % self.name
+            )
+        want = self._cast_sites(site)[0][1]
+        for outsite, _products in self.metabolize(
+            mol,
+            tag_atoms=False,
+            only_emit_topologically_distinct_sites=False,
+            attach_phase1_steps=False,
+        ):
+            emitted = outsite[1] if isinstance(outsite, tuple) else outsite
+            if frozenset(emitted) == frozenset(want):
+                from .step_plan import StepPlan
+
+                return [StepPlan.singleton(self.name, want)]
+        return []
+
     def format_site(self, site, just_rule_name=False):
 
         if just_rule_name and isinstance(site, (tuple, list)):
@@ -1583,6 +1611,7 @@ class ReactionRule(AtomTracker):
         do_not_tag_atoms=False,
         only_unique=False,
         strict=True,
+        attach_phase1_steps=False,
         **kwargs
     ):
         if only_unique:
@@ -1614,6 +1643,7 @@ class ReactionRule(AtomTracker):
             format_output_site=format_output_site,
             do_not_tag_atoms=do_not_tag_atoms,
             strict=strict,
+            attach_phase1_steps=attach_phase1_steps,
             **kwargs
         )
         while True:
@@ -1681,7 +1711,27 @@ class ReactionRule(AtomTracker):
                 else:
                     unique_smi.append(unique_metabolites)
 
+            if attach_phase1_steps:
+                self._attach_phase1_steps_to_products(mol, outsite, metabolites)
+
             yield outsite, metabolites
+
+    def _attach_phase1_steps_to_products(self, mol, outsite, metabolites):
+        """Stamp phase1_steps on products that do not already carry the prop."""
+        from .step_plan import StepPlan
+
+        already = [m for m in metabolites if m.HasProp("phase1_steps")]
+        if len(already) == len(metabolites):
+            return
+        if not self.phase1_equivalent:
+            raise NotImplementedError(
+                "attach_phase1_steps is not supported for %s" % self.name
+            )
+        site = outsite[1] if isinstance(outsite, tuple) else outsite
+        plan = StepPlan.singleton(self.name, frozenset(site))
+        for metabolite in metabolites:
+            if not metabolite.HasProp("phase1_steps"):
+                plan.attach_to_mol(metabolite)
 
     def metabolites(self, mol, **kwargs):
         """Should return a tuple of lists. The first element will be the site, the second element
