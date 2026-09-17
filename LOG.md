@@ -5,7 +5,7 @@
 - Issue #3 reports `calcImplicitValence` crash on PhaseOneRS BFS; reproduces on forest 0.1.0 only (already fixed in 0.2.0+).
 - Full BFS depth=2 failed with RDKit `Range Error` after acetylation→dehydrogenation: `_remove_dummy_atoms` deleted conjugation `*` adducts. Fix: mark FragmentOnBonds dummies and only remove those.
 - BFS `expand_star_conjugates=False` by default: star conjugates are terminal products; opt in to expand them further.
-- Hypothesis fuzz: depth-2 BFS over PhaseOneRS and Full.
+- Hypothesis fuzz: depth-2 Full BFS (Phase I covered via Full).
 
 ## 2026-09-13
 

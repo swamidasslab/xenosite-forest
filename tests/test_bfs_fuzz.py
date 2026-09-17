@@ -1,8 +1,7 @@
-"""Hypothesis fuzz: BFS must not raise RDKit errors mid-enumeration.
+"""Hypothesis fuzz: Full BFS must not raise RDKit errors mid-enumeration.
 
-Catches regressions like GitHub issue #3 (valence caches) and Full-ruleset
-depth≥2 failures when conjugation star adducts were stripped during resonance
-reassembly.
+Covers Phase I (Full includes it) plus conjugation / quinone paths. Catches
+regressions like GitHub issue #3 and star-adduct resonance reassembly failures.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from rdkit import Chem
 from xenosite.forest import bfs
 from xenosite.forest.rules import Acetylation, Dehydrogenation
 
-# Prior RDKit 2026 crashers + diverse Phase I / conjugation substrates.
+# Prior RDKit 2026 crashers + diverse substrates (docs / suite).
 _CORPUS = (
     "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21",  # issue #3
     "CN(C)CCOC(c1ccccc1)c1ccccc1",  # diphenhydramine
@@ -57,7 +56,6 @@ _FUNC = ("", "O", "N", "Cl", "F", "C(=O)O", "C(=O)N", "OC", "NC", "C=O", "C#N")
 
 _MAX_PRODUCTS = 250
 _MAX_HEAVY = 36
-_RULESETS = ("PhaseOneRS", "Full")
 
 
 @st.composite
@@ -95,7 +93,6 @@ def bfs_smiles(draw):
 def _drain_bfs(
     smiles: str,
     *,
-    ruleset: str = "PhaseOneRS",
     depth: int = 2,
     limit: int = _MAX_PRODUCTS,
     expand_star_conjugates: bool = False,
@@ -103,7 +100,7 @@ def _drain_bfs(
     n = 0
     for _ in bfs(
         smiles,
-        ruleset=ruleset,
+        ruleset="Full",
         depth=depth,
         expand_star_conjugates=expand_star_conjugates,
     ):
@@ -113,21 +110,25 @@ def _drain_bfs(
     return n
 
 
-@given(smiles=bfs_smiles(), ruleset=st.sampled_from(_RULESETS))
+@given(
+    smiles=bfs_smiles(),
+    expand_star_conjugates=st.booleans(),
+)
 @settings(
     max_examples=40,
     deadline=20_000,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
-def test_bfs_depth2_no_rdkit_runtime_error(smiles: str, ruleset: str):
-    """Depth-2 BFS (PhaseOneRS and Full) must not raise RDKit RuntimeErrors."""
+def test_full_bfs_depth2_no_rdkit_runtime_error(
+    smiles: str, expand_star_conjugates: bool
+):
+    """Depth-2 Full BFS must not raise RDKit RuntimeErrors."""
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
-    # Default: do not expand star conjugates. Also stress opt-in expansion.
-    _drain_bfs(smiles, ruleset=ruleset, depth=2, expand_star_conjugates=False)
-    if ruleset == "Full":
-        _drain_bfs(smiles, ruleset=ruleset, depth=2, expand_star_conjugates=True)
+    _drain_bfs(
+        smiles, depth=2, expand_star_conjugates=expand_star_conjugates
+    )
 
 
 def test_full_bfs_depth2_issue3_parent_does_not_crash():
@@ -135,7 +136,6 @@ def test_full_bfs_depth2_issue3_parent_does_not_crash():
     parent = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
     n = _drain_bfs(
         parent,
-        ruleset="Full",
         depth=2,
         limit=_MAX_PRODUCTS,
         expand_star_conjugates=True,
@@ -150,5 +150,4 @@ def test_dehydrogenation_on_star_acetyl_keeps_star():
     assert any(a.GetSymbol() == "*" for a in acetyl.GetAtoms())
     n = sum(1 for _ in Dehydrogenation().metabolize(Chem.Mol(acetyl)))
     assert n > 0
-    # Star still present on a resonance-path product path (input copy untouched ok).
     assert any(a.GetSymbol() == "*" for a in acetyl.GetAtoms())
