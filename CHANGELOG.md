@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Public `Step` / `StepPlan` partial-order helpers (`iter_linearizations`, JSON, mol prop attach).
-- `ReactionRule.phase1_steps(mol, site)`: Phase I and `NDealkylation` return a degenerate singleton plan; `QuinoneFormation` returns multi-step prep + final dehydrogenation plans; other rules raise `NotImplementedError`.
+- Public `AtomRef` / `Step` / `StepPlan` / `Linearization`: reactant-stable sites (origin or created-by), partial orders, `Step.apply` / `Linearization.apply` with `mol._forest["atom_refs"]` creation index and opt-in `resolve_site`.
+- `ReactionRule.phase1_steps(mol, site)`: Phase I and `NDealkylation` return a degenerate singleton plan; `QuinoneFormation` returns multi-step prep + final dehydrogenation (`AtomRef` ends for new O); other rules raise `NotImplementedError`.
 - Opt-in `attach_phase1_steps=True` on `metabolize` / rule `metabolites` to stamp `phase1_steps` on products.
-- Hypothesis fuzz that linearizations replay through Forest rules (prep agreement for quinone; full equality for degenerate bond rules when steps fire).
+- Hypothesis fuzz via library `Linearization.apply` (prep agreement; full equality when all steps fire).
 
 ## [0.3.1] - 2026-09-17
 

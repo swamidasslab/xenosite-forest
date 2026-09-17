@@ -52,7 +52,16 @@ rdBase.DisableLog("rdApp.*")
 _log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Mol-scoped resonance cache (mol._forest). Private toggle for parity tests.
+# Private mol._forest bag (not a public API).
+#
+# Schema (reserved keys):
+#   resonance  -> ResonanceCache (lazy joined forms / bfs_all_pairs)
+#   atom_refs  -> AtomRefsIndex (Step.apply creation lookup for AtomRef)
+#
+# Share with _copy_forest (same dict object) when caches should be shared.
+# Step/linearization apply may install a new dict that shares ``resonance``
+# but copies ``atom_refs`` so creation bookkeeping does not mutate the parent.
+# Do not store public phase1_steps JSON here (mol prop only).
 # ---------------------------------------------------------------------------
 
 _RESONANCE_CACHE_ENABLED = True

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from rdkit.Chem.rdmolfiles import MolFromSmiles
 
-from xenosite.forest import StepPlan
+from xenosite.forest import AtomRef, StepPlan
 from xenosite.forest.rules import (
     Acetylation,
     Epoxidation,
@@ -78,7 +78,9 @@ def test_quinone_apap_phase1_steps_single_dh():
         if len(p) == 1 and p.steps[0].rule == "Dehydrogenation"
     ]
     assert dh_only
-    assert dh_only[0].steps[0].site == frozenset({3, 8})
+    assert dh_only[0].steps[0].site == frozenset(
+        {AtomRef(origin=3), AtomRef(origin=8)}
+    )
 
 
 def test_quinone_benzene_addo_layers():
@@ -93,6 +95,8 @@ def test_quinone_benzene_addo_layers():
     assert len(orders) == 2
     assert all(o[-1].rule == "Dehydrogenation" for o in orders)
     assert all(o[0].rule == "Hydroxylation" for o in orders)
+    dh_site = orders[0][-1].site
+    assert all(isinstance(r, AtomRef) and r.added_by == "Hydroxylation" for r in dh_site)
 
 
 def test_quinone_attach_phase1_steps_matches_public():

@@ -7,7 +7,7 @@ Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI 
 ## Public API
 
 ```python
-from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace, Step, StepPlan
+from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace, AtomRef, Linearization, Step, StepPlan
 ```
 
 | Symbol | Role |
@@ -19,7 +19,7 @@ from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULES
 | `PhaseOneRS` | Phase I rules used in Metabolic Forest |
 | `RULESETS` | Registry of built-in rulesets |
 | `AtomTrace(mol)` | 1-based atom-mapping history on a tagged metabolite |
-| `Step` / `StepPlan` | Named reaction at a site; partial order with lazy linearizations |
+| `AtomRef` / `Step` / `StepPlan` / `Linearization` | Reactant-stable sites; partial orders; self-apply linearizations |
 
 `xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
 
@@ -33,15 +33,21 @@ Some Forest rules correspond to one or more Phase I transformations. Ask a rule 
 | `QuinoneFormation` | Multi-step: prep layers (e.g. hydroxylation) then final dehydrogenation |
 | Other rules (conjugates, …) | `NotImplementedError` |
 
+`Step.site` is a frozenset of `AtomRef`: either a reactant **origin** index, or an atom **created by** an earlier step (`added_by` + reactant-frame `at`). Ints coerce to `AtomRef(origin=…)`. Quinone final dehydrogenation after `addO` names the new oxygens that way so sites match Forest’s heteroatom-pair DH rule.
+
 ```python
 from rdkit import Chem
-from xenosite.forest import StepPlan, rules
+from xenosite.forest import Linearization, StepPlan, rules
 
-mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
-plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
-for plan in plans:
-    for order in plan.iter_linearizations():
-        print([(s.rule, sorted(s.site)) for s in order])
+mol = Chem.MolFromSmiles("c1ccccc1")
+plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
+plan = next(p for p in plans if len(p) == 3)
+for order in plan.iter_linearizations():
+    # Replay through Forest rules; creation bookkeeping on mol._forest["atom_refs"]
+    products = Linearization(order).apply(mol)
+    # Prep only, still retain fragments needed for the final DH sites:
+    mid = Linearization(order[:-1]).apply(mol, toward=order[-1].site)
+    print(order[-1].resolve_site(mid[0]) if mid else None)
 
 # Opt-in stamp on products (mol prop "phase1_steps")
 _, products = next(
@@ -52,7 +58,7 @@ _, products = next(
 StepPlan.from_mol(products[0])
 ```
 
-Sites in `Step` / `StepPlan` use **0-based** RDKit indices (same as reaction `site` frozensets), not 1-based atom numbers.
+Stamped plans stay reactant-stable `AtomRef`s. Call `AtomRef.resolve(mol)` / `Step.resolve_site(mol)` when you need current GetIdx on a metabolite after apply.
 
 ## Enumerate metabolites
 

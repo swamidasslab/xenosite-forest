@@ -9,7 +9,7 @@ from .bfs import bfs, dfs
 from .phaseone import PhaseOneRS
 from . import rules
 from .rulesets import RULESETS, RuleSet, load_ruleset
-from .step_plan import Step, StepPlan
+from .step_plan import AtomRef, Linearization, Step, StepPlan
 from .trace import AtomTrace
 
 __all__ = [
@@ -21,6 +21,8 @@ __all__ = [
     "RuleSet",
     "load_ruleset",
     "rules",
+    "AtomRef",
+    "Linearization",
     "Step",
     "StepPlan",
     "AtomTrace",

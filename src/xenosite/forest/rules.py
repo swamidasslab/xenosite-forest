@@ -18,7 +18,7 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
-from .step_plan import Step, StepPlan
+from .step_plan import Step, StepPlan, AtomRef
 from .utils import (
     apply_star_conjugate,
     canon_smi,
@@ -161,19 +161,24 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
         return frozenset(modifications)
 
     def _prep_and_dh_end(self, match):
-        """Return (prep Steps, DH endpoint atom) for one quinone SMARTS match."""
+        """Return (prep Steps, DH endpoint AtomRef) for one quinone SMARTS match."""
         mapids, modifications = match
         names = self._mod_names(modifications)
         prep = []
         if "addO" in names:
-            prep.append(Step("Hydroxylation", frozenset([mapids[1]])))
-        if "replaceHalogenWithO" in names:
-            prep.append(
-                Step("OxidativeDehalogenation", frozenset([mapids[1], mapids[2]]))
-            )
-        if "dealk" in names:
+            carbon = mapids[1]
+            prep.append(Step("Hydroxylation", frozenset([carbon])))
+            end = AtomRef(added_by="Hydroxylation", at=frozenset([carbon]))
+        elif "replaceHalogenWithO" in names:
+            at = frozenset([mapids[1], mapids[2]])
+            prep.append(Step("OxidativeDehalogenation", at))
+            end = AtomRef(added_by="OxidativeDehalogenation", at=at)
+        elif "dealk" in names:
             prep.append(Step("Dealkylation", frozenset([mapids[2], mapids[3]])))
-        end = mapids[2] if 2 in mapids else mapids[1]
+            end = AtomRef(origin=mapids[2])
+        else:
+            # single2double / addPlus1: heteroatom already on reactant
+            end = AtomRef(origin=mapids[2] if 2 in mapids else mapids[1])
         return prep, end
 
     def _plan_from_match_pair(self, match1, match2):
