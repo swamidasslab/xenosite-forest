@@ -56,7 +56,7 @@ def test_benzene_prep_linearizations_agree():
     """Both OH orders for para-quinone prep yield the same hydroquinone."""
     mol = Chem.MolFromSmiles("c1ccccc1")
     plan = next(p for p in QuinoneFormation().phase1_steps(mol, frozenset({0, 3})) if len(p) == 3)
-    finals = _smi_sets(plan.apply_all_prefixes(mol))
+    finals = _smi_sets(plan.apply_all(mol, drop_last=1))
     assert finals and len(set(finals)) == 1
     got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(finals[0]))))
     assert got == Chem.MolToSmiles(Chem.MolFromSmiles("Oc1ccc(O)cc1"))
@@ -119,7 +119,7 @@ def test_quinone_linearizations_prep_agree_or_full_match(smiles: str):
                 assert len(set(full_hits)) == 1
 
             if len(plan) > 1:
-                prep_hits = _smi_sets(plan.apply_all_prefixes(mol))
+                prep_hits = _smi_sets(plan.apply_all(mol, drop_last=1))
                 if prep_hits:
                     assert len(set(prep_hits)) == 1
 

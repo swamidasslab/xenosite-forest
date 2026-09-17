@@ -141,7 +141,7 @@ def test_benzene_prep_linearization_apply_agrees():
     plan = StepPlan.layers([[h0, h3], [dh]])
     prep_smiles = [
         frozenset(unmapped_smiles(p) for p in products)
-        for _lin, products in plan.apply_all_prefixes(mol)
+        for _lin, products in plan.apply_all(mol, drop_last=1)
         if products
     ]
     assert prep_smiles and len(set(prep_smiles)) == 1

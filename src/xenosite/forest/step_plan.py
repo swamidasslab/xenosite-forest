@@ -365,13 +365,30 @@ class Linearization:
     def __post_init__(self):
         object.__setattr__(self, "steps", tuple(self.steps))
 
-    def apply(self, mol, toward=None, **kwargs) -> list:
+    def apply(self, mol, toward=None, drop_last: int = 0, **kwargs) -> list:
         """Apply steps in order.
 
         ``toward``: optional extra :class:`AtomRef` sequence used only for
-        multi-fragment retention (e.g. final DH sites when applying a prep
-        prefix). Not applied as reactions.
+        multi-fragment retention (e.g. sites of steps not yet applied).
+        Not applied as reactions.
+
+        ``drop_last``: omit this many trailing steps from the run, but pass
+        their sites as ``toward`` so fragments needed for them are kept.
+        Equivalent to a prep-only replay when the final step is Dehydrogenation.
         """
+        drop_last = int(drop_last)
+        if drop_last < 0:
+            raise ValueError("drop_last must be >= 0")
+        if drop_last:
+            if drop_last >= len(self.steps):
+                return [Chem.Mol(mol)]
+            toward_refs = list(toward or ())
+            for step in self.steps[-drop_last:]:
+                toward_refs.extend(step.site)
+            return Linearization(self.steps[:-drop_last]).apply(
+                mol, toward=toward_refs, drop_last=0, **kwargs
+            )
+
         if not self.steps:
             return [Chem.Mol(mol)]
         root = Chem.Mol(mol)
@@ -404,22 +421,8 @@ class Linearization:
         return currents
 
     def apply_prefix(self, mol, n_drop: int = 1, **kwargs) -> list:
-        """Apply all but the last ``n_drop`` steps.
-
-        Sites of the dropped trailing steps are passed as ``toward`` so
-        multi-fragment steps keep pieces needed for the omitted suffix.
-        """
-        n_drop = int(n_drop)
-        if n_drop <= 0:
-            return self.apply(mol, **kwargs)
-        if n_drop >= len(self.steps):
-            return [Chem.Mol(mol)]
-        toward = []
-        for step in self.steps[-n_drop:]:
-            toward.extend(step.site)
-        return Linearization(self.steps[:-n_drop]).apply(
-            mol, toward=toward, **kwargs
-        )
+        """Deprecated alias for ``apply(..., drop_last=n_drop)``."""
+        return self.apply(mol, drop_last=n_drop, **kwargs)
 
 
 class StepPlan:
@@ -582,19 +585,20 @@ class StepPlan:
         for order in self.iter_linearizations():
             yield Linearization(order)
 
-    def apply_all(self, mol, **kwargs) -> list:
-        """Apply every linearization; return ``[(Linearization, products), ...]``."""
+    def apply_all(self, mol, drop_last: int = 0, **kwargs) -> list:
+        """Apply every linearization; return ``[(Linearization, products), ...]``.
+
+        ``drop_last`` is forwarded to :meth:`Linearization.apply` (omit trailing
+        steps but retain fragments toward their sites).
+        """
         out = []
         for lin in self.iter_as_linearizations():
-            out.append((lin, lin.apply(mol, **kwargs)))
+            out.append((lin, lin.apply(mol, drop_last=drop_last, **kwargs)))
         return out
 
     def apply_all_prefixes(self, mol, n_drop: int = 1, **kwargs) -> list:
-        """Apply every linearization prefix (drop trailing steps); same return shape."""
-        out = []
-        for lin in self.iter_as_linearizations():
-            out.append((lin, lin.apply_prefix(mol, n_drop=n_drop, **kwargs)))
-        return out
+        """Alias for ``apply_all(..., drop_last=n_drop)``."""
+        return self.apply_all(mol, drop_last=n_drop, **kwargs)
 
     def iter_linearizations(self) -> Iterator[tuple[Step, ...]]:
         """Lazily yield every total order consistent with ``precedes``."""
