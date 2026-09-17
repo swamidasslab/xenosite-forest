@@ -59,7 +59,7 @@ def test_benzene_prep_linearizations_agree():
         p for p in QuinoneFormation().phase1_steps(mol, frozenset({0, 3})) if len(p) == 3
     )
     finals = _smi_sets(
-        lin.apply(mol, drop_last=1) for lin in plan.iter_as_linearizations()
+        lin.apply(mol, drop_last=1) for lin in plan.linearizations()
     )
     assert finals and len(set(finals)) == 1
     got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(finals[0]))))
@@ -73,7 +73,7 @@ def test_epoxidation_linearization_replays_product():
     )
     plan = StepPlan.from_mol(products[0])
     expected = can_smi_set(products)
-    for lin in plan.iter_as_linearizations():
+    for lin in plan.linearizations():
         result = lin.apply(mol)
         assert result
         assert can_smi_set(result) == expected
@@ -90,7 +90,7 @@ def test_ndealkylation_linearization_replays_product():
         expected == got or expected <= got or got <= expected
         for got in (
             can_smi_set(r)
-            for lin in plan.iter_as_linearizations()
+            for lin in plan.linearizations()
             for r in [lin.apply(mol)]
             if r
         )
@@ -123,7 +123,7 @@ def test_quinone_linearizations_prep_agree_or_full_match(smiles: str):
             target = unmapped_smiles(product)
 
             full_hits = _smi_sets(
-                lin.apply(mol) for lin in plan.iter_as_linearizations()
+                lin.apply(mol) for lin in plan.linearizations()
             )
             for smis in full_hits:
                 assert target in smis
@@ -133,7 +133,7 @@ def test_quinone_linearizations_prep_agree_or_full_match(smiles: str):
             if len(plan) > 1:
                 prep_hits = _smi_sets(
                     lin.apply(mol, drop_last=1)
-                    for lin in plan.iter_as_linearizations()
+                    for lin in plan.linearizations()
                 )
                 if prep_hits:
                     assert len(set(prep_hits)) == 1
@@ -162,7 +162,7 @@ def test_degenerate_bond_rules_replay(smiles: str):
         plan = StepPlan.from_mol(products[0])
         assert len(plan) == 1
         expected = can_smi_set(products)
-        for lin in plan.iter_as_linearizations():
+        for lin in plan.linearizations():
             result = lin.apply(mol)
             assert result
             got = can_smi_set(result)

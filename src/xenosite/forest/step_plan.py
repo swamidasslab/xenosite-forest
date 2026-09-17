@@ -576,7 +576,7 @@ class StepPlan:
         """Apply an ordered sequence of steps (typically from ``iter_linearizations``)."""
         return Linearization(tuple(order)).apply(mol, toward=toward, **kwargs)
 
-    def iter_as_linearizations(self) -> Iterator[Linearization]:
+    def linearizations(self) -> Iterator[Linearization]:
         """Yield each total order as a :class:`Linearization`."""
         for order in self.iter_linearizations():
             yield Linearization(order)
