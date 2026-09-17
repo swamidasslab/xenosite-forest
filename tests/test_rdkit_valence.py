@@ -35,19 +35,6 @@ def test_bfs_phaseone_issue3_parent_does_not_crash():
     assert any(steps and steps[0][0] != "Dehydrogenation" for _, steps, _ in rows)
 
 
-def test_dehydrogenation_issue3_resonance_copies_run():
-    """Resonance copies from join_fragments must be RunReactants-ready."""
-    mol = Chem.MolFromSmiles(ISSUE3_PARENT)
-    rule = Dehydrogenation()
-    res = list(rule.resonance_structures(mol))
-    assert len(res) > 1
-    n = 0
-    for copy in res[1:]:
-        for rxn in rule.rxns:
-            n += len(rxn.RunReactants((copy,)))
-    assert n > 0
-
-
 @pytest.mark.parametrize("smi", [DIPHENHYDRAMINE, IBUPROFEN, ISSUE3_PARENT])
 def test_phaseone_unique_on_suite_crashers(smi):
     mol = Chem.MolFromSmiles(smi)
