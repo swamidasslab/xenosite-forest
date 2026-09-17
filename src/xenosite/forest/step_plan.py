@@ -269,12 +269,12 @@ class AtomRef:
         if self.origin is not None:
             return str(self.origin)
         at = ",".join(str(i) for i in sorted(self.at))
-        return "%s→%s" % (self.added_by, at)
+        return "%s(%s)" % (self.added_by, at)
 
     def __repr__(self) -> str:
         if self.origin is not None:
             return "AtomRef(%s)" % (self.origin,)
-        return "AtomRef(%s→%s)" % (
+        return "AtomRef(%s(%s))" % (
             self.added_by,
             ",".join(str(i) for i in sorted(self.at)),
         )
