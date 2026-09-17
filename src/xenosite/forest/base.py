@@ -681,10 +681,7 @@ class ConjugatedSystems(object):
         reproduce the original molecule prior to _fragment_on_bonds."""
         mol = self._combine_fragments(fragments)
         mol = self._remove_dummy_atoms(mol)
-        mol = self._restore_bonds(mol, bond_types)
-        # EditableMol / RenumberAtoms leave implicit-H caches empty; RDKit 2026
-        # asserts them inside RunReactants (see GitHub issue #3).
-        return refresh_mol(mol)
+        return self._restore_bonds(mol, bond_types)
 
     def _combine_fragments(self, fragments):
         """Combines rdkit molecules into a single molecule and reorders by their original atom
@@ -1633,7 +1630,6 @@ class SmartsReactionRule(ReactionRule):
 
         for rxn_num, rxn in enumerate(self.rxns):
             self._clear_atom_maps(mol)
-            refresh_mol(mol)
             try:
                 reactant_products = rxn.RunReactants((mol,))
             except RuntimeError:

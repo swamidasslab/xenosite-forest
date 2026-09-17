@@ -7,13 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Resonance copies from `join_fragments` fill RDKit valence caches before return, so `bfs(..., ruleset="PhaseOneRS")` no longer raises `getNumImplicitHs() called without preceding call to calcImplicitValence()` on fused systems (GitHub issue #3).
-
 ### Added
 
 - Hypothesis fuzz test: `bfs(..., ruleset="PhaseOneRS", depth=2)` over corpus crashers and generated organics (no RDKit valence preconditions).
+- Regression lock for GitHub issue #3 parent SMILES (already fixed since 0.2.0 / valence refresh in 0.2.2).
 
 ## [0.2.8] - 2026-09-13
 

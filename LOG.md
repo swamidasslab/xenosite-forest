@@ -2,8 +2,7 @@
 
 ## 2026-09-17
 
-- Issue #3: `bfs(PhaseOneRS)` on `CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21` crashed after seven Dehydrogenation products (`calcImplicitValence` / RDKit 2026). Root cause: `join_fragments` resonance copies had empty implicit-H caches; `RunReactants` asserted. Fix: `refresh_mol` at end of `join_fragments` and again before each SMARTS `RunReactants`.
-- Added Hypothesis fuzz: PhaseOneRS `bfs` depth=2 over corpus crashers + generated organics (product-capped) to catch valence preconditions mid-enumeration.
+- Issue #3 reports `calcImplicitValence` crash on PhaseOneRS BFS; reproduces on forest 0.1.0 only (already fixed in 0.2.0+). No library change. Added Hypothesis depth-2 BFS fuzz + issue #3 SMILES regression lock.
 
 ## 2026-09-13
 
