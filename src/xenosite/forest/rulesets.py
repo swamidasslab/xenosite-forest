@@ -8,7 +8,7 @@ from collections import OrderedDict, defaultdict
 from . import rules as all_rules
 from .base import (AtomTracker, ReactionRule, can_smi,
                                         clean)
-from .utils import refresh_mol, unmapped_smiles
+from .utils import refresh_mol, unmapped_smiles, has_star_conjugate
 from rdkit import Chem, rdBase
 
 # Prevents spammy rdkit messages
@@ -486,6 +486,7 @@ class RuleSet(Phase1Site, ReactionRule):
                               termination_rulenames=[],
                               quit_if_not_ended_in_termination_rulenames=True,
                               strict=True,
+                              expand_star_conjugates=False,
                               **kwargs):
 
         if isinstance(depth, str):
@@ -517,6 +518,10 @@ class RuleSet(Phase1Site, ReactionRule):
             if not resmol:
                 continue
 
+            # Star adducts are terminal unless expand_star_conjugates=True.
+            if not expand_star_conjugates and has_star_conjugate(resmol):
+                continue
+
             if quit_if_not_ended_in_termination_rulenames and termination_rulenames and path:
                 rulename = self.format_site(path[-1])[0]
                 if rulename in termination_rulenames:
@@ -533,8 +538,10 @@ class RuleSet(Phase1Site, ReactionRule):
 
                 for next_product in clean(next_products):
 
-                    self._prepare_next_mols(next_product, path, next_step,
-                                            product_paths, next_mols)
+                    if expand_star_conjugates or not has_star_conjugate(
+                            next_product):
+                        self._prepare_next_mols(next_product, path, next_step,
+                                                product_paths, next_mols)
 
                     new_canonical_product = can_smi(rdmol=next_product)
                     if not new_canonical_product:
@@ -574,6 +581,7 @@ class RuleSet(Phase1Site, ReactionRule):
                     termination_rulenames=termination_rulenames,
                     quit_if_not_ended_in_termination_rulenames=
                     quit_if_not_ended_in_termination_rulenames,
+                    expand_star_conjugates=expand_star_conjugates,
                     **kwargs):
 
                 yield pro, pat, propath

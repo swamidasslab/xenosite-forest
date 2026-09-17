@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Resonance reassembly no longer strips conjugation ``*`` adducts when removing FragmentOnBonds dummies, so `bfs(..., ruleset="Full", depth=2)` no longer raises RDKit `Range Error` after acetylation→dehydrogenation.
+- Resonance reassembly no longer strips conjugation ``*`` adducts when removing FragmentOnBonds dummies, so `bfs(..., ruleset="Full", depth=2, expand_star_conjugates=True)` no longer raises RDKit `Range Error` after acetylation→dehydrogenation.
 
 ### Added
 
+- `expand_star_conjugates=False` (default) on BFS / `find_path`: star (`*`) conjugate adducts are emitted but not metabolized further. Opt in with `expand_star_conjugates=True` or CLI `--expand-star-conjugates`.
 - Hypothesis fuzz test: `bfs` depth=2 over `PhaseOneRS` and `Full` with corpus crashers and generated organics.
 - Regression lock for GitHub issue #3 parent SMILES (PhaseOneRS valence crash was already fixed since 0.2.0 / 0.2.2).
 

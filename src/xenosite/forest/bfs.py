@@ -21,7 +21,9 @@ def bfs(molstrings, ruleset="Full", termination_ruleset=None, **kwargs):
         molstrings: SMILES strings, RDKit mols, or a mix.
         ruleset: named ruleset, RuleSet instance, or list of those.
         termination_ruleset: optional ruleset whose rule names stop expansion.
-        **kwargs: forwarded to RuleSet.find_path (depth, phase1, all_paths, ...).
+        **kwargs: forwarded to RuleSet.find_path (depth, phase1, all_paths,
+            expand_star_conjugates, ...). Star adducts are not expanded further
+            unless ``expand_star_conjugates=True``.
     """
     inputs = load(molstrings)
 
@@ -105,6 +107,12 @@ def main(argv=None):
         dest="termination_ruleset",
         help="Optional ruleset whose reactions terminate the search.",
     )
+    parser.add_argument(
+        "--expand-star-conjugates",
+        dest="expand_star_conjugates",
+        action="store_true",
+        help="Allow further metabolism of star (*) conjugate adducts (default: off).",
+    )
 
     args = parser.parse_args(argv)
     kwargs = {
@@ -114,6 +122,7 @@ def main(argv=None):
         "do_not_tag_atoms": args.do_not_tag_atoms,
         "depth": args.depth,
         "phase1": args.phase1,
+        "expand_star_conjugates": args.expand_star_conjugates,
     }
 
     for rxnnum, (smi, rules_and_sites, _mols) in enumerate(bfs(args.molecules, **kwargs)):

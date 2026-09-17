@@ -98,9 +98,15 @@ def _drain_bfs(
     ruleset: str = "PhaseOneRS",
     depth: int = 2,
     limit: int = _MAX_PRODUCTS,
+    expand_star_conjugates: bool = False,
 ) -> int:
     n = 0
-    for _ in bfs(smiles, ruleset=ruleset, depth=depth):
+    for _ in bfs(
+        smiles,
+        ruleset=ruleset,
+        depth=depth,
+        expand_star_conjugates=expand_star_conjugates,
+    ):
         n += 1
         if n >= limit:
             break
@@ -118,13 +124,22 @@ def test_bfs_depth2_no_rdkit_runtime_error(smiles: str, ruleset: str):
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
-    _drain_bfs(smiles, ruleset=ruleset, depth=2)
+    # Default: do not expand star conjugates. Also stress opt-in expansion.
+    _drain_bfs(smiles, ruleset=ruleset, depth=2, expand_star_conjugates=False)
+    if ruleset == "Full":
+        _drain_bfs(smiles, ruleset=ruleset, depth=2, expand_star_conjugates=True)
 
 
 def test_full_bfs_depth2_issue3_parent_does_not_crash():
-    """Full ruleset depth=2 used to RangeError after acetylation→dehydrogenation."""
+    """Full depth=2 with star expansion must not RangeError after acetylation."""
     parent = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
-    n = _drain_bfs(parent, ruleset="Full", depth=2, limit=_MAX_PRODUCTS)
+    n = _drain_bfs(
+        parent,
+        ruleset="Full",
+        depth=2,
+        limit=_MAX_PRODUCTS,
+        expand_star_conjugates=True,
+    )
     assert n > 140
 
 

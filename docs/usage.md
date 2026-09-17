@@ -134,6 +134,8 @@ With one molecule, `bfs` enumerates metabolites of that reactant. With two, it s
 
 `phase1=True` formats sites as Phase I strings (for example `1.h` or `2.3`) instead of frozensets of atom indices.
 
+Star conjugate adducts (`*` dummies from Phase II) are **not** metabolized further by default. Pass `expand_star_conjugates=True` (CLI: `--expand-star-conjugates`) to allow depth>1 expansion of those products.
+
 ## Custom rulesets
 
 ```python
