@@ -33,6 +33,11 @@ network = [
     "networkx>=3.2.1",
     "tqdm>=4.66.0",
 ]
+# Downstream predictors; not installed on CI (workflows use --extra network only).
+# Marker keeps forest's requires-python>=3.10 resolvable; predict itself needs >=3.11.
+predict = [
+    "xenosite-predict>=0.4.2; python_version >= '3.11'",
+]
 
 [project.urls]
 Homepage = "https://xenosite.org"

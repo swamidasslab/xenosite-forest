@@ -22,6 +22,7 @@ from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULES
 | `AtomRef` / `Step` / `StepPlan` / `Linearization` | Reactant-stable sites; Phase1-equivalent plans; self-apply linearizations (`try_from_mol` / `from_mol` / `attach_to_mol`) |
 
 `xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
+Site-of-metabolism models are optional via `pip install 'xenosite-forest[predict]'` (not used in Forest CI).
 
 ## Phase1-equivalent steps
 

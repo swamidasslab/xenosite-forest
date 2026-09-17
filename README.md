@@ -24,6 +24,12 @@ Optional NetworkX helpers for building a metabolite graph:
 uv add "xenosite-forest[network]"
 ```
 
+Optional [xenosite-predict](https://github.com/swamidasslab/xenosite-predict) (site-of-metabolism models; Python ≥3.11). Not installed in this repo’s CI:
+
+```bash
+uv add "xenosite-forest[predict]"
+```
+
 Requires **Python 3.10–3.13** and **RDKit 2022.03+**.
 
 ## Quick start
