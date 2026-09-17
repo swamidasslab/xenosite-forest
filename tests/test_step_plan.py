@@ -88,6 +88,30 @@ def test_cycle_raises():
         list(StepPlan((a, b), ((0, 1), (1, 0))).iter_linearizations())
 
 
+def test_compact_str():
+    assert str(AtomRef(origin=3)) == "3"
+    assert str(AtomRef(added_by="Hydroxylation", at={0})) == "Hydroxylation→0"
+    assert str(Step("Hydroxylation", {0})) == "Hydroxylation: 0"
+    dh = Step(
+        "Dehydrogenation",
+        {
+            AtomRef(added_by="Hydroxylation", at={0}),
+            AtomRef(added_by="Hydroxylation", at={3}),
+        },
+    )
+    assert str(dh) == "Dehydrogenation: Hydroxylation→0, Hydroxylation→3"
+    plan = StepPlan.layers(
+        [
+            [Step("Hydroxylation", {0}), Step("Hydroxylation", {3})],
+            [dh],
+        ]
+    )
+    assert str(plan) == (
+        "(Hydroxylation: 0 & Hydroxylation: 3) → "
+        "Dehydrogenation: Hydroxylation→0, Hydroxylation→3"
+    )
+
+
 def test_hydroxylation_apply_records_atom_ref():
     mol = MolFromSmiles("c1ccccc1")
     step = Step("Hydroxylation", {0})

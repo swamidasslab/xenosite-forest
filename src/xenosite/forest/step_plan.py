@@ -265,6 +265,26 @@ class AtomRef:
             )
         return idx
 
+    def __str__(self) -> str:
+        if self.origin is not None:
+            return str(self.origin)
+        at = ",".join(str(i) for i in sorted(self.at))
+        return "%s→%s" % (self.added_by, at)
+
+    def __repr__(self) -> str:
+        if self.origin is not None:
+            return "AtomRef(%s)" % (self.origin,)
+        return "AtomRef(%s→%s)" % (
+            self.added_by,
+            ",".join(str(i) for i in sorted(self.at)),
+        )
+
+
+def _atomref_sort_key(ref: AtomRef):
+    if ref.origin is not None:
+        return (0, ref.origin, "", ())
+    return (1, -1, ref.added_by or "", tuple(sorted(ref.at or ())))
+
 
 def _coerce_site(site) -> frozenset:
     return frozenset(AtomRef.coerce(x) for x in site)
@@ -294,6 +314,18 @@ class Step:
 
     def __post_init__(self):
         object.__setattr__(self, "site", _coerce_site(self.site))
+
+    def __str__(self) -> str:
+        sites = ", ".join(
+            str(ref) for ref in sorted(self.site, key=_atomref_sort_key)
+        )
+        return "%s: %s" % (self.rule, sites)
+
+    def __repr__(self) -> str:
+        return "Step(%r, %s)" % (
+            self.rule,
+            "{" + ", ".join(repr(r) for r in sorted(self.site, key=_atomref_sort_key)) + "}",
+        )
 
     def resolve_site(self, mol) -> frozenset:
         """Opt-in: map this step's AtomRefs to current GetIdx on ``mol``."""
@@ -435,7 +467,56 @@ class StepPlan:
         return hash((self._steps, self._precedes))
 
     def __repr__(self) -> str:
-        return "StepPlan(steps=%r, precedes=%r)" % (self._steps, self._precedes)
+        return "StepPlan(%r)" % (str(self),)
+
+    def __str__(self) -> str:
+        """Compact form; unordered layers in parentheses joined by ``&`` (all required)."""
+        layers = self._kahn_layers()
+        if not layers:
+            return "StepPlan()"
+        parts = []
+        for layer in layers:
+            texts = [str(step) for step in layer]
+            if len(texts) == 1:
+                parts.append(texts[0])
+            else:
+                parts.append("(" + " & ".join(texts) + ")")
+        return " → ".join(parts)
+
+    def _kahn_layers(self) -> list[list[Step]]:
+        """Partition steps into successive ready-sets (unordered within a layer)."""
+        n = len(self._steps)
+        if n == 0:
+            return []
+        successors = [[] for _ in range(n)]
+        indegree = [0] * n
+        for a, b in self._precedes:
+            successors[a].append(b)
+            indegree[b] += 1
+        remaining = list(indegree)
+        ready = sorted(i for i, d in enumerate(remaining) if d == 0)
+        layers: list[list[Step]] = []
+        seen = 0
+        while ready:
+            layer_idx = list(ready)
+            layers.append(
+                sorted(
+                    (self._steps[i] for i in layer_idx),
+                    key=lambda s: (s.rule, _site_to_json(s.site)),
+                )
+            )
+            seen += len(layer_idx)
+            nxt = []
+            for node in layer_idx:
+                for succ in successors[node]:
+                    remaining[succ] -= 1
+                    if remaining[succ] == 0:
+                        nxt.append(succ)
+            ready = sorted(nxt)
+        if seen != n:
+            # Cycle or incomplete; fall back to declaration order.
+            return [[step] for step in self._steps]
+        return layers
 
     @property
     def steps(self) -> tuple[Step, ...]:
