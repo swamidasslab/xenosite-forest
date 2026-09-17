@@ -220,6 +220,13 @@ def _atom_from_reactant(atom):
     return any(atom.HasProp(p) for p in _PARENT_ATOM_PROPS)
 
 
+def has_star_conjugate(mol):
+    """True if ``mol`` has a dummy atom (atomic number 0), e.g. a star adduct."""
+    if mol is None:
+        return False
+    return any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms())
+
+
 def collapse_conjugate_to_star(product):
     """Replace newly added conjugate atoms with a dummy ``*`` at each attachment.
 

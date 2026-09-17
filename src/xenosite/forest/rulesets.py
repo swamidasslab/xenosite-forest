@@ -8,7 +8,7 @@ from collections import OrderedDict, defaultdict
 from . import rules as all_rules
 from .base import (AtomTracker, ReactionRule, can_smi,
                                         clean)
-from .utils import refresh_mol, unmapped_smiles
+from .utils import refresh_mol, unmapped_smiles, has_star_conjugate
 from rdkit import Chem, rdBase
 
 # Prevents spammy rdkit messages
@@ -317,6 +317,7 @@ class RuleSet(Phase1Site, ReactionRule):
                   depth=1,
                   metabolite_table='',
                   openfilehandle=None,
+                  search='bfs',
                   **kwargs):
         """Find path between start and end mol.
 
@@ -326,6 +327,8 @@ class RuleSet(Phase1Site, ReactionRule):
             all_paths: if True, then generate all found paths between start and end (default False).
             outmols: output rdmols and sites in addition to string
             termination_rulenames: A list of rulenames that terminate the search.
+            search: ``\"bfs\"`` (default) or ``\"dfs\"``. DFS yields deep paths earlier,
+                which is better for sampling a few two-step pathways.
 
         """
 
@@ -344,12 +347,26 @@ class RuleSet(Phase1Site, ReactionRule):
             writer = self.initialize_metabolite_table(
                 openfilehandle, depth=depth)
 
-        for smi, sites, mols in self._metabolite_paths_bfs(
-            [(start, [], [start])],
+        if search == 'dfs':
+            path_iter = self._metabolite_paths_dfs(
+                start,
+                [],
+                [start],
                 desired_endpoint_structures=desired_endpoint_structures,
                 format_output_site=False,
                 depth=depth,
-                **kwargs):
+                **kwargs)
+        elif search == 'bfs':
+            path_iter = self._metabolite_paths_bfs(
+                [(start, [], [start])],
+                desired_endpoint_structures=desired_endpoint_structures,
+                format_output_site=False,
+                depth=depth,
+                **kwargs)
+        else:
+            raise ValueError("search must be 'bfs' or 'dfs', got %r" % (search,))
+
+        for smi, sites, mols in path_iter:
             
             fsite = sorted(sites)
 
@@ -486,6 +503,8 @@ class RuleSet(Phase1Site, ReactionRule):
                               termination_rulenames=[],
                               quit_if_not_ended_in_termination_rulenames=True,
                               strict=True,
+                              expand_star_conjugates=False,
+                              shuffle_rng=None,
                               **kwargs):
 
         if isinstance(depth, str):
@@ -512,9 +531,17 @@ class RuleSet(Phase1Site, ReactionRule):
 
         next_mols = []
 
-        for resmol, path, product_paths in resmols_and_paths:
+        frontier = list(resmols_and_paths)
+        if shuffle_rng is not None:
+            shuffle_rng.shuffle(frontier)
+
+        for resmol, path, product_paths in frontier:
 
             if not resmol:
+                continue
+
+            # Star adducts are terminal unless expand_star_conjugates=True.
+            if not expand_star_conjugates and has_star_conjugate(resmol):
                 continue
 
             if quit_if_not_ended_in_termination_rulenames and termination_rulenames and path:
@@ -522,8 +549,12 @@ class RuleSet(Phase1Site, ReactionRule):
                 if rulename in termination_rulenames:
                     continue
 
-            for next_step, next_products in self.metabolize(
-                    resmol, strict=strict, **kwargs):
+            reactions = self.metabolize(resmol, strict=strict, **kwargs)
+            if shuffle_rng is not None:
+                reactions = list(reactions)
+                shuffle_rng.shuffle(reactions)
+
+            for next_step, next_products in reactions:
 
                 if limit_to_phase1_sites_in_sdf:
                     next_rule, next_site = next_step
@@ -531,10 +562,16 @@ class RuleSet(Phase1Site, ReactionRule):
                     if not next_site & colors_to_sites['all']:
                         continue
 
-                for next_product in clean(next_products):
+                products = list(clean(next_products))
+                if shuffle_rng is not None:
+                    shuffle_rng.shuffle(products)
 
-                    self._prepare_next_mols(next_product, path, next_step,
-                                            product_paths, next_mols)
+                for next_product in products:
+
+                    if expand_star_conjugates or not has_star_conjugate(
+                            next_product):
+                        self._prepare_next_mols(next_product, path, next_step,
+                                                product_paths, next_mols)
 
                     new_canonical_product = can_smi(rdmol=next_product)
                     if not new_canonical_product:
@@ -564,6 +601,9 @@ class RuleSet(Phase1Site, ReactionRule):
 
         if current_level < depth:
 
+            if shuffle_rng is not None:
+                shuffle_rng.shuffle(next_mols)
+
             for pro, pat, propath in self._metabolite_paths_bfs(
                     next_mols,
                     desired_endpoint_structures=desired_endpoint_structures,
@@ -574,9 +614,121 @@ class RuleSet(Phase1Site, ReactionRule):
                     termination_rulenames=termination_rulenames,
                     quit_if_not_ended_in_termination_rulenames=
                     quit_if_not_ended_in_termination_rulenames,
+                    expand_star_conjugates=expand_star_conjugates,
+                    shuffle_rng=shuffle_rng,
                     **kwargs):
 
                 yield pro, pat, propath
+
+    def _metabolite_paths_dfs(self,
+                              resmol,
+                              path,
+                              product_paths,
+                              desired_endpoint_structures=None,
+                              depth=1,
+                              current_level=1,
+                              all_paths=False,
+                              phase1=False,
+                              termination_rulenames=None,
+                              quit_if_not_ended_in_termination_rulenames=True,
+                              strict=True,
+                              expand_star_conjugates=False,
+                              shuffle_rng=None,
+                              **kwargs):
+        """Depth-first pathway enumeration.
+
+        Yields a reaction path as soon as each product is formed, then recurses
+        into that product before siblings. Useful for sampling a few depth-N
+        pathways without waiting for a full BFS level to finish.
+
+        If ``shuffle_rng`` is a ``random.Random`` (or compatible), reaction and
+        product order are shuffled so repeated samples explore different branches.
+        """
+
+        if isinstance(depth, str):
+            depth = int(depth)
+
+        if desired_endpoint_structures is None:
+            desired_endpoint_structures = []
+
+        if termination_rulenames is None:
+            termination_rulenames = []
+
+        if not resmol:
+            return
+
+        if not expand_star_conjugates and has_star_conjugate(resmol):
+            return
+
+        if quit_if_not_ended_in_termination_rulenames and termination_rulenames and path:
+            rulename = self.format_site(path[-1])[0]
+            if rulename in termination_rulenames:
+                return
+
+        reactions = self.metabolize(resmol, strict=strict, **kwargs)
+        if shuffle_rng is not None:
+            reactions = list(reactions)
+            shuffle_rng.shuffle(reactions)
+
+        for next_step, next_products in reactions:
+
+            products = list(clean(next_products))
+            if shuffle_rng is not None:
+                shuffle_rng.shuffle(products)
+
+            for next_product in products:
+
+                new_canonical_product = can_smi(rdmol=next_product)
+                if not new_canonical_product:
+                    continue
+                new_canonical_product = new_canonical_product[0]
+
+                if not desired_endpoint_structures or new_canonical_product in desired_endpoint_structures:
+
+                    emit = True
+                    if quit_if_not_ended_in_termination_rulenames:
+                        if termination_rulenames and self.format_site(
+                                next_step)[0] not in termination_rulenames:
+                            emit = False
+
+                    if emit:
+                        yield self._prep_output(
+                            new_canonical_product,
+                            path,
+                            next_step,
+                            product_paths,
+                            next_product,
+                            phase1=phase1)
+
+                        if new_canonical_product in desired_endpoint_structures and not all_paths:
+                            desired_endpoint_structures.remove(
+                                new_canonical_product)
+
+                            if not desired_endpoint_structures:
+                                return
+
+                if current_level < depth and (
+                        expand_star_conjugates
+                        or not has_star_conjugate(next_product)):
+                    for pro, pat, propath in self._metabolite_paths_dfs(
+                            next_product,
+                            path + [next_step],
+                            product_paths + [next_product],
+                            desired_endpoint_structures=desired_endpoint_structures,
+                            depth=depth,
+                            current_level=current_level + 1,
+                            all_paths=all_paths,
+                            phase1=phase1,
+                            termination_rulenames=termination_rulenames,
+                            quit_if_not_ended_in_termination_rulenames=
+                            quit_if_not_ended_in_termination_rulenames,
+                            expand_star_conjugates=expand_star_conjugates,
+                            shuffle_rng=shuffle_rng,
+                            strict=strict,
+                            **kwargs):
+                        yield pro, pat, propath
+                        if desired_endpoint_structures is not None and not desired_endpoint_structures and not all_paths:
+                            return
 
 
 ConjugationRS = RuleSet(name='CJ', longname='Conjugation')

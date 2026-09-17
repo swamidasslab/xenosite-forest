@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Resonance reassembly no longer strips conjugation ``*`` adducts when removing FragmentOnBonds dummies, so `bfs(..., ruleset="Full", depth=2, expand_star_conjugates=True)` no longer raises RDKit `Range Error` after acetylation→dehydrogenation.
+
+### Added
+
+- `dfs(...)` / `find_path(..., search="dfs")` for depth-first pathway search; CLI `--search dfs`.
+- Optional `max_paths` on `bfs` / `dfs` (default unlimited) and `shuffle_rng` on both to randomize metabolite order.
+- `expand_star_conjugates=False` (default) on BFS/DFS / `find_path`: star (`*`) conjugate adducts are emitted but not metabolized further. Opt in with `expand_star_conjugates=True` or CLI `--expand-star-conjugates`.
+- Hypothesis fuzz: randomly sample Full DFS two-step pathways (``shuffle_rng``); persist ``.hypothesis`` example DB on CI.
+- Regression lock for GitHub issue #3 parent SMILES (PhaseOneRS valence crash was already fixed since 0.2.0 / 0.2.2).
+
 ## [0.2.8] - 2026-09-13
 
 ### Fixed

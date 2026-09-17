@@ -16,6 +16,7 @@ Regressions live in `tests/test_rdkit_valence.py` (diphenhydramine, ibuprofen, s
 
 | Name / note | SMILES |
 | --- | --- |
+| Issue #3 fused dihydrobenzofuran amide | `CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21` |
 | Diphenhydramine | `CN(C)CCOC(c1ccccc1)c1ccccc1` |
 | Ibuprofen | `CC(C)Cc1ccc(C(C)C(=O)O)cc1` |
 | Atenolol | `CC(C)NCC(O)COc1ccc(CC(N)=O)cc1` |

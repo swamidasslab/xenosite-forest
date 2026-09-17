@@ -130,9 +130,13 @@ print(smiles)  # product SMILES
 print(steps)   # [(rule_name, site_strings), ...]
 ```
 
-With one molecule, `bfs` enumerates metabolites of that reactant. With two, it searches for a path from the first to the second. `depth` is the maximum number of sequential reactions.
+With one molecule, `bfs` enumerates metabolites of that reactant. With two, it searches for a path from the first to the second. `depth` is the maximum number of sequential reactions. `dfs(...)` is the same API with depth-first order (better for sampling a few deep pathways). CLI: `--search dfs`.
+
+Optional shared knobs: `max_paths=N` stops after N yields (default unlimited); `shuffle_rng=random.Random(seed)` randomizes frontier / reaction / product order on both BFS and DFS.
 
 `phase1=True` formats sites as Phase I strings (for example `1.h` or `2.3`) instead of frozensets of atom indices.
+
+Star conjugate adducts (`*` dummies from Phase II) are **not** metabolized further by default. Pass `expand_star_conjugates=True` (CLI: `--expand-star-conjugates`) to allow depth>1 expansion of those products.
 
 ## Custom rulesets
 
