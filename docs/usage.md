@@ -7,7 +7,7 @@ Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI 
 ## Public API
 
 ```python
-from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace
+from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace, AtomRef, Linearization, Step, StepPlan
 ```
 
 | Symbol | Role |
@@ -15,12 +15,99 @@ from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULES
 | `bfs(mols, ruleset=..., **kwargs)` | Search pathways from a reactant, or between reactant and product |
 | `rules` | Individual reaction classes (`Hydroxylation`, `Epoxidation`, `QuinoneFormation`, …) |
 | `RuleSet` | Group of rules used together |
-| `load_ruleset(name)` | Look up a named ruleset (`"Full"`, `"PhaseOneRS"`, `"QuinoneFormationRS"`, …) |
+| `load_ruleset(name)` | Look up a named ruleset (`"Full"`, `"PhaseOneRS"`, `"QF"`, …) |
 | `PhaseOneRS` | Phase I rules used in Metabolic Forest |
 | `RULESETS` | Registry of built-in rulesets |
 | `AtomTrace(mol)` | 1-based atom-mapping history on a tagged metabolite |
+| `AtomRef` / `Step` / `StepPlan` / `Linearization` | Reactant-stable sites; Phase1-equivalent plans; self-apply linearizations (`try_from_mol` / `from_mol` / `attach_to_mol`) |
 
 `xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
+
+## Phase1-equivalent steps
+
+Some Forest rules correspond to one or more Phase I transformations. Plans are
+`StepPlan` objects (partial orders of `Step`). Sites use reactant-stable `AtomRef`
+values: a reactant **origin** index, or an atom **created by** an earlier step
+(`added_by` + reactant-frame `at`). Ints coerce to `AtomRef(origin=…)`.
+
+| Rule family | `phase1_steps` |
+| --- | --- |
+| Phase I (`Hydroxylation`, `Epoxidation`, `Dehydrogenation`, …) and `NDealkylation` | Degenerate: one singleton plan for a valid site |
+| `QuinoneFormation` | Multi-step: prep layers (e.g. hydroxylation) then final dehydrogenation |
+| Other rules (conjugates, …) | `NotImplementedError` |
+
+### Ask a rule (no enumeration)
+
+```python
+from rdkit import Chem
+from xenosite.forest import rules
+
+mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
+# e.g. Dehydrogenation[3, 8]
+#      Dealkylation[1, 3] → Dehydrogenation[3, 8]
+
+rules.Epoxidation().phase1_steps(Chem.MolFromSmiles("C=C"), frozenset({0, 1}))
+# → [Epoxidation[0, 1]]
+```
+
+### Stamp while metabolizing
+
+Opt in with `attach_phase1_steps=True`. Read stamps via `StepPlan` — do not inspect
+mol props by name (`from_mol` raises if missing; `try_from_mol` returns `None`).
+
+```python
+from rdkit import Chem
+from xenosite.forest import StepPlan, load_ruleset, rules
+
+mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+
+# Single rule
+for site, products in rules.QuinoneFormation().metabolize(
+    mol, attach_phase1_steps=True, tag_atoms=False
+):
+    for p in products:
+        plan = StepPlan.try_from_mol(p)  # None on unstamped fragments
+        if plan is not None:
+            print(site, plan)
+
+# Same flag on a ruleset (e.g. "QF", "PhaseOneRS", "Full")
+for site, products in load_ruleset("QF").metabolize(
+    mol, attach_phase1_steps=True, tag_atoms=False
+):
+    plan = StepPlan.try_from_mol(products[0])
+    ...
+```
+
+### Resolve and replay
+
+`AtomRef.resolve(mol)` / `Step.resolve_site(mol)` map reactant-stable refs to the
+current `GetIdx` on a given mol (read-only; the plan object is unchanged).
+`Linearization.apply` copies the input mol, runs Forest rules in order, and records
+created atoms on `mol._forest["atom_refs"]` so later created-by refs resolve.
+
+```python
+from rdkit import Chem
+from xenosite.forest import AtomRef, Linearization, StepPlan, rules
+
+mol = Chem.MolFromSmiles("c1ccccc1")
+plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
+plan = next(p for p in plans if len(p) == 3)
+
+for lin in plan.linearizations():
+    products = lin.apply(mol)  # full plan
+    mid = lin.apply(mol, drop_last=1)  # prep only; keep frags for final DH sites
+    if mid:
+        print(lin.steps[-1].resolve_site(mid[0]))
+
+# Same AtomRef works on different mols; only the mol's maps / atom_refs change
+ref = AtomRef(origin=3)
+ref.resolve(mol)
+```
+
+`toward=` on `apply` retains fragments needed for AtomRefs that are not yet applied
+(e.g. sites of later steps). `drop_last=N` omits the last N steps but passes their
+sites as `toward`.
 
 ## Enumerate metabolites
 

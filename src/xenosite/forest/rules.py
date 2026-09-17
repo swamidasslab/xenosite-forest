@@ -2,6 +2,7 @@
 
 # Standard Library
 import itertools
+import json
 
 # Third Party
 from rdkit import Chem, rdBase
@@ -17,6 +18,7 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
+from .step_plan import Step, StepPlan, AtomRef
 from .utils import (
     apply_star_conjugate,
     canon_smi,
@@ -152,7 +154,73 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
             systems="aromatic",
         )
 
-    def metabolites(self, mol, attach_matches=False, **kwargs):
+    @staticmethod
+    def _mod_names(modifications):
+        if isinstance(modifications, str):
+            return frozenset([modifications])
+        return frozenset(modifications)
+
+    def _prep_and_dh_end(self, match):
+        """Return (prep Steps, DH endpoint AtomRef) for one quinone SMARTS match."""
+        mapids, modifications = match
+        names = self._mod_names(modifications)
+        prep = []
+        if "addO" in names:
+            carbon = mapids[1]
+            prep.append(Step("Hydroxylation", frozenset([carbon])))
+            end = AtomRef(added_by="Hydroxylation", at=frozenset([carbon]))
+        elif "replaceHalogenWithO" in names:
+            at = frozenset([mapids[1], mapids[2]])
+            prep.append(Step("OxidativeDehalogenation", at))
+            end = AtomRef(added_by="OxidativeDehalogenation", at=at)
+        elif "dealk" in names:
+            prep.append(Step("Dealkylation", frozenset([mapids[2], mapids[3]])))
+            end = AtomRef(origin=mapids[2])
+        else:
+            # single2double / addPlus1: heteroatom already on reactant
+            end = AtomRef(origin=mapids[2] if 2 in mapids else mapids[1])
+        return prep, end
+
+    def _plan_from_match_pair(self, match1, match2):
+        prep1, end1 = self._prep_and_dh_end(match1)
+        prep2, end2 = self._prep_and_dh_end(match2)
+        prep = prep1 + prep2
+        final = Step("Dehydrogenation", frozenset([end1, end2]))
+        if prep:
+            return StepPlan.layers([prep, [final]])
+        return StepPlan.singleton("Dehydrogenation", frozenset([end1, end2]))
+
+    def phase1_steps(self, mol, site, _matches=None, _match_pair=None, **kwargs):
+        """Phase1-equivalent :class:`StepPlan` list for a quinone site.
+
+        Public callers pass ``(mol, site)`` only. Private ``_matches`` /
+        ``_match_pair`` avoid rematching inside ``metabolites``.
+        """
+        want = frozenset(self._cast_sites(site)[0][1])
+        if _match_pair is not None:
+            return [self._plan_from_match_pair(*_match_pair)]
+
+        template_mol = self.standardize(mol)
+        if not template_mol:
+            return []
+
+        matches = _matches if _matches is not None else self.match_queries(template_mol)
+        if len(want) != 2 or not want.issubset(matches):
+            return []
+
+        a, b = tuple(want)
+        plans = []
+        seen = set()
+        for match1, match2 in itertools.product(matches[a], matches[b]):
+            plan = self._plan_from_match_pair(match1, match2)
+            key = json.dumps(plan.to_json(), sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            plans.append(plan)
+        return plans
+
+    def metabolites(self, mol, attach_matches=False, attach_phase1_steps=False, **kwargs):
 
         # I tried moving this to within each downstream function, but this increased the run time
         # of the test suite so it seems most efficient to precompute the standardized molecule.
@@ -195,9 +263,18 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
                     product.SetProp("matches", str((matches1, matches2)))
 
                 outsite = self.name + "_%d" % num, frozenset(pair)
-                products = self.tag_quinone_fragments(product)
+                products = clean(self.tag_quinone_fragments(product))
 
-                yield outsite, clean(products)
+                if attach_phase1_steps and products:
+                    plan = self._plan_from_match_pair(matches1, matches2)
+                    for frag in products:
+                        if (
+                            not frag.HasProp("Quinone")
+                            or frag.GetProp("Quinone") == "True"
+                        ):
+                            plan.attach_to_mol(frag)
+
+                yield outsite, products
 
     def tag_quinone_fragments(self, mol):
         frags = list(GetMolFrags(mol, asMols=True, sanitizeFrags=False))
@@ -275,6 +352,11 @@ class Dehydrogenation(ResonancePairRule):
             query_smarts=[
                 ("single2double", "[#6h:1][#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#8H:2]"),
                 (("single2double", "addPlus1"), "[#6h:1][#7D3:2]"),
+                # Quinoid / phenol ends: ring C without H bonded to OH or NH
+                # (existing patterns require #6h and miss hydroquinone / NAPQI).
+                ("single2double", "[#6H0:1][#8H:2]"),
+                ("single2double", "[#6H0:1][#7D2H1,#7D1H2:2]"),
+                (("single2double", "addPlus1"), "[#6H0:1][#7D3:2]"),
             ],
             phase1_sites_on="atom_hydrogen",
             sites_on="atom_pairs",
@@ -969,6 +1051,29 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
     ]
     phase1_sites_on = "atoms"
     mapid_site = [1]
+
+
+# Phase I rules (and N-dealkylation) expose degenerate phase1_steps singletons.
+for _phase1_rule in (
+    Dehydrogenation,
+    Dephosphorylation,
+    EpoxideOpening,
+    Hydrolysis,
+    Dehydration,
+    Hydrogenation,
+    NitrogenReduction,
+    OxygenReduction,
+    ReductiveDehalogenation,
+    SulfurReduction,
+    Hydroxylation,
+    Epoxidation,
+    SulfurOxidation,
+    NitrogenOxidation,
+    Dealkylation,
+    OxidativeDehalogenation,
+    NDealkylation,
+):
+    _phase1_rule.phase1_equivalent = True
 
 
 if __name__ == "__main__":
