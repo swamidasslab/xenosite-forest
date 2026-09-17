@@ -67,7 +67,63 @@ def test_hydroxylation_degenerate():
     assert plans == [StepPlan.singleton("Hydroxylation", frozenset(site[1]))]
 
 
+def test_quinone_apap_phase1_steps_single_dh():
+    mol = MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+    plans = QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
+    assert plans
+    # Prefer the single2double+single2double plan: only Dehydrogenation on N and O.
+    dh_only = [
+        p
+        for p in plans
+        if len(p) == 1 and p.steps[0].rule == "Dehydrogenation"
+    ]
+    assert dh_only
+    assert dh_only[0].steps[0].site == frozenset({3, 8})
+
+
+def test_quinone_benzene_addo_layers():
+    mol = MolFromSmiles("c1ccccc1")
+    # para carbons 0 and 3
+    plans = QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
+    assert plans
+    layered = [p for p in plans if len(p) == 3]
+    assert layered
+    plan = layered[0]
+    orders = list(plan.iter_linearizations())
+    assert len(orders) == 2
+    assert all(o[-1].rule == "Dehydrogenation" for o in orders)
+    assert all(o[0].rule == "Hydroxylation" for o in orders)
+
+
+def test_quinone_attach_phase1_steps_matches_public():
+    mol = MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+    qf = QuinoneFormation()
+    site, products = next(
+        qf.metabolites_from_sites(
+            mol, frozenset({4, 7}), attach_phase1_steps=True, tag_atoms=False
+        )
+    )
+    stamped = [StepPlan.from_mol(p) for p in products if p.HasProp("phase1_steps")]
+    assert stamped
+    public = qf.phase1_steps(mol, frozenset({4, 7}))
+    assert stamped[0] in public
+
+
+def test_quinone_attach_phase1_steps_survives_tagging():
+    """RenumberAtoms during tag/align must keep phase1_steps on products."""
+    mol = MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
+    qf = QuinoneFormation()
+    site, products = next(
+        qf.metabolites_from_sites(
+            mol, frozenset({4, 7}), attach_phase1_steps=True, tag_atoms=True
+        )
+    )
+    stamped = [p for p in products if p.HasProp("phase1_steps")]
+    assert stamped
+    assert StepPlan.from_mol(stamped[0]) in qf.phase1_steps(mol, frozenset({4, 7}))
+
+
 def test_quinone_not_yet_phase1_equivalent_flag():
-    # QuinoneFormation overrides phase1_steps in a later commit; until then
-    # phase1_equivalent stays False so base raises unless overridden.
+    # QuinoneFormation overrides phase1_steps; flag stays False so metabolize
+    # does not try the degenerate singleton attach path.
     assert QuinoneFormation.phase1_equivalent is False

@@ -580,7 +580,14 @@ class AtomTracker(object):
         new_order = self._reactant_aligned_order(product, origin_of)
 
         if new_order != list(range(product.GetNumAtoms())):
+            # RDKit RenumberAtoms drops molecule-level props (e.g. phase1_steps).
+            mol_props = {
+                name: product.GetProp(name) for name in product.GetPropNames()
+            }
             product = RenumberAtoms(product, new_order)
+            for name, value in mol_props.items():
+                if not product.HasProp(name):
+                    product.SetProp(name, value)
             old_to_new = {old: new for new, old in enumerate(new_order)}
             for rec in tags.values():
                 if last_depth not in rec["depth"]:
@@ -1720,8 +1727,11 @@ class ReactionRule(AtomTracker):
         """Stamp phase1_steps on products that do not already carry the prop."""
         from .step_plan import StepPlan
 
-        already = [m for m in metabolites if m.HasProp("phase1_steps")]
-        if len(already) == len(metabolites):
+        missing = [m for m in metabolites if not m.HasProp("phase1_steps")]
+        if not missing:
+            return
+        # Subclasses (e.g. QuinoneFormation) may stamp only selected fragments.
+        if any(m.HasProp("phase1_steps") for m in metabolites):
             return
         if not self.phase1_equivalent:
             raise NotImplementedError(
@@ -1729,9 +1739,8 @@ class ReactionRule(AtomTracker):
             )
         site = outsite[1] if isinstance(outsite, tuple) else outsite
         plan = StepPlan.singleton(self.name, frozenset(site))
-        for metabolite in metabolites:
-            if not metabolite.HasProp("phase1_steps"):
-                plan.attach_to_mol(metabolite)
+        for metabolite in missing:
+            plan.attach_to_mol(metabolite)
 
     def metabolites(self, mol, **kwargs):
         """Should return a tuple of lists. The first element will be the site, the second element
@@ -1756,7 +1765,9 @@ class ReactionRule(AtomTracker):
 
         sites = self._cast_sites(sites)
 
-        for site, metabolite in self.metabolize(mol, **kwargs):
+        for site, metabolite in self.metabolize(
+            mol, tag_atoms=tag_atoms, **kwargs
+        ):
             if tuple(site) in sites:
 
                 if just_smiles:

@@ -2,6 +2,7 @@
 
 # Standard Library
 import itertools
+import json
 
 # Third Party
 from rdkit import Chem, rdBase
@@ -17,6 +18,7 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
+from .step_plan import Step, StepPlan
 from .utils import (
     apply_star_conjugate,
     canon_smi,
@@ -152,7 +154,68 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
             systems="aromatic",
         )
 
-    def metabolites(self, mol, attach_matches=False, **kwargs):
+    @staticmethod
+    def _mod_names(modifications):
+        if isinstance(modifications, str):
+            return frozenset([modifications])
+        return frozenset(modifications)
+
+    def _prep_and_dh_end(self, match):
+        """Return (prep Steps, DH endpoint atom) for one quinone SMARTS match."""
+        mapids, modifications = match
+        names = self._mod_names(modifications)
+        prep = []
+        if "addO" in names:
+            prep.append(Step("Hydroxylation", frozenset([mapids[1]])))
+        if "replaceHalogenWithO" in names:
+            prep.append(
+                Step("OxidativeDehalogenation", frozenset([mapids[1], mapids[2]]))
+            )
+        if "dealk" in names:
+            prep.append(Step("Dealkylation", frozenset([mapids[2], mapids[3]])))
+        end = mapids[2] if 2 in mapids else mapids[1]
+        return prep, end
+
+    def _plan_from_match_pair(self, match1, match2):
+        prep1, end1 = self._prep_and_dh_end(match1)
+        prep2, end2 = self._prep_and_dh_end(match2)
+        prep = prep1 + prep2
+        final = Step("Dehydrogenation", frozenset([end1, end2]))
+        if prep:
+            return StepPlan.layers([prep, [final]])
+        return StepPlan.singleton("Dehydrogenation", frozenset([end1, end2]))
+
+    def phase1_steps(self, mol, site, _matches=None, _match_pair=None, **kwargs):
+        """Phase1-equivalent :class:`StepPlan` list for a quinone site.
+
+        Public callers pass ``(mol, site)`` only. Private ``_matches`` /
+        ``_match_pair`` avoid rematching inside ``metabolites``.
+        """
+        want = frozenset(self._cast_sites(site)[0][1])
+        if _match_pair is not None:
+            return [self._plan_from_match_pair(*_match_pair)]
+
+        template_mol = self.standardize(mol)
+        if not template_mol:
+            return []
+
+        matches = _matches if _matches is not None else self.match_queries(template_mol)
+        if len(want) != 2 or not want.issubset(matches):
+            return []
+
+        a, b = tuple(want)
+        plans = []
+        seen = set()
+        for match1, match2 in itertools.product(matches[a], matches[b]):
+            plan = self._plan_from_match_pair(match1, match2)
+            key = json.dumps(plan.to_json(), sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            plans.append(plan)
+        return plans
+
+    def metabolites(self, mol, attach_matches=False, attach_phase1_steps=False, **kwargs):
 
         # I tried moving this to within each downstream function, but this increased the run time
         # of the test suite so it seems most efficient to precompute the standardized molecule.
@@ -195,9 +258,18 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
                     product.SetProp("matches", str((matches1, matches2)))
 
                 outsite = self.name + "_%d" % num, frozenset(pair)
-                products = self.tag_quinone_fragments(product)
+                products = clean(self.tag_quinone_fragments(product))
 
-                yield outsite, clean(products)
+                if attach_phase1_steps and products:
+                    plan = self._plan_from_match_pair(matches1, matches2)
+                    for frag in products:
+                        if (
+                            not frag.HasProp("Quinone")
+                            or frag.GetProp("Quinone") == "True"
+                        ):
+                            plan.attach_to_mol(frag)
+
+                yield outsite, products
 
     def tag_quinone_fragments(self, mol):
         frags = list(GetMolFrags(mol, asMols=True, sanitizeFrags=False))
