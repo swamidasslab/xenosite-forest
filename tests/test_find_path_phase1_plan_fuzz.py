@@ -195,15 +195,15 @@ def _assert_plan_exact_for_target(mol, plan, target: str):
     )
 
 
-# Hydroxylation, Hydroxylation, QuinoneFormation does turn 4-methoxyphenol
-# into this quinone, but find_path's BFS spends ``_BUDGET`` on earlier nodes
-# and never expands the intermediate. Fix search order later; do not raise
-# the budget to make this pass.
-_SEARCH_MISS = ("COc1ccc(O)cc1", "O=C1C=CC(OC(O)O)=CC1=O")
+# The orthocarbonate quinone is four phase1 steps (ring hydroxylation,
+# dehydrogenation, then two methoxy hydroxylations), so it is not one of the
+# short spines this property checks. ``test_find_path_methoxyphenol_ocarbonate_quinone``
+# covers it.
+_NOT_A_SHORT_SPINE = ("COc1ccc(O)cc1", "O=C1C=CC(OC(O)O)=CC1=O")
 
 
-def _is_known_search_miss(r_smi: str, t_smi: str) -> bool:
-    return (_canon(r_smi), _canon(t_smi)) == tuple(_canon(s) for s in _SEARCH_MISS)
+def _is_not_a_short_spine(r_smi: str, t_smi: str) -> bool:
+    return (_canon(r_smi), _canon(t_smi)) == tuple(_canon(s) for s in _NOT_A_SHORT_SPINE)
 
 
 def _assert_qf_phase1_plan_exact(r_smi: str, t_smi: str, recipe) -> None:
@@ -286,26 +286,41 @@ def test_fuzz_find_path_expands_qf_phase1_plan_exact(case):
     leaf orders ⊆ plan lins) after apply-replay corrects deps.
     """
     r_smi, t_smi, recipe = case
-    # Held out so a stored replay does not fail this property. See the xfail.
-    assume(not _is_known_search_miss(r_smi, t_smi))
+    # Four-step orthocarbonate quinone: not a <=3 spine. See the dedicated test.
+    assume(not _is_not_a_short_spine(r_smi, t_smi))
     _assert_qf_phase1_plan_exact(r_smi, t_smi, recipe)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "find_path misses COc1ccc(O)cc1 → O=C1C=CC(OC(O)O)=CC1=O "
-        "(Hydroxylation, Hydroxylation, QuinoneFormation) within "
-        "max_expansions=120. The route is real; BFS spends the budget "
-        "first. Fix search order later."
-    ),
-)
-def test_find_path_methoxyphenol_ocarbonate_quinone_search_miss():
-    """Known budget miss. Remove this xfail when search order finds the route."""
-    _assert_qf_phase1_plan_exact(
-        *_SEARCH_MISS,
-        ["Hydroxylation", "Hydroxylation", "QuinoneFormation"],
+def test_find_path_methoxyphenol_ocarbonate_quinone():
+    """4-Methoxyphenol → orthocarbonate quinone inside the expansion budget.
+
+    The ring is aromatic here and not on the target, so quinone formation is
+    tried on that system before other sites. The methoxy carbon is the match
+    boundary where the two extra oxygens attach.
+    """
+    counters = PathSearchCounters()
+    hits = list(
+        find_path(
+            *_NOT_A_SHORT_SPINE,
+            ruleset=_find_ruleset(),
+            depth=5,
+            maybe_prefixes=False,
+            max_paths=1,
+            max_expansions=_BUDGET,
+            expand_phase1_plans=True,
+            counters=counters,
+        )
     )
+    assert hits, counters.as_dict()
+    assert not counters.budget_exhausted
+    assert counters.billed() < _BUDGET
+    outcome = hits[0]
+    _assert_no_opaque_quinone(outcome)
+    mol = _mol(_NOT_A_SHORT_SPINE[0])
+    target = _canon(_NOT_A_SHORT_SPINE[1])
+    assert _canon(outcome.smiles[-1]) == target
+    assert _plan_replays(mol, outcome.plan, target)
+    assert any(s.rule == "Dehydrogenation" for s in outcome.plan.steps)
 
 
 def test_benzene_qf_find_path_no_opaque_quinone_plan_exact():

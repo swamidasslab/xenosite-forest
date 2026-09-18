@@ -2491,6 +2491,16 @@ class ReactionRule(AtomTracker):
             return False
         return any(h is not None and hint_includes_cleave(h) for h in hints)
 
+    def can_dearomatize(self) -> bool:
+        """True if this rule can turn an aromatic system into a non-aromatic one.
+
+        Guided search tries these rules first when a large matched region is
+        aromatic on the reactant and not on the target, and only expands them
+        at sites on that system. Override on the rule; do not infer it from
+        SMARTS.
+        """
+        return False
+
     def cleave_alone(self) -> bool:
         """True ⇒ join the cleavage peer pass when the target is smaller.
 

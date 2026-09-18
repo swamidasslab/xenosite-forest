@@ -37,6 +37,28 @@ def test_path_context_benzene_benzoquinone_aromatic_tolerant():
     assert ctx.dearomatization_delta < 0
 
 
+def test_dearomatization_systems_and_attachment_boundary():
+    """A large aromatic match against a quinone names the ring, and the
+    unmapped oxygens mark the methoxy carbon as the attachment boundary.
+    """
+    from xenosite.forest.path_context import (
+        attachment_boundary_atoms,
+        dearomatization_systems,
+    )
+    from xenosite.forest.rules import Dehydrogenation, Epoxidation, QuinoneFormation
+
+    mol = _smi("COc1ccc(O)cc1")
+    target = _smi("O=C1C=CC(OC(O)O)=CC1=O")
+    ctx = PathContext.from_mols(mol, target)
+    systems = dearomatization_systems(mol, ctx)
+    assert systems == (frozenset({2, 3, 4, 5, 7, 8}),)
+    assert 0 in attachment_boundary_atoms(ctx)
+    assert QuinoneFormation().can_dearomatize()
+    assert Dehydrogenation().can_dearomatize()
+    assert Epoxidation().can_dearomatize()
+    assert not Hydroxylation().can_dearomatize()
+
+
 def test_path_context_etoh_acetaldehyde():
     ctx = PathContext.from_mols(_smi("CCO"), _smi("CC=O"))
     assert len(ctx.conserved_r_atoms) == 3
