@@ -136,8 +136,8 @@ def test_layers_two_prep_then_final_two_orders():
         "Dehydrogenation",
         frozenset(
             [
-                AtomRef(added_by="Hydroxylation", at=frozenset({0})),
-                AtomRef(added_by="Hydroxylation", at=frozenset({3})),
+                AtomRef(added_by=("Hydroxylation", frozenset({0}))),
+                AtomRef(added_by=("Hydroxylation", frozenset({3}))),
             ]
         ),
     )
@@ -156,8 +156,8 @@ def test_json_round_trip():
                 Step(
                     "Dehydrogenation",
                     {
-                        AtomRef(added_by="Hydroxylation", at={1}),
-                        AtomRef(added_by="Hydroxylation", at={2}),
+                        AtomRef(added_by=("Hydroxylation", {1})),
+                        AtomRef(added_by=("Hydroxylation", {2})),
                     },
                 )
             ],
@@ -199,13 +199,13 @@ def test_cycle_raises():
 
 def test_compact_str():
     assert str(AtomRef(origin=3)) == "3"
-    assert str(AtomRef(added_by="Hydroxylation", at={0})) == "Hydroxylation[0]"
+    assert str(AtomRef(added_by=("Hydroxylation", {0}))) == "Hydroxylation[0]"
     assert str(Step("Hydroxylation", {0})) == "Hydroxylation[0]"
     dh = Step(
         "Dehydrogenation",
         {
-            AtomRef(added_by="Hydroxylation", at={0}),
-            AtomRef(added_by="Hydroxylation", at={3}),
+            AtomRef(added_by=("Hydroxylation", {0})),
+            AtomRef(added_by=("Hydroxylation", {3})),
         },
     )
     assert str(dh) == "Dehydrogenation[Hydroxylation[0], Hydroxylation[3]]"
@@ -227,7 +227,7 @@ def test_hydroxylation_apply_records_atom_ref():
     products = step.apply(mol)
     assert products
     product = products[0]
-    ref = AtomRef(added_by="Hydroxylation", at=frozenset({0}))
+    ref = AtomRef(added_by=("Hydroxylation", frozenset({0})))
     o_idx = ref.resolve(product)
     assert product.GetAtomWithIdx(o_idx).GetAtomicNum() == 8
     carbon_site = step.resolve_site(product)
@@ -242,8 +242,8 @@ def test_benzene_prep_linearization_apply_agrees():
         "Dehydrogenation",
         frozenset(
             [
-                AtomRef(added_by="Hydroxylation", at={0}),
-                AtomRef(added_by="Hydroxylation", at={3}),
+                AtomRef(added_by=("Hydroxylation", {0})),
+                AtomRef(added_by=("Hydroxylation", {3})),
             ]
         ),
     )

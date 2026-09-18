@@ -163,8 +163,9 @@ def _assert_emitted_respects_phase1_deps(mol, branch: StepPlan):
     dh = steps[-1]
     for prep in steps[:-1]:
         if any(
-            getattr(r, "added_by", None) == prep.rule
-            and set(r.at or ())
+            getattr(r, "added_by", None)
+            and r.added_by[0] == prep.rule
+            and set(r.added_by[1])
             & {int(x.origin) for x in prep.site if x.origin is not None}
             for r in dh.site
         ):
@@ -367,8 +368,8 @@ def test_and_cleave_plan_dual_oh_and_then_dh_exact():
             "Dehydrogenation",
             frozenset(
                 {
-                    AtomRef(added_by="Hydroxylation", at=frozenset({0})),
-                    AtomRef(added_by="Hydroxylation", at=frozenset({3})),
+                    AtomRef(added_by=("Hydroxylation", frozenset({0}))),
+                    AtomRef(added_by=("Hydroxylation", frozenset({3}))),
                 }
             ),
         ),

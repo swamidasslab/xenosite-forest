@@ -218,12 +218,12 @@ def test_coerce_counters_and_small_path_helpers():
 
     later = Step(
         "Dehydrogenation",
-        {AtomRef(added_by="Hydroxylation", at=frozenset({0}))},
+        {AtomRef(added_by=("Hydroxylation", frozenset({0})))},
     )
     assert _step_depends_on(later, step)
     other = Step(
         "Dehydrogenation",
-        {AtomRef(added_by="Other", at=frozenset({0}))},
+        {AtomRef(added_by=("Other", frozenset({0})))},
     )
     assert not _step_depends_on(other, step)
 
@@ -371,13 +371,23 @@ def test_product_pieces_cohorts_and_smarts_cover():
 
 def test_step_plan_reprs_or_and_edges():
     with pytest.raises(ValueError):
-        AtomRef(origin=1, added_by="X", at=frozenset({0}))
+        AtomRef(origin=1, added_by=("X", frozenset({0})))
     with pytest.raises(ValueError):
         AtomRef()
     with pytest.raises(ValueError):
         AtomRef(added_by="X")
-    ref = AtomRef(added_by="Hydroxylation", at=[0, 1])
-    assert isinstance(ref.at, frozenset)
+    with pytest.raises(ValueError):
+        AtomRef(added_by=("X",))
+    ref = AtomRef(added_by=("Hydroxylation", [0, 1]))
+    assert isinstance(ref.added_by[1], frozenset)
+    assert AtomRef.from_json({"added_by": "Legacy", "at": [2]}).added_by == (
+        "Legacy",
+        frozenset({2}),
+    )
+    assert AtomRef.from_json({"added_by": ["New", [3]]}).added_by == (
+        "New",
+        frozenset({3}),
+    )
     assert "Hydroxylation" in repr(ref)
     assert AtomRef.coerce(3).origin == 3
     assert AtomRef.coerce({"origin": 2}).origin == 2

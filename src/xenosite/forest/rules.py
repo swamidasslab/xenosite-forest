@@ -219,11 +219,11 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
         if "addO" in names:
             carbon = mapids[1]
             prep.append(Step("Hydroxylation", frozenset([carbon])))
-            end = AtomRef(added_by="Hydroxylation", at=frozenset([carbon]))
+            end = AtomRef(added_by=("Hydroxylation", frozenset([carbon])))
         elif "replaceHalogenWithO" in names:
             at = frozenset([mapids[1], mapids[2]])
             prep.append(Step("OxidativeDehalogenation", at))
-            end = AtomRef(added_by="OxidativeDehalogenation", at=at)
+            end = AtomRef(added_by=("OxidativeDehalogenation", at))
         elif "dealk" in names:
             prep.append(Step("Dealkylation", frozenset([mapids[2], mapids[3]])))
             end = AtomRef(origin=mapids[2])

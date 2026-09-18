@@ -98,8 +98,7 @@ def test_anisole_acetate_two_cleaves_and_plan():
     # Hydrolysis + Dealkylation each bifurcate → bags accumulate each hop.
     assert _n_cleavage_bags(maybe) >= 2
     assert _canon(smiles[-1]) == _canon("Oc1ccc(O)cc1")
-    assert steps[0][0] == "Hydrolysis"
-    assert steps[1][0] == "Dealkylation"
+    assert {s[0] for s in steps} == {"Hydrolysis", "Dealkylation"}
     assert isinstance(plan, Deps)
     assert plan.contains(["Hydrolysis", "Dealkylation"], by="rule")
     assert plan.contains(["Dealkylation", "Hydrolysis"], by="rule")
@@ -162,8 +161,8 @@ def test_and_cleave_plan_independent_preps_become_and_then_seq():
         "Dehydrogenation",
         frozenset(
             {
-                AtomRef(added_by="Hydroxylation", at=frozenset({0})),
-                AtomRef(added_by="Hydroxylation", at=frozenset({1})),
+                AtomRef(added_by=("Hydroxylation", frozenset({0}))),
+                AtomRef(added_by=("Hydroxylation", frozenset({1}))),
             }
         ),
     )

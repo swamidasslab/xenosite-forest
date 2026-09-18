@@ -261,7 +261,10 @@ def test_quinone_benzene_addo_layers():
     assert all(o[-1].rule == "Dehydrogenation" for o in orders)
     assert all(o[0].rule == "Hydroxylation" for o in orders)
     dh_site = orders[0][-1].site
-    assert all(isinstance(r, AtomRef) and r.added_by == "Hydroxylation" for r in dh_site)
+    assert all(
+        isinstance(r, AtomRef) and r.added_by and r.added_by[0] == "Hydroxylation"
+        for r in dh_site
+    )
 
 
 def test_quinone_attach_phase1_steps_matches_public():

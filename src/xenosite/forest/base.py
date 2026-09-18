@@ -57,10 +57,31 @@ _log = logging.getLogger(__name__)
 # Schema (reserved keys):
 #   resonance   -> ResonanceCache (lazy joined forms / bfs_all_pairs)
 #   atom_refs   -> AtomRefsIndex (creation lookup for AtomRef.added_by)
-#   atom_trace  -> {"records": {label: {"idx","depth"}}, "last_tag": int}
+#                 Keys are (rule, site) as metabolize saw them on the parent;
+#                 AtomRef.resolve projects site through atom_trace frames.
+#   atom_trace  -> {"records": {label: record}, "last_tag": int}
 #                 label matches the stable atomLabel prop on each heavy atom
 #                 (stamped once; never rewritten). Remap via carry_forest after
 #                 Mol()/GetMolFrags.
+#
+#                 record:
+#                   idx, depth     — parallel GetIdx history at each tag depth
+#                   added_by?      — optional (rule, site) when this label was
+#                                    created by a step (future consolidation)
+#                   removed_by?    — set when the atom leaves this mol's
+#                                    structure (reaction loss). Truthy marker
+#                                    for now; may become (rule, site) later.
+#                                    Resolve skips removed labels when mapping
+#                                    origin → current idx. Cleavage fragments
+#                                    must not keep sibling labels: carry_forest
+#                                    drops any label not present on dst (those
+#                                    are not removed_by — they belong on the
+#                                    other fragment). Same-size copy_mol keeps
+#                                    removed_by records for AtomTrace.removed().
+#
+#                 AtomRef.resolve (origin): find the live label whose idx at the
+#                 ref depth equals origin, then read that label's idx at the
+#                 mol's latest tagged depth.
 #
 # Share with _copy_forest (same dict object) when caches should be shared.
 # Product handoff installs a new dict that shares ``resonance`` but copies
@@ -105,7 +126,13 @@ def _copy_forest(src, dst):
 
 
 class AtomRefsIndex:
-    """Maps (added_by, reactant-frame at) -> current GetIdx on a mol."""
+    """Maps AtomRef.added_by ``(rule, site)`` -> current GetIdx on a mol.
+
+    ``site`` is whatever GetIdx frozenset metabolize saw on the parent at
+    recording time (often the current frame of that step, not depth-0).
+    ``AtomRef.resolve`` projects the caller's site through ``atom_trace``
+    frames so the same creation still resolves.
+    """
 
     __slots__ = ("_entries",)
 
@@ -116,11 +143,13 @@ class AtomRefsIndex:
     def copy(self):
         return AtomRefsIndex(self._entries)
 
-    def set(self, added_by: str, at: frozenset, idx: int) -> None:
-        self._entries[(added_by, frozenset(at))] = int(idx)
+    def set(self, added_by, idx: int) -> None:
+        rule, at = added_by
+        self._entries[(rule, frozenset(at))] = int(idx)
 
-    def lookup(self, added_by: str, at: frozenset):
-        return self._entries.get((added_by, frozenset(at)))
+    def lookup(self, added_by):
+        rule, at = added_by
+        return self._entries.get((rule, frozenset(at)))
 
     def items(self):
         return self._entries.items()
@@ -194,7 +223,7 @@ def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsI
         if chosen is None:
             chosen = new_atoms[0]
 
-    index.set(rule_name, origin_at, chosen.GetIdx())
+    index.set((rule_name, origin_at), chosen.GetIdx())
 
 
 def install_product_forest(
@@ -246,6 +275,10 @@ def carry_forest(src, dst, share_resonance=None):
     Each heavy atom keeps a unique ``atomLabel`` stamped once; this rebuilds
     ``atom_trace`` / ``atom_refs`` current idxs from those labels.
 
+    ``atom_trace`` membership is filtered to labels on ``dst``. Sibling-fragment
+    labels are dropped (not marked ``removed_by``). Same-size copies also keep
+    existing ``removed_by`` records so removal history survives ``copy_mol``.
+
     Resonance is shared only for same-size copies (``share_resonance`` default).
     Fragments must not reuse the parent's resonance cache.
     """
@@ -258,6 +291,11 @@ def carry_forest(src, dst, share_resonance=None):
             share_resonance = src.GetNumAtoms() == dst.GetNumAtoms()
         except Exception:
             share_resonance = False
+
+    try:
+        same_size = src.GetNumAtoms() == dst.GetNumAtoms()
+    except Exception:
+        same_size = False
 
     label_to_idx = {}
     for atom in dst.GetAtoms():
@@ -273,23 +311,28 @@ def carry_forest(src, dst, share_resonance=None):
     trace = src_forest.get("atom_trace")
     if trace and "records" in trace:
         records = {}
-        depths_present = set()
         for tag, rec in trace["records"].items():
-            records[tag] = {
+            label = str(tag)
+            rec_copy = {
                 "idx": list(rec["idx"]),
                 "depth": list(rec["depth"]),
             }
-            depths_present.update(rec["depth"])
-        last_depth = max(depths_present) if depths_present else None
-        if last_depth is not None:
-            for tag, rec in records.items():
-                if last_depth not in rec["depth"]:
-                    continue
-                label = str(tag)
-                if label not in label_to_idx:
-                    continue
-                i = rec["depth"].index(last_depth)
-                rec["idx"][i] = label_to_idx[label]
+            if rec.get("removed_by"):
+                rec_copy["removed_by"] = rec["removed_by"]
+            if rec.get("added_by") is not None:
+                rec_copy["added_by"] = rec["added_by"]
+
+            if label in label_to_idx:
+                # Live on dst: remap the latest depth entry to dst GetIdx.
+                if rec_copy["depth"]:
+                    last_i = len(rec_copy["depth"]) - 1
+                    rec_copy["idx"][last_i] = label_to_idx[label]
+                records[tag] = rec_copy
+            elif same_size and rec_copy.get("removed_by"):
+                # Full-mol copy: preserve removal provenance.
+                records[tag] = rec_copy
+            # else: fragment / foreign label — drop (belongs elsewhere or gone)
+
         child["atom_trace"] = {
             "records": records,
             "last_tag": trace.get("last_tag", max(records) if records else 0),
@@ -309,7 +352,7 @@ def carry_forest(src, dst, share_resonance=None):
         for key, src_idx in prev_refs.items():
             label = src_idx_to_label.get(src_idx)
             if label is not None and label in label_to_idx:
-                remapped.set(key[0], key[1], label_to_idx[label])
+                remapped.set(key, label_to_idx[label])
             else:
                 # Fall back to react_atom_idx remap.
                 for atom in dst.GetAtoms():
@@ -317,7 +360,7 @@ def carry_forest(src, dst, share_resonance=None):
                         atom.HasProp("react_atom_idx")
                         and int(atom.GetProp("react_atom_idx")) == src_idx
                     ):
-                        remapped.set(key[0], key[1], atom.GetIdx())
+                        remapped.set(key, atom.GetIdx())
                         break
         child["atom_refs"] = remapped
 
@@ -505,11 +548,19 @@ class AtomTracker(object):
 
     @classmethod
     def _copy_tag_records(cls, records):
-        """Shallow-copy tag records (list copies); avoids ``copy.deepcopy``."""
-        return {
-            tag: {"idx": list(data["idx"]), "depth": list(data["depth"])}
-            for tag, data in records.items()
-        }
+        """Shallow-copy tag records (list copies); avoids ``copy.deepcopy``.
+
+        Preserves optional ``added_by`` / ``removed_by`` provenance fields.
+        """
+        out = {}
+        for tag, data in records.items():
+            rec = {"idx": list(data["idx"]), "depth": list(data["depth"])}
+            if data.get("removed_by"):
+                rec["removed_by"] = data["removed_by"]
+            if data.get("added_by") is not None:
+                rec["added_by"] = data["added_by"]
+            out[tag] = rec
+        return out
 
     @classmethod
     def _load_atom_trace(cls, mol, strict=True):
@@ -674,7 +725,13 @@ class AtomTracker(object):
         self._save_tags(mol, initial_tags)
 
     def tag(self, product, reactant, strict=True, **kwargs):
-        """Copies all atom tags from reactant and updates the tags in product."""
+        """Copies all atom tags from reactant and updates the tags in product.
+
+        Labels on the reactant frontier that do not appear on ``product`` are
+        kept with ``removed_by`` set so resolve can skip them and
+        ``AtomTrace.removed()`` still sees the gap. Cleavage then drops
+        sibling labels in ``carry_forest`` (those are not ``removed_by``).
+        """
 
         previous_tags = self.tags(reactant, strict=strict)
         next_depth = self.next_depth(previous_tags)
@@ -688,6 +745,8 @@ class AtomTracker(object):
                     "idx": list(rec["idx"]),
                     "depth": list(rec["depth"]),
                 }
+                if rec.get("added_by") is not None:
+                    new_tags[tag]["added_by"] = rec["added_by"]
 
         old_to_new_atom_indexes = self._old_to_new_atom_indexes(product)
 
@@ -706,13 +765,23 @@ class AtomTracker(object):
                 record["depth"].append(record["depth"][-1] + 1)
 
                 new_atom_indexes.remove(new_index)
+            else:
+                # Frontier atom absent on product (deleted / other fragment
+                # before clean). Mark removed so resolve will not treat this
+                # label as a live origin match.
+                record["removed_by"] = True
 
         for tag in set(previous_tags) - set(new_tags):
             rec = previous_tags[tag]
-            new_tags[tag] = {
+            kept = {
                 "idx": list(rec["idx"]),
                 "depth": list(rec["depth"]),
             }
+            if rec.get("added_by") is not None:
+                kept["added_by"] = rec["added_by"]
+            # Already gone in an earlier step — keep / set removed_by.
+            kept["removed_by"] = rec.get("removed_by", True)
+            new_tags[tag] = kept
 
         self._save_tags(
             product,

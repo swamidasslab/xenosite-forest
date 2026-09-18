@@ -35,9 +35,9 @@ Some Forest rules correspond to one or more Phase I transformations. Each rule
 returns **one** `StepPlan` (nested `Step` / Seq / `And` / `Or`; guided emission
 may use `Deps` for flat steps + precedes).
 
-Sites use reactant-stable `AtomRef` values: a reactant **origin** index, or an
-atom **created by** an earlier step (`added_by` + reactant-frame `at`). Ints
-coerce to `AtomRef(origin=…)`.
+Sites use reactant-stable `AtomRef` values: a reactant **origin** index
+(remapped through `atom_trace` on resolve), or an atom **created by** an
+earlier step (`added_by=(rule, site)`). Ints coerce to `AtomRef(origin=…)`.
 
 | Rule family | `phase1_steps` |
 | --- | --- |

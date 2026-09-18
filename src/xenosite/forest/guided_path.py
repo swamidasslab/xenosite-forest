@@ -352,10 +352,9 @@ def _step_depends_on(later: Step, earlier: Step) -> bool:
     earlier_origins = _step_origins(earlier)
     for ref in later.site:
         added_by = getattr(ref, "added_by", None)
-        if not added_by or added_by != earlier.rule:
+        if not added_by or added_by[0] != earlier.rule:
             continue
-        at = set(ref.at or ())
-        if at & earlier_origins:
+        if set(added_by[1]) & earlier_origins:
             return True
     return False
 
@@ -636,6 +635,16 @@ def and_cleave_plan(steps, mols=None, reactant=None, target_smi: str | None = No
     return plan
 
 
+def _added_by_json_fp(site_obj: dict) -> tuple:
+    """Fingerprint an AtomRef JSON site (new tuple form or legacy at=)."""
+    ab = site_obj.get("added_by")
+    if isinstance(ab, str):
+        return (ab, tuple(sorted(site_obj.get("at") or ())))
+    if isinstance(ab, (list, tuple)) and len(ab) == 2:
+        return (ab[0], tuple(sorted(ab[1] or ())))
+    return (ab, ())
+
+
 def _canonical_plan_key(plan: StepPlan) -> tuple:
     """Order-insensitive fingerprint so And-equivalent plans collide."""
     data = plan.to_json() if plan is not None else {}
@@ -686,10 +695,7 @@ def _canonicalize_plan_json(data):
                     (
                         s
                         if isinstance(s, int)
-                        else (
-                            s.get("added_by"),
-                            tuple(sorted(s.get("at") or ())),
-                        )
+                        else _added_by_json_fp(s)
                     )
                     for s in site
                 ),
