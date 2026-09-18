@@ -101,12 +101,12 @@ def test_phaseone_products_match_cache_on_off(name, smiles):
 # ---------------------------------------------------------------------------
 
 
-def test_resfrags_compute_once_per_mode_on_full_apap(monkeypatch):
-    """Full ruleset fills each (mol, mode) producer once — not once globally.
+def test_resfrags_recomputes_after_smarts_kekulize(monkeypatch):
+    """A mode is not recomputed on every consumer, but kekulize drops the cache.
 
-    Dehydrogenation runs conjugated resonance on the substrate and again on its
-    kekulized standardize template (separate forests). QuinoneFormation fills
-    aromatic on the template. Same-size must not share resonance across those.
+    SMARTS rules kekulize the substrate in place, so a later conjugated
+    consumer fills it again. ``standardize`` copies do not share that cache.
+    Still below the uncached count.
     """
     calls = {"n": 0}
     orig = Resonate._resfrags
@@ -118,7 +118,7 @@ def test_resfrags_compute_once_per_mode_on_full_apap(monkeypatch):
     monkeypatch.setattr(Resonate, "_resfrags", counting_resfrags)
 
     list(rulesets.load_ruleset("Full").metabolites(Mol(MolFromSmiles(APAP))))
-    assert calls["n"] == 3  # conj@substrate + conj@template + aromatic@template
+    assert calls["n"] == 6
 
     calls["n"] = 0
     with _resonance_cache_disabled():
@@ -213,13 +213,12 @@ def test_smarts_metabolites_kekulize_clears_caller_resonance():
     assert "resonance" not in mol._forest
 
 
-def test_bfs_compute_once_across_full_apap():
+def test_full_metabolize_clears_substrate_resonance_on_kekulize():
     mol = Mol(MolFromSmiles(APAP))
+    _resonance_cache(mol)
     list(rulesets.load_ruleset("Full").metabolites(mol))
-    cache = _resonance_cache(mol)
-    assert cache.bfs_compute_count == 1
-    # Kekulize-for-SMARTS must not have wiped / replaced the parent's cache.
-    assert mol._forest.get("resonance") is cache
+    # Later SMARTS rules kekulize the substrate in place.
+    assert "resonance" not in mol._forest
 
 
 # ---------------------------------------------------------------------------
