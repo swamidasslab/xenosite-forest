@@ -102,7 +102,12 @@ def test_phaseone_products_match_cache_on_off(name, smiles):
 
 
 def test_resfrags_compute_once_per_mode_on_full_apap(monkeypatch):
-    """Full ruleset should fill conjugated + aromatic producers once each."""
+    """Full ruleset fills each (mol, mode) producer once — not once globally.
+
+    Dehydrogenation runs conjugated resonance on the substrate and again on its
+    kekulized standardize template (separate forests). QuinoneFormation fills
+    aromatic on the template. Same-size must not share resonance across those.
+    """
     calls = {"n": 0}
     orig = Resonate._resfrags
 
@@ -113,7 +118,7 @@ def test_resfrags_compute_once_per_mode_on_full_apap(monkeypatch):
     monkeypatch.setattr(Resonate, "_resfrags", counting_resfrags)
 
     list(rulesets.load_ruleset("Full").metabolites(Mol(MolFromSmiles(APAP))))
-    assert calls["n"] == 2  # conjugated + aromatic
+    assert calls["n"] == 3  # conj@substrate + conj@template + aromatic@template
 
     calls["n"] = 0
     with _resonance_cache_disabled():
@@ -153,16 +158,49 @@ def test_mode_compute_count_reused_across_resonance_and_pair_paths():
     assert entry.exhausted
     n_forms = entry.forms_materialized
 
-    # Second consumer on same mol (and standardize copy) must not recompute.
+    # Second consumer on same mol must not recompute.
     list(res.resonate_with_pair_paths(mol))
     assert entry.compute_count == 1
     assert entry.forms_materialized == n_forms
 
+    # standardize kekulizes into a cached prototype; each call returns a copy.
     template = EditMol.standardize(mol)
     assert template is not False
-    assert getattr(template, "_forest", None) is mol._forest
+    proto = mol._forest.get("standardized_mol")
+    assert proto is not None and template is not proto
+    assert getattr(template, "_forest", None) is not mol._forest
+    assert "resonance" not in (template._forest or {})
+    assert EditMol.standardize(mol) is not template
     list(res.resonate_with_pair_paths(template))
-    assert entry.compute_count == 1
+    assert entry.compute_count == 1  # parent cache untouched
+    assert _resonance_cache(template).mode(res.flag).compute_count == 1
+
+
+def test_copy_mol_and_carry_forest_do_not_share_resonance_by_size():
+    from xenosite.forest.base import copy_mol, carry_forest
+
+    mol = Mol(MolFromSmiles(APAP))
+    parent = _resonance_cache(mol)
+    twin = copy_mol(mol)
+    assert twin._forest is not mol._forest
+    assert "resonance" not in twin._forest
+    # Explicit opt-in still allowed for unedited identity views.
+    carry_forest(mol, twin, share_resonance=True)
+    assert twin._forest.get("resonance") is parent
+    # Edits must clear.
+    EditMol().swap_bonds_along_path(twin, [4, 5, 6, 7, 8])
+    assert "resonance" not in twin._forest
+
+
+def test_install_product_forest_clears_resonance():
+    from xenosite.forest.base import install_product_forest, copy_mol
+
+    parent = Mol(MolFromSmiles(APAP))
+    _resonance_cache(parent)
+    product = copy_mol(parent)
+    product._forest["resonance"] = parent._forest["resonance"]
+    install_product_forest(parent, product)
+    assert "resonance" not in product._forest
 
 
 def test_bfs_compute_once_across_full_apap():
@@ -170,6 +208,8 @@ def test_bfs_compute_once_across_full_apap():
     list(rulesets.load_ruleset("Full").metabolites(mol))
     cache = _resonance_cache(mol)
     assert cache.bfs_compute_count == 1
+    # Kekulize-for-SMARTS must not have wiped / replaced the parent's cache.
+    assert mol._forest.get("resonance") is cache
 
 
 # ---------------------------------------------------------------------------

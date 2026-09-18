@@ -187,6 +187,10 @@ def _sanitize_kekulize(mol, reset_hs=False):
     except ValueError:
         pass
     refresh_mol(mol)
+    # Kekulize / sanitize edit bonding — drop any inherited resonance cache.
+    from .base import _clear_resonance
+
+    _clear_resonance(mol)
     smi = Chem.MolToSmiles(mol)
     if Chem.MolFromSmiles(smi) is None:
         raise ValueError("SMILES round-trip failed: %s" % smi)

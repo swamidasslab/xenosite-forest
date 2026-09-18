@@ -89,8 +89,10 @@ _log = logging.getLogger(__name__)
 #                 the mol's latest tagged depth.
 #
 # Share with _copy_forest (same dict object) when caches should be shared.
-# Product handoff installs a new dict that shares ``resonance`` but copies
-# ``atom_refs`` / ``atom_trace`` so bookkeeping does not mutate the parent.
+# Product handoff / edited mols must **not** keep a parent's resonance cache
+# (same atom count ≠ same bonding). Prefer carry_forest (no resonance share)
+# or _clear_resonance after in-place edits. install_product_forest always
+# drops resonance on reaction products.
 # Do not store public phase1_steps JSON here (mol prop only).
 # ---------------------------------------------------------------------------
 
@@ -123,8 +125,26 @@ def _forest_state(mol):
     return forest
 
 
+def _clear_resonance(mol):
+    """Drop cached resonance after any structural / kekule edit to ``mol``.
+
+    Also drops a cached standardized (kekulized) view — it is only valid for
+    the pre-edit structure.
+    """
+    forest = getattr(mol, "_forest", None)
+    if forest is not None:
+        forest.pop("resonance", None)
+        forest.pop("standardized_mol", None)
+    return mol
+
+
 def _copy_forest(src, dst):
-    """Share ``src._forest`` onto ``dst`` (same object) when present."""
+    """Share ``src._forest`` onto ``dst`` (same object) when present.
+
+    Only for unedited views of the same structure. Prefer :func:`carry_forest`
+    (independent dict, no resonance share) when ``dst`` may be sanitized,
+    kekulized, or otherwise edited.
+    """
     forest = getattr(src, "_forest", None)
     if forest is not None:
         dst._forest = forest
@@ -268,7 +288,7 @@ def install_product_forest(
     return child["atom_refs"]
 
 
-def carry_forest(src, dst, share_resonance=None):
+def carry_forest(src, dst, share_resonance=False):
     """Copy ``src._forest`` onto ``dst``, remapping idxs via stable ``_forestLabel``.
 
     RDKit ``Mol()`` / ``GetMolFrags`` drop Python attrs but keep atom props.
@@ -280,18 +300,14 @@ def carry_forest(src, dst, share_resonance=None):
     list is copied for same-size mols only so chemical-removal history survives
     ``copy_mol``; fragments start without the parent's removal log.
 
-    Resonance is shared only for same-size copies (``share_resonance`` default).
-    Fragments must not reuse the parent's resonance cache.
+    Resonance is **not** carried by default. Same atom count does not imply the
+    same bonding / resonance forms. Pass ``share_resonance=True`` only for an
+    unedited identity view of the same structure; clear via
+    :func:`_clear_resonance` after any subsequent edit.
     """
     src_forest = getattr(src, "_forest", None)
-    if not src_forest:
+    if src_forest is None:
         return dst
-
-    if share_resonance is None:
-        try:
-            share_resonance = src.GetNumAtoms() == dst.GetNumAtoms()
-        except Exception:
-            share_resonance = False
 
     try:
         same_size = src.GetNumAtoms() == dst.GetNumAtoms()
@@ -370,13 +386,14 @@ def copy_mol(mol):
     """``Chem.Mol(mol)`` that also carries ``_forest`` (via :func:`carry_forest`).
 
     Use this instead of bare ``Chem.Mol`` / ``Mol`` whenever the copy must keep
-    atom-trace or atom_refs history. Throwaway copies for SMILES / sanitize
-    probes can still use ``Chem.Mol`` directly.
+    atom-trace or atom_refs history. Resonance is not shared (same size ≠ same
+    bonding); a later edit must not see the source's forms. Throwaway copies
+    for SMILES / sanitize probes can still use ``Chem.Mol`` directly.
     """
     if mol is None:
         return None
     out = Chem.Mol(mol)
-    carry_forest(mol, out)
+    carry_forest(mol, out)  # share_resonance=False
     # Mol-level props (LAST_TAG, phase1_steps, …) are copied by Chem.Mol;
     # Python ``_forest`` is not — carry_forest restores it.
     return out
@@ -1752,16 +1769,33 @@ class QueryMol(object):
 
         """
 
+        # Reuse one kekulized prototype per substrate. Return a Chem.Mol copy
+        # so callers cannot corrupt the prototype. Do not share resonance with
+        # the aromatic parent or across edited working copies.
+        forest = _forest_state(inmol)
+        cached = forest.get("standardized_mol")
+        if cached is not None:
+            out = Chem.Mol(cached)
+            carry_forest(cached, out)
+            return out
+
         mol = Mol(inmol)
-        _copy_forest(inmol, mol)
+        carry_forest(inmol, mol)
         try:
             SanitizeMol(mol)
             Kekulize(mol, clearAromaticFlags=True)
         except ValueError:
             return False
 
+        _clear_resonance(mol)
+        # Ensure RingInfo is valid after kekulize (RDKit 2026).
+        SanitizeMol(mol, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
+        refresh_mol(mol)
         mol.SetProp("standardized", "1")
-        return mol
+        forest["standardized_mol"] = mol
+        out = Chem.Mol(mol)
+        carry_forest(mol, out)
+        return out
 
     def match_queries(self, mol):
         """Returns dict mapping from each atom index to a list of matches to self.queries.
@@ -1910,6 +1944,8 @@ class EditMol(QueryMol):
         if attach_path:
             mol.SetProp("path", str(atoms))
 
+        # Bond edits invalidate any cached resonance forms.
+        _clear_resonance(mol)
     def apply_modifications(self, mol, modifications, **kwargs):
         """Makes an editable copy of mol and successively applies each submitted modification."""
 
@@ -2763,8 +2799,12 @@ class SmartsReactionRule(ReactionRule):
 
         ``toward_target``: optional product mol; reaction SMARTS whose
         :meth:`smarts_compatible` is False are skipped (formula hints).
+
+        Kekulize runs on a copy so the caller's bonding / resonance cache are
+        not mutated or cleared.
         """
         if kekulize:
+            mol = copy_mol(mol)
             self._kekulize(mol)
 
         self._remove_props(mol)
@@ -2817,6 +2857,7 @@ class SmartsReactionRule(ReactionRule):
         except ValueError:
             pass
         refresh_mol(mol)
+        _clear_resonance(mol)
 
     def _copy_props(
         self,
