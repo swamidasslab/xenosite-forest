@@ -99,6 +99,7 @@ doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 norecursedirs = [".git", ".venv", "build", "dist", ".hypothesis"]
 filterwarnings = [
     "ignore::DeprecationWarning",
+    "ignore::xenosite.forest.unstable.UnstableWarning",
 ]
 
 [tool.coverage.run]
