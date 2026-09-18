@@ -130,26 +130,6 @@ Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs
 
 Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/swamidasslab/xenosite-forest/blob/main/.github/workflows/release.yml): tests must pass and the resolved version must be a clean `X.Y.Z` before a GitHub Release and PyPI upload. A red tag workflow means do not treat that tag as released. To *block* creating tags unless checks pass, add a GitHub Ruleset on `refs/tags/v*` that requires the `release` / `test` status checks.
 
-### One-time PyPI Trusted Publishing setup
-
-No API token is stored in the repo. CI authenticates with [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC).
-
-1. Create the GitHub repo `swamidasslab/xenosite-forest` and push `main`.
-2. GitHub → **Settings → Environments** → create an environment named exactly `pypi` (optional: require reviewers before deploy).
-3. On [PyPI](https://pypi.org/manage/account/publishing/): add a **pending** trusted publisher (project does not need to exist yet):
-
-   | Field | Value |
-   | --- | --- |
-   | PyPI project name | `xenosite-forest` |
-   | Owner | `swamidasslab` |
-   | Repository name | `xenosite-forest` |
-   | Workflow name | `release.yml` |
-   | Environment name | `pypi` |
-
-4. Tag a release (`git tag -a v0.1.0 -m "0.1.0" && git push origin v0.1.0`). The `pypi-publish` job uploads only after tests and build succeed.
-
-For a dry run, register the same publisher on [TestPyPI](https://test.pypi.org/manage/account/publishing/) first and temporarily point the publish action at TestPyPI.
-
 ## License
 
 MIT. See [LICENSE](https://github.com/swamidasslab/xenosite-forest/blob/main/LICENSE).
