@@ -64,6 +64,8 @@ _log = logging.getLogger(__name__)
 #                    "records": {label: record},   # live labels only
 #                    "removed": [event, ...],      # chemical-removal history
 #                    "last_tag": int,             # next label allocator
+#                    "depth": int,                # current frame; 0 on first stamp,
+#                                                 # +1 each tag()
 #                  }
 #                 label matches the stable ``_forestLabel`` atom prop (not CX
 #                 ``atomLabel``, which conjugates use for display names)
@@ -182,9 +184,9 @@ class AtomRefsIndex:
     def remap_from_parent(self, parent_mol, child_mol):
         """Rebuild entries with child GetIdx via ``_forestLabel``.
 
-        ``current_idx`` is the reactant GetIdx, not the parent GetIdx of a
-        created atom, so it must not be used here. Fall back to
-        ``react_atom_idx`` only when the created atom has no trace label.
+        An entry whose label is not on the child is dropped. ``react_atom_idx``
+        is the reactant GetIdx, not a created atom's parent idx, so it is not
+        a remap key.
         """
         out = AtomRefsIndex()
         src_idx_to_label = {}
@@ -203,14 +205,6 @@ class AtomRefsIndex:
             label = src_idx_to_label.get(parent_idx)
             if label is not None and label in label_to_idx:
                 out._entries[key] = label_to_idx[label]
-                continue
-            for atom in child_mol.GetAtoms():
-                if (
-                    atom.HasProp("react_atom_idx")
-                    and int(atom.GetProp("react_atom_idx")) == parent_idx
-                ):
-                    out._entries[key] = atom.GetIdx()
-                    break
         return out
 
 
@@ -237,8 +231,8 @@ def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsI
     A creation is a trace label the parent did not have. Missing atom maps are
     not enough: dehydrogenation clears maps on atoms the trace already knows.
     The new label is stamped ``added_by`` so ``AtomRef.resolve`` can follow
-    that label instead of a raw GetIdx. A later step at the same site does not
-    retarget the first creation.
+    that label. The idx is the one at ``atom_trace["depth"]``. If several new
+    labels cannot be attributed to the site, nothing is stamped.
     """
     origin_at = frozenset(int(x) for x in (origin_at or ()))
     if not origin_at:
@@ -246,16 +240,20 @@ def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsI
 
     child_records = _forest_trace_records(after)
     if child_records is None:
-        _record_atom_creations_untagged(rule_name, origin_at, after, index)
-        return
+        raise RuntimeError(
+            "cannot record %s creation: product has no atom_trace" % (rule_name,)
+        )
 
+    frame = int((getattr(after, "_forest", None) or {})["atom_trace"]["depth"])
     parent_records = _forest_trace_records(before) or {}
     new_atoms = []
     label_of = {}
     for tag, rec in child_records.items():
         if tag in parent_records or not rec.get("depth"):
             continue
-        idx = int(rec["idx"][-1])
+        if frame not in rec["depth"]:
+            continue
+        idx = int(rec["idx"][rec["depth"].index(frame)])
         if idx < 0 or idx >= after.GetNumAtoms():
             continue
         atom = after.GetAtomWithIdx(idx)
@@ -265,45 +263,43 @@ def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsI
         return
 
     chosen = _choose_created_atom(after, new_atoms, origin_at)
+    if chosen is None:
+        return
     tag = label_of.get(chosen.GetIdx())
     if tag is not None and child_records[tag].get("added_by") is None:
         child_records[tag]["added_by"] = (rule_name, origin_at)
-    key = (rule_name, origin_at)
-    if index.lookup(key) is None:
-        index.set(key, chosen.GetIdx())
+    index.set((rule_name, origin_at), chosen.GetIdx())
 
 
 def _choose_created_atom(after, new_atoms, origin_at):
-    """Pick the new atom bonded to ``origin_at`` when a step adds several."""
+    """The new atom this site created, or None if that is not unique.
+
+    ``origin_at`` is GetIdx on the parent. One new trace label is that atom.
+    Several new labels are disambiguated by a bond to the site at the current
+    frame. An ambiguous set is not stamped.
+    """
     if len(new_atoms) == 1:
         return new_atoms[0]
-    targets = {int(x) for x in origin_at}
-    for atom in new_atoms:
-        for t in targets:
-            if (
-                t < after.GetNumAtoms()
-                and atom.GetIdx() != t
-                and after.GetBondBetweenAtoms(atom.GetIdx(), t)
-            ):
-                return atom
-    return new_atoms[0]
-
-
-def _record_atom_creations_untagged(rule_name, origin_at, after, index: AtomRefsIndex):
-    """Legacy creation heuristic for a product that has no atom_trace yet."""
-    old_on_after = set()
-    for atom in after.GetAtoms():
-        if atom.GetAtomMapNum() > 0 or atom.HasProp("react_atom_idx"):
-            old_on_after.add(atom.GetIdx())
-    new_atoms = [
-        atom for atom in after.GetAtoms() if atom.GetIdx() not in old_on_after
+    trace = after._forest["atom_trace"]
+    frame = int(trace["depth"])
+    parent_depth = frame - 1
+    want = {int(x) for x in origin_at}
+    targets = set()
+    for rec in trace["records"].values():
+        depths = rec["depth"]
+        idxs = rec["idx"]
+        if parent_depth not in depths or frame not in depths:
+            continue
+        if int(idxs[depths.index(parent_depth)]) in want:
+            targets.add(int(idxs[depths.index(frame)]))
+    chosen = [
+        atom
+        for atom in new_atoms
+        if any(after.GetBondBetweenAtoms(atom.GetIdx(), t) for t in targets)
     ]
-    if not new_atoms:
-        return
-    chosen = _choose_created_atom(after, new_atoms, origin_at)
-    key = (rule_name, origin_at)
-    if index.lookup(key) is None:
-        index.set(key, chosen.GetIdx())
+    if len(chosen) == 1:
+        return chosen[0]
+    return None
 
 
 def install_product_forest(
@@ -394,9 +390,13 @@ def carry_forest(src, dst, share_resonance=False):
                 # Cleavage sibling / foreign — drop (do not record as removed).
                 continue
             rec_copy = deepcopy(rec)
-            if rec_copy["depth"]:
-                last_i = len(rec_copy["depth"]) - 1
-                rec_copy["idx"][last_i] = label_to_idx[label]
+            frame = int(trace["depth"])
+            if frame not in rec_copy["depth"]:
+                raise KeyError(
+                    "atom_trace label %s has no idx at depth %s" % (tag, frame)
+                )
+            i = rec_copy["depth"].index(frame)
+            rec_copy["idx"][i] = label_to_idx[label]
             records[tag] = rec_copy
 
         removed = []
@@ -409,7 +409,8 @@ def carry_forest(src, dst, share_resonance=False):
         child["atom_trace"] = {
             "records": records,
             "removed": removed,
-            "last_tag": trace.get("last_tag", max(records) if records else 0),
+            "last_tag": trace["last_tag"],
+            "depth": trace["depth"],
         }
 
     prev_refs = src_forest.get("atom_refs")
@@ -427,15 +428,6 @@ def carry_forest(src, dst, share_resonance=False):
             label = src_idx_to_label.get(src_idx)
             if label is not None and label in label_to_idx:
                 remapped.set(key, label_to_idx[label])
-            else:
-                # Fall back to react_atom_idx remap.
-                for atom in dst.GetAtoms():
-                    if (
-                        atom.HasProp("react_atom_idx")
-                        and int(atom.GetProp("react_atom_idx")) == src_idx
-                    ):
-                        remapped.set(key, atom.GetIdx())
-                        break
         child["atom_refs"] = remapped
 
     dst._forest = child
@@ -636,9 +628,6 @@ class AtomTracker(object):
         out = {"records": {}, "removed": [], "last_tag": 0, **dict(trace or {})}
         out.setdefault("records", {})
         out.setdefault("removed", [])
-        if out.get("last_tag") is None:
-            records = out["records"] or {}
-            out["last_tag"] = max(records) if records else 0
         return out
 
     @classmethod
@@ -734,16 +723,6 @@ class AtomTracker(object):
         )
 
     @classmethod
-    def next_depth(cls, previous_tags):
-        depth = 1
-
-        previous = cls.depths(previous_tags)
-        if previous:
-            depth += max(previous)
-
-        return depth
-
-    @classmethod
     def metabolite_index_to_reversed_index_record(
         cls, metabolite, exact_depth=2, strict=True
     ):
@@ -797,7 +776,7 @@ class AtomTracker(object):
                 except ValueError:
                     tag = label
                 records[tag] = {"idx": [atom.GetIdx()], "depth": [0]}
-            self._save_tags(mol, records)
+            self._save_tags(mol, records, depth=0)
             return
 
         if mol.HasProp(self.tag_name):
@@ -815,7 +794,7 @@ class AtomTracker(object):
             initial_tags[idx] = {"idx": [idx], "depth": [0]}
             atom.SetProp(self.atom_tag_prop_name, str(idx))
 
-        self._save_tags(mol, initial_tags)
+        self._save_tags(mol, initial_tags, depth=0)
 
     def tag(self, product, reactant, strict=True, **kwargs):
         """Copy live atom tags from reactant onto product; advance depth.
@@ -833,7 +812,7 @@ class AtomTracker(object):
         removed = [
             self._copy_removed_event(ev) for ev in (prev_trace.get("removed") or ())
         ]
-        next_depth = self.next_depth(previous_tags)
+        next_depth = int(prev_trace["depth"]) + 1
 
         frontier = next_depth - 1
         new_tags = {}
@@ -881,28 +860,15 @@ class AtomTracker(object):
                 new_tags, new_atom_indexes, next_depth, self._next_tag(reactant)
             ),
             removed=removed,
+            depth=next_depth,
         )
 
     @classmethod
     def _next_tag(cls, mol):
-        forest = getattr(mol, "_forest", None) or {}
-        trace = forest.get("atom_trace")
-        if trace is not None and "last_tag" in trace:
-            try:
-                return int(trace["last_tag"]) + 1
-            except (TypeError, ValueError):
-                pass
-        try:
-            last_tag = mol.GetProp(cls.last_tag_name)
-        except KeyError:
-            last_tag = "0"
-
-        try:
-            last_tag_depth = int(last_tag)
-        except ValueError:
-            last_tag_depth = 0
-
-        return last_tag_depth + 1
+        trace = (getattr(mol, "_forest", None) or {}).get("atom_trace")
+        if not trace or "last_tag" not in trace:
+            raise KeyError("atom_trace has no last_tag")
+        return int(trace["last_tag"]) + 1
 
     def _tag_new_atoms(self, new_tags, untagged_atom_indexes, next_depth, next_tag):
 
@@ -1047,14 +1013,14 @@ class AtomTracker(object):
     def _align_and_stamp(self, product):
         """Renumber to reactant-aligned order, rewrite last-depth tags, stamp maps."""
         try:
-            tags = self.tags(product)
+            trace = self._load_atom_trace(product)
+            tags = trace["records"]
         except (KeyError, SyntaxError, ValueError):
             return product
 
-        depths = self.depths(tags)
-        if not depths:
+        if not tags:
             return product
-        last_depth = max(depths)
+        last_depth = int(trace["depth"])
         origin_of = self._current_to_origin(tags, last_depth, level=0)
         new_order = self._reactant_aligned_order(product, origin_of)
 
@@ -1077,14 +1043,17 @@ class AtomTracker(object):
                     continue
                 i = rec["depth"].index(last_depth)
                 rec["idx"][i] = old_to_new[rec["idx"][i]]
-            self._save_tags(product, tags)
+            self._save_tags(product, tags, depth=last_depth)
 
         # Keep current_idx as the reactant GetIdx() so a wrapping RuleSet.metabolize
         # can tag() again. Next-step metabolize resets it via add_current_idx_as_atom_prop.
         self._stamp_origin_maps(product, tags, level=0)
         return product
 
-    def _save_tags(self, mol, tags, removed=None):
+    def _save_tags(self, mol, tags, removed=None, depth=None):
+        if depth is None:
+            raise TypeError("atom_trace depth is required")
+        depth = int(depth)
         if isinstance(tags, defaultdict):
             tags = {x: y for x, y in list(tags.items())}
 
@@ -1094,19 +1063,22 @@ class AtomTracker(object):
         if removed is None:
             removed = list(prev.get("removed") or [])
         forest["atom_trace"] = self._normalize_atom_trace(
-            {"records": tags, "removed": removed, "last_tag": last_tag}
+            {
+                "records": tags,
+                "removed": removed,
+                "last_tag": last_tag,
+                "depth": depth,
+            }
         )
 
         # One stable ``_forestLabel`` per heavy atom (never rewritten). History
         # lives only in ``_forest["atom_trace"]`` keyed by that label.
         # (CX ``atomLabel`` is reserved for conjugate display names.)
         if tags:
-            depths = self.depths(tags)
-            last_depth = max(depths) if depths else None
             for tag, rec in tags.items():
-                if last_depth is None or last_depth not in rec["depth"]:
+                if depth not in rec["depth"]:
                     continue
-                idx = rec["idx"][rec["depth"].index(last_depth)]
+                idx = rec["idx"][rec["depth"].index(depth)]
                 atom = mol.GetAtomWithIdx(idx)
                 if atom.GetAtomicNum() == 1:
                     continue

@@ -154,12 +154,13 @@ def test_tag_record_removals_chemical_deletion():
     assert not any(rec["depth"] == [0] for rec in AtomTracker.tags(product).values())
 
 
-def test_next_tag_missing_and_non_integer():
+def test_next_tag_requires_trace():
     mol = MolFromSmiles("CC")
-    assert AtomTracker._next_tag(mol) == 1
-
-    mol.SetProp(AtomTracker.last_tag_name, "not-an-int")
-    assert AtomTracker._next_tag(mol) == 1
+    with pytest.raises(KeyError):
+        AtomTracker._next_tag(mol)
+    AtomTracker().initialize_tags(mol)
+    # Tags are the atom idxs 0 and 1, so the next label is 2.
+    assert AtomTracker._next_tag(mol) == 2
 
 
 def test_old_to_new_uses_react_atom_idx():
@@ -214,7 +215,7 @@ def test_save_tags_converts_defaultdict():
     mol = MolFromSmiles("C")
     tags = defaultdict(dict)
     tags[0] = {"idx": [0], "depth": [0]}
-    AtomTracker()._save_tags(mol, tags)
+    AtomTracker()._save_tags(mol, tags, depth=0)
     loaded = AtomTracker.tags(mol)
     assert loaded[0]["idx"] == [0]
 
