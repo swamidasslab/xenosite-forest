@@ -330,13 +330,13 @@ class AtomRef:
 
     **Created-by ref** (``added_by=(rule, site)``, ``depth=…``):
         Names the atom *created by* ``rule`` at ``site``. ``site`` idxs are
-        GetIdx values in tagged frame ``depth`` (the frame used when the site
-        was written — same depth metabolize keyed into ``atom_refs``). Prefer
-        this over a mid-depth origin when the atom is defined by a prior step.
-        Resolve reads live trace records stamped ``added_by`` for that rule
-        whose site is ``site`` or a later frame of it. A match has to be born
-        at or before ``atom_trace["depth"]``; the most recent one wins. On the
-        original frame, before any such add, resolve fails.
+        GetIdx values in tagged frame ``depth``. Prefer this over a mid-depth
+        origin when the atom is defined by a prior step. Resolve reads only
+        ``atom_trace``: live records stamped ``added_by`` for that rule whose
+        site is ``site`` or a later frame of it. A match has to be born at or
+        before ``atom_trace["depth"]``; the most recent one wins. On the
+        original frame, before any such add, resolve fails. ``atom_refs`` is
+        not consulted.
     """
 
     origin: int | None = None
@@ -521,11 +521,9 @@ class Step:
             for frag in frags:
                 if not frag:
                     continue
-                # metabolize (tag_atoms=True) already installs _forest + creations.
-                already = (
-                    getattr(frag, "_forest", None) is not None
-                    and frag._forest.get("atom_refs") is not None
-                )
+                # metabolize (tag_atoms=True) already stamps the trace and creations.
+                trace = (getattr(frag, "_forest", None) or {}).get("atom_trace")
+                already = bool(trace and trace.get("records"))
                 # Key creations by current-frame site (resolved). Mid-depth
                 # AtomRef.origin values are not depth-0 idxs.
                 install_product_forest(
@@ -541,7 +539,7 @@ class Step:
 
 @dataclass(frozen=True)
 class Linearization:
-    """Ordered steps; ``apply`` chains resolve → rule → ``atom_refs`` record."""
+    """Ordered steps; ``apply`` chains resolve → rule. Resolve reads the trace."""
 
     steps: tuple
 
