@@ -379,6 +379,9 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
 
                 yield outsite, products
 
+    def can_dearomatize(self) -> bool:
+        return True
+
     def enumerate_for_path(self, mol, ctx, expand_phase1_plans=True, **kwargs):
         """Emit phase1 plans from aromatic pair matches — no RunReactants/clean."""
         from .path_context import oxygen_deficit
@@ -593,6 +596,9 @@ class Dehydrogenation(ResonancePairRule):
             idx2mapids = item[0]
             site.append(idx2mapids[2])
         return frozenset(site)
+
+    def can_dearomatize(self) -> bool:
+        return True
 
     def could_help(self, mol, target, ctx) -> bool:
         """DH when heavy-atom formula already matches (bond / aromatic change)."""
@@ -816,6 +822,9 @@ class Epoxidation(ResonanceRule):
             if type(peer) is type(self):
                 return peer is not self
         return False
+
+    def can_dearomatize(self) -> bool:
+        return True
 
     def could_help(self, mol, target, ctx) -> bool:
         """Skip epoxidation when target is quinoid / non-aromatic with ≥2 O."""

@@ -37,6 +37,61 @@ def test_path_context_benzene_benzoquinone_aromatic_tolerant():
     assert ctx.dearomatization_delta < 0
 
 
+def test_dearomatization_systems_and_attachment_boundary():
+    """A large aromatic match against a quinone names the ring, and the
+    unmapped oxygens mark the methoxy carbon as the attachment boundary.
+    """
+    from xenosite.forest.path_context import (
+        attachment_boundary_atoms,
+        dearomatization_systems,
+    )
+    from xenosite.forest.rules import Dehydrogenation, Epoxidation, QuinoneFormation
+
+    mol = _smi("COc1ccc(O)cc1")
+    target = _smi("O=C1C=CC(OC(O)O)=CC1=O")
+    ctx = PathContext.from_mols(mol, target)
+    systems = dearomatization_systems(mol, ctx)
+    assert systems == (frozenset({2, 3, 4, 5, 7, 8}),)
+    assert 0 in attachment_boundary_atoms(ctx)
+    assert QuinoneFormation().can_dearomatize()
+    assert Dehydrogenation().can_dearomatize()
+    assert Epoxidation().can_dearomatize()
+    assert not Hydroxylation().can_dearomatize()
+
+
+def test_dearomatizing_site_filter_keeps_ring_ends():
+    """Ring ends sort with the dearomatizing sites. Other sites are not dropped.
+
+    Hydroquinone's quinone oxygens and APAP's amide N / phenol O are the
+    dehydrogenation ends. A methoxy carbon is two bonds out, so it sorts
+    later, but it stays in the search.
+    """
+    from xenosite.forest.guided_path import (
+        _dearomatize_site_rank,
+        _site_on_systems,
+    )
+    from xenosite.forest.rules import Dehydrogenation, QuinoneFormation
+
+    hq = _smi("Oc1ccc(O)cc1")
+    ring = (frozenset({1, 2, 3, 4, 6, 7}),)
+    assert _site_on_systems([{1, 4}, {0, 5}], ring, hq)
+    assert _site_on_systems([{0, 5}], ring, hq)
+
+    apap = _smi("CC(=O)Nc1ccc(O)cc1")
+    ring = (frozenset({4, 5, 6, 7, 9, 10}),)
+    assert _site_on_systems([{3, 8}], ring, apap)
+    assert _dearomatize_site_rank(
+        Dehydrogenation(), [{0, 1}], ring, apap, True
+    ) == 1
+
+    methoxy = _smi("COc1ccc(O)cc1")
+    ring = (frozenset({2, 3, 4, 5, 7, 8}),)
+    qf = QuinoneFormation()
+    assert _dearomatize_site_rank(qf, [{2, 5}, {0}], ring, methoxy, True) == 0
+    assert _dearomatize_site_rank(qf, [{0}], ring, methoxy, True) == 1
+    assert _dearomatize_site_rank(Hydroxylation(), [{0}], ring, methoxy, True) == 0
+
+
 def test_path_context_etoh_acetaldehyde():
     ctx = PathContext.from_mols(_smi("CCO"), _smi("CC=O"))
     assert len(ctx.conserved_r_atoms) == 3
@@ -136,6 +191,63 @@ def test_find_path_apap_napqi():
         )
     )
     assert classic
+
+
+def test_find_path_ring_end_sites_are_expanded():
+    """Hydroquinone and APAP are found at the OH / NH ends, inside budget.
+
+    The dearomatization filter used to require every plan step to sit on the
+    aromatic atoms, so these sites were never expanded.
+    """
+    from xenosite.forest import RuleSet
+    from xenosite.forest.rules import (
+        Dealkylation,
+        Dehydrogenation,
+        Hydroxylation,
+        QuinoneFormation,
+    )
+
+    qf = RuleSet(
+        [QuinoneFormation(), Hydroxylation(), Dehydrogenation(), Dealkylation()],
+        name="ring_end_qf",
+    )
+    counters = PathSearchCounters()
+    hits = list(
+        find_path(
+            "Oc1ccc(O)cc1",
+            "O=C1C=CC(=O)C=C1",
+            ruleset=qf,
+            depth=5,
+            maybe_prefixes=False,
+            max_paths=1,
+            max_expansions=120,
+            expand_phase1_plans=True,
+            counters=counters,
+        )
+    )
+    assert hits, counters.as_dict()
+    assert counters.sites_considered >= 1
+    assert not counters.budget_exhausted
+    assert canon_smi(hits[0].smiles[-1]) == canon_smi("O=C1C=CC(=O)C=C1")
+
+    phase1 = RuleSet([Hydroxylation(), Dehydrogenation()], name="ring_end_phase1")
+    counters = PathSearchCounters()
+    hits = list(
+        find_path(
+            "CC(=O)Nc1ccc(O)cc1",
+            "CC(=O)N=C1C=CC(=O)C=C1",
+            ruleset=phase1,
+            depth=2,
+            maybe_prefixes=False,
+            max_paths=1,
+            max_expansions=40,
+            counters=counters,
+        )
+    )
+    assert hits, counters.as_dict()
+    assert counters.sites_considered >= 1
+    assert not counters.budget_exhausted
+    assert canon_smi(hits[0][0][-1]) == canon_smi("CC(=O)N=C1C=CC(=O)C=C1")
 
 
 def test_enumerate_for_path_prunes_topo_orbits():

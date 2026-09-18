@@ -968,6 +968,106 @@ def find_path(
 find_path_guided = find_path
 
 
+def _can_dearomatize(rule) -> bool:
+    fn = getattr(rule, "can_dearomatize", None)
+    if not callable(fn):
+        return False
+    try:
+        return bool(fn())
+    except Exception:
+        return False
+
+
+def _ref_atom_idxs(ref) -> frozenset:
+    origin = getattr(ref, "origin", None)
+    if origin is not None:
+        try:
+            return frozenset([int(origin)])
+        except (TypeError, ValueError):
+            pass
+    added = getattr(ref, "added_by", None)
+    if added and len(added) >= 2:
+        out = []
+        for idx in added[1]:
+            try:
+                out.append(int(idx))
+            except (TypeError, ValueError):
+                continue
+        return frozenset(out)
+    return frozenset()
+
+
+def _expansion_site_groups(site, expr=None):
+    """Atom-index groups for a hop site and, when present, each plan step."""
+    groups = []
+    atoms = _site_atoms(site)
+    if atoms:
+        groups.append(frozenset(int(i) for i in atoms))
+    if expr is None:
+        return groups
+    try:
+        lins = list(pathway_linearizations(expr))
+    except Exception:
+        lins = []
+    steps = []
+    if lins:
+        for lin in lins:
+            steps.extend(lin.steps)
+    else:
+        steps.extend(getattr(expr, "steps", ()) or ())
+    for step in steps:
+        idxs = set()
+        for ref in getattr(step, "site", ()) or ():
+            idxs |= _ref_atom_idxs(ref)
+        if idxs:
+            groups.append(frozenset(idxs))
+    return groups
+
+
+def _system_with_ends(systems, mol) -> set:
+    """Aromatic-system atoms plus the atoms bonded to them.
+
+    Quinone and dehydrogenation ends are the OH / NH atoms on the ring, which
+    are not themselves aromatic. Atoms two bonds out (a methoxy carbon) are
+    not included.
+    """
+    union = set().union(*systems) if systems else set()
+    extended = set(union)
+    for idx in union:
+        try:
+            atom = mol.GetAtomWithIdx(int(idx))
+        except Exception:
+            continue
+        for nbr in atom.GetNeighbors():
+            extended.add(nbr.GetIdx())
+    return extended
+
+
+def _site_on_systems(groups, systems, mol) -> bool:
+    """True when the expansion site touches a system that must be dearomatized.
+
+    Only the site is checked. A later plan step, such as removing a
+    substituent, does not move a site off the system. This is a sort key,
+    not a reason to drop the expansion.
+    """
+    if not systems or not groups:
+        return True
+    return bool(set(groups[0]) & _system_with_ends(systems, mol))
+
+
+def _dearomatize_site_rank(rule, groups, systems, mol, needs_dear) -> int:
+    """0 for sites to try with the dearomatizing rules, 1 for the rest.
+
+    Off-system sites stay in the search. They sort after sites on the system
+    that has to lose aromaticity, including atoms bonded to it.
+    """
+    if not needs_dear or not _can_dearomatize(rule):
+        return 0
+    if _site_on_systems(groups, systems, mol):
+        return 0
+    return 1
+
+
 def _guided_mol_search(
     reactant,
     product,
@@ -983,8 +1083,10 @@ def _guided_mol_search(
 ):
     """Yield ``(smiles_path, step_path, mol_path, cleavage_side_bags)``."""
     start = copy_mol(reactant)
-    # (mol, smi_path, step_path, mol_path, depth_left, bags, open_sites)
-    item0 = (start, [_canon(start)], [], [start], depth, (), ())
+    # (mol, smi_path, step_path, mol_path, depth_left, bags, open_sites, boosted)
+    # boosted: this node was reached by a match-boundary dearomatizing edit, so
+    # its own boundary children jump ahead of older siblings.
+    item0 = (start, [_canon(start)], [], [start], depth, (), (), False)
     if search == "dfs":
         frontier = [item0]
         pop = frontier.pop
@@ -997,16 +1099,31 @@ def _guided_mol_search(
     seen = {(_canon(start), (), ())}
     counters.nodes_enqueued += 1
 
+    from .path_context import dearomatization_systems, site_match_boundary_rank
+
     while frontier:
         if not counters.under_budget(max_expansions):
             return
-        mol, smi_path, step_path, mol_path, depth_left, bags, opens = pop()
+        mol, smi_path, step_path, mol_path, depth_left, bags, opens, boosted = pop()
         if not _depth_remaining(depth_left):
             continue
 
         ctx = PathContext.from_mols(mol, product)
+        systems = dearomatization_systems(mol, ctx)
+        needs_dear = bool(systems)
+        rules = _rules_for_mol(active, mol, product)
+        if needs_dear:
+            rules = [r for r in rules if _can_dearomatize(r)] + [
+                r for r in rules if not _can_dearomatize(r)
+            ]
 
-        for rule in _rules_for_mol(active, mol, product):
+        jump_buf = []
+        rest_buf = []
+
+        def enqueue(item, jump, _jump_buf=jump_buf, _rest_buf=rest_buf):
+            (_jump_buf if jump else _rest_buf).append(item)
+
+        for rule in rules:
             if not counters.under_budget(max_expansions):
                 return
             if not rule.could_help(mol, product, ctx):
@@ -1024,7 +1141,39 @@ def _guided_mol_search(
                     **kwargs,
                 )
             )
+            prepared = []
             for kind, *payload in items:
+                if kind == "plan":
+                    expr, site = payload
+                elif kind == "hop":
+                    site = payload[0]
+                    expr = None
+                else:
+                    prepared.append(((1, 1, 1, 1, 1), kind, payload, False))
+                    continue
+                groups = _expansion_site_groups(site, expr)
+                atoms = set()
+                for group in groups:
+                    atoms |= set(group)
+                boundary = site_match_boundary_rank(ctx, atoms)
+                rule_rank = 0 if needs_dear and _can_dearomatize(rule) else 1
+                # On-system sites first. Off-system sites of a dearomatizing
+                # rule are kept; they just sort later and do not jump the queue.
+                system_rank = _dearomatize_site_rank(
+                    rule, groups, systems, mol, needs_dear
+                )
+                on_boundary = boundary[0] == 0 or boundary[1] == 0
+                jump = (
+                    (boosted or rule_rank == 0)
+                    and system_rank == 0
+                    and on_boundary
+                    and boundary[2] == 0
+                )
+                prepared.append(
+                    ((rule_rank, system_rank) + boundary, kind, payload, jump)
+                )
+            prepared.sort(key=lambda row: row[0])
+            for _rank, kind, payload, jump in prepared:
                 if kind == "plan":
                     expr, site = payload
                     counters.plans_expanded += 1
@@ -1043,7 +1192,8 @@ def _guided_mol_search(
                         depth_left,
                         bags,
                         opens,
-                        frontier,
+                        enqueue,
+                        jump,
                         seen,
                         counters,
                         max_expansions=max_expansions,
@@ -1097,7 +1247,7 @@ def _guided_mol_search(
                                 counters.nodes_pruned += 1
                                 continue
                             seen.add(sk)
-                            frontier.append(
+                            enqueue(
                                 (
                                     child,
                                     smi_path + [child_smi],
@@ -1106,7 +1256,9 @@ def _guided_mol_search(
                                     rem,
                                     new_bags,
                                     new_opens,
-                                )
+                                    jump,
+                                ),
+                                jump,
                             )
                             counters.nodes_enqueued += 1
                 else:
@@ -1114,6 +1266,15 @@ def _guided_mol_search(
                         "enumerate_for_path yielded %r; expected 'plan' or 'hop'"
                         % (kind,)
                     )
+        for item in reversed(jump_buf):
+            if search == "dfs":
+                frontier.append(item)
+            else:
+                frontier.appendleft(item)
+        if search == "dfs":
+            frontier[:0] = rest_buf
+        else:
+            frontier.extend(rest_buf)
 
 
 def _apply_plan_branches(
@@ -1129,7 +1290,8 @@ def _apply_plan_branches(
     depth_left,
     bags,
     opens,
-    frontier,
+    enqueue,
+    jump,
     seen,
     counters,
     max_expansions=None,
@@ -1178,7 +1340,8 @@ def _apply_plan_branches(
                     counters.nodes_pruned += 1
                     continue
                 seen.add(sk)
-                frontier.append(
-                    (child, new_smi, new_steps, new_mols, rem, new_bags, new_opens)
+                enqueue(
+                    (child, new_smi, new_steps, new_mols, rem, new_bags, new_opens, jump),
+                    jump,
                 )
                 counters.nodes_enqueued += 1

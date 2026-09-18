@@ -385,6 +385,123 @@ def mcs_chem_disagree_atoms(ctx) -> frozenset:
     return frozenset(atoms)
 
 
+def _embedding_heavy(mol, embedding) -> int:
+    return sum(
+        1 for i in embedding if mol.GetAtomWithIdx(int(i)).GetAtomicNum() > 1
+    )
+
+
+def match_covers_large_part(ctx) -> bool:
+    """True when the largest MCS embedding is a substantial piece of both mols.
+
+    Same size bar as cleavage interior trust: at least half the smaller mol,
+    and at least 3 heavy atoms.
+    """
+    mol = getattr(ctx, "reactant", None)
+    target = getattr(ctx, "target", None)
+    if mol is None or target is None:
+        return False
+    embeddings = list(getattr(ctx, "conserved_r_embeddings", ()) or ())
+    if not embeddings:
+        cons = getattr(ctx, "conserved_r_atoms", None)
+        embeddings = [frozenset(cons)] if cons else []
+    if not embeddings:
+        return False
+    try:
+        n = min(int(mol.GetNumHeavyAtoms()), int(target.GetNumHeavyAtoms()))
+    except Exception:
+        return False
+    best = max(_embedding_heavy(mol, emb) for emb in embeddings)
+    return best >= max(3, n // 2)
+
+
+def attachment_boundary_atoms(ctx) -> frozenset:
+    """Mapped reactant atoms whose target image is bonded to an unmapped atom.
+
+    Those are the sites where the target still has atoms the match did not
+    place — the boundary new atoms have to be added on.
+    """
+    target = getattr(ctx, "target", None)
+    r_to_t = getattr(ctx, "r_to_t", None) or {}
+    t_only = set(getattr(ctx, "t_only_atoms", ()) or ())
+    if target is None or not r_to_t or not t_only:
+        return frozenset()
+    out = []
+    for ri, ti in r_to_t.items():
+        try:
+            atom = target.GetAtomWithIdx(int(ti))
+        except Exception:
+            continue
+        if any(nbr.GetIdx() in t_only for nbr in atom.GetNeighbors()):
+            out.append(int(ri))
+    return frozenset(out)
+
+
+def aromatic_mismatch_atoms(mol, ctx) -> frozenset:
+    """Mapped atoms that are aromatic on ``mol`` and not on the target."""
+    target = getattr(ctx, "target", None)
+    r_to_t = getattr(ctx, "r_to_t", None) or {}
+    if mol is None or target is None or not r_to_t:
+        return frozenset()
+    out = []
+    for ri, ti in r_to_t.items():
+        try:
+            src = mol.GetAtomWithIdx(int(ri))
+            dst = target.GetAtomWithIdx(int(ti))
+        except Exception:
+            continue
+        if src.GetIsAromatic() and not dst.GetIsAromatic():
+            out.append(int(ri))
+    return frozenset(out)
+
+
+def dearomatization_systems(mol, ctx):
+    """Aromatic systems that the match says must lose aromaticity.
+
+    Empty unless the MCS covers a large part of both mols and at least half
+    of a system (and at least 3 atoms) is aromatic here and not on the target.
+    """
+    if not match_covers_large_part(ctx):
+        return ()
+    mismatch = aromatic_mismatch_atoms(mol, ctx)
+    if len(mismatch) < 3:
+        return ()
+    from .base import AromaticSystems
+
+    kept = []
+    for system in AromaticSystems().systems(mol):
+        system = frozenset(int(i) for i in system)
+        hit = system & mismatch
+        if len(hit) >= max(3, len(system) // 2):
+            kept.append(system)
+    return tuple(kept)
+
+
+def site_match_boundary_rank(ctx, atoms) -> tuple:
+    """Sort key for expansion sites. Lower is tried first.
+
+    Prefer atoms on the attachment boundary (unmapped target neighbors), then
+    atoms whose matched bonds disagree with the target. A site that also edits
+    atoms outside that boundary sorts later — it is not the match-boundary edit.
+    """
+    idxs = []
+    for atom in atoms or ():
+        try:
+            idxs.append(int(atom))
+        except (TypeError, ValueError):
+            continue
+    if not idxs:
+        return (1, 1, 1)
+    atoms_fs = frozenset(idxs)
+    disagree = mcs_chem_disagree_atoms(ctx)
+    attach = attachment_boundary_atoms(ctx)
+    boundary = disagree | attach
+    on_attach = 0 if atoms_fs & attach else 1
+    on_disagree = 0 if atoms_fs & disagree else 1
+    off = 1 if (atoms_fs - boundary) else 0
+    return (on_attach, on_disagree, off)
+
+
 def mcs_shared_core(ctx) -> frozenset:
     """Intersection of full-size embeddings (agreed conserved core)."""
     embeddings = list(getattr(ctx, "conserved_r_embeddings", ()) or ())
