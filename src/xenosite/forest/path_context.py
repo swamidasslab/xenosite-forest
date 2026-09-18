@@ -700,9 +700,12 @@ def _mol_without_atoms(mol, drop):
     if not drop:
         return Chem.Mol(mol), {i: i for i in range(mol.GetNumAtoms())}
     rw = Chem.RWMol(Chem.Mol(mol))
-    for idx in sorted(drop, reverse=True):
-        if 0 <= idx < rw.GetNumAtoms():
-            rw.RemoveAtom(idx)
+    from .edit_guard import edit_mol
+
+    with edit_mol(rw):
+        for idx in sorted(drop, reverse=True):
+            if 0 <= idx < rw.GetNumAtoms():
+                rw.RemoveAtom(idx)
     rem = rw.GetMol()
     try:
         Chem.SanitizeMol(rem, catchErrors=True)
