@@ -60,14 +60,17 @@ def test_dearomatization_systems_and_attachment_boundary():
 
 
 def test_dearomatizing_site_filter_keeps_ring_ends():
-    """The site must touch the ring or an atom bonded to it. Later steps do not.
+    """Ring ends sort with the dearomatizing sites. Other sites are not dropped.
 
     Hydroquinone's quinone oxygens and APAP's amide N / phenol O are the
-    dehydrogenation ends. A methoxy carbon is two bonds out, so it is not a
-    site on that system, but a ring site is not dropped because a later step
-    touches that carbon.
+    dehydrogenation ends. A methoxy carbon is two bonds out, so it sorts
+    later, but it stays in the search.
     """
-    from xenosite.forest.guided_path import _site_on_systems
+    from xenosite.forest.guided_path import (
+        _dearomatize_site_rank,
+        _site_on_systems,
+    )
+    from xenosite.forest.rules import Dehydrogenation, QuinoneFormation
 
     hq = _smi("Oc1ccc(O)cc1")
     ring = (frozenset({1, 2, 3, 4, 6, 7}),)
@@ -77,12 +80,16 @@ def test_dearomatizing_site_filter_keeps_ring_ends():
     apap = _smi("CC(=O)Nc1ccc(O)cc1")
     ring = (frozenset({4, 5, 6, 7, 9, 10}),)
     assert _site_on_systems([{3, 8}], ring, apap)
-    assert not _site_on_systems([{0, 1}], ring, apap)
+    assert _dearomatize_site_rank(
+        Dehydrogenation(), [{0, 1}], ring, apap, True
+    ) == 1
 
     methoxy = _smi("COc1ccc(O)cc1")
     ring = (frozenset({2, 3, 4, 5, 7, 8}),)
-    assert _site_on_systems([{2, 5}, {0}], ring, methoxy)
-    assert not _site_on_systems([{0}], ring, methoxy)
+    qf = QuinoneFormation()
+    assert _dearomatize_site_rank(qf, [{2, 5}, {0}], ring, methoxy, True) == 0
+    assert _dearomatize_site_rank(qf, [{0}], ring, methoxy, True) == 1
+    assert _dearomatize_site_rank(Hydroxylation(), [{0}], ring, methoxy, True) == 0
 
 
 def test_path_context_etoh_acetaldehyde():

@@ -1047,11 +1047,25 @@ def _site_on_systems(groups, systems, mol) -> bool:
     """True when the expansion site touches a system that must be dearomatized.
 
     Only the site is checked. A later plan step, such as removing a
-    substituent, does not drop a site that is already on the system.
+    substituent, does not move a site off the system. This is a sort key,
+    not a reason to drop the expansion.
     """
     if not systems or not groups:
         return True
     return bool(set(groups[0]) & _system_with_ends(systems, mol))
+
+
+def _dearomatize_site_rank(rule, groups, systems, mol, needs_dear) -> int:
+    """0 for sites to try with the dearomatizing rules, 1 for the rest.
+
+    Off-system sites stay in the search. They sort after sites on the system
+    that has to lose aromaticity, including atoms bonded to it.
+    """
+    if not needs_dear or not _can_dearomatize(rule):
+        return 0
+    if _site_on_systems(groups, systems, mol):
+        return 0
+    return 1
 
 
 def _guided_mol_search(
@@ -1135,25 +1149,29 @@ def _guided_mol_search(
                     site = payload[0]
                     expr = None
                 else:
-                    prepared.append(((1, 1, 1, 1), kind, payload, False))
+                    prepared.append(((1, 1, 1, 1, 1), kind, payload, False))
                     continue
                 groups = _expansion_site_groups(site, expr)
-                if (
-                    needs_dear
-                    and _can_dearomatize(rule)
-                    and not _site_on_systems(groups, systems, mol)
-                ):
-                    counters.nodes_pruned += 1
-                    counters._sync()
-                    continue
                 atoms = set()
                 for group in groups:
                     atoms |= set(group)
                 boundary = site_match_boundary_rank(ctx, atoms)
                 rule_rank = 0 if needs_dear and _can_dearomatize(rule) else 1
+                # On-system sites first. Off-system sites of a dearomatizing
+                # rule are kept; they just sort later and do not jump the queue.
+                system_rank = _dearomatize_site_rank(
+                    rule, groups, systems, mol, needs_dear
+                )
                 on_boundary = boundary[0] == 0 or boundary[1] == 0
-                jump = (boosted or rule_rank == 0) and on_boundary and boundary[2] == 0
-                prepared.append(((rule_rank,) + boundary, kind, payload, jump))
+                jump = (
+                    (boosted or rule_rank == 0)
+                    and system_rank == 0
+                    and on_boundary
+                    and boundary[2] == 0
+                )
+                prepared.append(
+                    ((rule_rank, system_rank) + boundary, kind, payload, jump)
+                )
             prepared.sort(key=lambda row: row[0])
             for _rank, kind, payload, jump in prepared:
                 if kind == "plan":
