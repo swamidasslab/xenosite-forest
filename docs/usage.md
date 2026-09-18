@@ -37,7 +37,9 @@ may use `Deps` for flat steps + precedes).
 
 Sites use reactant-stable `AtomRef` values: a reactant **origin** index
 (remapped through `atom_trace` on resolve), or an atom **created by** an
-earlier step (`added_by=(rule, site)`). Ints coerce to `AtomRef(origin=…)`.
+earlier step (`added_by=(rule, site)`). Both forms carry frame `depth` —
+site idxs are GetIdx values in that tagged frame (created atoms often have
+no depth-0 entry). Ints coerce to `AtomRef(origin=…)`.
 
 | Rule family | `phase1_steps` |
 | --- | --- |
@@ -93,10 +95,12 @@ for site, products in load_ruleset("QF").metabolize(
 
 ### Resolve and replay
 
-`AtomRef.resolve(mol)` / `Step.resolve_site(mol)` map reactant-stable refs to the
-current `GetIdx` on a given mol (read-only; the plan object is unchanged).
-`Linearization.apply` copies the input mol, runs Forest rules in order, and records
-created atoms on `mol._forest["atom_refs"]` so later created-by refs resolve.
+`AtomRef.resolve(mol)` / `Step.resolve_site(mol)` map refs to the current
+`GetIdx` on a given mol (read-only; the plan object is unchanged). Origin refs
+carry a frame `depth` — not every atom exists at depth 0 (created atoms like an
+OH oxygen only appear mid-path). `Linearization.apply` copies the input mol,
+runs Forest rules in order, and records created atoms on
+`mol._forest["atom_refs"]` so later created-by refs resolve.
 
 ```python
 from rdkit import Chem

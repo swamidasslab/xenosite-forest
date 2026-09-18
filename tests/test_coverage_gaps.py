@@ -388,11 +388,21 @@ def test_step_plan_reprs_or_and_edges():
         "New",
         frozenset({3}),
     )
+    mid = AtomRef(added_by=("Hydroxylation", frozenset({1})), depth=2)
+    assert mid.depth == 2
+    assert mid.to_json() == {
+        "added_by": ["Hydroxylation", [1]],
+        "depth": 2,
+    }
+    assert AtomRef.from_json(mid.to_json()) == mid
+    assert str(mid) == "Hydroxylation[1]@2"
     assert "Hydroxylation" in repr(ref)
     assert AtomRef.coerce(3).origin == 3
     assert AtomRef.coerce({"origin": 2}).origin == 2
     with pytest.raises(TypeError):
         AtomRef.coerce("no")
+    with pytest.raises(ValueError):
+        AtomRef(origin=0, depth=-1)
 
     tagged = Step("Dehydrogenation", {0}, pathways={"methide"})
     assert "methide" in repr(tagged) and "methide" in str(tagged)

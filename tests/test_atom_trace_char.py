@@ -168,7 +168,7 @@ def test_metabolize_and_step_apply_share_atom_refs():
 
 
 def test_atom_label_stable_across_step_string_equality():
-    """Parent atomLabels persist on child atoms; new atoms get a new label once."""
+    """Parent ``_forestLabel`` props persist on child atoms; new atoms get a new label once."""
     parent = MolFromSmiles("CC")
     AtomTracker().initialize_tags(parent)
     parent_labels = {

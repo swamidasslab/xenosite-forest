@@ -25,6 +25,7 @@ from .step_plan import (
     Linearization,
     Step,
     StepPlan,
+    _origin_refs,
     canonical_dependency_edges,
     get_rule,
     pathway_linearizations,
@@ -105,7 +106,9 @@ class MaybeFilter:
     def __str__(self) -> str:
         if not self.entries:
             return "MaybeFilter()"
-        return "MaybeFilter(" + "; ".join(str(e) for e in self.entries) + ")"
+        # Order-insensitive: And-equivalent walks accumulate the same bags.
+        parts = sorted(str(e) for e in self.entries)
+        return "MaybeFilter(" + "; ".join(parts) + ")"
 
     @classmethod
     def from_sides(cls, sides) -> MaybeFilter:
@@ -638,11 +641,28 @@ def and_cleave_plan(steps, mols=None, reactant=None, target_smi: str | None = No
 def _added_by_json_fp(site_obj: dict) -> tuple:
     """Fingerprint an AtomRef JSON site (new tuple form or legacy at=)."""
     ab = site_obj.get("added_by")
+    depth = int(site_obj.get("depth", 0) or 0)
     if isinstance(ab, str):
-        return (ab, tuple(sorted(site_obj.get("at") or ())))
+        return (ab, tuple(sorted(site_obj.get("at") or ())), depth)
     if isinstance(ab, (list, tuple)) and len(ab) == 2:
-        return (ab[0], tuple(sorted(ab[1] or ())))
-    return (ab, ())
+        return (ab[0], tuple(sorted(ab[1] or ())), depth)
+    return (ab, (), depth)
+
+
+def _origin_json_fp(site_obj: dict) -> tuple:
+    """Fingerprint an origin AtomRef JSON object (optional depth)."""
+    return (int(site_obj.get("origin", -1)), int(site_obj.get("depth", 0) or 0))
+
+
+def _site_json_fp(s) -> tuple:
+    if isinstance(s, int):
+        return ("o", s, 0)
+    if isinstance(s, dict):
+        if "origin" in s and s["origin"] is not None:
+            o, d = _origin_json_fp(s)
+            return ("o", o, d)
+        return ("a",) + _added_by_json_fp(s)
+    return ("x", repr(s))
 
 
 def _canonical_plan_key(plan: StepPlan) -> tuple:
@@ -661,6 +681,15 @@ def _canonicalize_plan_json(data):
     if not isinstance(data, dict):
         return str(data)
     op = data.get("op")
+    # Deps embeds steps as {rule, site} without op=step.
+    if op == "step" or (
+        op is None and "rule" in data and "site" in data and "children" not in data
+        and "steps" not in data
+    ):
+        site = data.get("site", [])
+        site_fp = tuple(sorted((_site_json_fp(s) for s in site), key=repr))
+        pathways = tuple(sorted(data.get("pathways") or ()))
+        return ("step", data.get("rule"), site_fp, pathways)
     if op == "and":
         kids = [_canonicalize_plan_json(c) for c in data.get("children", ())]
         return ("and", tuple(sorted(kids, key=repr)))
@@ -687,31 +716,15 @@ def _canonicalize_plan_json(data):
         except Exception:
             canon_edges = tuple(sorted(set(precedes)))
         return ("deps", canon_steps, canon_edges)
-    if op == "step":
-        site = data.get("site", [])
-        site_fp = tuple(
-            sorted(
-                (
-                    (
-                        s
-                        if isinstance(s, int)
-                        else _added_by_json_fp(s)
-                    )
-                    for s in site
-                ),
-                key=repr,
-            )
-        )
-        pathways = tuple(sorted(data.get("pathways") or ()))
-        return ("step", data.get("rule"), site_fp, pathways)
     # Unknown / legacy
     return ("raw", json.dumps(data, sort_keys=True, default=str))
 
 
 def _site_atoms(site) -> frozenset:
+    """Return comparable atom keys (ints) from a walk / formation site."""
     if isinstance(site, tuple) and len(site) >= 2 and isinstance(site[0], str):
-        return frozenset(site[1])
-    return frozenset(site)
+        site = site[1]
+    return _site_key_set(site)
 
 
 def _steps_key(steps) -> tuple:
@@ -1051,9 +1064,14 @@ def _guided_mol_search(
                             counters.mol_edits += 1
                             counters._sync()
                             child_smi = _canon(child)
-                            new_steps = step_path + [(rule.name, site)]
+                            # Site idxs are GetIdx on ``mol`` at its current
+                            # frame. Prefer depth-0 origins when the atom
+                            # existed on the reactant; created atoms keep
+                            # mid-frame depth.
+                            stamped = _origin_refs(_site_atoms(site), mol)
+                            new_steps = step_path + [(rule.name, stamped)]
                             new_bags, new_opens = _advance_opens_and_bags(
-                                rule, site, child, cohort, bags, opens
+                                rule, stamped, child, cohort, bags, opens
                             )
                             if child_smi == target_smi:
                                 yield (
@@ -1131,6 +1149,7 @@ def _apply_plan_branches(
             continue
         step_label = [(s.rule, s.site) for s in lin.steps]
         ctx = PathContext.from_mols(mol, product)
+        stamped_site = _origin_refs(_site_atoms(site), mol)
         for cohort in _expansion_cohorts(mol, products):
             for child in cohort:
                 _require_mol(child, "plan product")
@@ -1142,7 +1161,7 @@ def _apply_plan_branches(
                 child_smi = _canon(child)
                 new_steps = step_path + step_label
                 new_bags, new_opens = _advance_opens_and_bags(
-                    rule, site, child, cohort, bags, opens
+                    rule, stamped_site, child, cohort, bags, opens
                 )
                 new_smi = smi_path + [child_smi]
                 new_mols = mol_path + [child]

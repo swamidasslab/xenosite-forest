@@ -242,7 +242,7 @@ def clean(mol):
     formation).
 
     Preserves ``mol._forest`` across ``GetMolFrags`` / sanitize by remapping
-    through stable ``atomLabel`` props on atoms.
+    through stable ``_forestLabel`` props on atoms.
     """
     if isinstance(mol, (list, tuple)):
         parts = [clean(x) for x in mol]

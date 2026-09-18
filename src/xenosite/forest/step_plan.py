@@ -105,8 +105,7 @@ def _resolve_origin(mol, origin: int, *, depth: int = 0) -> int:
     """Map an AtomRef origin idx at ``depth`` to the mol's current-frame GetIdx.
 
     Preferred path — ``atom_trace`` (see ``AtomRef``):
-      1. Find a *live* label whose idx at ``depth`` equals ``origin``
-         (skip ``removed_by`` and labels that lack the resolve depth).
+      1. Find a live label whose idx at ``depth`` equals ``origin``.
       2. Return that label's idx at the latest tagged depth on this mol.
 
     Fallback when no trace is installed yet: atom-map / ``react_atom_idx``
@@ -118,8 +117,6 @@ def _resolve_origin(mol, origin: int, *, depth: int = 0) -> int:
     if records is not None:
         to_depth = _latest_trace_depth(records)
         for rec in records.values():
-            if rec.get("removed_by"):
-                continue
             depths = list(rec["depth"])
             idxs = list(rec["idx"])
             if depth not in depths:
@@ -127,13 +124,10 @@ def _resolve_origin(mol, origin: int, *, depth: int = 0) -> int:
             if int(idxs[depths.index(depth)]) != origin:
                 continue
             if to_depth not in depths:
-                # Not live at resolve depth (gap without removed_by yet) —
-                # try other labels; do not treat as a hard hit.
                 continue
             return int(idxs[depths.index(to_depth)])
         # No live label for this (depth, origin). Fall back to maps/identity
         # so current-frame sites on lightly tagged mols still resolve.
-        # (Mid-depth AtomRef.depth will make this unambiguous later.)
 
     has_maps = False
     for atom in mol.GetAtoms():
@@ -154,9 +148,10 @@ def _site_frames_via_trace(mol, site, *, depth: int = 0):
     """Yield ``site`` projected to each atom_trace depth (for atom_refs keys).
 
     ``atom_refs`` records creations under the parent GetIdx site metabolize
-    saw. That parent frame equals some tagged depth, not necessarily depth-0.
-    Projecting the AtomRef site through the trace yields every frozenset that
-    might have been used as the key. Removed labels are ignored.
+    saw. That parent frame equals some tagged depth (``depth``), not
+    necessarily depth-0. Projecting the AtomRef site through live ``records``
+    starting at ``depth`` yields every frozenset that might have been used as
+    the key.
     """
     site = frozenset(int(x) for x in site)
     yield site
@@ -165,8 +160,6 @@ def _site_frames_via_trace(mol, site, *, depth: int = 0):
         return
     by_depth: dict = {}
     for rec in records.values():
-        if rec.get("removed_by"):
-            continue
         depths = list(rec["depth"])
         idxs = list(rec["idx"])
         if depth not in depths:
@@ -214,7 +207,7 @@ def _fragment_retains_refs(product, later_refs) -> bool:
             except KeyError:
                 for origin in ref.added_by[1]:
                     try:
-                        _resolve_origin(product, origin)
+                        _resolve_origin(product, origin, depth=ref.depth)
                     except KeyError:
                         return False
     return True
@@ -225,37 +218,93 @@ def _fragment_retains_refs(product, later_refs) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _frame_depth(mol) -> int:
+    """Latest atom_trace depth on ``mol``, or 0 if untagged."""
+    records = _atom_trace_records(mol)
+    if records is None:
+        return 0
+    return _latest_trace_depth(records)
+
+
+def _origin_at_depth0(mol, idx: int, *, depth: int) -> int | None:
+    """Return depth-0 GetIdx for the label at ``(depth, idx)``, or None."""
+    if depth == 0:
+        return int(idx)
+    records = _atom_trace_records(mol)
+    if records is None:
+        return None
+    idx = int(idx)
+    depth = int(depth)
+    for rec in records.values():
+        depths = list(rec["depth"])
+        idxs = list(rec["idx"])
+        if depth not in depths or 0 not in depths:
+            continue
+        if int(idxs[depths.index(depth)]) != idx:
+            continue
+        return int(idxs[depths.index(0)])
+    return None
+
+
+def _origin_refs(site, mol=None, depth: int | None = None) -> frozenset:
+    """Coerce site idxs to :class:`AtomRef` at ``depth`` (default: mol frame).
+
+    When ``mol`` has an atom_trace and the atom already existed at depth 0,
+    prefer ``AtomRef(origin=idx0, depth=0)`` so reactant-stable sites stay
+    reorderable across cleave/prep walks. Created atoms (no depth-0 entry)
+    keep the current-frame origin.
+    """
+    if depth is None:
+        depth = _frame_depth(mol) if mol is not None else 0
+    depth = int(depth)
+    out = set()
+    for x in site:
+        if isinstance(x, AtomRef):
+            out.add(x)
+            continue
+        idx = int(x)
+        if mol is not None and depth != 0:
+            at0 = _origin_at_depth0(mol, idx, depth=depth)
+            if at0 is not None:
+                out.add(AtomRef(origin=at0, depth=0))
+                continue
+        out.add(AtomRef(origin=idx, depth=depth))
+    return frozenset(out)
+
+
 @dataclass(frozen=True)
 class AtomRef:
     """Stable atom identity across metabolize depths.
 
-    **Origin ref** (``origin=…``):
-        ``origin`` is a GetIdx in a tagged frame. Today that frame is always
-        depth 0 (pathway reactant / first ``initialize_tags``). Resolve does
-        not invent chemistry — it only remaps identity:
+    **Origin ref** (``origin=…``, ``depth=…``):
+        ``origin`` is a GetIdx in tagged frame ``depth`` (0 = pathway reactant /
+        first ``initialize_tags``). Not every atom exists at depth 0 — atoms
+        created mid-path (OH oxygen, epoxide O, …) only appear at later depths,
+        so sites enumerated on an intermediate **must** stamp that mol's latest
+        depth. Resolve:
 
-          * Find a live ``atom_trace`` label whose idx at that depth equals
-            ``origin`` (skip ``removed_by`` and labels missing the resolve
-            depth).
+          * Find a live ``atom_trace`` label whose idx at ``depth`` equals
+            ``origin``.
           * Return the same label's idx at the mol's latest tagged depth.
 
-        Mid-depth origin refs (carry idx at depth d>0) can use the same rule
-        once a depth field is added; the lookup stays "label at (depth, idx)
-        → idx at resolve depth".
-
-    **Created-by ref** (``added_by=(rule, site)``):
-        Names the atom *created by* ``rule`` at ``site`` (frozenset of
-        depth-0 idxs for the reaction site). The creation idx lives in
-        ``atom_refs``, keyed by whatever site frame metabolize recorded on
-        the parent. Resolve projects ``site`` through ``atom_trace`` frames
+    **Created-by ref** (``added_by=(rule, site)``, ``depth=…``):
+        Names the atom *created by* ``rule`` at ``site``. ``site`` idxs are
+        GetIdx values in tagged frame ``depth`` (the frame used when the site
+        was written — same depth metabolize keyed into ``atom_refs``). Prefer
+        this over a mid-depth origin when the atom is defined by a prior step.
+        Resolve projects ``site`` through ``atom_trace`` starting at ``depth``
         and looks up ``(rule, frame)`` until one hits.
     """
 
     origin: int | None = None
-    # (rule_name, frozenset[site idxs at depth 0]) for atoms created by a step.
+    depth: int = 0
+    # (rule_name, frozenset[site idxs at ``depth``]) for atoms created by a step.
     added_by: tuple | None = None
 
     def __post_init__(self):
+        object.__setattr__(self, "depth", int(self.depth))
+        if self.depth < 0:
+            raise ValueError("AtomRef.depth must be >= 0")
         if self.added_by is not None:
             if not (isinstance(self.added_by, tuple) and len(self.added_by) == 2):
                 raise ValueError("added_by must be (rule, site)")
@@ -281,30 +330,36 @@ class AtomRef:
 
     def to_json(self):
         if self.origin is not None:
+            if self.depth:
+                return {"origin": self.origin, "depth": self.depth}
             return self.origin
         rule, site = self.added_by
-        return {"added_by": [rule, sorted(site)]}
+        out = {"added_by": [rule, sorted(site)]}
+        if self.depth:
+            out["depth"] = self.depth
+        return out
 
     @classmethod
     def from_json(cls, data) -> AtomRef:
         if isinstance(data, int):
             return cls(origin=data)
+        depth = int(data.get("depth", 0) or 0)
         if "origin" in data and data["origin"] is not None:
-            return cls(origin=int(data["origin"]))
+            return cls(origin=int(data["origin"]), depth=depth)
         ab = data["added_by"]
         # Legacy plan JSON: {"added_by": "Rule", "at": [...]}
         if isinstance(ab, str):
-            return cls(added_by=(ab, frozenset(data["at"])))
+            return cls(added_by=(ab, frozenset(data["at"])), depth=depth)
         rule, site = ab
-        return cls(added_by=(rule, frozenset(site)))
+        return cls(added_by=(rule, frozenset(site)), depth=depth)
 
     def resolve(self, mol) -> int:
         """Current-frame GetIdx for this ref on ``mol`` (see class docstring)."""
         if self.origin is not None:
-            return _resolve_origin(mol, self.origin)
+            return _resolve_origin(mol, self.origin, depth=self.depth)
         rule, site = self.added_by
         index = _atom_refs_index(mol)
-        for frame in _site_frames_via_trace(mol, site):
+        for frame in _site_frames_via_trace(mol, site, depth=self.depth):
             idx = index.lookup((rule, frame))
             if idx is not None:
                 return idx
@@ -312,26 +367,36 @@ class AtomRef:
 
     def __str__(self) -> str:
         if self.origin is not None:
+            if self.depth:
+                return "%s@%s" % (self.origin, self.depth)
             return str(self.origin)
         rule, site = self.added_by
         at = ",".join(str(i) for i in sorted(site))
-        return "%s[%s]" % (rule, at)
+        base = "%s[%s]" % (rule, at)
+        if self.depth:
+            return "%s@%s" % (base, self.depth)
+        return base
 
     def __repr__(self) -> str:
         if self.origin is not None:
+            if self.depth:
+                return "AtomRef(%s@%s)" % (self.origin, self.depth)
             return "AtomRef(%s)" % (self.origin,)
         rule, site = self.added_by
-        return "AtomRef(%s[%s])" % (
+        body = "%s[%s]" % (
             rule,
             ",".join(str(i) for i in sorted(site)),
         )
+        if self.depth:
+            return "AtomRef(%s@%s)" % (body, self.depth)
+        return "AtomRef(%s)" % (body,)
 
 
 def _atomref_sort_key(ref: AtomRef):
     if ref.origin is not None:
-        return (0, ref.origin, "", ())
+        return (0, ref.depth, ref.origin, "", ())
     rule, site = ref.added_by
-    return (1, -1, rule, tuple(sorted(site)))
+    return (1, ref.depth, -1, rule, tuple(sorted(site)))
 
 
 def _coerce_site(site) -> frozenset:
@@ -420,14 +485,13 @@ class Step:
                     getattr(frag, "_forest", None) is not None
                     and frag._forest.get("atom_refs") is not None
                 )
-                origin_at = frozenset(
-                    ref.origin for ref in self.site if ref.origin is not None
-                )
+                # Key creations by current-frame site (resolved). Mid-depth
+                # AtomRef.origin values are not depth-0 idxs.
                 install_product_forest(
                     mol,
                     frag,
                     rule_name=self.rule,
-                    origin_site=origin_at,
+                    origin_site=site,
                     record_creation=not already,
                 )
                 products.append(frag)

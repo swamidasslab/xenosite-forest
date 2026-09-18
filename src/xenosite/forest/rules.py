@@ -211,26 +211,48 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
         return frozenset(modifications)
 
     def _prep_and_dh_end(self, match, mol=None):
-        """Return (prep Steps, DH endpoint AtomRef, is_methide) for one match."""
+        """Return (prep Steps, DH endpoint AtomRef, is_methide) for one match.
+
+        Mapids are GetIdx on ``mol`` (caller). Origin refs stamp that frame's
+        depth — created atoms (e.g. OH oxygen) have no depth-0 identity and
+        must use ``added_by`` instead.
+        """
+        from .step_plan import _frame_depth, _origin_refs
+
         mapids, modifications = match[0], match[1]
         names = self._mod_names(modifications)
+        depth = _frame_depth(mol) if mol is not None else 0
         prep = []
         methide = False
         if "addO" in names:
             carbon = mapids[1]
-            prep.append(Step("Hydroxylation", frozenset([carbon])))
-            end = AtomRef(added_by=("Hydroxylation", frozenset([carbon])))
+            carbon_refs = _origin_refs([carbon], mol, depth=depth)
+            prep.append(Step("Hydroxylation", carbon_refs))
+            # added_by site idxs share the origin refs' frame.
+            c_ref = next(iter(carbon_refs))
+            end = AtomRef(
+                added_by=("Hydroxylation", frozenset([c_ref.origin])),
+                depth=c_ref.depth,
+            )
         elif "replaceHalogenWithO" in names:
-            at = frozenset([mapids[1], mapids[2]])
-            prep.append(Step("OxidativeDehalogenation", at))
-            end = AtomRef(added_by=("OxidativeDehalogenation", at))
+            at_refs = _origin_refs([mapids[1], mapids[2]], mol, depth=depth)
+            prep.append(Step("OxidativeDehalogenation", at_refs))
+            at = frozenset(r.origin for r in at_refs)
+            # Homogeneous frame (all projected or all current).
+            site_depth = next(iter(at_refs)).depth if at_refs else depth
+            end = AtomRef(added_by=("OxidativeDehalogenation", at), depth=site_depth)
         elif "dealk" in names:
-            prep.append(Step("Dealkylation", frozenset([mapids[2], mapids[3]])))
-            end = AtomRef(origin=mapids[2])
+            prep.append(
+                Step(
+                    "Dealkylation",
+                    _origin_refs([mapids[2], mapids[3]], mol, depth=depth),
+                )
+            )
+            end = next(iter(_origin_refs([mapids[2]], mol, depth=depth)))
         else:
             # single2double / addPlus1: heteroatom or alkyl already on reactant
             end_idx = mapids[2] if 2 in mapids else mapids[1]
-            end = AtomRef(origin=end_idx)
+            end = next(iter(_origin_refs([end_idx], mol, depth=depth)))
             if mol is not None:
                 try:
                     methide = mol.GetAtomWithIdx(int(end_idx)).GetAtomicNum() == 6

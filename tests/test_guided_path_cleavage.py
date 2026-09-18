@@ -51,8 +51,8 @@ def test_formula_hints_before_after_half_molecule_cleavage():
 def test_long_ester_cleave_then_hydroxylation_and_plan():
     """Half-molecule: long-chain phenyl ester → catechol phenol.
 
-    Search hydrolyzes first (formula-sound), then hydroxylates. Plan is
-    ``Deps`` with no precedes so OH-before-cleave is also a member.
+    Search hydrolyzes first (formula-sound), then hydroxylates. Ring carbons
+    project to depth-0 origins, so Deps leaves the two steps unordered.
     """
     counters = PathSearchCounters()
     hits = list(
@@ -100,6 +100,8 @@ def test_anisole_acetate_two_cleaves_and_plan():
     assert _canon(smiles[-1]) == _canon("Oc1ccc(O)cc1")
     assert {s[0] for s in steps} == {"Hydrolysis", "Dealkylation"}
     assert isinstance(plan, Deps)
+    # Sites project to depth-0 when atoms existed on the reactant, so the two
+    # cleaves remain unordered (both linearizations are members).
     assert plan.contains(["Hydrolysis", "Dealkylation"], by="rule")
     assert plan.contains(["Dealkylation", "Hydrolysis"], by="rule")
 

@@ -234,6 +234,48 @@ def test_hydroxylation_apply_records_atom_ref():
     assert len(carbon_site) == 1
 
 
+def test_added_by_and_origin_carry_frame_depth():
+    """Created atoms lack depth-0; site idxs need the frame they were written in."""
+    from xenosite.forest.step_plan import _frame_depth, _origin_refs
+
+    benzene = MolFromSmiles("c1ccccc1")
+    mono = Step("Hydroxylation", {0}).apply(benzene)[0]
+    depth1 = _frame_depth(mono)
+    assert depth1 == 1
+
+    # Second OH site is a carbon GetIdx on the mono-OH frame.
+    carbons = [
+        a.GetIdx()
+        for a in mono.GetAtoms()
+        if a.GetAtomicNum() == 6 and a.GetTotalNumHs() >= 1
+    ]
+    site_c = carbons[3] if len(carbons) > 3 else carbons[0]
+    # Reactant-stable carbon → depth-0 origin; created O uses mid-frame.
+    carbon_refs = _origin_refs([site_c], mono)
+    c_ref = next(iter(carbon_refs))
+    assert c_ref.depth == 0
+    di = Step("Hydroxylation", carbon_refs).apply(mono)[0]
+    depth2 = _frame_depth(di)
+    assert depth2 == 2
+
+    created = AtomRef(
+        added_by=("Hydroxylation", frozenset([c_ref.origin])), depth=c_ref.depth
+    )
+    assert created.depth == 0
+    o_idx = created.resolve(di)
+    assert di.GetAtomWithIdx(o_idx).GetAtomicNum() == 8
+
+    # New oxygens have no depth-0 identity — origin refs stay at di-OH frame.
+    oxygens = [a.GetIdx() for a in di.GetAtoms() if a.GetAtomicNum() == 8]
+    assert len(oxygens) == 2
+    o_refs = _origin_refs(oxygens, di)
+    assert all(r.depth == depth2 for r in o_refs)
+    for r in o_refs:
+        assert di.GetAtomWithIdx(r.resolve(di)).GetAtomicNum() == 8
+        remapped = AtomRef(origin=r.origin, depth=0).resolve(di)
+        assert remapped != r.resolve(di) or di.GetAtomWithIdx(remapped).GetAtomicNum() != 8
+
+
 def test_benzene_prep_linearization_apply_agrees():
     mol = MolFromSmiles("c1ccccc1")
     h0 = Step("Hydroxylation", {0})

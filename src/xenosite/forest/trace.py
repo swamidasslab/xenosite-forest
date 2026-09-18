@@ -51,6 +51,9 @@ class AtomTrace:
                 "do_not_tag_atoms=True"
             ) from err
         self._depths = tuple(AtomTracker.depths(self._tags))
+        forest = getattr(mol, "_forest", None) or {}
+        trace = forest.get("atom_trace") or {}
+        self._removed_events = list(trace.get("removed") or ())
 
     @property
     def depths(self) -> tuple[int, ...]:
@@ -139,16 +142,28 @@ class AtomTrace:
         return frozenset(out)
 
     def removed(self, depth: int | None = None) -> frozenset[int]:
-        """1-based level-0 numbers that have disappeared by ``depth`` (last if omitted)."""
+        """1-based level-0 numbers that have disappeared by ``depth`` (last if omitted).
+
+        Prefers ``atom_trace["removed"]`` events when present; also treats live
+        records that lack an idx at ``depth`` as gone (legacy depth-gap).
+        """
         if depth is None:
             if not self._depths:
-                return frozenset()
-            depth = self._depths[-1]
+                depth = None
+            else:
+                depth = self._depths[-1]
         out: set[int] = set()
         for rec in self._tags.values():
             orig = self._idx_at(rec, 0)
             if orig is None:
                 continue
-            if self._idx_at(rec, depth) is None:
+            if depth is None or self._idx_at(rec, depth) is None:
                 out.add(atom_no(orig))
+        for event in self._removed_events:
+            if depth is not None and int(event.get("depth", 0)) > int(depth):
+                continue
+            for rec in (event.get("records") or {}).values():
+                orig = self._idx_at(rec, 0)
+                if orig is not None:
+                    out.add(atom_no(orig))
         return frozenset(out)

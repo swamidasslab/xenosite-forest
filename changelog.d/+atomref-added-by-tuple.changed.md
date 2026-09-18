@@ -1,1 +1,1 @@
-`AtomRef.added_by` is `(rule, site)`; origin resolve uses live `atom_trace` labels (skip `removed_by`); `carry_forest` drops sibling-fragment labels.
+`AtomRef.added_by` is `(rule, site)` with frame `depth` for those site idxs; origin refs also carry `depth` (created atoms lack depth-0); `atom_trace` keeps live `records` plus a `removed` event list (cleavage siblings are dropped, not recorded).
