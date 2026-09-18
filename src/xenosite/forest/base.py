@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 # Third Party
+from .edit_guard import _OPEN_PROP, edit_mol
 from .utils import (
     clean,
     merge,
@@ -394,6 +395,9 @@ def copy_mol(mol):
         return None
     out = Chem.Mol(mol)
     carry_forest(mol, out)  # share_resonance=False
+    # An open-for-edit token must not leak onto copies.
+    if out.HasProp(_OPEN_PROP):
+        out.ClearProp(_OPEN_PROP)
     # Mol-level props (LAST_TAG, phase1_steps, …) are copied by Chem.Mol;
     # Python ``_forest`` is not — carry_forest restores it.
     return out
@@ -1180,10 +1184,11 @@ class ConjugatedSystems(object):
         """
         SanitizeMol(mol, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
 
-        try:
-            Kekulize(mol, clearAromaticFlags=True)
-        except ValueError:
-            pass
+        with edit_mol(mol):
+            try:
+                Kekulize(mol, clearAromaticFlags=True)
+            except ValueError:
+                pass
 
         try:
             supplier = ResonanceMolSupplier(mol, KEKULE_ALL)
@@ -1225,10 +1230,11 @@ class ConjugatedSystems(object):
 
         """
         SanitizeMol(mol, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
-        try:
-            Kekulize(mol, clearAromaticFlags=True)
-        except ValueError:
-            pass
+        with edit_mol(mol):
+            try:
+                Kekulize(mol, clearAromaticFlags=True)
+            except ValueError:
+                pass
 
         # The input molecule will be fragmented and rejoined,
         # and there is no guarantee that the atom ordering will remain the same.
@@ -1270,13 +1276,15 @@ class ConjugatedSystems(object):
         """Adds bonds to mol. bond_types is a dict mapping from tuples of atom indexes to RDKit
         bond types."""
 
-        for idxs, bond in bond_types.items():
-            if mol.GetBondBetweenAtoms(*idxs):
-                mol.GetBondBetweenAtoms(*idxs).SetBondType(bond)
-            else:
-                emol = Chem.rdchem.EditableMol(mol)
-                emol.AddBond(*idxs, order=bond)
-                mol = emol.GetMol()
+        with edit_mol(mol):
+            for idxs, bond in bond_types.items():
+                if mol.GetBondBetweenAtoms(*idxs):
+                    mol.GetBondBetweenAtoms(*idxs).SetBondType(bond)
+                else:
+                    emol = Chem.rdchem.EditableMol(mol)
+                    with edit_mol(emol):
+                        emol.AddBond(*idxs, order=bond)
+                    mol = emol.GetMol()
         return mol
 
     def _remove_dummy_atoms(self, mol):
@@ -1298,7 +1306,8 @@ class ConjugatedSystems(object):
         dummies = _fragment_dummy_idxs(mol)
         while dummies:
             emol = Chem.rdchem.EditableMol(mol)
-            emol.RemoveAtom(dummies.pop())
+            with edit_mol(emol):
+                emol.RemoveAtom(dummies.pop())
             mol = emol.GetMol()
             dummies = _fragment_dummy_idxs(mol)
         return mol
@@ -1554,10 +1563,11 @@ class QueryMol(object):
 
         if alternate_bonds:
             SanitizeMol(mol, SanitizeFlags.SANITIZE_CLEANUP)
-            try:
-                Kekulize(mol, clearAromaticFlags=True)
-            except ValueError:
-                pass
+            with edit_mol(mol):
+                try:
+                    Kekulize(mol, clearAromaticFlags=True)
+                except ValueError:
+                    pass
 
         # Execute recursive search that modifies valid_paths
         search(mol, end, path=[start])
@@ -1782,8 +1792,9 @@ class QueryMol(object):
         mol = Mol(inmol)
         carry_forest(inmol, mol)
         try:
-            SanitizeMol(mol)
-            Kekulize(mol, clearAromaticFlags=True)
+            with edit_mol(mol):
+                SanitizeMol(mol)
+                Kekulize(mol, clearAromaticFlags=True)
         except ValueError:
             return False
 
@@ -1846,30 +1857,35 @@ class EditMol(QueryMol):
 
     def break_bond(self, emol, idx1, idx2):
         """Breaks bond between idx1 and idx2 in emol."""
-        bond = emol.GetBondBetweenAtoms(idx1, idx2)
-        if bond:
-            emol.RemoveBond(idx1, idx2)
-            self.adjust_hydrogen_count(emol, idx1, 1)
-            self.adjust_hydrogen_count(emol, idx2, 1)
+        with edit_mol(emol):
+            bond = emol.GetBondBetweenAtoms(idx1, idx2)
+            if bond:
+                emol.RemoveBond(idx1, idx2)
+                self.adjust_hydrogen_count(emol, idx1, 1)
+                self.adjust_hydrogen_count(emol, idx2, 1)
 
     def change_bond(self, emol, idx1, idx2, new_bond_type=1):
         """Change bond between idx1 and idx2 in emol to new_bond_type."""
-        bond = emol.GetBondBetweenAtoms(idx1, idx2)
-        if bond:
-            bond.SetBondType(self.bonds[new_bond_type])
+        with edit_mol(emol):
+            bond = emol.GetBondBetweenAtoms(idx1, idx2)
+            if bond:
+                bond.SetBondType(self.bonds[new_bond_type])
 
     def add_atom(self, emol, idx, new_atomic_num=1, new_bond_type=1):
         """Add atom to emol with new_atomic_num to atom with idx with new_bond_type."""
-        i = emol.AddAtom(Atom(new_atomic_num))
-        emol.AddBond(idx, i, self.bonds[new_bond_type])
+        with edit_mol(emol):
+            i = emol.AddAtom(Atom(new_atomic_num))
+            emol.AddBond(idx, i, self.bonds[new_bond_type])
 
     def replace_atom(self, emol, idx, new_atomic_num=1):
         """Changes atom with idx in emol to atom with new_atomic_num."""
-        emol.GetAtomWithIdx(idx).SetAtomicNum(new_atomic_num)
+        with edit_mol(emol):
+            emol.GetAtomWithIdx(idx).SetAtomicNum(new_atomic_num)
 
     def set_charge(self, emol, idx, charge):
         """Sets idx charge in emol."""
-        emol.GetAtomWithIdx(idx).SetFormalCharge(charge)
+        with edit_mol(emol):
+            emol.GetAtomWithIdx(idx).SetFormalCharge(charge)
 
     def adjust_hydrogen_count(self, mol, atom, change):
         """Adjusts the number of explicit hydrogens on atom."""
@@ -1884,8 +1900,9 @@ class EditMol(QueryMol):
             implicit = atom.GetNumImplicitHs()
         total_hydrogens = atom.GetNumExplicitHs() + implicit
         if total_hydrogens > 0:
-            atom.SetNoImplicit(True)
-            atom.SetNumExplicitHs(total_hydrogens + change)
+            with edit_mol(mol):
+                atom.SetNoImplicit(True)
+                atom.SetNumExplicitHs(total_hydrogens + change)
 
     def _bonds_from_atom_path(self, mol, atoms):
         """Converts list of atom indexes to a list of the bond objects between each atom pair.
@@ -1925,36 +1942,40 @@ class EditMol(QueryMol):
         True
 
         """
-        bond = False
-        for i, bond in enumerate(self._bonds_from_atom_path(mol, atoms)):
+        with edit_mol(mol):
+            bond = False
+            for i, bond in enumerate(self._bonds_from_atom_path(mol, atoms)):
 
-            if bond.GetBondType() == BondType.DOUBLE:
-                bond.SetBondType(BondType.SINGLE)
+                if bond.GetBondType() == BondType.DOUBLE:
+                    bond.SetBondType(BondType.SINGLE)
 
-            elif bond.GetBondType() == BondType.SINGLE:
-                bond.SetBondType(BondType.DOUBLE)
+                elif bond.GetBondType() == BondType.SINGLE:
+                    bond.SetBondType(BondType.DOUBLE)
 
-            if i == 0:  # fix hydrogens at begininng
-                self._correct_hydrogens_of_endpoint(mol, atoms[0], bond)
+                if i == 0:  # fix hydrogens at begininng
+                    self._correct_hydrogens_of_endpoint(mol, atoms[0], bond)
 
-        # fix hydrogens at end
-        if bond:
-            self._correct_hydrogens_of_endpoint(mol, atoms[-1], bond)
+            # fix hydrogens at end
+            if bond:
+                self._correct_hydrogens_of_endpoint(mol, atoms[-1], bond)
 
-        if attach_path:
-            mol.SetProp("path", str(atoms))
+            if attach_path:
+                mol.SetProp("path", str(atoms))
 
-        # Bond edits invalidate any cached resonance forms.
+        # Bond edits invalidate any cached resonance forms. edit_mol only
+        # sees the mutation when the guard is installed, which it is not yet.
         _clear_resonance(mol)
+
     def apply_modifications(self, mol, modifications, **kwargs):
         """Makes an editable copy of mol and successively applies each submitted modification."""
 
         emol = RWMol(Mol(mol))
-        for item in modifications:
-            map2queryidx, modification = item[0], item[1]
-            valid = self.modify(emol, map2queryidx, modification, **kwargs)
-            if not valid:
-                return False
+        with edit_mol(emol):
+            for item in modifications:
+                map2queryidx, modification = item[0], item[1]
+                valid = self.modify(emol, map2queryidx, modification, **kwargs)
+                if not valid:
+                    return False
         return emol.GetMol()
 
     def modify(self, emol, mapid2atomidx, modifications):
@@ -2852,10 +2873,11 @@ class SmartsReactionRule(ReactionRule):
 
     def _kekulize(self, mol):
         SanitizeMol(mol, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
-        try:
-            Kekulize(mol, clearAromaticFlags=True)
-        except ValueError:
-            pass
+        with edit_mol(mol):
+            try:
+                Kekulize(mol, clearAromaticFlags=True)
+            except ValueError:
+                pass
         refresh_mol(mol)
         _clear_resonance(mol)
 

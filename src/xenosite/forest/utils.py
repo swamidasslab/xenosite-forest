@@ -174,18 +174,21 @@ def is_rdkit_valid(mol):
 
 
 def _sanitize_kekulize(mol, reset_hs=False):
-    if reset_hs:
+    from .edit_guard import edit_mol
+
+    with edit_mol(mol):
+        if reset_hs:
+            for atom in mol.GetAtoms():
+                atom.SetNoImplicit(True)
+                atom.SetNumExplicitHs(0)
+            Chem.SanitizeMol(mol, Chem.SanitizeFlags.SANITIZE_CLEANUP, catchErrors=True)
         for atom in mol.GetAtoms():
-            atom.SetNoImplicit(True)
-            atom.SetNumExplicitHs(0)
-        Chem.SanitizeMol(mol, Chem.SanitizeFlags.SANITIZE_CLEANUP, catchErrors=True)
-    for atom in mol.GetAtoms():
-        atom.SetNoImplicit(False)
-    Chem.SanitizeMol(mol)
-    try:
-        Chem.Kekulize(mol, clearAromaticFlags=True)
-    except ValueError:
-        pass
+            atom.SetNoImplicit(False)
+        Chem.SanitizeMol(mol)
+        try:
+            Chem.Kekulize(mol, clearAromaticFlags=True)
+        except ValueError:
+            pass
     refresh_mol(mol)
     # Kekulize / sanitize edit bonding — drop any inherited resonance cache.
     from .base import _clear_resonance
@@ -320,12 +323,15 @@ def collapse_conjugate_to_star(product):
     def _after_remove(idx):
         return idx - sum(1 for n in new_atoms if n < idx)
 
+    from .edit_guard import edit_mol
+
     rw = Chem.RWMol(product)
-    for idx in sorted(new_atoms, reverse=True):
-        rw.RemoveAtom(idx)
-    for pa in sorted(_after_remove(a) for a in attach):
-        dummy = rw.AddAtom(Chem.Atom(0))
-        rw.AddBond(pa, dummy, Chem.BondType.SINGLE)
+    with edit_mol(rw):
+        for idx in sorted(new_atoms, reverse=True):
+            rw.RemoveAtom(idx)
+        for pa in sorted(_after_remove(a) for a in attach):
+            dummy = rw.AddAtom(Chem.Atom(0))
+            rw.AddBond(pa, dummy, Chem.BondType.SINGLE)
     mol = rw.GetMol()
     Chem.SanitizeMol(mol, catchErrors=True)
     refresh_mol(mol)

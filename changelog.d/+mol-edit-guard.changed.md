@@ -1,0 +1,1 @@
+Structural edits on a closed mol raise `MolClosedError` while `edit_guard()` is active. `edit_mol` opens one mol and drops its resonance cache if a mutation ran. The guard is not installed unless `edit_guard()` is entered.

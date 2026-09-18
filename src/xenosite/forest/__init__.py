@@ -26,6 +26,7 @@ from .rulesets import RULESETS, RuleSet, load_ruleset
 from .step_plan import And, AtomRef, Deps, Linearization, Or, Step, StepPlan
 from .step_plan import pathway_from_json, pathway_to_json
 from .trace import AtomTrace
+from .edit_guard import MolClosedError, edit_guard, edit_mol
 
 __all__ = [
     "__version__",
@@ -57,4 +58,7 @@ __all__ = [
     "pathway_from_json",
     "pathway_to_json",
     "AtomTrace",
+    "MolClosedError",
+    "edit_guard",
+    "edit_mol",
 ]
