@@ -1769,16 +1769,9 @@ class QueryMol(object):
 
         """
 
-        # Reuse one kekulized prototype per substrate. Return a Chem.Mol copy
-        # so callers cannot corrupt the prototype. Do not share resonance with
-        # the aromatic parent or across edited working copies.
-        forest = _forest_state(inmol)
-        cached = forest.get("standardized_mol")
-        if cached is not None:
-            out = Chem.Mol(cached)
-            carry_forest(cached, out)
-            return out
-
+        # Kekulize a copy. Do not share the parent's resonance cache, and do
+        # not keep a prototype: an edit that misses _clear_resonance would
+        # hand back the old kekule form.
         mol = Mol(inmol)
         carry_forest(inmol, mol)
         try:
@@ -1792,10 +1785,7 @@ class QueryMol(object):
         SanitizeMol(mol, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
         refresh_mol(mol)
         mol.SetProp("standardized", "1")
-        forest["standardized_mol"] = mol
-        out = Chem.Mol(mol)
-        carry_forest(mol, out)
-        return out
+        return mol
 
     def match_queries(self, mol):
         """Returns dict mapping from each atom index to a list of matches to self.queries.
@@ -2800,11 +2790,9 @@ class SmartsReactionRule(ReactionRule):
         ``toward_target``: optional product mol; reaction SMARTS whose
         :meth:`smarts_compatible` is False are skipped (formula hints).
 
-        Kekulize runs on a copy so the caller's bonding / resonance cache are
-        not mutated or cleared.
+        Kekulize edits ``mol`` in place and drops its resonance cache.
         """
         if kekulize:
-            mol = copy_mol(mol)
             self._kekulize(mol)
 
         self._remove_props(mol)

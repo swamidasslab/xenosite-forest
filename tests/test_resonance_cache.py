@@ -163,14 +163,12 @@ def test_mode_compute_count_reused_across_resonance_and_pair_paths():
     assert entry.compute_count == 1
     assert entry.forms_materialized == n_forms
 
-    # standardize kekulizes into a cached prototype; each call returns a copy.
+    # standardize kekulizes a copy and does not alias or cache it on the parent.
     template = EditMol.standardize(mol)
     assert template is not False
-    proto = mol._forest.get("standardized_mol")
-    assert proto is not None and template is not proto
+    assert "standardized_mol" not in (mol._forest or {})
     assert getattr(template, "_forest", None) is not mol._forest
     assert "resonance" not in (template._forest or {})
-    assert EditMol.standardize(mol) is not template
     list(res.resonate_with_pair_paths(template))
     assert entry.compute_count == 1  # parent cache untouched
     assert _resonance_cache(template).mode(res.flag).compute_count == 1
@@ -201,6 +199,18 @@ def test_install_product_forest_clears_resonance():
     product._forest["resonance"] = parent._forest["resonance"]
     install_product_forest(parent, product)
     assert "resonance" not in product._forest
+
+
+def test_smarts_metabolites_kekulize_clears_caller_resonance():
+    from xenosite.forest.rules import Hydroxylation
+
+    mol = Mol(MolFromSmiles("c1ccccc1"))
+    cache = _resonance_cache(mol)
+    assert mol._forest["resonance"] is cache
+    assert mol.GetBondWithIdx(0).GetIsAromatic()
+    list(Hydroxylation().metabolites(mol))
+    assert not mol.GetBondWithIdx(0).GetIsAromatic()
+    assert "resonance" not in mol._forest
 
 
 def test_bfs_compute_once_across_full_apap():
