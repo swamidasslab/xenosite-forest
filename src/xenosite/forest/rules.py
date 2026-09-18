@@ -18,6 +18,16 @@ from .base import (
     SmartsReactionRule,
     clean,
 )
+from .path_context import (
+    ADD_O,
+    CLEAVE,
+    CLEAVE_OR_ADD_O,
+    NEUTRAL,
+    REMOVE_O,
+    FormulaAny,
+    FormulaHint,
+    FormulaMatch,
+)
 from .step_plan import Step, StepPlan, AtomRef
 from .utils import (
     apply_star_conjugate,
@@ -59,6 +69,45 @@ class ConjugationRule(SmartsReactionRule):
         self.as_star = as_star
         self.star_label = star_label
         super(ConjugationRule, self).__init__(*args, **kwargs)
+
+    def is_terminal_product(self, mol) -> bool:
+        from .utils import has_star_conjugate
+
+        return bool(has_star_conjugate(mol))
+
+    def is_redundant(self, peer_rules) -> bool:
+        """Keep only the first conjugation rule in the peer list for path search."""
+        for peer in peer_rules:
+            if isinstance(peer, ConjugationRule):
+                return peer is not self
+        return False
+
+    def enumerate_for_path(
+        self,
+        mol,
+        ctx,
+        expand_phase1_plans=True,
+        include_sites=None,
+        exclude_sites=None,
+        **kwargs,
+    ):
+        """Emit unlabeled ``*`` adducts only; products are terminal."""
+        old_star, old_label = self.as_star, self.star_label
+        self.as_star = True
+        self.star_label = None
+        try:
+            yield from SmartsReactionRule.enumerate_for_path(
+                self,
+                mol,
+                ctx,
+                expand_phase1_plans=False,
+                include_sites=include_sites,
+                exclude_sites=exclude_sites,
+                **kwargs,
+            )
+        finally:
+            self.as_star = old_star
+            self.star_label = old_label
 
     def metabolites(self, mol, **kwargs):
         for site, products in super(ConjugationRule, self).metabolites(mol, **kwargs):
@@ -160,11 +209,12 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
             return frozenset([modifications])
         return frozenset(modifications)
 
-    def _prep_and_dh_end(self, match):
-        """Return (prep Steps, DH endpoint AtomRef) for one quinone SMARTS match."""
-        mapids, modifications = match
+    def _prep_and_dh_end(self, match, mol=None):
+        """Return (prep Steps, DH endpoint AtomRef, is_methide) for one match."""
+        mapids, modifications = match[0], match[1]
         names = self._mod_names(modifications)
         prep = []
+        methide = False
         if "addO" in names:
             carbon = mapids[1]
             prep.append(Step("Hydroxylation", frozenset([carbon])))
@@ -177,48 +227,68 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
             prep.append(Step("Dealkylation", frozenset([mapids[2], mapids[3]])))
             end = AtomRef(origin=mapids[2])
         else:
-            # single2double / addPlus1: heteroatom already on reactant
-            end = AtomRef(origin=mapids[2] if 2 in mapids else mapids[1])
-        return prep, end
+            # single2double / addPlus1: heteroatom or alkyl already on reactant
+            end_idx = mapids[2] if 2 in mapids else mapids[1]
+            end = AtomRef(origin=end_idx)
+            if mol is not None:
+                try:
+                    methide = mol.GetAtomWithIdx(int(end_idx)).GetAtomicNum() == 6
+                except Exception:
+                    methide = False
+        return prep, end, methide
 
-    def _plan_from_match_pair(self, match1, match2):
-        prep1, end1 = self._prep_and_dh_end(match1)
-        prep2, end2 = self._prep_and_dh_end(match2)
+    def _plan_from_match_pair(self, match1, match2, mol=None):
+        from .step_plan import And, StepPlan
+
+        prep1, end1, m1 = self._prep_and_dh_end(match1, mol=mol)
+        prep2, end2, m2 = self._prep_and_dh_end(match2, mol=mol)
         prep = prep1 + prep2
-        final = Step("Dehydrogenation", frozenset([end1, end2]))
-        if prep:
-            return StepPlan.layers([prep, [final]])
-        return StepPlan.singleton("Dehydrogenation", frozenset([end1, end2]))
+        # One alkylidene end ⇒ methide DH; both ends never (skip pathway stamp).
+        pathways = frozenset()
+        if (m1 or m2) and not (m1 and m2):
+            pathways = frozenset({Dehydrogenation.PATHWAY_METHIDE})
+        final = Step(
+            "Dehydrogenation", frozenset([end1, end2]), pathways=pathways
+        )
+        if not prep:
+            return StepPlan((final,))
+        if len(prep) == 1:
+            return StepPlan([prep[0], final])
+        return StepPlan([And(prep), final])
 
     def phase1_steps(self, mol, site, _matches=None, _match_pair=None, **kwargs):
-        """Phase1-equivalent :class:`StepPlan` list for a quinone site.
+        """One Phase1-equivalent :class:`StepPlan` for a quinone site.
 
-        Public callers pass ``(mol, site)`` only. Private ``_matches`` /
-        ``_match_pair`` avoid rematching inside ``metabolites``.
+        Multiple SMARTS match pairs become a top-level ``Or`` inside that
+        single plan. Linearizations expand every alternative total order.
+        Alkyl quinone-methide ends stamp ``pathways=(\"methide\",)`` on the
+        final Dehydrogenation step.
         """
+        from .step_plan import StepPlan, or_of_plans
+
         want = frozenset(self._cast_sites(site)[0][1])
         if _match_pair is not None:
-            return [self._plan_from_match_pair(*_match_pair)]
+            return self._plan_from_match_pair(*_match_pair, mol=mol)
 
         template_mol = self.standardize(mol)
         if not template_mol:
-            return []
+            return StepPlan.empty()
 
         matches = _matches if _matches is not None else self.match_queries(template_mol)
         if len(want) != 2 or not want.issubset(matches):
-            return []
+            return StepPlan.empty()
 
         a, b = tuple(want)
         plans = []
         seen = set()
         for match1, match2 in itertools.product(matches[a], matches[b]):
-            plan = self._plan_from_match_pair(match1, match2)
+            plan = self._plan_from_match_pair(match1, match2, mol=template_mol)
             key = json.dumps(plan.to_json(), sort_keys=True)
             if key in seen:
                 continue
             seen.add(key)
             plans.append(plan)
-        return plans
+        return or_of_plans(plans)
 
     def metabolites(self, mol, attach_matches=False, attach_phase1_steps=False, **kwargs):
 
@@ -230,6 +300,10 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
         # exit.
         if not template_mol:
             return
+
+        from .base import _include_atom_sets
+
+        want = _include_atom_sets(kwargs.get("include_sites"))
 
         # Preconstruct a dict mapping from each atom index to a list of tuples specifiying the atom
         # indexes of all rings containing that atom.
@@ -245,6 +319,10 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
             if [self.in_ring_size(rings, a, 6) for a in pair] == [True, True]:
                 if len(path) % 2:  # can't form meta quinones on 6-membered rings
                     continue
+
+            pair_fs = frozenset(pair)
+            if want is not None and pair_fs not in want:
+                continue
 
             for matches1, matches2 in itertools.product(*[matches[x] for x in pair]):
 
@@ -266,7 +344,9 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
                 products = clean(self.tag_quinone_fragments(product))
 
                 if attach_phase1_steps and products:
-                    plan = self._plan_from_match_pair(matches1, matches2)
+                    plan = self._plan_from_match_pair(
+                        matches1, matches2, mol=template_mol
+                    )
                     for frag in products:
                         if (
                             not frag.HasProp("Quinone")
@@ -275,6 +355,60 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
                             plan.attach_to_mol(frag)
 
                 yield outsite, products
+
+    def enumerate_for_path(self, mol, ctx, expand_phase1_plans=True, **kwargs):
+        """Emit phase1 plans from aromatic pair matches — no RunReactants/clean."""
+        from .path_context import oxygen_deficit
+        from .step_plan import pathway_alternatives
+
+        if not self.could_help(mol, ctx.target, ctx):
+            return
+        if not expand_phase1_plans:
+            yield from super(QuinoneFormation, self).enumerate_for_path(
+                mol, ctx, expand_phase1_plans=False, **kwargs
+            )
+            return
+
+        template_mol = self.standardize(mol)
+        if not template_mol:
+            return
+        rings = self.rings(template_mol)
+        matches = self.match_queries(template_mol)
+        try:
+            need_o = max(0, int(oxygen_deficit(mol, ctx.target)))
+        except Exception:
+            need_o = None
+        seen = set()
+        for _res, pair, path in self.resonate_with_pair_paths(
+            template_mol, valid_atoms=set(matches)
+        ):
+            if [self.in_ring_size(rings, a, 6) for a in pair] == [True, True]:
+                if len(path) % 2:
+                    continue
+            site = frozenset(pair)
+            if site in seen or len(site) != 2:
+                continue
+            if not site.issubset(matches):
+                continue
+            seen.add(site)
+            try:
+                expr = self.phase1_steps(mol, site, _matches=matches)
+            except NotImplementedError:
+                continue
+            if not pathway_alternatives(expr):
+                continue
+            # Skip plans that add more O than the target needs (e.g. bis-OH when
+            # phenol→BQ only needs one).
+            if need_o is not None:
+                max_oh = 0
+                for lin in expr.linearizations():
+                    max_oh = max(
+                        max_oh,
+                        sum(1 for s in lin.steps if s.rule == "Hydroxylation"),
+                    )
+                if max_oh > need_o:
+                    continue
+            yield ("plan", expr, site)
 
     def tag_quinone_fragments(self, mol):
         frags = list(GetMolFrags(mol, asMols=True, sanitizeFrags=False))
@@ -334,7 +468,15 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
 
 
 class Dehydrogenation(ResonancePairRule):
-    """Dehydrogenate
+    """Dehydrogenate.
+
+    Optional uncommon chemotypes are declared as ``query_smarts`` options
+    (``pathway``, ``one_sided``, ``recommend``), not separate code branches.
+    Default Phase I keeps those pathways off; enable via
+    ``Dehydrogenation(pathways={\"methide\"})``, ``metabolize(..., pathways=...)``,
+    a :class:`~xenosite.forest.step_plan.Step` with ``pathways=...`` (quinone
+    ``phase1_steps`` stamps methide when an end is alkyl), or guided search when
+    formula hints + ``recommend`` SMARTS agree.
 
     >>> D = Dehydrogenation()
     >>> mol = Chem.MolFromSmiles('OC=CC=CC=CC=CN')
@@ -343,44 +485,114 @@ class Dehydrogenation(ResonancePairRule):
 
     """
 
-    def __init__(self):
+    PATHWAY_METHIDE = "methide"
+
+    def __init__(self, pathways=()):
         super(Dehydrogenation, self).__init__(
             rxns=[
-                "[#16v4:1]-[Oh:2]>>[*:1]=[*:2]",
-                "[#6h:1]-[#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#7D3,#8H1:2]>>[*:1]=[*:2]",
+                ("[#16v4:1]-[Oh:2]>>[*:1]=[*:2]", {"formula_hint": NEUTRAL}),
+                (
+                    "[#6h:1]-[#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#7D3,#8H1:2]>>[*:1]=[*:2]",
+                    {"formula_hint": NEUTRAL},
+                ),
             ],
             query_smarts=[
-                ("single2double", "[#6h:1][#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#8H:2]"),
-                (("single2double", "addPlus1"), "[#6h:1][#7D3:2]"),
+                (
+                    "single2double",
+                    "[#6h:1][#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#8H:2]",
+                    {"formula_hint": NEUTRAL},
+                ),
+                (
+                    ("single2double", "addPlus1"),
+                    "[#6h:1][#7D3:2]",
+                    {"formula_hint": NEUTRAL},
+                ),
                 # Quinoid / phenol ends: ring C without H bonded to OH or NH
                 # (existing patterns require #6h and miss hydroquinone / NAPQI).
-                ("single2double", "[#6H0:1][#8H:2]"),
-                ("single2double", "[#6H0:1][#7D2H1,#7D1H2:2]"),
-                (("single2double", "addPlus1"), "[#6H0:1][#7D3:2]"),
+                ("single2double", "[#6H0:1][#8H:2]", {"formula_hint": NEUTRAL}),
+                (
+                    "single2double",
+                    "[#6H0:1][#7D2H1,#7D1H2:2]",
+                    {"formula_hint": NEUTRAL},
+                ),
+                (
+                    ("single2double", "addPlus1"),
+                    "[#6H0:1][#7D3:2]",
+                    {"formula_hint": NEUTRAL},
+                ),
+                # Optional methide: same single2double edit; gated by pathway options.
+                (
+                    "single2double",
+                    "[#6R:1][#6D1H3,#6D2H2,#6D3H1:2]",
+                    {
+                        "pathway": "methide",
+                        "one_sided": True,
+                        "recommend": "[#6;R]=[#6D1H2,#6D2H1,#6D3H0]",
+                        "formula_hint": NEUTRAL,
+                    },
+                ),
             ],
             phase1_sites_on="atom_hydrogen",
             sites_on="atom_pairs",
         )
+        self.pathways = frozenset(pathways or ())
+
+    @staticmethod
+    def _mod_names(modifications):
+        if isinstance(modifications, str):
+            return frozenset([modifications])
+        return frozenset(modifications)
+
+    def _active_pathways(self, pathways=None):
+        if pathways is None:
+            return self.pathways
+        return frozenset(pathways)
+
+    def pathways_toward(self, mol, target) -> frozenset:
+        """Instance pathways plus those recommended by query options + formula."""
+        return frozenset(self.pathways) | self.pathways_recommended_by_queries(
+            mol, target
+        )
 
     def modify(self, emol, mapid2atomidx, modifications):
-
-        if "single2double" in modifications:
+        names = self._mod_names(modifications)
+        if "single2double" in names:
             self.change_bond(emol, mapid2atomidx[1], mapid2atomidx[2], new_bond_type=2)
 
-        if "addPlus1" in modifications:
+        if "addPlus1" in names:
             self.set_charge(emol, mapid2atomidx[2], 1)
 
         return True
 
     def site_from_matches(self, matches):
         site = []
-        for idx2mapids, query in matches:
+        for item in matches:
+            idx2mapids = item[0]
             site.append(idx2mapids[2])
         return frozenset(site)
 
-    def metabolites(self, mol, **kwargs):
+    def could_help(self, mol, target, ctx) -> bool:
+        """DH when heavy-atom formula already matches (bond / aromatic change)."""
+        from .path_context import heavy_formula_equal
 
-        for site, metabolites in super(Dehydrogenation, self).metabolites(mol):
+        return heavy_formula_equal(mol, target)
+
+    def enumerate_for_path(self, mol, ctx, **kwargs):
+        """Opt in query ``pathway`` options when formula + recommend SMARTS agree."""
+        pathways = kwargs.pop("pathways", None)
+        if pathways is None and ctx is not None:
+            pathways = self.pathways_toward(mol, ctx.target)
+        kwargs["pathways"] = pathways
+        yield from super(Dehydrogenation, self).enumerate_for_path(
+            mol, ctx, **kwargs
+        )
+
+    def metabolites(self, mol, pathways=None, **kwargs):
+        active = self._active_pathways(pathways)
+
+        for site, metabolites in super(Dehydrogenation, self).metabolites(
+            mol, **kwargs
+        ):
             yield site, metabolites
 
         # I tried moving this to within each downstream function, but this increased the run time
@@ -392,6 +604,10 @@ class Dehydrogenation(ResonancePairRule):
         if not template_mol:
             return
 
+        from .base import _include_atom_sets
+
+        want = _include_atom_sets(kwargs.get("include_sites"))
+
         matches = self.match_queries(template_mol)
 
         for res_struct, pair, path in self.resonate_with_pair_paths(
@@ -402,6 +618,14 @@ class Dehydrogenation(ResonancePairRule):
                 continue
 
             for matches1, matches2 in itertools.product(*[matches[x] for x in pair]):
+                if not self.pair_query_options_allowed(
+                    matches1, matches2, active_pathways=active
+                ):
+                    continue
+
+                site_atoms = self.site_from_matches([matches1, matches2])
+                if want is not None and frozenset(site_atoms) not in want:
+                    continue
 
                 product = self.apply_modifications(res_struct, [matches1, matches2])
 
@@ -409,10 +633,7 @@ class Dehydrogenation(ResonancePairRule):
                     continue
 
                 self.swap_bonds_along_path(product, path)
-                yield (self.name, self.site_from_matches([matches1, matches2])), clean(
-                    product
-                )
-                # yield (self.name, frozenset(pair)), clean(product)
+                yield (self.name, site_atoms), clean(product)
 
 
 class Hydrogenation(ResonancePairRule):
@@ -427,15 +648,27 @@ class Hydrogenation(ResonancePairRule):
 
     def __init__(self):
         super(Hydrogenation, self).__init__(
-            rxns=["[#6:1]#[#6:2]>>[*:1]=[*:2]", "[#6:1]=[#6:2]>>[*:1]-[*:2]"],
+            rxns=[
+                ("[#6:1]#[#6:2]>>[*:1]=[*:2]", {"formula_hint": NEUTRAL}),
+                ("[#6:1]=[#6:2]>>[*:1]-[*:2]", {"formula_hint": NEUTRAL}),
+            ],
             phase1_sites_on="atoms",
-            query_smarts=[("", "[*:1]")],
+            query_smarts=[("", "[*:1]", {"formula_hint": NEUTRAL})],
         )
 
     def metabolites(self, mol, **kwargs):
 
-        for site, metabolites in super(Hydrogenation, self).metabolites(mol):
+        for site, metabolites in super(Hydrogenation, self).metabolites(mol, **kwargs):
             yield site, metabolites
+
+        # Resonance path swaps are formula-neutral; skip when target formula differs.
+        toward = kwargs.get("toward_target")
+        if toward is not None and not NEUTRAL.compatible(mol, toward):
+            return
+
+        from .base import _include_atom_sets
+
+        want = _include_atom_sets(kwargs.get("include_sites"))
 
         for res_struct, pair, path in self.resonate_with_pair_paths(mol):
 
@@ -444,9 +677,13 @@ class Hydrogenation(ResonancePairRule):
             if len(path) < 2:
                 continue
 
+            pair_fs = frozenset(pair)
+            if want is not None and pair_fs not in want:
+                continue
+
             self.swap_bonds_along_path(res_struct, path)
 
-            yield (self.name, frozenset(pair)), clean(res_struct)
+            yield (self.name, pair_fs), clean(res_struct)
 
 
 class Tautomerization(ResonanceRule):
@@ -541,8 +778,32 @@ class Epoxidation(ResonanceRule):
 
     def __init__(self):
         super(Epoxidation, self).__init__(
-            rxns="[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1", sites_on="bonds"
+            rxns=[
+                (
+                    "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1",
+                    {"formula_hint": ADD_O},
+                )
+            ],
+            sites_on="bonds",
         )
+
+    def is_redundant(self, peer_rules) -> bool:
+        """Drop duplicate Epoxidation instances (keep the first)."""
+        for peer in peer_rules:
+            if type(peer) is type(self):
+                return peer is not self
+        return False
+
+    def could_help(self, mol, target, ctx) -> bool:
+        """Skip epoxidation when target is quinoid / non-aromatic with ≥2 O."""
+        from .path_context import _aromatic_bond_count, _formula, oxygen_deficit
+
+        if oxygen_deficit(mol, target) <= 0:
+            return False
+        # Quinone-like targets: prefer Hydroxylation → Dehydrogenation.
+        if _aromatic_bond_count(target) == 0 and _formula(target).get("O", 0) >= 2:
+            return False
+        return True
 
 
 class Acetylation(ConjugationRule):
@@ -632,22 +893,27 @@ class Dealkylation(SmartsReactionRule):
     """
 
     smarts = [
-        "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
-        "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
-        "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
-        "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
-        "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
-        "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
-        "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
-        "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
-        "[#6H0:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
-        "[#6:1][#6:2]>>(O-[*:1].[*:2])",
-        "[#6h:1][#6:2]>>(O-[*:1].[*:2])",
-        "[#6h:1][#6:2]>>(O=[*:1].[*:2])",
-        "[#8H1:3]-[#6:1]-[#7,#8,#16:2]>>([*:3]=[*:1].[*:2])",
+        ("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)", {"formula_hint": CLEAVE}),
+        ("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)", {"formula_hint": CLEAVE}),
+        ("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)", {"formula_hint": CLEAVE}),
+        ("[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)", {"formula_hint": CLEAVE}),
+        ("[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)", {"formula_hint": CLEAVE}),
+        ("[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)", {"formula_hint": CLEAVE}),
+        ("[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)", {"formula_hint": CLEAVE}),
+        ("[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)", {"formula_hint": CLEAVE}),
+        ("[#6H0:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)", {"formula_hint": CLEAVE}),
+        ("[#6:1][#6:2]>>(O-[*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#6h:1][#6:2]>>(O-[*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#6h:1][#6:2]>>(O=[*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#8H1:3]-[#6:1]-[#7,#8,#16:2]>>([*:3]=[*:1].[*:2])", {"formula_hint": CLEAVE}),
     ]
     mapid_site = [1, 2]
     sites_on = "bonds"
+
+    def elements_may_add(self):
+        # SMARTS emit carbonyl / alcohol O on the carbon fragment (CLEAVE hint alone
+        # does not list ADD_O — still introduce oxygen for impossibility checks).
+        return frozenset({"O"})
 
 
 class NDealkylation(Dealkylation):
@@ -667,6 +933,25 @@ class NDealkylation(Dealkylation):
             if any(mol.GetAtomWithIdx(i).GetAtomicNum() == 7 for i in site):
                 yield site_key, products
 
+    def sites_toward(self, mol, target, ctx):
+        sites = super(NDealkylation, self).sites_toward(mol, target, ctx)
+        if sites is None:
+            return None
+        return [
+            s
+            for s in sites
+            if any(mol.GetAtomWithIdx(i).GetAtomicNum() == 7 for i in s)
+        ]
+
+    def is_redundant(self, peer_rules) -> bool:
+        """Redundant when Phase I Dealkylation is already among peers."""
+        for peer in peer_rules:
+            if type(peer) is type(self):
+                return peer is not self
+            if getattr(peer, "name", type(peer).__name__) == "Dealkylation":
+                return True
+        return False
+
 
 class Hydrolysis(SmartsReactionRule):
     """Cleaves the single bond in carbonyls and adds oxygen to the carbon.
@@ -681,11 +966,14 @@ class Hydrolysis(SmartsReactionRule):
     """
 
     smarts = [
-        "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])",
-        "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2].[*:3])",
+        ("[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])", {"formula_hint": CLEAVE}),
+        ("[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2].[*:3])", {"formula_hint": CLEAVE}),
     ]
     mapid_site = [2, 3]
     sites_on = "bonds"
+
+    def elements_may_add(self):
+        return frozenset({"O"})
 
 
 class ReductiveDehalogenation(SmartsReactionRule):
@@ -700,8 +988,8 @@ class ReductiveDehalogenation(SmartsReactionRule):
     """
 
     smarts = [
-        "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]",
-        "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
+        ("[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
+        ("[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]", {"formula_hint": CLEAVE}),
     ]
     sites_on = "bonds"
 
@@ -717,14 +1005,17 @@ class OxidativeDehalogenation(SmartsReactionRule):
     """
 
     smarts = [
-        "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
-        "[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O",
-        "[#9,#17,#35,#53,#85:1]-[#6H2:2]>>[*:1].[*:2](O)=O",
-        "[#9,#17,#35,#53,#85:1]-[#6:2][#6H1:3]>>[*:2](O)[*:3]-[*:1]",
-        "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]",
-        "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]",
+        ("[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O", {"formula_hint": ADD_O}),
+        ("[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O", {"formula_hint": ADD_O}),
+        ("[#9,#17,#35,#53,#85:1]-[#6H2:2]>>[*:1].[*:2](O)=O", {"formula_hint": ADD_O}),
+        ("[#9,#17,#35,#53,#85:1]-[#6:2][#6H1:3]>>[*:2](O)[*:3]-[*:1]", {"formula_hint": ADD_O}),
+        ("[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]", {"formula_hint": ADD_O}),
+        ("[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]", {"formula_hint": ADD_O}),
     ]
     sites_on = "bonds"
+
+    def cleave_alone(self) -> bool:
+        return True
 
 
 class NitrogenOxidation(SmartsReactionRule):
@@ -745,9 +1036,9 @@ class NitrogenOxidation(SmartsReactionRule):
     """
 
     smarts = [
-        "[#7v3h:1]>>[*:1]O",
-        "[#7v3H2:1]>>[*:1]=O",
-        "[#7v3H0:1]>>[*&H0&+:1][O-]",
+        ("[#7v3h:1]>>[*:1]O", {"formula_hint": ADD_O}),
+        ("[#7v3H2:1]>>[*:1]=O", {"formula_hint": ADD_O}),
+        ("[#7v3H0:1]>>[*&H0&+:1][O-]", {"formula_hint": ADD_O}),
     ]
     phase1_sites_on = "atoms"
 
@@ -771,9 +1062,9 @@ class SulfurOxidation(SmartsReactionRule):
     """
 
     smarts = [
-        "[#16;v2,v4:1]>>[*&H0&+:1][O-]",
-        "[#16;v2,v4:1]>>[*:1][O]",
-        "[#16;v2,v4:1]>>[*:1]=O",
+        ("[#16;v2,v4:1]>>[*&H0&+:1][O-]", {"formula_hint": ADD_O}),
+        ("[#16;v2,v4:1]>>[*:1][O]", {"formula_hint": ADD_O}),
+        ("[#16;v2,v4:1]>>[*:1]=O", {"formula_hint": ADD_O}),
     ]
     phase1_sites_on = "atoms"
 
@@ -794,8 +1085,45 @@ class Hydroxylation(SmartsReactionRule):
 
     """
 
-    smarts = ["[#6h:1]>>[*:1]O", "[#6h2:1]>>[*:1]=O"]
+    smarts = [
+        ("[#6h:1]>>[*:1]O", {"formula_hint": ADD_O}),
+        ("[#6h2:1]>>[*:1]=O", {"formula_hint": ADD_O}),
+    ]
     phase1_sites_on = "atom_hydrogen"
+
+    def could_help(self, mol, target, ctx) -> bool:
+        """Hydroxylation only when the target still needs more oxygen."""
+        from .path_context import oxygen_deficit
+
+        return oxygen_deficit(mol, target) > 0
+
+    def sites_toward(self, mol, target, ctx):
+        """Conserved MCS atoms, one representative per topological orbit."""
+        if ctx is None or not getattr(ctx, "conserved_r_atoms", None):
+            return None
+        conserved = set(ctx.conserved_r_atoms)
+        r_only = set(getattr(ctx, "r_only_atoms", ()) or ())
+        if not r_only or len(conserved) == 0:
+            return None
+        ranks = self.topol_equiv(mol)
+        seen_ranks = set()
+        out = []
+        for a in sorted(conserved):
+            rank = ranks.get(a)
+            if rank in seen_ranks:
+                continue
+            seen_ranks.add(rank)
+            out.append(frozenset([a]))
+        return out or None
+
+    def child_may_reach(self, parent, child, target, ctx) -> bool:
+        if ctx is not None:
+            try:
+                if ctx.distance_proxy(child) > ctx.distance_proxy(parent):
+                    return False
+            except Exception:
+                pass
+        return True
 
 
 class OxygenReduction(SmartsReactionRule):
@@ -808,7 +1136,10 @@ class OxygenReduction(SmartsReactionRule):
 
     """
 
-    smarts = ["[#8:1]=[#6,#7:2]>>[*:1]-[*:2]", "[#8:1]-[#8:2]>>[*:1].[*:2]"]
+    smarts = [
+        ("[#8:1]=[#6,#7:2]>>[*:1]-[*:2]", {"formula_hint": NEUTRAL}),
+        ("[#8:1]-[#8:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
+    ]
 
 
 class Dehydration(SmartsReactionRule):
@@ -825,9 +1156,9 @@ class Dehydration(SmartsReactionRule):
     sites_on = "bonds"
 
     smarts = [
-        "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
-        "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
-        "[#6,#7:1]=[#8:2]>>[*:1].[*:2]",
+        ("[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
+        ("[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]", {"formula_hint": CLEAVE}),
+        ("[#6,#7:1]=[#8:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
     ]
     mapid_site = [1, 2]
 
@@ -843,7 +1174,12 @@ class Dephosphorylation(SmartsReactionRule):
 
     """
 
-    smarts = "[#8:1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]"
+    smarts = [
+        (
+            "[#8:1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]",
+            {"formula_hint": CLEAVE},
+        )
+    ]
     sites_on = "bonds"
     mapid_site = [1, 2]
 
@@ -889,9 +1225,9 @@ class SulfurReduction(SmartsReactionRule):
     """
 
     smarts = [
-        "[#16:1]=[#8:2]>>[*:1].[*:2]",
-        "[#16:1]-[#16:2]>>[*:1].[*:2]",
-        "[#16:1]-[#6,#8:2]>>[*:1].[*:2]",
+        ("[#16:1]=[#8:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
+        ("[#16:1]-[#16:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
+        ("[#16:1]-[#6,#8:2]>>[*:1].[*:2]", {"formula_hint": CLEAVE}),
     ]
 
 
@@ -957,6 +1293,9 @@ class AzoSplitting(SmartsReactionRule):
 
     smarts = "[#7:1]=[#7:2]>>[*:1].[*:2]"
 
+    def cleave_alone(self) -> bool:
+        return True
+
 
 class EpoxideOpening(SmartsReactionRule):
     """Breaks one of the carbon-oxygen bonds in epoxides.
@@ -971,8 +1310,8 @@ class EpoxideOpening(SmartsReactionRule):
     """
 
     smarts = [
-        "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])",
-        "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1]O)",
+        ("[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])", {"formula_hint": NEUTRAL}),
+        ("[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1]O)", {"formula_hint": ADD_O}),
     ]
     mapid_site = [1, 2]
     sites_on = "bonds"
@@ -991,14 +1330,14 @@ class NitrogenReduction(SmartsReactionRule):
     """
 
     smarts = [
-        "[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
-        "[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
-        "[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])",
-        "[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])",
-        "[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])",
-        "[#7:1]-[#8:2]>>([*:1].[*:2])",
-        "[#7D2:1]=[#8:2]>>([*:1].[*2])",
-        "[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])",
+        ("[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])", {"formula_hint": CLEAVE}),
+        ("[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])", {"formula_hint": CLEAVE}),
+        ("[#7:1]-[#8:2]>>([*:1].[*:2])", {"formula_hint": CLEAVE}),
+        ("[#7D2:1]=[#8:2]>>([*:1].[*2])", {"formula_hint": CLEAVE}),
+        ("[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])", {"formula_hint": CLEAVE}),
     ]
     mapid_site = [1, 2]
 
@@ -1054,6 +1393,8 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
 
 
 # Phase I rules (and N-dealkylation) expose degenerate phase1_steps singletons.
+# Formula heuristics live on SMARTS entry options (``formula_hint``);
+# Hydroxylation / Epoxidation / Dehydrogenation keep custom could_help overlays.
 for _phase1_rule in (
     Dehydrogenation,
     Dephosphorylation,

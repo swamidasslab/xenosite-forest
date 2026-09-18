@@ -18,6 +18,7 @@ from .utils import (
     unmapped_smiles,
     canon_smi,
     is_rdkit_valid,
+    note_sanitize_drop,
     _mol_smiles,
     refresh_mol,
 )
@@ -926,15 +927,118 @@ class QueryMol(object):
 
         else:
             self.query_smarts = query_smarts
-            self.queries = [
-                (name,) + self._prepare_query(smarts) for name, smarts in query_smarts
-            ]
+            self.queries = []
+            for entry in query_smarts:
+                name, smarts, options = self._parse_query_smarts_entry(entry)
+                query, queryidx2mapid = self._prepare_query(smarts)
+                self.queries.append((name, query, queryidx2mapid, options))
 
         self.valid_modifications = set(
             itertools.chain(
                 *[[x[0]] if isinstance(x[0], str) else x[0] for x in self.queries]
             )
         )
+
+    @staticmethod
+    def _parse_query_smarts_entry(entry):
+        """Normalize ``(mods, smarts)`` or ``(mods, smarts, options)`` entries.
+
+        ``options`` may include:
+
+        - ``pathway``: optional uncommon chemotype name (off unless enabled)
+        - ``one_sided`` / ``pair_limit``: max ends in a pair that may use this pathway
+        - ``recommend``: target SMARTS; guided search opts the pathway in when it
+          matches and formula hints agree
+        - ``formula_hint``: :class:`~xenosite.forest.path_context.FormulaHint`,
+          :class:`~xenosite.forest.path_context.FormulaAny`,
+          :class:`~xenosite.forest.path_context.FormulaMatch`, a sequence of
+          those, or ``callable(mol, match)`` — effect may depend on the hit
+        """
+        if not isinstance(entry, (tuple, list)) or len(entry) not in (2, 3):
+            raise TypeError(
+                "query_smarts entry must be (mods, smarts) or "
+                "(mods, smarts, options), got %r" % (entry,)
+            )
+        name, smarts = entry[0], entry[1]
+        options = dict(entry[2]) if len(entry) == 3 and entry[2] else {}
+        return name, smarts, options
+
+    @staticmethod
+    def match_options(match) -> dict:
+        """Options dict from a :meth:`match_queries` hit (empty if legacy 2-tuple)."""
+        if isinstance(match, tuple) and len(match) >= 3:
+            return match[2] or {}
+        return {}
+
+    @staticmethod
+    def match_modifications(match):
+        return match[1]
+
+    def pair_query_options_allowed(self, match1, match2, active_pathways=()) -> bool:
+        """True if a pair of query hits respects pathway / one-sided options.
+
+        Used by resonance-pair rules so optional SMARTS stay configurable via
+        the query list rather than hard-coded chemotype branches.
+        """
+        active = frozenset(active_pathways or ())
+        opts1 = self.match_options(match1)
+        opts2 = self.match_options(match2)
+        pathway_counts = {}
+        for opts in (opts1, opts2):
+            pw = opts.get("pathway")
+            if not pw:
+                continue
+            if pw not in active:
+                return False
+            pathway_counts[pw] = pathway_counts.get(pw, 0) + 1
+        for opts in (opts1, opts2):
+            pw = opts.get("pathway")
+            if not pw:
+                continue
+            limit = opts.get("pair_limit")
+            if limit is None and opts.get("one_sided"):
+                limit = 1
+            if limit is not None and pathway_counts.get(pw, 0) > int(limit):
+                return False
+        return True
+
+    def pathways_recommended_by_queries(self, mol, target) -> frozenset:
+        """Pathway names whose ``recommend`` SMARTS match ``target`` and formula hint allows.
+
+        Intended for guided search: uncommon SMARTS stay off in broad enumeration
+        but opt in when the target (+ formula) asks for them.
+        """
+        from .path_context import (
+            FormulaHint,
+            NEUTRAL,
+            formula_compatible,
+            heavy_formula_equal,
+        )
+
+        out = set()
+        if target is None:
+            return frozenset()
+        for entry in self.query_smarts:
+            _name, _smarts, options = self._parse_query_smarts_entry(entry)
+            pw = options.get("pathway")
+            if not pw:
+                continue
+            hint = options.get("formula_hint", NEUTRAL)
+            if hint is None:
+                hint = NEUTRAL
+            # Pre-match: possibility set must be compatible (sound).
+            if not formula_compatible(hint, mol, target, match=None):
+                continue
+            rec = options.get("recommend")
+            if not rec:
+                continue
+            try:
+                q = MolFromSmarts(rec) if isinstance(rec, str) else rec
+                if q is not None and target.HasSubstructMatch(q):
+                    out.add(pw)
+            except Exception:
+                continue
+        return frozenset(out)
 
     def neighbors(self, mol, idx):
         """Get the indexes neighboring idx in mol."""
@@ -1239,15 +1343,14 @@ class QueryMol(object):
     def match_queries(self, mol):
         """Returns dict mapping from each atom index to a list of matches to self.queries.
 
-        Each element of the list is a tuple. The first value in each tuple is a mapping from
-        mapids to atom indexes, as produced by self.match. The second value in each tuple
-        is the name of each query as listed in self.queries.
+        Each element of the list is a tuple ``(mapids, modifications, options)``.
+        ``options`` comes from an optional third field on ``query_smarts`` entries.
 
         >>> query_smarts=[('name1', '[#6R:1][#7,#8h1:2]'),('name2','[#6R:1][#7:2][#6:3]')]
         >>> RRR = EditMol(query_smarts=query_smarts)
         >>> mol = MolFromSmiles('CC(=O)Nc1ccc(O)cc1')
         >>> RRR.match_queries(mol)
-        {4: [({1: 4, 2: 3}, 'name1'), ({1: 4, 2: 3, 3: 1}, 'name2')], 7: [({1: 7, 2: 8}, 'name1')]}
+        {4: [({1: 4, 2: 3}, 'name1', {}), ({1: 4, 2: 3, 3: 1}, 'name2', {})], 7: [({1: 7, 2: 8}, 'name1', {})]}
 
 
 
@@ -1262,13 +1365,13 @@ class QueryMol(object):
 
         mapped_matches = collections.defaultdict(list)
 
-        for modifications, query, queryidx2mapid in self.queries:
+        for modifications, query, queryidx2mapid, options in self.queries:
             for map2queryidx in self.match(
                 mol, query=query, queryidx2mapid=queryidx2mapid
             ):
 
                 mapped_matches[map2queryidx[min(map2queryidx)]].append(
-                    (map2queryidx, modifications)
+                    (map2queryidx, modifications, options)
                 )
 
         return dict(mapped_matches)
@@ -1388,7 +1491,8 @@ class EditMol(QueryMol):
         """Makes an editable copy of mol and successively applies each submitted modification."""
 
         emol = RWMol(Mol(mol))
-        for map2queryidx, modification in modifications:
+        for item in modifications:
+            map2queryidx, modification = item[0], item[1]
             valid = self.modify(emol, map2queryidx, modification, **kwargs)
             if not valid:
                 return False
@@ -1522,6 +1626,35 @@ class Resonate(ConjugatedSystems, EditMol):
                 yield tuple(outputs)
 
 
+def _site_atom_set(site):
+    """Normalize a metabolize site to a frozenset of atom indices."""
+    if isinstance(site, tuple) and len(site) >= 2 and not isinstance(site[0], int):
+        return frozenset(site[1])
+    if isinstance(site, (list, tuple, set, frozenset)):
+        return frozenset(site)
+    return frozenset([site])
+
+
+def _site_matches_filters(site, include_sites, exclude_sites) -> bool:
+    atoms = _site_atom_set(site)
+    if exclude_sites is not None:
+        excluded = {_site_atom_set(s) for s in exclude_sites}
+        if atoms in excluded:
+            return False
+    if include_sites is not None:
+        included = {_site_atom_set(s) for s in include_sites}
+        if atoms not in included:
+            return False
+    return True
+
+
+def _include_atom_sets(include_sites):
+    """frozenset of atom-index frozensets, or ``None`` if unrestricted."""
+    if include_sites is None:
+        return None
+    return frozenset(_site_atom_set(s) for s in include_sites)
+
+
 class ReactionRule(AtomTracker):
     """Template for all rules."""
 
@@ -1574,13 +1707,15 @@ class ReactionRule(AtomTracker):
         return iter([self])
 
     def phase1_steps(self, mol, site, **kwargs):
-        """Return Phase1-equivalent :class:`~xenosite.forest.step_plan.StepPlan` list.
+        """Return one Phase1-equivalent :class:`~xenosite.forest.step_plan.StepPlan`.
 
         Public signature is ``(mol, site)``. Subclasses that are Phase I set
         ``phase1_equivalent = True`` for a degenerate singleton plan. Others
         raise ``NotImplementedError``. Private underscore kwargs may be used
         by subclasses for efficiency.
         """
+        from .step_plan import StepPlan
+
         if not self.phase1_equivalent:
             raise NotImplementedError(
                 "%s does not define Phase1-equivalent steps" % self.name
@@ -1594,10 +1729,8 @@ class ReactionRule(AtomTracker):
         ):
             emitted = outsite[1] if isinstance(outsite, tuple) else outsite
             if frozenset(emitted) == frozenset(want):
-                from .step_plan import StepPlan
-
-                return [StepPlan.singleton(self.name, want)]
-        return []
+                return StepPlan.singleton(self.name, want)
+        return StepPlan.empty()
 
     def format_site(self, site, just_rule_name=False):
 
@@ -1628,6 +1761,8 @@ class ReactionRule(AtomTracker):
         only_unique=False,
         strict=True,
         attach_phase1_steps=False,
+        include_sites=None,
+        exclude_sites=None,
         **kwargs
     ):
         if only_unique:
@@ -1660,6 +1795,8 @@ class ReactionRule(AtomTracker):
             do_not_tag_atoms=do_not_tag_atoms,
             strict=strict,
             attach_phase1_steps=attach_phase1_steps,
+            include_sites=include_sites,
+            exclude_sites=exclude_sites,
             **kwargs
         )
         while True:
@@ -1681,6 +1818,7 @@ class ReactionRule(AtomTracker):
                 if is_rdkit_valid(metabolite):
                     valid.append(metabolite)
                     continue
+                note_sanitize_drop(1)
                 _log.debug(
                     "Dropping RDKit-invalid %s metabolite %s",
                     self.name,
@@ -1727,6 +1865,10 @@ class ReactionRule(AtomTracker):
                 else:
                     unique_smi.append(unique_metabolites)
 
+            if include_sites is not None or exclude_sites is not None:
+                if not _site_matches_filters(outsite, include_sites, exclude_sites):
+                    continue
+
             if attach_phase1_steps:
                 self._attach_phase1_steps_to_products(mol, outsite, metabolites)
 
@@ -1751,6 +1893,206 @@ class ReactionRule(AtomTracker):
         for metabolite in missing:
             plan.attach_to_mol(metabolite)
 
+    def is_redundant(self, peer_rules) -> bool:
+        """True if this rule should be dropped given the rest of the ruleset."""
+        return False
+
+    def is_terminal_product(self, mol) -> bool:
+        """True if ``mol`` must not be expanded further in guided path search."""
+        return False
+
+    def formula_hints(self):
+        """Per-reaction / per-query :class:`~xenosite.forest.path_context.FormulaHint`\\ s.
+
+        Prefer ``formula_hint`` on each SMARTS entry's options dict (reaction
+        ``smarts`` / ``rxns`` or ``query_smarts``). Legacy class attribute
+        ``formula_effects`` is still read when options omit hints.
+        ``None`` entries mean “unknown — do not filter”. Empty / missing ⇒ no
+        formula-based SMARTS skipping (``could_help`` stays permissive unless
+        overridden).
+        """
+        opts = getattr(self, "smarts_options", None)
+        if opts and any("formula_hint" in o for o in opts):
+            return [o.get("formula_hint") for o in opts]
+        # query_smarts options (ResonancePairRule / EditMol)
+        qsmarts = getattr(self, "query_smarts", None) or []
+        if qsmarts:
+            from_query = []
+            for entry in qsmarts:
+                try:
+                    _n, _s, o = QueryMol._parse_query_smarts_entry(entry)
+                except Exception:
+                    from_query.append(None)
+                    continue
+                from_query.append(o.get("formula_hint") if o else None)
+            if from_query and any(h is not None for h in from_query):
+                return from_query
+        return getattr(self, "formula_effects", None) or getattr(
+            type(self), "formula_effects", None
+        )
+
+    def smarts_compatible(self, rxn_index: int, mol, target, match=None) -> bool:
+        """False ⇒ skip reaction SMARTS ``rxn_index`` for paths toward ``target``.
+
+        ``match`` optional: when provided, match-polymorphic ``formula_hint``
+        resolvers can refine the effect; otherwise the pre-match possibility
+        set is used (sound skip).
+        """
+        from .path_context import formula_compatible
+
+        hints = self.formula_hints()
+        if not hints:
+            return True
+        if rxn_index < 0 or rxn_index >= len(hints):
+            return True
+        hint = hints[rxn_index]
+        if hint is None:
+            return True
+        return formula_compatible(hint, mol, target, match=match)
+
+    def elements_may_add(self):
+        """Element symbols this rule may introduce, or ``None`` if unknown.
+
+        Default: derive from :meth:`formula_hints` positive ``delta`` entries.
+        Rules without hints return ``None`` (cannot prove impossibility).
+        """
+        from .path_context import elements_may_add_from_hints
+
+        return elements_may_add_from_hints(self.formula_hints())
+
+    def could_help(self, mol, target, ctx) -> bool:
+        """False ⇒ this rule cannot appear on any path from ``mol`` to ``target``.
+
+        Default: if :meth:`formula_hints` are declared, True when any hint is
+        compatible with ``mol``→``target``; otherwise True (permissive).
+        """
+        from .path_context import any_hint_compatible
+
+        hints = self.formula_hints()
+        if not hints:
+            return True
+        return any_hint_compatible(hints, mol, target)
+
+    def is_cleavage(self) -> bool:
+        """True if any formula hint may shrink / fragment the molecule."""
+        from .path_context import hint_includes_cleave
+
+        hints = self.formula_hints()
+        if not hints:
+            return False
+        return any(h is not None and hint_includes_cleave(h) for h in hints)
+
+    def cleave_alone(self) -> bool:
+        """True ⇒ join the cleavage peer pass when the target is smaller.
+
+        The guided cleavage-only pass expands every ``is_cleavage()`` rule as
+        peers (primary and secondary CLEAVE-tagged chemistry together). Override
+        this when a rule should join that pass even without a CLEAVE formula
+        hint (e.g. oxidative dehalogenation: C–X cleavage with ADD_O hints).
+        """
+        return False
+
+    def sites_toward(self, mol, target, ctx):
+        """Required sites for a direct path, or ``None`` for unrestricted."""
+        return None
+
+    def sites_maybe(self, mol, target, ctx):
+        """Optional (Maybe) sites that do not themselves advance MCS/delta."""
+        return ()
+
+    def child_may_reach(self, parent, child, target, ctx) -> bool:
+        """False ⇒ reject ``child`` before enqueue (Impossible product).
+
+        Default: formula distance to ``target`` must not increase.
+        """
+        if ctx is None:
+            return True
+        try:
+            return ctx.distance_proxy(child) <= ctx.distance_proxy(parent)
+        except Exception:
+            return True
+
+    def enumerate_for_path(
+        self,
+        mol,
+        ctx,
+        expand_phase1_plans=True,
+        include_sites=None,
+        exclude_sites=None,
+        only_emit_topologically_distinct_sites=True,
+        **kwargs,
+    ):
+        """Yield ``("plan", expr, site)`` or ``("hop", site, products)`` for guided search.
+
+        Batches metabolize once per rule/mol. Never loops per-site generation.
+        Topologically equivalent site orbits are pruned by default.
+        Passes ``toward_target`` so per-SMARTS formula hints can skip reactions.
+
+        When :meth:`sites_toward` returns a list and phase1 plans are enabled,
+        emit plans for those sites from reactant SMARTS + MCS pruning **without**
+        calling ``metabolize`` / ``RunReactants`` first.
+        """
+        from .step_plan import pathway_alternatives
+
+        if not self.could_help(mol, ctx.target, ctx):
+            return
+
+        toward = self.sites_toward(mol, ctx.target, ctx)
+        maybe = self.sites_maybe(mol, ctx.target, ctx)
+        if include_sites is None and toward is not None:
+            include_sites = list(toward) + list(maybe or ())
+
+        supports_phase1 = False
+        if expand_phase1_plans:
+            try:
+                supports_phase1 = bool(getattr(self, "phase1_equivalent", False))
+                if not supports_phase1:
+                    supports_phase1 = (
+                        type(self).phase1_steps is not ReactionRule.phase1_steps
+                    )
+            except Exception:
+                supports_phase1 = False
+
+        # Cleavage toward-sites: plan without materializing every SMARTS hit.
+        if (
+            include_sites is not None
+            and supports_phase1
+            and expand_phase1_plans
+            and toward is not None
+        ):
+            for site in include_sites:
+                atoms = _site_atom_set(site)
+                try:
+                    expr = self.phase1_steps(mol, atoms)
+                except NotImplementedError:
+                    continue
+                if pathway_alternatives(expr):
+                    yield ("plan", expr, site)
+            return
+
+        topol = None  # metabolize topo+product identity is the orbit prune
+        for site, products in self.metabolize(
+            mol,
+            include_sites=include_sites,
+            exclude_sites=exclude_sites,
+            tag_atoms=False,
+            only_emit_topologically_distinct_sites=only_emit_topologically_distinct_sites,
+            attach_phase1_steps=False,
+            toward_target=ctx.target,
+            **kwargs,
+        ):
+            atoms = _site_atom_set(site)
+            if supports_phase1:
+                try:
+                    expr = self.phase1_steps(mol, atoms)
+                except NotImplementedError:
+                    yield ("hop", site, products)
+                    continue
+                if pathway_alternatives(expr):
+                    yield ("plan", expr, site)
+                    continue
+            yield ("hop", site, products)
+
     def metabolites(self, mol, **kwargs):
         """Should return a tuple of lists. The first element will be the site, the second element
         will be a list of metabolites. Any rule that could cause molecule fragmention should
@@ -1773,9 +2115,12 @@ class ReactionRule(AtomTracker):
         Otherwise, return all metabolites with matching sites."""
 
         sites = self._cast_sites(sites)
+        # Restrict generation before clean/RunReactants when possible — full
+        # metabolize + post-filter still builds every resonance product.
+        include = [_site_atom_set(s) for s in sites]
 
         for site, metabolite in self.metabolize(
-            mol, tag_atoms=tag_atoms, **kwargs
+            mol, tag_atoms=tag_atoms, include_sites=include, **kwargs
         ):
             if tuple(site) in sites:
 
@@ -1824,11 +2169,34 @@ class ReactionRule(AtomTracker):
 
 
 class SmartsReactionRule(ReactionRule):
-    """Performs reactions specified by SMARTS."""
+    """Performs reactions specified by SMARTS.
+
+    Each ``smarts`` / ``rxns`` entry may be a plain SMARTS string or
+    ``(smarts, options)`` where ``options`` may include ``formula_hint``
+    (and the same keys as ``query_smarts`` options: ``pathway``, …).
+    """
 
     parameters = ["Reaction SMARTS"]
     smarts = []
     mapid_site = []
+
+    @staticmethod
+    def _parse_smarts_entry(entry):
+        """Return ``(smarts_str, options_dict)`` for a reaction SMARTS list item."""
+        if isinstance(entry, str):
+            return entry, {}
+        if isinstance(entry, (tuple, list)) and len(entry) >= 1:
+            smarts = entry[0]
+            options = dict(entry[1]) if len(entry) > 1 and entry[1] else {}
+            if not isinstance(smarts, str):
+                raise TypeError(
+                    "reaction SMARTS entry must start with a string, got %r" % (entry,)
+                )
+            return smarts, options
+        raise TypeError(
+            "reaction SMARTS entry must be a string or (smarts, options), got %r"
+            % (entry,)
+        )
 
     def __init__(self, rxns=None, mapid_site=None, *args, **kwargs):
 
@@ -1840,17 +2208,109 @@ class SmartsReactionRule(ReactionRule):
         if rxns:
             if isinstance(rxns, str):
                 rxns = [rxns]
-            self.smarts = rxns
+            entries = list(rxns)
         elif self.smarts:
             if isinstance(self.smarts, str):
-                self.smarts = [self.smarts]
+                entries = [self.smarts]
+            else:
+                entries = list(self.smarts)
         else:
-            self.smarts = []
+            entries = []
 
-        self.rxns = [self._smarts2rxns(rxn, **kwargs) for rxn in self.smarts]
+        parsed = [self._parse_smarts_entry(e) for e in entries]
+        self.smarts = [s for s, _o in parsed]
+        self.smarts_options = [o for _s, o in parsed]
+        self.rxns = [self._smarts2rxns(s, **kwargs) for s in self.smarts]
 
-    def metabolites(self, mol, kekulize=True, **kwargs):
-        """By default, mol will be kekulized."""
+    def formula_hints(self):
+        """Hints from each reaction SMARTS entry's ``formula_hint`` option.
+
+        Falls back to legacy class ``formula_effects`` when options omit hints.
+        """
+        opts = getattr(self, "smarts_options", None) or []
+        if opts and any("formula_hint" in o for o in opts):
+            return [o.get("formula_hint") for o in opts]
+        return super(SmartsReactionRule, self).formula_hints()
+
+    def iter_reactant_site_matches(self, mol):
+        """Yield formation sites from reactant-side SMARTS only (no ``RunReactants``)."""
+        mapids = list(self.mapid_site or [])
+        if not mapids:
+            return
+        seen = set()
+        for smarts in self.smarts or ():
+            lhs = smarts.split(">>", 1)[0].strip()
+            # Drop reaction-product grouping parens sometimes left on LHS.
+            if lhs.startswith("(") and lhs.endswith(")"):
+                lhs = lhs[1:-1]
+            query = Chem.MolFromSmarts(lhs)
+            if query is None:
+                continue
+            for match in mol.GetSubstructMatches(query):
+                by_map = {}
+                for qi, atom in enumerate(query.GetAtoms()):
+                    mid = int(atom.GetAtomMapNum() or 0)
+                    if mid and qi < len(match):
+                        by_map[mid] = int(match[qi])
+                try:
+                    site = frozenset(by_map[m] for m in mapids)
+                except KeyError:
+                    continue
+                if len(site) < 1 or site in seen:
+                    continue
+                seen.add(site)
+                yield site
+
+    def sites_toward(self, mol, target, ctx):
+        """When T is smaller, keep cleavage sites whose MCS side can hold T.
+
+        Candidate bonds come from reactant SMARTS matches; pruning uses the
+        reactant↔target MCS and a bridge split on the SMILES graph — cleavage
+        products are not materialized.
+
+        Sites are **prioritized** by MCS frontier / embedding disagreement.
+        Only sites passing :func:`~xenosite.forest.path_context.cleavage_site_safe_to_drop_required`
+        thresholds are hard-dropped from Required (deep interior; deep exterior
+        when MCS already matches T's size). Other non-frontier sites stay, later
+        in the list.
+        """
+        if not self.is_cleavage():
+            return super(SmartsReactionRule, self).sites_toward(mol, target, ctx)
+        if ctx is None or target is None:
+            return None
+        try:
+            if target.GetNumHeavyAtoms() >= mol.GetNumHeavyAtoms():
+                return None
+        except Exception:
+            return None
+        from .path_context import (
+            cleavage_site_may_reach,
+            cleavage_site_priority,
+            cleavage_site_safe_to_drop_required,
+        )
+
+        out = []
+        seen = set()
+        for site in self.iter_reactant_site_matches(mol):
+            key = frozenset(site)
+            if key in seen:
+                continue
+            seen.add(key)
+            site_fs = frozenset(site)
+            if not cleavage_site_may_reach(mol, site_fs, target, ctx):
+                continue
+            if cleavage_site_safe_to_drop_required(mol, site_fs, ctx, target):
+                continue
+            out.append(site_fs)
+        out.sort(key=lambda s: cleavage_site_priority(mol, s, ctx))
+        return out
+
+    def metabolites(self, mol, kekulize=True, toward_target=None, **kwargs):
+        """By default, mol will be kekulized.
+
+        ``toward_target``: optional product mol; reaction SMARTS whose
+        :meth:`smarts_compatible` is False are skipped (formula hints).
+        """
         if kekulize:
             self._kekulize(mol)
 
@@ -1859,6 +2319,10 @@ class SmartsReactionRule(ReactionRule):
         refresh_mol(mol)
 
         for rxn_num, rxn in enumerate(self.rxns):
+            if toward_target is not None and not self.smarts_compatible(
+                rxn_num, mol, toward_target
+            ):
+                continue
             self._clear_atom_maps(mol)
             try:
                 reactant_products = rxn.RunReactants((mol,))
