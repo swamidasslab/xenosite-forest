@@ -1,0 +1,2 @@
+Fragments for towncrier. Add `*.md` files named `{slug}.{type}.md` or `{issue}.{type}.md`.
+Types: added, changed, fixed, removed, deprecated, security.

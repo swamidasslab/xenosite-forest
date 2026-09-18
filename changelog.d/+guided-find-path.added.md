@@ -1,0 +1,1 @@
+Package `find_path` (alias `find_path_guided`): MCS-guided search; default `PhaseOneQF`, `depth=None`, `max_expansions=200`; yields `PathOutcome` (Required `plan` + cleavage-side `maybe`). Unstable API.
