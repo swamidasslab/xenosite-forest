@@ -174,6 +174,46 @@ def _site_frames_via_trace(mol, site, *, depth: int = 0):
             yield frame
 
 
+def _added_by_pair(added_by):
+    """Normalize a trace ``added_by`` value to ``(rule, frozenset)``."""
+    if not added_by or not isinstance(added_by, (tuple, list)) or len(added_by) != 2:
+        return None
+    rule, site = added_by
+    try:
+        site = frozenset(int(x) for x in site)
+    except TypeError:
+        return None
+    return str(rule), site
+
+
+def _resolve_added_by_trace(mol, rule, site, *, depth: int = 0):
+    """Current idx of the earliest trace label created by ``(rule, site)``.
+
+    Returns ``None`` when no live record is stamped ``added_by`` for this ref.
+    """
+    records = _atom_trace_records(mol)
+    if records is None:
+        return None
+    frames = set(_site_frames_via_trace(mol, site, depth=depth))
+    to_depth = _latest_trace_depth(records)
+    matches = []
+    for rec in records.values():
+        pair = _added_by_pair(rec.get("added_by"))
+        if pair is None or pair[0] != rule or pair[1] not in frames:
+            continue
+        depths = list(rec.get("depth") or ())
+        idxs = list(rec.get("idx") or ())
+        if not depths or to_depth not in depths:
+            continue
+        birth = int(depths[0])
+        cur = int(idxs[depths.index(to_depth)])
+        matches.append((birth, cur))
+    if not matches:
+        return None
+    matches.sort()
+    return matches[0][1]
+
+
 def _ensure_apply_ready(mol) -> None:
     """Initialize atom maps on a fresh mol so later resolves can track origins."""
     if any(a.GetAtomMapNum() > 0 for a in mol.GetAtoms()):
@@ -292,8 +332,11 @@ class AtomRef:
         GetIdx values in tagged frame ``depth`` (the frame used when the site
         was written — same depth metabolize keyed into ``atom_refs``). Prefer
         this over a mid-depth origin when the atom is defined by a prior step.
-        Resolve projects ``site`` through ``atom_trace`` starting at ``depth``
-        and looks up ``(rule, frame)`` until one hits.
+        Resolve reads the live trace record stamped ``added_by`` for that rule
+        whose site is ``site`` or a later frame of it, and returns that label's
+        current idx. If the same site creates another atom later, the ref keeps
+        the earliest one. The ``atom_refs`` index is only a fallback for mols
+        tagged before ``added_by`` was stamped.
     """
 
     origin: int | None = None
@@ -358,6 +401,9 @@ class AtomRef:
         if self.origin is not None:
             return _resolve_origin(mol, self.origin, depth=self.depth)
         rule, site = self.added_by
+        traced = _resolve_added_by_trace(mol, rule, site, depth=self.depth)
+        if traced is not None:
+            return traced
         index = _atom_refs_index(mol)
         for frame in _site_frames_via_trace(mol, site, depth=self.depth):
             idx = index.lookup((rule, frame))

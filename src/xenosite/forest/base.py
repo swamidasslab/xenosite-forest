@@ -72,7 +72,7 @@ _log = logging.getLogger(__name__)
 #
 #                 record (live):
 #                   idx, depth  — parallel GetIdx history at each tag depth
-#                   added_by?   — optional (rule, site) when created by a step
+#                   added_by?   — (rule, site) stamped on labels this step created
 #
 #                 removed event:
 #                   depth       — tag depth at which labels left this structure
@@ -180,19 +180,34 @@ class AtomRefsIndex:
         return self._entries.items()
 
     def remap_from_parent(self, parent_mol, child_mol):
-        """Rebuild entries with child GetIdx via react_atom_idx from parent."""
+        """Rebuild entries with child GetIdx via ``_forestLabel``.
+
+        ``current_idx`` is the reactant GetIdx, not the parent GetIdx of a
+        created atom, so it must not be used here. Fall back to
+        ``react_atom_idx`` only when the created atom has no trace label.
+        """
         out = AtomRefsIndex()
+        src_idx_to_label = {}
+        for atom in parent_mol.GetAtoms():
+            if atom.HasProp(AtomTracker.atom_tag_prop_name):
+                src_idx_to_label[atom.GetIdx()] = atom.GetProp(
+                    AtomTracker.atom_tag_prop_name
+                )
+        label_to_idx = {}
+        for atom in child_mol.GetAtoms():
+            if atom.HasProp(AtomTracker.atom_tag_prop_name):
+                label_to_idx[atom.GetProp(AtomTracker.atom_tag_prop_name)] = (
+                    atom.GetIdx()
+                )
         for key, parent_idx in self._entries.items():
+            label = src_idx_to_label.get(parent_idx)
+            if label is not None and label in label_to_idx:
+                out._entries[key] = label_to_idx[label]
+                continue
             for atom in child_mol.GetAtoms():
                 if (
                     atom.HasProp("react_atom_idx")
                     and int(atom.GetProp("react_atom_idx")) == parent_idx
-                ):
-                    out._entries[key] = atom.GetIdx()
-                    break
-                if (
-                    atom.HasProp("current_idx")
-                    and int(atom.GetProp("current_idx")) == parent_idx
                 ):
                     out._entries[key] = atom.GetIdx()
                     break
@@ -208,12 +223,74 @@ def _atom_refs_index(mol) -> AtomRefsIndex:
     return index
 
 
+def _forest_trace_records(mol):
+    """Live ``atom_trace`` records on ``mol``, or ``None`` if untagged."""
+    forest = getattr(mol, "_forest", None) or {}
+    trace = forest.get("atom_trace") or {}
+    records = trace.get("records")
+    return records if records else None
+
+
 def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsIndex):
-    """Record atoms created by ``rule_name`` at ``origin_at`` onto ``index``."""
-    origin_at = frozenset(origin_at or ())
+    """Record atoms created by ``rule_name`` at ``origin_at`` onto ``index``.
+
+    A creation is a trace label the parent did not have. Missing atom maps are
+    not enough: dehydrogenation clears maps on atoms the trace already knows.
+    The new label is stamped ``added_by`` so ``AtomRef.resolve`` can follow
+    that label instead of a raw GetIdx. A later step at the same site does not
+    retarget the first creation.
+    """
+    origin_at = frozenset(int(x) for x in (origin_at or ()))
     if not origin_at:
         return
 
+    child_records = _forest_trace_records(after)
+    if child_records is None:
+        _record_atom_creations_untagged(rule_name, origin_at, after, index)
+        return
+
+    parent_records = _forest_trace_records(before) or {}
+    new_atoms = []
+    label_of = {}
+    for tag, rec in child_records.items():
+        if tag in parent_records or not rec.get("depth"):
+            continue
+        idx = int(rec["idx"][-1])
+        if idx < 0 or idx >= after.GetNumAtoms():
+            continue
+        atom = after.GetAtomWithIdx(idx)
+        new_atoms.append(atom)
+        label_of[atom.GetIdx()] = tag
+    if not new_atoms:
+        return
+
+    chosen = _choose_created_atom(after, new_atoms, origin_at)
+    tag = label_of.get(chosen.GetIdx())
+    if tag is not None and child_records[tag].get("added_by") is None:
+        child_records[tag]["added_by"] = (rule_name, origin_at)
+    key = (rule_name, origin_at)
+    if index.lookup(key) is None:
+        index.set(key, chosen.GetIdx())
+
+
+def _choose_created_atom(after, new_atoms, origin_at):
+    """Pick the new atom bonded to ``origin_at`` when a step adds several."""
+    if len(new_atoms) == 1:
+        return new_atoms[0]
+    targets = {int(x) for x in origin_at}
+    for atom in new_atoms:
+        for t in targets:
+            if (
+                t < after.GetNumAtoms()
+                and atom.GetIdx() != t
+                and after.GetBondBetweenAtoms(atom.GetIdx(), t)
+            ):
+                return atom
+    return new_atoms[0]
+
+
+def _record_atom_creations_untagged(rule_name, origin_at, after, index: AtomRefsIndex):
+    """Legacy creation heuristic for a product that has no atom_trace yet."""
     old_on_after = set()
     for atom in after.GetAtoms():
         if atom.GetAtomMapNum() > 0 or atom.HasProp("react_atom_idx"):
@@ -223,27 +300,10 @@ def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsI
     ]
     if not new_atoms:
         return
-
-    chosen = None
-    if len(new_atoms) == 1:
-        chosen = new_atoms[0]
-    else:
-        # ``origin_at`` is the formation site as metabolize / resolve saw it
-        # (current-frame idxs on ``before``). Prefer a new atom bonded to one.
-        targets = {int(x) for x in origin_at}
-        for atom in new_atoms:
-            for t in targets:
-                if t < after.GetNumAtoms() and atom.GetIdx() != t and after.GetBondBetweenAtoms(
-                    atom.GetIdx(), t
-                ):
-                    chosen = atom
-                    break
-            if chosen is not None:
-                break
-        if chosen is None:
-            chosen = new_atoms[0]
-
-    index.set((rule_name, origin_at), chosen.GetIdx())
+    chosen = _choose_created_atom(after, new_atoms, origin_at)
+    key = (rule_name, origin_at)
+    if index.lookup(key) is None:
+        index.set(key, chosen.GetIdx())
 
 
 def install_product_forest(

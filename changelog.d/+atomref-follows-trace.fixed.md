@@ -1,0 +1,1 @@
+``AtomRef`` for a created atom follows the ``atom_trace`` label stamped ``added_by``. A reaction that adds no label no longer records a creation, and a later reaction at the same site does not retarget the first atom.

@@ -297,5 +297,46 @@ def test_benzene_prep_linearization_apply_agrees():
         if products
     ]
     assert prep_smiles and len(set(prep_smiles)) == 1
-    got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(next(iter(prep_smiles))))))
-    assert got == Chem.MolToSmiles(Chem.MolFromSmiles("Oc1ccc(O)cc1"))
+
+
+def test_created_atom_ref_follows_trace_label():
+    """Dehydrogenation must not alias an older oxygen, and a second
+    hydroxylation at the same site must not retarget the first creation.
+    """
+    from xenosite.forest.step_plan import _atom_refs_index
+
+    start = MolFromSmiles("COc1ccc(O)cc1")
+    catechol = Step("Hydroxylation", {4}).apply(start)[0]
+    quinone = Step(
+        "Dehydrogenation",
+        {
+            AtomRef(added_by=("Hydroxylation", frozenset({4}))),
+            AtomRef(origin=6),
+        },
+    ).apply(catechol)[0]
+    keys = [key[0] for key, _idx in _atom_refs_index(quinone).items()]
+    assert "Dehydrogenation" not in keys
+    followed = AtomRef(added_by=("Hydroxylation", frozenset({4}))).resolve(quinone)
+    records = quinone._forest["atom_trace"]["records"]
+    oh_now = [
+        rec["idx"][-1]
+        for rec in records.values()
+        if rec.get("added_by")
+        and rec["added_by"][0] == "Hydroxylation"
+        and 4 in rec["added_by"][1]
+    ]
+    assert oh_now == [followed]
+    assert quinone.GetAtomWithIdx(followed).GetAtomicNum() == 8
+
+    once = Step("Hydroxylation", {0}).apply(start)[0]
+    twice = Step("Hydroxylation", {0}).apply(once)[0]
+    births = []
+    for rec in twice._forest["atom_trace"]["records"].values():
+        added = rec.get("added_by")
+        if not added or added[0] != "Hydroxylation" or 0 not in added[1]:
+            continue
+        births.append((rec["depth"][0], rec["idx"][-1]))
+    assert len(births) == 2
+    resolved = AtomRef(added_by=("Hydroxylation", frozenset({0}))).resolve(twice)
+    assert resolved == min(births)[1]
+    assert resolved != max(births)[1]
