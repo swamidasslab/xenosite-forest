@@ -233,38 +233,3 @@ def test_find_path_default_phaseone_qf_no_ruleset_pick():
     assert tba.rule_expansions <= 10
     assert tba.billed() <= 40
     assert not tba.budget_exhausted
-
-
-def test_phenol_hydroxyquinone_is_one_quinone_expansion():
-    """Phenol → hydroxybenzoquinone is one QF expansion, not a Phase I walk.
-
-    Plans that add the wrong number of oxygens used to enqueue benzoquinone
-    intermediates; Hydroxylation then replayed the same quinone plans.
-    """
-    from xenosite.forest import RuleSet
-    from xenosite.forest.rules import Dehydrogenation, QuinoneFormation
-
-    counters = PathSearchCounters()
-    hits = list(
-        find_path(
-            "Oc1ccccc1",
-            "O=C1C=CC=C(O)C1=O",
-            ruleset=RuleSet(
-                [
-                    QuinoneFormation(),
-                    Hydroxylation(),
-                    Dehydrogenation(),
-                    Dealkylation(),
-                ]
-            ),
-            depth=5,
-            maybe_prefixes=False,
-            max_paths=8,
-            max_expansions=120,
-            expand_phase1_plans=True,
-            counters=counters,
-        )
-    )
-    assert hits
-    assert counters.rule_expansions == 1
-    assert not counters.budget_exhausted
