@@ -9,7 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Package `find_path` (alias `find_path_guided`): MCS-guided search; default `PhaseOneQF`, `depth=None`, `max_expansions=200`; yields `PathOutcome` (Required `plan` + cleavage-side `maybe`). Unstable API.
+- `Deps` (`StepPlan` specialization): flat steps + precedes; linearizations are topological sorts. Guided emission uses `Deps` (not Kahn→And/Seq).
+- `StepPlan.n_linearizations()`: count total orders without enumerating (`Deps` uses subset DP, `n≤20`).
+- Optional `max_expansions` / `counters` on classic `RuleSet.find_path` (BFS/DFS): accepts `PathSearchCounters` (or a dict mirror); caps billed work so classic and guided counters are comparable.
+- Per-SMARTS `formula_hint` / `FormulaHint` on reaction options; `metabolize(..., toward_target=)` skips incompatible SMARTS. Dehydrogenation methide is opt-in (not default Phase I).
+- Optional `include_sites` / `exclude_sites` on `metabolize` (default: no filter).
+- Conjugation path policy: one unlabeled `*` peer via `is_redundant`; star products terminal.
+- `NDealkylation.is_redundant` when `Dealkylation` peers are present; duplicate `Epoxidation` instances dropped.
 - Optional extra `predict` (`xenosite-forest[predict]` → `xenosite-predict`); not installed on CI.
+
+### Changed
+
+- Guided `max_expansions` caps `PathSearchCounters.billed()` (`linearizations_applied` + `site_applies`), not `rule_expansions`.
+- Cleavage site prune / priority under guided search (MCS frontier, safe-drop interior/exterior, chem-disagree as frontier-only). Early abort when T introduces unreachable elements.
+- Package `__all__` trimmed: emission helpers (`and_cleave_plan`, `CleavageSide`, `MaybeFilter`, PathContext utils, `@unstable`) are submodule-only. Docs keep `find_path` short.
+- `@unstable` / `UnstableWarning` on public guided surface: `find_path`, `PathOutcome`, `PathSearchCounters`, `Deps`, `StepPlan.n_linearizations`.
+- QuinoneFormation guided enum can emit phase1 plans without materializing/clean; `include_sites` restricts resonance fanout before `clean`.
+- `QuinoneFormation.phase1_steps` / Phase I emitters return a single `StepPlan`. Prefer `plan.branches()` / `plan.linearizations()`.
+- Attached plan JSON is an expression tree (`op`: `seq`/`and`/`or`/`step`/`deps`); legacy flat `steps`+`precedes` still loads.
 
 ## [0.4.0] - 2026-09-17
 

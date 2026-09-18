@@ -7,34 +7,42 @@ Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI 
 ## Public API
 
 ```python
-from xenosite.forest import bfs, rules, RuleSet, PhaseOneRS, load_ruleset, RULESETS, AtomTrace, AtomRef, Linearization, Step, StepPlan
+from xenosite.forest import (
+    bfs, dfs, find_path, rules, RuleSet, PhaseOneRS, PhaseOneQF,
+    load_ruleset, RULESETS, AtomTrace, AtomRef, Linearization, Step,
+    StepPlan, And, Or, Deps, PathOutcome, PathSearchCounters, FormulaHint,
+)
 ```
 
 | Symbol | Role |
 | --- | --- |
-| `bfs(mols, ruleset=..., **kwargs)` | Search pathways from a reactant, or between reactant and product |
-| `rules` | Individual reaction classes (`Hydroxylation`, `Epoxidation`, `QuinoneFormation`, …) |
-| `RuleSet` | Group of rules used together |
-| `load_ruleset(name)` | Look up a named ruleset (`"Full"`, `"PhaseOneRS"`, `"QF"`, …) |
-| `PhaseOneRS` | Phase I rules used in Metabolic Forest |
-| `RULESETS` | Registry of built-in rulesets |
-| `AtomTrace(mol)` | 1-based atom-mapping history on a tagged metabolite |
-| `AtomRef` / `Step` / `StepPlan` / `Linearization` | Reactant-stable sites; Phase1-equivalent plans; self-apply linearizations (`try_from_mol` / `from_mol` / `attach_to_mol`) |
+| `bfs` / `dfs` | Enumerate pathways from a reactant (or toward a product) |
+| `find_path(R, T, …)` | MCS-guided search; yields `PathOutcome` (unstable API) |
+| `PathOutcome` | Required `plan` + cleavage-side `maybe`; unpacks as `(smiles, steps, mols, plan, maybe)` |
+| `PathSearchCounters` | Shared guided/classic instrumentation (`billed`, `sanitize_dropped`, …) |
+| `rules` / `RuleSet` / `load_ruleset` / `RULESETS` | Reaction rules and named rulesets |
+| `PhaseOneRS` / `PhaseOneQF` | Phase I; Phase I + `QuinoneFormation` (guided default) |
+| `AtomTrace` | 1-based atom-mapping history on a tagged metabolite |
+| `AtomRef` / `Step` / `StepPlan` / `And` / `Or` / `Deps` / `Linearization` | Pathway plans and self-apply linearizations |
+| `FormulaHint` / `ADD_O` / `CLEAVE` / … | Per-SMARTS formula effects toward a target |
 
-`xenosite.forest.net.MetaboliteNetwork` is optional and needs `pip install 'xenosite-forest[network]'`.
+`xenosite.forest.net.MetaboliteNetwork` is optional (`pip install 'xenosite-forest[network]'`).
 Site-of-metabolism models are optional via `pip install 'xenosite-forest[predict]'` (not used in Forest CI).
 
 ## Phase1-equivalent steps
 
-Some Forest rules correspond to one or more Phase I transformations. Plans are
-`StepPlan` objects (partial orders of `Step`). Sites use reactant-stable `AtomRef`
-values: a reactant **origin** index, or an atom **created by** an earlier step
-(`added_by` + reactant-frame `at`). Ints coerce to `AtomRef(origin=…)`.
+Some Forest rules correspond to one or more Phase I transformations. Each rule
+returns **one** `StepPlan` (nested `Step` / Seq / `And` / `Or`; guided emission
+may use `Deps` for flat steps + precedes).
+
+Sites use reactant-stable `AtomRef` values: a reactant **origin** index, or an
+atom **created by** an earlier step (`added_by` + reactant-frame `at`). Ints
+coerce to `AtomRef(origin=…)`.
 
 | Rule family | `phase1_steps` |
 | --- | --- |
-| Phase I (`Hydroxylation`, `Epoxidation`, `Dehydrogenation`, …) and `NDealkylation` | Degenerate: one singleton plan for a valid site |
-| `QuinoneFormation` | Multi-step: prep layers (e.g. hydroxylation) then final dehydrogenation |
+| Phase I (`Hydroxylation`, `Epoxidation`, `Dehydrogenation`, …) and `NDealkylation` | Degenerate singleton `StepPlan` for a valid site |
+| `QuinoneFormation` | One plan: `Or` of routes (e.g. DH-only \| dealk→DH \| `And(OH,…)`→DH) |
 | Other rules (conjugates, …) | `NotImplementedError` |
 
 ### Ask a rule (no enumeration)
@@ -44,12 +52,15 @@ from rdkit import Chem
 from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
-plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
-# e.g. Dehydrogenation[3, 8]
-#      Dealkylation[1, 3] → Dehydrogenation[3, 8]
+plan = rules.QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
+# e.g. Dehydrogenation[3, 8] | Dealkylation[1, 3] → Dehydrogenation[3, 8]
+for branch in plan.branches():
+    print(branch)
+for lin in plan.linearizations():  # every total order across Or/And/Seq
+    ...
 
 rules.Epoxidation().phase1_steps(Chem.MolFromSmiles("C=C"), frozenset({0, 1}))
-# → [Epoxidation[0, 1]]
+# → Epoxidation[0, 1]
 ```
 
 ### Stamp while metabolizing
@@ -92,10 +103,10 @@ from rdkit import Chem
 from xenosite.forest import AtomRef, Linearization, StepPlan, rules
 
 mol = Chem.MolFromSmiles("c1ccccc1")
-plans = rules.QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
-plan = next(p for p in plans if len(p) == 3)
+plan = rules.QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
+branch = next(b for b in plan.branches() if len(b) == 3)
 
-for lin in plan.linearizations():
+for lin in branch.linearizations():
     products = lin.apply(mol)  # full plan
     mid = lin.apply(mol, drop_last=1)  # prep only; keep frags for final DH sites
     if mid:
@@ -226,6 +237,40 @@ Optional shared knobs: `max_paths=N` stops after N yields (default unlimited); `
 
 Star conjugate adducts (`*` dummies from Phase II) are **not** metabolized further by default. Pass `expand_star_conjugates=True` (CLI: `--expand-star-conjugates`) to allow depth>1 expansion of those products.
 
+### Path search (`find_path`)
+
+Package-level `find_path` is an MCS-guided search (distinct from classic
+`RuleSet.find_path`). The API is **unstable**. Default ruleset is `PhaseOneQF`.
+
+```python
+from xenosite.forest import find_path, PathSearchCounters
+
+counters = PathSearchCounters()
+for outcome in find_path(
+    "CN(C)Cc1ccccc1",
+    "O=Cc1ccccc1",
+    ruleset="ND",
+    counters=counters,
+):
+    print(outcome.plan, outcome.maybe)
+print(counters.as_dict())
+```
+
+Hits are `PathOutcome` values (Required `plan` + cleavage-side `maybe`); they
+also unpack as `(smiles, steps, mols, plan, maybe)`. Prefer
+`PathSearchCounters` when comparing search cost.
+
+| Knob | Default | Role |
+| --- | --- | --- |
+| `ruleset` | `PhaseOneQF` | Phase I + QuinoneFormation; pass `PhaseOneRS` / `QF` / `ND` / … |
+| `depth` | `None` | Unbounded hops; optional hard cap |
+| `max_expansions` | `200` | Caps billed work; sets `budget_exhausted` |
+| `expand_phase1_plans` | `True` | Expand `phase1_steps` instead of opaque composite hops |
+
+Use classic `bfs` / `RuleSet.find_path` for exhaustive mol-BFS; use package
+`find_path` when MCS-guided search is enough. Optimization claims should cite
+`PathSearchCounters` shifts.
+
 ## Custom rulesets
 
 ```python
@@ -235,7 +280,7 @@ rs = RuleSet([rules.Epoxidation(), rules.EpoxideOpening()], name="epoxide")
 path = next(rs.find_path(reactant, product, depth=2))
 ```
 
-Built-in names include `Full`, `PhaseOneRS`, `Bioactivation`, `QuinoneFormationRS`, and the Phase I groups `SO`, `DH`, `HD`, `RD`, and `UO`. Pass any of those strings to `bfs(..., ruleset=...)` or `load_ruleset(...)`.
+Built-in names include `Full`, `PhaseOneRS`, `PhaseOneQF` (Phase I + quinone; guided default), `Bioactivation`, `QuinoneFormationRS`, and the Phase I groups `SO`, `DH`, `HD`, `RD`, and `UO`. Pass any of those strings to `bfs(..., ruleset=...)` or `load_ruleset(...)`.
 
 Which ruleset matches which paper (Rainbow, quinone, bioactivation, and others) is in **[rulesets.md](rulesets.md)**.
 
