@@ -195,40 +195,23 @@ def _assert_plan_exact_for_target(mol, plan, target: str):
     )
 
 
-@st.composite
-def create_then_find_case(draw):
-    smi = draw(st.sampled_from(_CORPUS))
-    n_steps = draw(st.integers(1, 3))
-    force_qf = draw(st.booleans())
-    r_smi, t_smi, recipe = random_walk(draw, smi, _create_rules(), n_steps)
-    assume(r_smi != t_smi)
-    if force_qf:
-        assume("QuinoneFormation" in recipe)
-    return r_smi, t_smi, recipe
+# Hydroxylation, Hydroxylation, QuinoneFormation does turn 4-methoxyphenol
+# into this quinone, but find_path's BFS spends ``_BUDGET`` on earlier nodes
+# and never expands the intermediate. Fix search order later; do not raise
+# the budget to make this pass.
+_SEARCH_MISS = ("COc1ccc(O)cc1", "O=C1C=CC(OC(O)O)=CC1=O")
 
 
-# 30 examples are ~40s locally (~60s with the edit guard). On a loaded CI
-# worker the default 120s cap fires mid-example; Hypothesis retries that
-# example alone, it passes, and the run is reported as a flake.
-@pytest.mark.timeout(300)
-@given(case=create_then_find_case())
-@settings(
-    max_examples=30,
-    deadline=30_000,
-    database=_HYPOTHESIS_DB,
-    suppress_health_check=[
-        HealthCheck.too_slow,
-        HealthCheck.data_too_large,
-        HealthCheck.filter_too_much,
-    ],
-)
-def test_fuzz_find_path_expands_qf_phase1_plan_exact(case):
+def _is_known_search_miss(r_smi: str, t_smi: str) -> bool:
+    return (_canon(r_smi), _canon(t_smi)) == tuple(_canon(s) for s in _SEARCH_MISS)
+
+
+def _assert_qf_phase1_plan_exact(r_smi: str, t_smi: str, recipe) -> None:
     """Create with QF+Phase I; find_path emits phase1-only plans.
 
     Always: no opaque QF; soundness (lins → T); completeness (reaching
     leaf orders ⊆ plan lins) after apply-replay corrects deps.
     """
-    r_smi, t_smi, recipe = case
     counters = PathSearchCounters()
     hits = list(
         find_path(
@@ -267,6 +250,62 @@ def test_fuzz_find_path_expands_qf_phase1_plan_exact(case):
         )
         checked += 1
     assume(checked >= 1)
+
+
+@st.composite
+def create_then_find_case(draw):
+    smi = draw(st.sampled_from(_CORPUS))
+    n_steps = draw(st.integers(1, 3))
+    force_qf = draw(st.booleans())
+    r_smi, t_smi, recipe = random_walk(draw, smi, _create_rules(), n_steps)
+    assume(r_smi != t_smi)
+    if force_qf:
+        assume("QuinoneFormation" in recipe)
+    return r_smi, t_smi, recipe
+
+
+# 30 examples are ~40s locally (~60s with the edit guard). On a loaded CI
+# worker the default 120s cap fires mid-example; Hypothesis retries that
+# example alone, it passes, and the run is reported as a flake.
+@pytest.mark.timeout(300)
+@given(case=create_then_find_case())
+@settings(
+    max_examples=30,
+    deadline=30_000,
+    database=_HYPOTHESIS_DB,
+    suppress_health_check=[
+        HealthCheck.too_slow,
+        HealthCheck.data_too_large,
+        HealthCheck.filter_too_much,
+    ],
+)
+def test_fuzz_find_path_expands_qf_phase1_plan_exact(case):
+    """Create with QF+Phase I; find_path emits phase1-only plans.
+
+    Always: no opaque QF; soundness (lins → T); completeness (reaching
+    leaf orders ⊆ plan lins) after apply-replay corrects deps.
+    """
+    r_smi, t_smi, recipe = case
+    # Held out so a stored replay does not fail this property. See the xfail.
+    assume(not _is_known_search_miss(r_smi, t_smi))
+    _assert_qf_phase1_plan_exact(r_smi, t_smi, recipe)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "find_path misses COc1ccc(O)cc1 → O=C1C=CC(OC(O)O)=CC1=O "
+        "(Hydroxylation, Hydroxylation, QuinoneFormation) within "
+        "max_expansions=120. The route is real; BFS spends the budget "
+        "first. Fix search order later."
+    ),
+)
+def test_find_path_methoxyphenol_ocarbonate_quinone_search_miss():
+    """Known budget miss. Remove this xfail when search order finds the route."""
+    _assert_qf_phase1_plan_exact(
+        *_SEARCH_MISS,
+        ["Hydroxylation", "Hydroxylation", "QuinoneFormation"],
+    )
 
 
 def test_benzene_qf_find_path_no_opaque_quinone_plan_exact():

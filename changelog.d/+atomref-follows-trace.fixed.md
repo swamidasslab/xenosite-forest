@@ -1,0 +1,1 @@
+``AtomRef`` for a created atom follows the ``atom_trace`` label stamped ``added_by``. The trace records its current frame in ``depth`` (0 on the first stamp, then +1 each stamp). At that frame the ref is the most recent matching add born at or before it. A reaction that adds no label records no creation.

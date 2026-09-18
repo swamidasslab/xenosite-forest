@@ -196,7 +196,9 @@ def test_atom_label_stable_across_step_string_equality():
         for a in child.GetAtoms()
         if a.HasProp(AtomTracker.atom_tag_prop_name)
     }
-    AtomTracker()._save_tags(child, AtomTracker.tags(child))
+    AtomTracker()._save_tags(
+        child, AtomTracker.tags(child), depth=child._forest["atom_trace"]["depth"]
+    )
     after = {
         a.GetIdx(): a.GetProp(AtomTracker.atom_tag_prop_name)
         for a in child.GetAtoms()

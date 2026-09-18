@@ -91,56 +91,53 @@ def _atom_trace_records(mol):
     return records if records else None
 
 
-def _latest_trace_depth(records) -> int:
-    """Highest tag depth present in any atom_trace record."""
-    latest = 0
-    for rec in records.values():
-        for d in rec.get("depth") or ():
-            if int(d) > latest:
-                latest = int(d)
-    return latest
+def _current_frame(mol) -> int:
+    """Current stamp frame, ``atom_trace["depth"]``.
+
+    Missing trace is frame 0 (not yet stamped). A trace without ``depth``
+    is an error.
+    """
+    trace = _forest_state(mol).get("atom_trace")
+    if not trace:
+        return 0
+    return int(trace["depth"])
 
 
 def _resolve_origin(mol, origin: int, *, depth: int = 0) -> int:
     """Map an AtomRef origin idx at ``depth`` to the mol's current-frame GetIdx.
 
-    Preferred path — ``atom_trace`` (see ``AtomRef``):
-      1. Find a live label whose idx at ``depth`` equals ``origin``.
-      2. Return that label's idx at the latest tagged depth on this mol.
-
-    Fallback when no trace is installed yet: atom-map / ``react_atom_idx``
-    (depth-0 on a freshly prepared apply mol), or identity if unmapped.
+    On a stamped mol, the live label whose idx at ``depth`` equals ``origin``
+    supplies the idx at ``atom_trace["depth"]``. A miss is an error. An
+    unstamped mol has no trace: use atom-map / ``react_atom_idx`` when present,
+    otherwise the GetIdx itself.
     """
     origin = int(origin)
     depth = int(depth)
     records = _atom_trace_records(mol)
-    if records is not None:
-        to_depth = _latest_trace_depth(records)
-        for rec in records.values():
-            depths = list(rec["depth"])
-            idxs = list(rec["idx"])
-            if depth not in depths:
-                continue
-            if int(idxs[depths.index(depth)]) != origin:
-                continue
-            if to_depth not in depths:
-                continue
-            return int(idxs[depths.index(to_depth)])
-        # No live label for this (depth, origin). Fall back to maps/identity
-        # so current-frame sites on lightly tagged mols still resolve.
-
-    has_maps = False
-    for atom in mol.GetAtoms():
-        if atom.GetAtomMapNum() > 0:
-            has_maps = True
+    if records is None:
+        for atom in mol.GetAtoms():
             if atom.GetAtomMapNum() == origin + 1:
                 return atom.GetIdx()
-        if atom.HasProp("react_atom_idx"):
-            has_maps = True
-            if int(atom.GetProp("react_atom_idx")) == origin:
+            if (
+                atom.HasProp("react_atom_idx")
+                and int(atom.GetProp("react_atom_idx")) == origin
+            ):
                 return atom.GetIdx()
-    if not has_maps and 0 <= origin < mol.GetNumAtoms():
-        return origin
+        if 0 <= origin < mol.GetNumAtoms():
+            return origin
+        raise KeyError("cannot resolve origin atom %s on mol" % (origin,))
+
+    to_depth = _current_frame(mol)
+    for rec in records.values():
+        depths = list(rec["depth"])
+        idxs = list(rec["idx"])
+        if depth not in depths:
+            continue
+        if int(idxs[depths.index(depth)]) != origin:
+            continue
+        if to_depth not in depths:
+            continue
+        return int(idxs[depths.index(to_depth)])
     raise KeyError("cannot resolve origin atom %s on mol" % (origin,))
 
 
@@ -172,6 +169,53 @@ def _site_frames_via_trace(mol, site, *, depth: int = 0):
         frame = frozenset(by_depth[d])
         if frame != site:
             yield frame
+
+
+def _added_by_pair(added_by):
+    """Normalize a trace ``added_by`` value to ``(rule, frozenset)``."""
+    if not added_by or not isinstance(added_by, (tuple, list)) or len(added_by) != 2:
+        return None
+    rule, site = added_by
+    try:
+        site = frozenset(int(x) for x in site)
+    except TypeError:
+        return None
+    return str(rule), site
+
+
+def _resolve_added_by_trace(mol, rule, site, *, depth: int = 0):
+    """Current idx of the latest ``(rule, site)`` creation at or before this frame.
+
+    ``depth`` is the site's frame, used only to project ``site``. The creation
+    itself is chosen against the mol's current trace depth: birth must be at
+    or before that depth, and the most recent such label wins. The original
+    frame, before any matching add, does not resolve.
+
+    Returns ``None`` when no live record qualifies.
+    """
+    records = _atom_trace_records(mol)
+    if records is None:
+        return None
+    frames = set(_site_frames_via_trace(mol, site, depth=depth))
+    to_depth = _current_frame(mol)
+    matches = []
+    for rec in records.values():
+        pair = _added_by_pair(rec.get("added_by"))
+        if pair is None or pair[0] != rule or pair[1] not in frames:
+            continue
+        depths = list(rec.get("depth") or ())
+        idxs = list(rec.get("idx") or ())
+        if not depths or to_depth not in depths:
+            continue
+        birth = int(depths[0])
+        if birth > to_depth:
+            continue
+        cur = int(idxs[depths.index(to_depth)])
+        matches.append((birth, cur))
+    if not matches:
+        return None
+    matches.sort()
+    return matches[-1][1]
 
 
 def _ensure_apply_ready(mol) -> None:
@@ -219,11 +263,8 @@ def _fragment_retains_refs(product, later_refs) -> bool:
 
 
 def _frame_depth(mol) -> int:
-    """Latest atom_trace depth on ``mol``, or 0 if untagged."""
-    records = _atom_trace_records(mol)
-    if records is None:
-        return 0
-    return _latest_trace_depth(records)
+    """Current ``atom_trace["depth"]`` on ``mol``, or 0 if untagged."""
+    return _current_frame(mol)
 
 
 def _origin_at_depth0(mol, idx: int, *, depth: int) -> int | None:
@@ -289,11 +330,13 @@ class AtomRef:
 
     **Created-by ref** (``added_by=(rule, site)``, ``depth=…``):
         Names the atom *created by* ``rule`` at ``site``. ``site`` idxs are
-        GetIdx values in tagged frame ``depth`` (the frame used when the site
-        was written — same depth metabolize keyed into ``atom_refs``). Prefer
-        this over a mid-depth origin when the atom is defined by a prior step.
-        Resolve projects ``site`` through ``atom_trace`` starting at ``depth``
-        and looks up ``(rule, frame)`` until one hits.
+        GetIdx values in tagged frame ``depth``. Prefer this over a mid-depth
+        origin when the atom is defined by a prior step. Resolve reads only
+        ``atom_trace``: live records stamped ``added_by`` for that rule whose
+        site is ``site`` or a later frame of it. A match has to be born at or
+        before ``atom_trace["depth"]``; the most recent one wins. On the
+        original frame, before any such add, resolve fails. ``atom_refs`` is
+        not consulted.
     """
 
     origin: int | None = None
@@ -358,12 +401,10 @@ class AtomRef:
         if self.origin is not None:
             return _resolve_origin(mol, self.origin, depth=self.depth)
         rule, site = self.added_by
-        index = _atom_refs_index(mol)
-        for frame in _site_frames_via_trace(mol, site, depth=self.depth):
-            idx = index.lookup((rule, frame))
-            if idx is not None:
-                return idx
-        raise KeyError("cannot resolve AtomRef added_by=%r" % (self.added_by,))
+        traced = _resolve_added_by_trace(mol, rule, site, depth=self.depth)
+        if traced is None:
+            raise KeyError("cannot resolve AtomRef added_by=%r" % (self.added_by,))
+        return traced
 
     def __str__(self) -> str:
         if self.origin is not None:
@@ -480,11 +521,9 @@ class Step:
             for frag in frags:
                 if not frag:
                     continue
-                # metabolize (tag_atoms=True) already installs _forest + creations.
-                already = (
-                    getattr(frag, "_forest", None) is not None
-                    and frag._forest.get("atom_refs") is not None
-                )
+                # metabolize (tag_atoms=True) already stamps the trace and creations.
+                trace = (getattr(frag, "_forest", None) or {}).get("atom_trace")
+                already = bool(trace and trace.get("records"))
                 # Key creations by current-frame site (resolved). Mid-depth
                 # AtomRef.origin values are not depth-0 idxs.
                 install_product_forest(
@@ -500,7 +539,7 @@ class Step:
 
 @dataclass(frozen=True)
 class Linearization:
-    """Ordered steps; ``apply`` chains resolve → rule → ``atom_refs`` record."""
+    """Ordered steps; ``apply`` chains resolve → rule. Resolve reads the trace."""
 
     steps: tuple
 

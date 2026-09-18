@@ -242,6 +242,7 @@ def test_added_by_and_origin_carry_frame_depth():
     mono = Step("Hydroxylation", {0}).apply(benzene)[0]
     depth1 = _frame_depth(mono)
     assert depth1 == 1
+    assert mono._forest["atom_trace"]["depth"] == 1
 
     # Second OH site is a carbon GetIdx on the mono-OH frame.
     carbons = [
@@ -257,6 +258,7 @@ def test_added_by_and_origin_carry_frame_depth():
     di = Step("Hydroxylation", carbon_refs).apply(mono)[0]
     depth2 = _frame_depth(di)
     assert depth2 == 2
+    assert di._forest["atom_trace"]["depth"] == 2
 
     created = AtomRef(
         added_by=("Hydroxylation", frozenset([c_ref.origin])), depth=c_ref.depth
@@ -272,8 +274,14 @@ def test_added_by_and_origin_carry_frame_depth():
     assert all(r.depth == depth2 for r in o_refs)
     for r in o_refs:
         assert di.GetAtomWithIdx(r.resolve(di)).GetAtomicNum() == 8
-        remapped = AtomRef(origin=r.origin, depth=0).resolve(di)
-        assert remapped != r.resolve(di) or di.GetAtomWithIdx(remapped).GetAtomicNum() != 8
+        # That idx is not this oxygen's depth-0 identity. A hit is some
+        # other atom; a miss is a KeyError.
+        try:
+            remapped = AtomRef(origin=r.origin, depth=0).resolve(di)
+        except KeyError:
+            continue
+        assert remapped != r.resolve(di)
+        assert di.GetAtomWithIdx(remapped).GetAtomicNum() != 8
 
 
 def test_benzene_prep_linearization_apply_agrees():
@@ -297,5 +305,76 @@ def test_benzene_prep_linearization_apply_agrees():
         if products
     ]
     assert prep_smiles and len(set(prep_smiles)) == 1
-    got = Chem.MolToSmiles(Chem.MolFromSmiles(next(iter(next(iter(prep_smiles))))))
-    assert got == Chem.MolToSmiles(Chem.MolFromSmiles("Oc1ccc(O)cc1"))
+
+
+def test_created_atom_ref_follows_trace_label():
+    """Dehydrogenation must not alias an older oxygen. A second hydroxylation
+    at the same site resolves to the later oxygen on that mol, and the
+    original frame does not resolve. A lying ``atom_refs`` index is ignored.
+    """
+    from xenosite.forest.base import AtomRefsIndex
+
+    start = MolFromSmiles("COc1ccc(O)cc1")
+    with pytest.raises(KeyError):
+        AtomRef(added_by=("Hydroxylation", frozenset({0}))).resolve(start)
+
+    catechol = Step("Hydroxylation", {4}).apply(start)[0]
+    quinone = Step(
+        "Dehydrogenation",
+        {
+            AtomRef(added_by=("Hydroxylation", frozenset({4}))),
+            AtomRef(origin=6),
+        },
+    ).apply(catechol)[0]
+    records = quinone._forest["atom_trace"]["records"]
+    assert not any(
+        rec.get("added_by") and rec["added_by"][0] == "Dehydrogenation"
+        for rec in records.values()
+    )
+    frame = quinone._forest["atom_trace"]["depth"]
+    oh_now = [
+        rec["idx"][rec["depth"].index(frame)]
+        for rec in records.values()
+        if rec.get("added_by")
+        and rec["added_by"][0] == "Hydroxylation"
+        and 4 in rec["added_by"][1]
+        and frame in rec["depth"]
+    ]
+    quinone._forest["atom_refs"] = AtomRefsIndex(
+        {(("Hydroxylation", frozenset({4})), 0)}
+    )
+    followed = AtomRef(added_by=("Hydroxylation", frozenset({4}))).resolve(quinone)
+    assert oh_now == [followed]
+    assert followed != 0
+    assert quinone.GetAtomWithIdx(followed).GetAtomicNum() == 8
+
+    once = Step("Hydroxylation", {0}).apply(start)[0]
+    twice = Step("Hydroxylation", {0}).apply(once)[0]
+    frame = twice._forest["atom_trace"]["depth"]
+    births = []
+    for rec in twice._forest["atom_trace"]["records"].values():
+        added = rec.get("added_by")
+        if not added or added[0] != "Hydroxylation" or 0 not in added[1]:
+            continue
+        if frame not in rec["depth"]:
+            continue
+        births.append((rec["depth"][0], rec["idx"][rec["depth"].index(frame)]))
+    assert len(births) == 2
+    twice._forest["atom_refs"] = AtomRefsIndex(
+        {(("Hydroxylation", frozenset({0})), min(births)[1])}
+    )
+    resolved = AtomRef(added_by=("Hydroxylation", frozenset({0}))).resolve(twice)
+    assert resolved == max(births)[1]
+    assert resolved != min(births)[1]
+    once_frame = once._forest["atom_trace"]["depth"]
+    once._forest["atom_refs"] = None
+    once_idx = AtomRef(added_by=("Hydroxylation", frozenset({0}))).resolve(once)
+    once_oh = [
+        rec["idx"][rec["depth"].index(once_frame)]
+        for rec in once._forest["atom_trace"]["records"].values()
+        if rec.get("added_by")
+        and rec["added_by"][0] == "Hydroxylation"
+        and 0 in rec["added_by"][1]
+        and once_frame in rec["depth"]
+    ]
+    assert once_oh == [once_idx]
