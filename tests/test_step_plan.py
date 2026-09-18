@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from rdkit import Chem
 from rdkit.Chem.rdmolfiles import MolFromSmiles
@@ -18,6 +20,113 @@ def test_singleton_one_linearization():
     assert list(plan.iter_linearizations()) == [
         (Step("Epoxidation", frozenset({0, 1})),)
     ]
+
+
+def test_deps_topo_sorts_not_kahn_layers():
+    """Deps keeps Dealk free of OH→DH (unlike Kahn And(preps)→DH)."""
+    from xenosite.forest.step_plan import Deps
+
+    dealk = Step("Dealkylation", frozenset({0, 1}))
+    oh = Step("Hydroxylation", frozenset({3}))
+    dh = Step("Dehydrogenation", frozenset({1, 3}))
+    # Only OH precedes DH.
+    plan = Deps([dealk, oh, dh], precedes=[(1, 2)])
+    orders = set(plan.iter_linearizations())
+    assert len(orders) == 3
+    assert plan.n_linearizations() == 3
+    assert (oh, dh, dealk) in orders
+    assert plan.contains([dealk, oh, dh], by="rule")
+    assert plan.contains([oh, dh, dealk], by="rule")
+    assert not plan.contains([dh, oh, dealk], by="rule")
+    roundtrip = StepPlan.from_json(plan.to_json())
+    assert isinstance(roundtrip, Deps)
+    assert set(roundtrip.iter_linearizations()) == orders
+
+
+def test_n_linearizations_matches_enumeration():
+    from xenosite.forest.step_plan import And, Deps, Or
+
+    a = Step("A", {0})
+    b = Step("B", {1})
+    c = Step("C", {2})
+    d = Step("D", {3})
+
+    seq = StepPlan((a, b, c))
+    assert seq.n_linearizations() == 1
+    assert seq.n_linearizations() == len(list(seq.iter_linearizations()))
+
+    and_plan = And((a, b, c))
+    assert and_plan.n_linearizations() == 6
+    assert and_plan.n_linearizations() == len(list(and_plan.iter_linearizations()))
+
+    # Seq of And(preps) then final — 2 orders.
+    layered = StepPlan.layers([[a, b], [c]])
+    assert layered.n_linearizations() == 2
+    assert layered.n_linearizations() == len(list(layered.iter_linearizations()))
+
+    # Or of different-length branches.
+    or_plan = Or((StepPlan((a, b)), StepPlan((c,))))
+    assert or_plan.n_linearizations() == 2
+    assert or_plan.n_linearizations() == len(list(or_plan.iter_linearizations()))
+
+    # And of Or (variable-length children) still exact.
+    mixed = And((Or((a, StepPlan((b, c)))), d))
+    assert mixed.n_linearizations() == len(list(mixed.iter_linearizations()))
+
+    deps = Deps([a, b, c], precedes=[(0, 2), (1, 2)])
+    assert deps.n_linearizations() == 2  # And(a,b)→c
+    assert deps.n_linearizations() == len(list(deps.iter_linearizations()))
+
+    free = Deps([a, b, c, d], precedes=[])
+    assert free.n_linearizations() == 24
+
+    # Independent components: many free nodes stay cheap (no 2^n on full n).
+    many = Deps([Step("S", {i}) for i in range(12)], precedes=[])
+    assert many.n_linearizations() == math.factorial(12)
+
+
+def test_deps_same_linearizations_via_transitive_closure():
+    """Lin-set identity is canonical edges — not ``==`` / raw precedes."""
+    from xenosite.forest.step_plan import (
+        Deps,
+        canonical_dependency_edges,
+    )
+
+    a = Step("A", {0})
+    b = Step("B", {1})
+    c = Step("C", {2})
+    chain = Deps([a, b, c], precedes=[(0, 1), (1, 2)])
+    with_transitive = Deps([a, b, c], precedes=[(0, 1), (1, 2), (0, 2)])
+    # Construction reduces edges → stable equal output.
+    assert chain == with_transitive
+    assert chain.precedes == ((0, 1), (1, 2))
+    assert with_transitive.precedes == ((0, 1), (1, 2))
+    assert chain.same_linearizations(with_transitive)
+    assert canonical_dependency_edges(3, [(0, 1), (1, 2), (0, 2)]) == (
+        (0, 1),
+        (1, 2),
+    )
+
+    flipped = Deps([c, a, b], precedes=[(1, 2), (2, 0)])  # a≺b≺c
+    assert chain.same_linearizations(flipped)
+
+    layered = StepPlan.layers([[a, b], [c]])
+    assert Deps(layered.steps, layered.precedes).same_linearizations(
+        Deps([a, b, c], precedes=[(0, 2), (1, 2)])
+    )
+
+    free_dealk = Deps([a, b, c], precedes=[(1, 2)])  # only b≺c
+    assert not free_dealk.same_linearizations(chain)
+
+    # Graph algorithms ignore Step identity — same_linearizations must not.
+    other_nodes = Deps(
+        [Step("X", {0}), Step("Y", {1}), Step("Z", {2})],
+        precedes=[(0, 1), (1, 2)],
+    )
+    assert canonical_dependency_edges(3, [(0, 1), (1, 2)]) == canonical_dependency_edges(
+        3, [(0, 1), (1, 2)]
+    )
+    assert not chain.same_linearizations(other_nodes)
 
 
 def test_layers_two_prep_then_final_two_orders():
@@ -80,10 +189,12 @@ def test_empty_plan():
 
 
 def test_cycle_raises():
+    from xenosite.forest.step_plan import Deps
+
     a = Step("A", {0})
     b = Step("B", {1})
     with pytest.raises(ValueError, match="cycle"):
-        list(StepPlan((a, b), ((0, 1), (1, 0))).iter_linearizations())
+        Deps((a, b), ((0, 1), (1, 0)))
 
 
 def test_compact_str():

@@ -1,23 +1,32 @@
-"""Partial-order plans over reaction steps (domain-agnostic).
+"""Partial-order / nested pathway plans over reaction steps.
 
 ``AtomRef`` / ``Step`` / ``Linearization`` form a reusable apply+resolve layer.
-Creation bookkeeping lives on ``mol._forest["atom_refs"]`` (private), not in
-AtomTracker tag strings.
+``StepPlan`` is an ordered sequence of children (Seq); ``And``, ``Or``, and
+``Deps`` subclass it. ``Deps`` is flat steps plus precedes edges (linearizations
+are topological sorts). Creation bookkeeping lives on
+``mol._forest["atom_refs"]`` (private), not in AtomTracker tag strings.
 """
 
 from __future__ import annotations
 
 import json
+import math
+from collections import deque
 from dataclasses import dataclass
-from typing import Iterator, Sequence
+from functools import cache
+from typing import Iterator, Sequence, Union
 
 from rdkit import Chem
 
 from .base import AtomTracker, _copy_forest, _forest_state
+from .unstable import unstable
 
 # Private storage key for StepPlan.attach_to_mol / from_mol / try_from_mol.
 # Callers must use those APIs; do not read or write this prop directly.
 _PHASE1_STEPS_PROP = "phase1_steps"
+
+# Pathway nodes: Step (leaf) | StepPlan (Seq) | And | Or | Deps
+PathwayNode = Union["Step", "StepPlan"]
 
 
 # ---------------------------------------------------------------------------
@@ -27,17 +36,26 @@ _PHASE1_STEPS_PROP = "phase1_steps"
 _RULE_CACHE: dict = {}
 
 
-def get_rule(name: str):
-    """Return a shared ``ReactionRule`` instance for ``name``."""
-    rule = _RULE_CACHE.get(name)
+def get_rule(name: str, pathways=()):
+    """Return a shared ``ReactionRule`` instance for ``name``.
+
+    ``pathways`` selects optional uncommon chemotypes (e.g. ``("methide",)`` on
+    Dehydrogenation). Default empty keeps broad Phase I enumeration lean.
+    """
+    pathways = frozenset(pathways or ())
+    key = (name, pathways) if pathways else name
+    rule = _RULE_CACHE.get(key)
     if rule is None:
         from . import rules as forest_rules
 
         cls = getattr(forest_rules, name, None)
         if cls is None:
             raise KeyError("unknown forest rule %r" % (name,))
-        rule = cls()
-        _RULE_CACHE[name] = rule
+        if pathways and name == "Dehydrogenation":
+            rule = cls(pathways=pathways)
+        else:
+            rule = cls()
+        _RULE_CACHE[key] = rule
     return rule
 
 
@@ -311,21 +329,37 @@ def _site_from_json(items) -> frozenset:
 
 @dataclass(frozen=True)
 class Step:
-    """One named reaction at a site of :class:`AtomRef` (ints coerce to origin)."""
+    """One named reaction at a site of :class:`AtomRef` (ints coerce to origin).
+
+    ``pathways`` names optional uncommon chemotypes on the rule (e.g.
+    ``("methide",)`` for quinone-methide Dehydrogenation). Empty by default so
+    Phase I enumeration stays lean unless a plan or caller opts in.
+    """
 
     rule: str
     site: frozenset
+    pathways: frozenset = frozenset()
 
     def __post_init__(self):
         object.__setattr__(self, "site", _coerce_site(self.site))
+        object.__setattr__(self, "pathways", frozenset(self.pathways or ()))
 
     def __str__(self) -> str:
         sites = ", ".join(
             str(ref) for ref in sorted(self.site, key=_atomref_sort_key)
         )
-        return "%s[%s]" % (self.rule, sites)
+        base = "%s[%s]" % (self.rule, sites)
+        if self.pathways:
+            return "%s{%s}" % (base, ",".join(sorted(self.pathways)))
+        return base
 
     def __repr__(self) -> str:
+        if self.pathways:
+            return "Step(%r, %s, pathways=%r)" % (
+                self.rule,
+                "{" + ", ".join(repr(r) for r in sorted(self.site, key=_atomref_sort_key)) + "}",
+                set(self.pathways),
+            )
         return "Step(%r, %s)" % (
             self.rule,
             "{" + ", ".join(repr(r) for r in sorted(self.site, key=_atomref_sort_key)) + "}",
@@ -341,15 +375,18 @@ class Step:
         mol = Chem.Mol(mol)
         _copy_forest(parent, mol)
         _ensure_apply_ready(mol)
-        rule = get_rule(self.rule)
+        rule = get_rule(self.rule, pathways=self.pathways)
         site = self.resolve_site(mol)
         products = []
+        apply_kw = dict(kwargs)
+        if self.pathways:
+            apply_kw.setdefault("pathways", self.pathways)
         for _outsite, frags in rule.metabolites_from_sites(
             mol,
             site,
             tag_atoms=True,
             only_emit_topologically_distinct_sites=False,
-            **kwargs
+            **apply_kw
         ):
             for frag in frags:
                 if not frag:
@@ -425,214 +462,959 @@ class Linearization:
         return currents
 
 
-class StepPlan:
-    """Partial order over :class:`Step` nodes.
+# ---------------------------------------------------------------------------
+# Nested pathway algebra: StepPlan (= Seq), And, Or
+# ---------------------------------------------------------------------------
 
-    Edges in ``precedes`` are pairs of indices ``(i, j)`` meaning
-    ``steps[i]`` must occur before ``steps[j]``. Within a layer from
-    :meth:`layers`, order is undefined.
+
+def _as_node(child):
+    """Normalize a child to Step or StepPlan."""
+    if isinstance(child, Step):
+        return child
+    if isinstance(child, StepPlan):
+        return child
+    raise TypeError("pathway child must be Step or StepPlan, got %r" % (type(child),))
+
+
+def _node_str(node) -> str:
+    return str(node)
+
+
+class StepPlan:
+    """Ordered sequence of pathway children (``Step`` or nested plans).
+
+    This is the Seq form: children run left-to-right. Subclasses ``And`` and
+    ``Or`` change only how :meth:`linearizations` expands children.
     """
 
-    __slots__ = ("_steps", "_precedes")
+    __slots__ = ("_children",)
 
-    def __init__(
-        self,
-        steps: Sequence[Step],
-        precedes: Sequence[tuple[int, int]] = (),
-    ):
-        self._steps = tuple(steps)
-        self._precedes = tuple((int(a), int(b)) for a, b in precedes)
-        n = len(self._steps)
-        for a, b in self._precedes:
-            if not (0 <= a < n and 0 <= b < n):
-                raise ValueError("precedes index out of range")
-            if a == b:
-                raise ValueError("precedes cannot be reflexive")
+
+    def __init__(self, children=(), precedes=()):
+        if precedes:
+            raise TypeError(
+                "use Deps(steps, precedes) or StepPlan.from_steps_precedes(...); "
+                "StepPlan(..., precedes=) no longer converts via Kahn layers"
+            )
+        if isinstance(children, (Step, StepPlan)) and not isinstance(
+            children, (list, tuple)
+        ):
+            children = (children,)
+        # Legacy flat list of Steps with no precedes → Seq of those steps
+        self._children = tuple(_as_node(c) for c in children)
 
     @classmethod
     def singleton(cls, rule: str, site) -> StepPlan:
-        """One step, no ordering constraints."""
-        return cls((Step(rule, site),), ())
+        return cls((Step(rule, site),))
 
     @classmethod
-    def layers(cls, layers: Sequence[Sequence[Step]]) -> StepPlan:
-        """Stack layers: every node in layer k precedes every node in layer k+1.
+    def empty(cls) -> StepPlan:
+        return Or(())
 
-        Order within a layer is undefined (no edges).
-        """
-        steps: list[Step] = []
-        ranges: list[tuple[int, int]] = []
+    @classmethod
+    def layers(cls, layers) -> StepPlan:
+        """Stack layers: each layer is an ``And`` (or a single ``Step``)."""
+        parts = []
         for layer in layers:
-            layer = list(layer)
+            layer = tuple(layer)
             if not layer:
                 continue
-            start = len(steps)
-            steps.extend(layer)
-            ranges.append((start, len(steps)))
-        precedes: list[tuple[int, int]] = []
-        for (a0, a1), (b0, b1) in zip(ranges, ranges[1:]):
-            for i in range(a0, a1):
-                for j in range(b0, b1):
-                    precedes.append((i, j))
-        return cls(steps, precedes)
+            if len(layer) == 1:
+                parts.append(layer[0])
+            else:
+                parts.append(And(layer))
+        if not parts:
+            return cls.empty()
+        if len(parts) == 1:
+            return parts[0] if isinstance(parts[0], StepPlan) else cls((parts[0],))
+        return cls(parts)
+
+    @classmethod
+    def from_steps_precedes(cls, steps, precedes=()) -> StepPlan:
+        """Build a :class:`Deps` plan from flat steps + precedes edges."""
+        return Deps(steps, precedes)
+
+    @property
+    def children(self) -> tuple:
+        return self._children
+
+    @property
+    def expr(self) -> StepPlan:
+        """Self (plans are the expression tree)."""
+        return self
+
+    def branches(self) -> list:
+        """Top-level ``Or`` alternatives; default is ``[self]``."""
+        return [self]
+
+    def __bool__(self) -> bool:
+        return bool(self._children)
 
     def __len__(self) -> int:
-        return len(self._steps)
+        return sum(
+            1 if isinstance(c, Step) else len(c) for c in self._children
+        )
+
+    def __iter__(self):
+        return iter(self._children)
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, StepPlan):
             return NotImplemented
-        return self._steps == other._steps and self._precedes == other._precedes
+        return type(self) is type(other) and self._children == other._children
 
     def __hash__(self) -> int:
-        return hash((self._steps, self._precedes))
+        return hash((type(self), self._children))
 
     def __repr__(self) -> str:
-        return "StepPlan(%r)" % (str(self),)
+        return "%s(%r)" % (type(self).__name__, str(self))
 
     def __str__(self) -> str:
-        """Compact form; unordered layers in parentheses joined by ``&`` (all required)."""
-        layers = self._kahn_layers()
-        if not layers:
-            return "StepPlan()"
-        parts = []
-        for layer in layers:
-            texts = [str(step) for step in layer]
-            if len(texts) == 1:
-                parts.append(texts[0])
-            else:
-                parts.append("(" + " & ".join(texts) + ")")
+        if not self._children:
+            return "%s()" % type(self).__name__
+        parts = [_node_str(c) for c in self._children]
+        if len(parts) == 1:
+            return parts[0]
         return " → ".join(parts)
 
-    def _kahn_layers(self) -> list[list[Step]]:
-        """Partition steps into successive ready-sets (unordered within a layer)."""
-        n = len(self._steps)
-        if n == 0:
-            return []
-        successors = [[] for _ in range(n)]
-        indegree = [0] * n
-        for a, b in self._precedes:
-            successors[a].append(b)
-            indegree[b] += 1
-        remaining = list(indegree)
-        ready = sorted(i for i, d in enumerate(remaining) if d == 0)
-        layers: list[list[Step]] = []
-        seen = 0
-        while ready:
-            layer_idx = list(ready)
-            layers.append(
-                sorted(
-                    (self._steps[i] for i in layer_idx),
-                    key=lambda s: (s.rule, _site_to_json(s.site)),
-                )
-            )
-            seen += len(layer_idx)
-            nxt = []
-            for node in layer_idx:
-                for succ in successors[node]:
-                    remaining[succ] -= 1
-                    if remaining[succ] == 0:
-                        nxt.append(succ)
-            ready = sorted(nxt)
-        if seen != n:
-            # Cycle or incomplete; fall back to declaration order.
-            return [[step] for step in self._steps]
-        return layers
+    @property
+    def steps(self) -> tuple:
+        """Leaf steps in declaration order (empty for multi-branch ``Or``)."""
+        out = []
+        for c in self._children:
+            if isinstance(c, Step):
+                out.append(c)
+            else:
+                out.extend(c.steps)
+        return tuple(out)
 
     @property
-    def steps(self) -> tuple[Step, ...]:
-        return self._steps
-
-    @property
-    def precedes(self) -> tuple[tuple[int, int], ...]:
-        return self._precedes
+    def precedes(self) -> tuple:
+        """Legacy flat precedes for a pure Seq-of-And spine; else empty."""
+        return _legacy_precedes(self)
 
     def to_json(self) -> dict:
-        return {
-            "steps": [
-                {"rule": s.rule, "site": _site_to_json(s.site)} for s in self._steps
-            ],
-            "precedes": [list(p) for p in self._precedes],
-        }
+        return pathway_to_json(self)
 
     @classmethod
     def from_json(cls, data: dict) -> StepPlan:
-        steps = [
-            Step(item["rule"], _site_from_json(item["site"])) for item in data["steps"]
-        ]
-        precedes = [tuple(p) for p in data.get("precedes", ())]
-        return cls(steps, precedes)
+        node = pathway_from_json(data)
+        if isinstance(node, Step):
+            return StepPlan((node,))
+        return node
 
     @classmethod
     def try_from_mol(cls, mol) -> StepPlan | None:
-        """Return the attached :class:`StepPlan`, or ``None`` if absent.
-
-        Prefer this over inspecting mol props directly so storage can change
-        without a public API break.
-        """
         if not mol.HasProp(_PHASE1_STEPS_PROP):
             return None
         return cls.from_json(json.loads(mol.GetProp(_PHASE1_STEPS_PROP)))
 
     @classmethod
     def from_mol(cls, mol) -> StepPlan:
-        """Read the attached :class:`StepPlan` from ``mol``.
-
-        Raises ``ValueError`` if none is attached; use :meth:`try_from_mol`
-        when absence is expected.
-        """
         plan = cls.try_from_mol(mol)
         if plan is None:
             raise ValueError("mol has no attached StepPlan")
         return plan
 
     def attach_to_mol(self, mol) -> None:
-        """Attach this plan to ``mol`` (storage is an implementation detail)."""
         mol.SetProp(
             _PHASE1_STEPS_PROP, json.dumps(self.to_json(), separators=(",", ":"))
         )
 
-    def apply_linearization(
-        self, mol, order: Sequence[Step], toward=None, **kwargs
-    ) -> list:
-        """Apply an ordered sequence of steps (typically from ``iter_linearizations``)."""
-        return Linearization(tuple(order)).apply(mol, toward=toward, **kwargs)
-
     def linearizations(self) -> Iterator[Linearization]:
-        """Yield each total order as a :class:`Linearization`."""
+        """Lazily yield each total order of leaf :class:`Step`\\ s."""
         for order in self.iter_linearizations():
             yield Linearization(order)
 
-    def iter_linearizations(self) -> Iterator[tuple[Step, ...]]:
-        """Lazily yield every total order consistent with ``precedes``."""
-        n = len(self._steps)
-        if n == 0:
+    @unstable(name="StepPlan.n_linearizations")
+    def n_linearizations(self) -> int:
+        """Number of total orders — no enumeration.
+
+        ``Seq`` / ``And`` / ``Or`` use closed recursive formulas (And needs a
+        length→count map so variable-length ``Or`` children stay exact).
+        ``Deps`` counts topological sorts by weakly connected components
+        (bitmask DP per component + multinomial interleaving).
+        """
+        return _n_linearizations(self)
+
+    def iter_linearizations(self) -> Iterator[tuple]:
+        """Seq semantics: concatenate child linearizations in order."""
+        yield from _seq_orders(self._children)
+
+    def contains(self, recipe, *, by: str = "step") -> bool:
+        """True iff ``recipe`` is exactly one linearization of this plan.
+
+        Tree walk (Or / Seq splits / And interleavings) — does **not** expand
+        every total order. Preferred over ``recipe in list(iter_linearizations())``.
+
+        Parameters
+        ----------
+        recipe
+            Sequence of :class:`Step` (``by="step"``) or rule-name strings
+            (``by="rule"``). A lone :class:`Step` / :class:`Linearization` is
+            accepted.
+        by
+            ``"step"`` — full Step equality; ``"rule"`` — compare ``Step.rule``
+            only (useful for walk recipes that lack AtomRef sites).
+        """
+        if isinstance(recipe, Linearization):
+            recipe = recipe.steps
+        elif isinstance(recipe, Step):
+            recipe = (recipe,)
+        recipe = tuple(recipe)
+        if by not in ("step", "rule"):
+            raise ValueError("by must be 'step' or 'rule'")
+        return _recipe_in_node(self, recipe, by=by)
+
+    def __contains__(self, item) -> bool:
+        if isinstance(item, (Linearization, Step, list, tuple)):
+            return self.contains(item, by="step")
+        return False
+
+
+class And(StepPlan):
+    """All children required; order unconstrained (all interleavings)."""
+
+    def __str__(self) -> str:
+        if not self._children:
+            return "And()"
+        parts = [_node_str(c) for c in self._children]
+        if len(parts) == 1:
+            return parts[0]
+        return "(" + " & ".join(parts) + ")"
+
+    def iter_linearizations(self) -> Iterator[tuple]:
+        if not self._children:
             yield ()
             return
+        from itertools import product
 
-        successors = [[] for _ in range(n)]
-        indegree = [0] * n
-        for a, b in self._precedes:
-            successors[a].append(b)
-            indegree[b] += 1
+        child_orders = [list(_node_orders(c)) for c in self._children]
+        for choice in product(*child_orders):
+            yield from _interleave_orders(choice)
 
-        def search(ready: list[int], remaining_indegree: list[int], path: list[int]):
-            if len(path) == n:
-                yield tuple(self._steps[i] for i in path)
-                return
-            # Stable choice order for determinism among equal-priority nodes.
-            for idx, node in enumerate(list(ready)):
-                path.append(node)
-                next_ready = ready[:idx] + ready[idx + 1 :]
-                next_indegree = list(remaining_indegree)
-                for succ in successors[node]:
-                    next_indegree[succ] -= 1
-                    if next_indegree[succ] == 0:
-                        next_ready.append(succ)
-                yield from search(sorted(next_ready), next_indegree, path)
+
+class Or(StepPlan):
+    """Choose exactly one child pathway."""
+
+    def __bool__(self) -> bool:
+        return bool(self._children)
+
+    def __len__(self) -> int:
+        if not self._children:
+            return 0
+        return len(self.branches()[0])
+
+    def __str__(self) -> str:
+        if not self._children:
+            return "Or()"
+        parts = []
+        for c in self._children:
+            s = _node_str(c)
+            if isinstance(c, StepPlan) and not isinstance(c, Or) and (
+                "→" in s or "&" in s
+            ):
+                parts.append("(%s)" % s)
+            else:
+                parts.append(s)
+        if len(parts) == 1:
+            return parts[0]
+        return " | ".join(parts)
+
+    def branches(self) -> list:
+        out = []
+        for c in self._children:
+            if isinstance(c, Step):
+                out.append(StepPlan((c,)))
+            elif isinstance(c, Or):
+                out.extend(c.branches())
+            else:
+                out.append(c)
+        return out
+
+    @property
+    def steps(self) -> tuple:
+        if len(self._children) == 1:
+            c = self._children[0]
+            return (c,) if isinstance(c, Step) else c.steps
+        return ()
+
+    def iter_linearizations(self) -> Iterator[tuple]:
+        if not self._children:
+            return
+        for child in self._children:
+            yield from _node_orders(child)
+
+
+@unstable
+class Deps(StepPlan):
+    """Flat steps + precedes edges; linearizations are topological sorts.
+
+    Same role as ``And`` / ``Or``: a ``StepPlan`` specialization. Prefer this
+    over Kahn→And/Seq when the dependency graph is the source of truth (guided
+    emission, apply-replay correction). And/Or/Seq are series-parallel and
+    cannot represent every precedes graph losslessly (different
+    ``n_linearizations`` algorithms are a symptom of that gap).
+    """
+
+    __slots__ = ("_precedes",)
+
+    def __init__(self, steps=(), precedes=()):
+        steps = tuple(steps or ())
+        nodes = []
+        for s in steps:
+            node = _as_node(s)
+            if not isinstance(node, Step):
+                raise TypeError("Deps steps must be Step instances, got %r" % (type(node),))
+            nodes.append(node)
+        precedes = tuple((int(a), int(b)) for a, b in (precedes or ()))
+        n = len(nodes)
+        for a, b in precedes:
+            if not (0 <= a < n and 0 <= b < n) or a == b:
+                raise ValueError("invalid precedes")
+        if n > 0 and next(_topo_orders(nodes, precedes), None) is None:
+            raise ValueError("cycle in precedes")
+        self._children = tuple(nodes)
+        # Always store the transitive reduction for stable output / JSON / keys.
+        # Graphs are tiny; reduction cost is fine vs O(M+N) closure equality.
+        self._precedes = (
+            canonical_dependency_edges(n, precedes) if n else ()
+        )
+
+    @property
+    def precedes(self) -> tuple:
+        return self._precedes
+
+    def same_linearizations(self, other: "Deps") -> bool:
+        """True iff ``other`` admits exactly the same total orders.
+
+        Requires **node identity** (same multiset of leaf :class:`Step`\\ s),
+        then compares canonical precedes (stored transitive reductions).
+        Prefer this over ``==`` only when declaration order of steps may differ;
+        after construction, ``==`` also sees reduced edges.
+        """
+        if not isinstance(other, Deps):
+            return False
+        aligned = _align_deps_indices(self._children, other._children)
+        if aligned is None:
+            return False
+        # Both sides already reduced; remap other's edges into self's index.
+        edges_b = tuple(
+            sorted((aligned[a], aligned[b]) for a, b in other._precedes)
+        )
+        return self._precedes == edges_b
+
+    def __eq__(self, other) -> bool:
+        """Same steps (order-sensitive) and same canonical precedes.
+
+        Construction always reduces edges, so redundant input graphs compare
+        equal once built. For order-insensitive step alignment use
+        :meth:`same_linearizations`.
+        """
+        if not isinstance(other, Deps):
+            return NotImplemented
+        return self._children == other._children and self._precedes == other._precedes
+
+    def __hash__(self) -> int:
+        return hash((Deps, self._children, self._precedes))
+
+    def __str__(self) -> str:
+        if not self._children:
+            return "Deps()"
+        parts = [_node_str(c) for c in self._children]
+        if not self._precedes:
+            if len(parts) == 1:
+                return parts[0]
+            return "(" + " & ".join(parts) + ")"
+        edges = ", ".join("%s≺%s" % (parts[a], parts[b]) for a, b in self._precedes)
+        return "[%s | %s]" % ("; ".join(parts), edges)
+
+    def iter_linearizations(self) -> Iterator[tuple]:
+        yield from _topo_orders(self._children, self._precedes)
+
+
+def or_of_plans(plans: Sequence) -> StepPlan:
+    """One plan: empty ``Or``, a single plan, or ``Or`` of alternatives."""
+    plans = tuple(
+        p if isinstance(p, StepPlan) else StepPlan((p,)) for p in plans
+    )
+    if not plans:
+        return Or(())
+    if len(plans) == 1:
+        return plans[0]
+    return Or(plans)
+
+
+def pathway_alternatives(plan) -> list:
+    """Top-level ``Or`` branches as plans (compat helper)."""
+    if plan is None:
+        return []
+    if isinstance(plan, StepPlan):
+        return plan.branches()
+    if isinstance(plan, Step):
+        return [StepPlan((plan,))]
+    return []
+
+
+def pathway_linearizations(node) -> Iterator[Linearization]:
+    if isinstance(node, StepPlan):
+        yield from node.linearizations()
+        return
+    for order in _node_orders(node):
+        yield Linearization(order)
+
+
+def _node_orders(node) -> Iterator[tuple]:
+    if isinstance(node, Step):
+        yield (node,)
+        return
+    if isinstance(node, StepPlan):
+        yield from node.iter_linearizations()
+        return
+    raise TypeError(type(node))
+
+
+def _step_key(step: Step, by: str):
+    if by == "rule":
+        return step.rule
+    return step
+
+
+def _recipe_item_key(item, by: str):
+    if by == "rule":
+        if isinstance(item, Step):
+            return item.rule
+        return item
+    if isinstance(item, Step):
+        return item
+    raise TypeError("recipe items must be Step when by='step'")
+
+
+def _n_linearizations(node) -> int:
+    """Total linearization count without materializing orders."""
+    return sum(_lin_counts_by_length(node).values())
+
+
+def _lin_counts_by_length(node) -> dict:
+    """Map leaf-length → number of linearizations of that length."""
+    if isinstance(node, Step):
+        return {1: 1}
+    if isinstance(node, Or):
+        if not node._children:
+            return {}
+        out = {}
+        for c in node._children:
+            for length, count in _lin_counts_by_length(c).items():
+                out[length] = out.get(length, 0) + count
+        return out
+    if isinstance(node, Deps):
+        n = len(node._children)
+        if n == 0:
+            return {0: 1}
+        return {n: count_transformation_orders(n, node._precedes)}
+    if isinstance(node, And):
+        return _and_lin_counts_by_length(node._children)
+    if isinstance(node, StepPlan):
+        return _seq_lin_counts_by_length(node._children)
+    raise TypeError(type(node))
+
+
+def _seq_lin_counts_by_length(children) -> dict:
+    if not children:
+        return {0: 1}
+    acc = {0: 1}
+    for child in children:
+        nxt = {}
+        child_map = _lin_counts_by_length(child)
+        for la, ca in acc.items():
+            for lb, cb in child_map.items():
+                length = la + lb
+                nxt[length] = nxt.get(length, 0) + ca * cb
+        acc = nxt
+    return acc
+
+
+def _and_lin_counts_by_length(children) -> dict:
+    if not children:
+        return {0: 1}
+    # Fold children left-to-right: interleave current bag with next child.
+    acc = _lin_counts_by_length(children[0])
+    for child in children[1:]:
+        nxt = {}
+        child_map = _lin_counts_by_length(child)
+        for la, ca in acc.items():
+            for lb, cb in child_map.items():
+                ways = ca * cb * (
+                    math.factorial(la + lb)
+                    // (math.factorial(la) * math.factorial(lb))
+                )
+                length = la + lb
+                nxt[length] = nxt.get(length, 0) + ways
+        acc = nxt
+    return acc
+
+
+class ComponentTooLarge(RuntimeError):
+    """Raised before DP if a weakly connected dependency component is too big."""
+
+    def __init__(self, nodes, max_size):
+        self.nodes = tuple(nodes)
+        self.max_size = max_size
+        super().__init__(
+            "Dependency component has %d nodes (limit is %d): %s"
+            % (len(nodes), max_size, list(nodes))
+        )
+
+
+def _align_deps_indices(steps_a, steps_b) -> dict | None:
+    """Map indices in ``steps_b`` → indices in ``steps_a`` by Step equality.
+
+    Returns ``None`` if the leaf multisets differ (node identity failed).
+    Duplicate equal Steps (same rule+SOM) are allowed — expected mainly from
+    pathological cycles, not normal emission — and matched greedily.
+    """
+    from collections import Counter
+
+    if len(steps_a) != len(steps_b):
+        return None
+    if Counter(steps_a) != Counter(steps_b):
+        return None
+    used = [False] * len(steps_b)
+    remap = {}
+    for i, step in enumerate(steps_a):
+        found = None
+        for j, other in enumerate(steps_b):
+            if used[j]:
+                continue
+            if other == step:
+                found = j
+                break
+        if found is None:
+            return None
+        used[found] = True
+        remap[found] = i
+    return remap
+
+
+def transitive_closure_masks(n, edges) -> tuple:
+    """One bitmask per node: bit ``b`` set iff ``a`` must precede ``b``.
+
+    Nodes are opaque index labels ``0..n-1`` — this does **not** check that
+    two plans' steps are the same reactions/sites. Align node identity first
+    (see :meth:`Deps.same_linearizations`).
+
+    Raises ``ValueError`` if the graph contains a cycle.
+    """
+    outgoing = [[] for _ in range(n)]
+    indegree = [0] * n
+    for a, b in set(edges):
+        if not (0 <= a < n and 0 <= b < n):
+            raise ValueError("invalid edge: %r" % ((a, b),))
+        if a == b:
+            raise ValueError("cycle in precedes")
+        outgoing[a].append(b)
+        indegree[b] += 1
+
+    queue = deque(v for v in range(n) if indegree[v] == 0)
+    topo = []
+    while queue:
+        a = queue.popleft()
+        topo.append(a)
+        for b in outgoing[a]:
+            indegree[b] -= 1
+            if indegree[b] == 0:
+                queue.append(b)
+    if len(topo) != n:
+        raise ValueError("cycle in precedes")
+
+    closure = [0] * n
+    for a in reversed(topo):
+        for b in outgoing[a]:
+            closure[a] |= (1 << b) | closure[b]
+    return tuple(closure)
+
+
+def canonical_dependency_edges(n, edges) -> tuple:
+    """Unique minimal dependency edge set (transitive reduction) for this DAG.
+
+    Two DAGs over the **same labeled nodes** ``0..n-1`` have exactly the same
+    valid orderings iff this returns the same edge list. Node identity is the
+    caller's responsibility. :class:`Deps` stores this form on construction
+    for stable output.
+    """
+    closure = transitive_closure_masks(n, edges)
+    canonical_edges = []
+    for a in range(n):
+        descendants = closure[a]
+        reachable_through_another_node = 0
+        remaining = descendants
+        while remaining:
+            bit = remaining & -remaining
+            b = bit.bit_length() - 1
+            remaining -= bit
+            reachable_through_another_node |= closure[b]
+        direct_children = descendants & ~reachable_through_another_node
+        while direct_children:
+            bit = direct_children & -direct_children
+            b = bit.bit_length() - 1
+            direct_children -= bit
+            canonical_edges.append((a, b))
+    return tuple(sorted(canonical_edges))
+
+
+def count_transformation_orders(n, edges, *, max_component_size=20) -> int:
+    """Count valid orders of ``n`` labeled nodes under precedes ``edges``.
+
+    Nodes are index labels only. Splits into weakly connected components,
+    counts each with memoized bitmask DP, then multiplies by multinomial
+    interleavings across components. Returns 0 on a cycle. Raises
+    :class:`ComponentTooLarge` if any component exceeds ``max_component_size``
+    (``None`` disables the limit).
+    """
+    edge_set = set()
+    for a, b in edges:
+        if not (0 <= a < n and 0 <= b < n):
+            raise ValueError("invalid dependency edge %r for n=%d" % ((a, b), n))
+        if a != b:
+            edge_set.add((a, b))
+
+    undirected = [[] for _ in range(n)]
+    for a, b in edge_set:
+        undirected[a].append(b)
+        undirected[b].append(a)
+
+    component_id = [-1] * n
+    components = []
+    for start in range(n):
+        if component_id[start] != -1:
+            continue
+        cid = len(components)
+        component = []
+        queue = deque([start])
+        component_id[start] = cid
+        while queue:
+            u = queue.popleft()
+            component.append(u)
+            for v in undirected[u]:
+                if component_id[v] == -1:
+                    component_id[v] = cid
+                    queue.append(v)
+        if (
+            max_component_size is not None
+            and len(component) > max_component_size
+        ):
+            raise ComponentTooLarge(component, max_component_size)
+        components.append(component)
+
+    component_edges = [[] for _ in components]
+    for a, b in edge_set:
+        component_edges[component_id[a]].append((a, b))
+
+    def count_component(nodes, local_edges):
+        size = len(nodes)
+        local_index = {node: i for i, node in enumerate(nodes)}
+        prerequisites = [0] * size
+        for a, b in local_edges:
+            prerequisites[local_index[b]] |= 1 << local_index[a]
+        all_done = (1 << size) - 1
+
+        @cache
+        def dp(done):
+            if done == all_done:
+                return 1
+            total = 0
+            for step in range(size):
+                bit = 1 << step
+                if not (done & bit) and (prerequisites[step] & ~done) == 0:
+                    total += dp(done | bit)
+            return total
+
+        return dp(0)
+
+    total_count = 1
+    total_steps_so_far = 0
+    for nodes, local_edges in zip(components, component_edges):
+        component_count = count_component(nodes, local_edges)
+        if component_count == 0:
+            return 0
+        component_size = len(nodes)
+        total_count *= component_count
+        total_count *= math.comb(
+            total_steps_so_far + component_size, component_size
+        )
+        total_steps_so_far += component_size
+    return total_count
+
+
+def _possible_lengths(node) -> frozenset:
+    """Possible leaf counts for ``node`` (Or branches may differ)."""
+    if isinstance(node, Step):
+        return frozenset({1})
+    if isinstance(node, Or):
+        if not node._children:
+            return frozenset({0})
+        out = set()
+        for c in node._children:
+            out |= _possible_lengths(c)
+        return frozenset(out)
+    if isinstance(node, Deps):
+        return frozenset({len(node._children)})
+    # Seq and And: sums of child lengths
+    sets = [_possible_lengths(c) for c in node._children]
+    if not sets:
+        return frozenset({0})
+    acc = {0}
+    for s in sets:
+        acc = {a + b for a in acc for b in s}
+    return frozenset(acc)
+
+
+def _recipe_in_node(node, recipe: tuple, *, by: str) -> bool:
+    """Exact linearization membership without full expansion."""
+    n = len(recipe)
+    if n not in _possible_lengths(node):
+        return False
+    if isinstance(node, Step):
+        return n == 1 and _recipe_item_key(recipe[0], by) == _step_key(node, by)
+    if type(node) is Or:
+        return any(_recipe_in_node(c, recipe, by=by) for c in node._children)
+    if type(node) is And:
+        return _recipe_in_and(node._children, recipe, by=by)
+    if type(node) is Deps:
+        return _recipe_in_deps(node, recipe, by=by)
+    # StepPlan Seq
+    return _recipe_in_seq(node._children, recipe, by=by)
+
+
+def _recipe_in_deps(node: "Deps", recipe: tuple, *, by: str) -> bool:
+    """True if ``recipe`` is a topo sort of ``node`` under ``by`` equality."""
+    steps = node._children
+    if len(recipe) != len(steps):
+        return False
+    # Map each recipe item to a unique step index.
+    used = [False] * len(steps)
+    index_of = []
+    for item in recipe:
+        key = _recipe_item_key(item, by)
+        found = None
+        for i, step in enumerate(steps):
+            if used[i]:
+                continue
+            if _step_key(step, by) == key:
+                found = i
+                break
+        if found is None:
+            return False
+        used[found] = True
+        index_of.append(found)
+    pos = {idx: p for p, idx in enumerate(index_of)}
+    return all(pos[a] < pos[b] for a, b in node._precedes)
+
+
+def _recipe_in_seq(children, recipe: tuple, *, by: str) -> bool:
+    """Partition ``recipe`` into contiguous segments matching each child."""
+    m = len(children)
+    if m == 0:
+        return len(recipe) == 0
+    # dp[i][j]: children[:i] match recipe[:j]
+    n = len(recipe)
+    dp = [False] * (n + 1)
+    dp[0] = True
+    for child in children:
+        lens = _possible_lengths(child)
+        nxt = [False] * (n + 1)
+        for j in range(n + 1):
+            if not dp[j]:
+                continue
+            for L in lens:
+                end = j + L
+                if end > n:
+                    continue
+                if _recipe_in_node(child, recipe[j:end], by=by):
+                    nxt[end] = True
+        dp = nxt
+    return dp[n]
+
+
+def _recipe_in_and(children, recipe: tuple, *, by: str) -> bool:
+    """``recipe`` is an interleaving of one linearization per child."""
+    if not children:
+        return len(recipe) == 0
+    child0, *rest = children
+    for L in _possible_lengths(child0):
+        if L > len(recipe):
+            continue
+        from itertools import combinations
+
+        for idxs in combinations(range(len(recipe)), L):
+            sub = tuple(recipe[i] for i in idxs)
+            if not _recipe_in_node(child0, sub, by=by):
+                continue
+            idx_set = set(idxs)
+            complement = tuple(
+                recipe[i] for i in range(len(recipe)) if i not in idx_set
+            )
+            if rest:
+                if _recipe_in_and(rest, complement, by=by):
+                    return True
+            elif not complement:
+                return True
+    return False
+
+
+def _seq_orders(children) -> Iterator[tuple]:
+    if not children:
+        yield ()
+        return
+
+    def concat(i: int, prefix: tuple):
+        if i == len(children):
+            yield prefix
+            return
+        for mid in _node_orders(children[i]):
+            yield from concat(i + 1, prefix + mid)
+
+    yield from concat(0, ())
+
+
+def _interleave_orders(orders) -> Iterator[tuple]:
+    if not orders:
+        yield ()
+        return
+    total = sum(len(o) for o in orders)
+    if total == 0:
+        yield ()
+        return
+
+    def search(pos, path):
+        if len(path) == total:
+            yield tuple(path)
+            return
+        for i, o in enumerate(orders):
+            if pos[i] < len(o):
+                path.append(o[pos[i]])
+                pos[i] += 1
+                yield from search(pos, path)
+                pos[i] -= 1
                 path.pop()
 
-        initial = sorted(i for i, d in enumerate(indegree) if d == 0)
-        if not initial and n:
-            raise ValueError("StepPlan precedes graph has a cycle")
-        yield from search(initial, indegree, [])
+    yield from search([0] * len(orders), [])
+
+
+def _topo_orders(steps, precedes) -> Iterator[tuple]:
+    """Yield every topological sort of ``steps`` under ``precedes`` edges."""
+    n = len(steps)
+    if n == 0:
+        yield ()
+        return
+    successors = [[] for _ in range(n)]
+    indegree = [0] * n
+    for a, b in precedes:
+        successors[a].append(b)
+        indegree[b] += 1
+
+    def search(remaining, path):
+        if len(path) == n:
+            yield tuple(steps[i] for i in path)
+            return
+        ready = [i for i in range(n) if remaining[i] == 0 and i not in path]
+        for i in ready:
+            remaining[i] = -1
+            path.append(i)
+            for succ in successors[i]:
+                remaining[succ] -= 1
+            yield from search(remaining, path)
+            for succ in successors[i]:
+                remaining[succ] += 1
+            path.pop()
+            remaining[i] = 0
+
+    yield from search(list(indegree), [])
+
+
+def _legacy_precedes(plan: StepPlan) -> tuple:
+    """Recover precedes for Deps or a pure Seq of And/Step layers."""
+    if type(plan) is Deps:
+        return plan._precedes
+    if type(plan) is not StepPlan:
+        return ()
+    layers = []
+    for c in plan.children:
+        if isinstance(c, Step):
+            layers.append([c])
+        elif type(c) is And:
+            layers.append(list(c.steps))
+        else:
+            return ()
+    steps = []
+    ranges = []
+    for layer in layers:
+        start = len(steps)
+        steps.extend(layer)
+        ranges.append((start, len(steps)))
+    precedes = []
+    for (a0, a1), (b0, b1) in zip(ranges, ranges[1:]):
+        for i in range(a0, a1):
+            for j in range(b0, b1):
+                precedes.append((i, j))
+    return tuple(precedes)
+
+
+def pathway_to_json(node) -> dict:
+    if isinstance(node, Step):
+        data = {"op": "step", "rule": node.rule, "site": _site_to_json(node.site)}
+        if node.pathways:
+            data["pathways"] = sorted(node.pathways)
+        return data
+    if isinstance(node, Deps):
+        return {
+            "op": "deps",
+            "steps": [
+                {
+                    "rule": s.rule,
+                    "site": _site_to_json(s.site),
+                    **({"pathways": sorted(s.pathways)} if s.pathways else {}),
+                }
+                for s in node._children
+            ],
+            "precedes": [list(p) for p in node._precedes],
+        }
+    if isinstance(node, And):
+        return {"op": "and", "children": [pathway_to_json(c) for c in node.children]}
+    if isinstance(node, Or):
+        return {"op": "or", "children": [pathway_to_json(c) for c in node.children]}
+    if isinstance(node, StepPlan):
+        # Seq
+        return {"op": "seq", "children": [pathway_to_json(c) for c in node.children]}
+    raise TypeError(type(node))
+
+
+def pathway_from_json(data: dict):
+    if not isinstance(data, dict):
+        raise TypeError("pathway JSON must be a dict")
+    op = data.get("op")
+    if op in (None, "plan", "deps") and "steps" in data and "children" not in data:
+        steps = []
+        for item in data["steps"]:
+            pathways = frozenset(item.get("pathways") or ())
+            steps.append(
+                Step(item["rule"], _site_from_json(item["site"]), pathways=pathways)
+            )
+        precedes = [tuple(p) for p in data.get("precedes", ())]
+        return Deps(steps, precedes)
+    if op == "step":
+        pathways = frozenset(data.get("pathways") or ())
+        return Step(
+            data["rule"], _site_from_json(data["site"]), pathways=pathways
+        )
+    if op == "and":
+        return And(tuple(pathway_from_json(c) for c in data["children"]))
+    if op == "or":
+        return Or(tuple(pathway_from_json(c) for c in data["children"]))
+    if op == "seq":
+        return StepPlan(tuple(pathway_from_json(c) for c in data["children"]))
+    raise ValueError("unknown pathway op %r" % (op,))
+
+
+# Back-compat alias: Seq was renamed — StepPlan *is* Seq.
+Seq = StepPlan

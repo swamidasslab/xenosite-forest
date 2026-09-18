@@ -61,7 +61,11 @@ def test_benzene_prep_linearizations_agree():
     """Both OH orders for para-quinone prep yield the same hydroquinone."""
     mol = Chem.MolFromSmiles("c1ccccc1")
     plan = next(
-        p for p in QuinoneFormation().phase1_steps(mol, frozenset({0, 3})) if len(p) == 3
+        b
+        for b in QuinoneFormation()
+        .phase1_steps(mol, frozenset({0, 3}))
+        .branches()
+        if len(b) == 3
     )
     finals = _smi_sets(
         lin.apply(mol, drop_last=1) for lin in plan.linearizations()
