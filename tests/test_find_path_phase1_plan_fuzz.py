@@ -15,6 +15,7 @@ from pathlib import Path
 
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from hypothesis.database import DirectoryBasedExampleDatabase
+import pytest
 from rdkit import Chem
 
 from xenosite.forest import PathSearchCounters, RuleSet, find_path
@@ -206,6 +207,10 @@ def create_then_find_case(draw):
     return r_smi, t_smi, recipe
 
 
+# 30 examples are ~40s locally (~60s with the edit guard). On a loaded CI
+# worker the default 120s cap fires mid-example; Hypothesis retries that
+# example alone, it passes, and the run is reported as a flake.
+@pytest.mark.timeout(300)
 @given(case=create_then_find_case())
 @settings(
     max_examples=30,
