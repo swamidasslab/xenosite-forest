@@ -61,3 +61,26 @@ def test_unstable_with_name_and_detail():
 def test_unstable_rejects_non_callable():
     with pytest.raises(TypeError, match="callable"):
         unstable(3)
+
+
+def test_path_outcome_unpack_and_helpers():
+    from xenosite.forest.guided_path import MaybeFilter, PathOutcome
+    from xenosite.forest.step_plan import Step, StepPlan
+
+    plan = StepPlan((Step("Hydroxylation", {0}),))
+    outcome = PathOutcome(
+        plan=plan,
+        maybe=MaybeFilter(),
+        steps=(("Hydroxylation", frozenset({0})),),
+        smiles=("CCO", "CCO"),
+        mols=(),
+    )
+    smiles, steps, mols, p, maybe = outcome
+    assert smiles[-1] == "CCO"
+    assert p is plan
+    assert len(outcome) == 5
+    assert outcome[3] is plan
+    assert list(outcome.linearizations())
+    assert outcome.contains(["Hydroxylation"], by="rule")
+    assert "PathOutcome" in str(outcome)
+    assert outcome.allows("Hydroxylation", frozenset({0})) in (True, False)

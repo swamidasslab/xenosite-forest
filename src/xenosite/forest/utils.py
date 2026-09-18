@@ -2,6 +2,9 @@
 
 import itertools
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Iterator, Optional
 
 from rdkit import Chem, rdBase
 
@@ -9,6 +12,38 @@ from rdkit import Chem, rdBase
 rdBase.DisableLog("rdApp.*")
 
 _log = logging.getLogger(__name__)
+
+# Active path-search counters (guided / classic find_path). clean() increments
+# sanitize_dropped when a constructed metabolite fails sanitization.
+_active_path_counters: ContextVar[Optional[object]] = ContextVar(
+    "xenosite_forest_path_counters", default=None
+)
+
+
+@contextmanager
+def path_counter_scope(counters) -> Iterator:
+    """Bind ``counters`` so :func:`clean` can record sanitize drops."""
+    token = _active_path_counters.set(counters)
+    try:
+        yield counters
+    finally:
+        _active_path_counters.reset(token)
+
+
+def note_sanitize_drop(n: int = 1) -> None:
+    """Record that ``n`` constructed metabolites failed sanitization."""
+    counters = _active_path_counters.get()
+    if counters is None or n <= 0:
+        return
+    try:
+        counters.sanitize_dropped = int(getattr(counters, "sanitize_dropped", 0)) + int(
+            n
+        )
+        sync = getattr(counters, "_sync", None)
+        if callable(sync):
+            sync()
+    except Exception:
+        pass
 
 
 def refresh_mol(mol):
@@ -174,8 +209,20 @@ def sanitize_metabolite(mol):
     Prefer keeping existing hydrogens (so imidazole [nH] is not lost). If that
     fails, reset explicit hydrogens — some reaction products keep leftover Hs —
     and sanitize again.
+
+    Over-valent drafts (common after aromatic quinone / DH edits) skip the
+    keep-Hs attempt and go straight to ``reset_hs=True``, which often repairs
+    them; do **not** hard-reject on a strict valence probe alone.
     """
-    for reset_hs in (False, True):
+    keep_hs_plausible = True
+    try:
+        probe = Chem.Mol(mol)
+        probe.UpdatePropertyCache(strict=True)
+    except Exception:
+        keep_hs_plausible = False
+
+    attempts = (False, True) if keep_hs_plausible else (True,)
+    for reset_hs in attempts:
         try:
             return _sanitize_kekulize(Chem.Mol(mol), reset_hs=reset_hs)
         except Exception:
@@ -202,6 +249,7 @@ def clean(mol):
     for frag in Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False):
         sanitized = sanitize_metabolite(frag)
         if sanitized is None:
+            note_sanitize_drop(1)
             _log.debug(
                 "Dropping RDKit-invalid metabolite %s (%s)",
                 _mol_smiles(frag),

@@ -318,6 +318,8 @@ class RuleSet(Phase1Site, ReactionRule):
                   metabolite_table='',
                   openfilehandle=None,
                   search='bfs',
+                  max_expansions=None,
+                  counters=None,
                   **kwargs):
         """Find path between start and end mol.
 
@@ -329,8 +331,22 @@ class RuleSet(Phase1Site, ReactionRule):
             termination_rulenames: A list of rulenames that terminate the search.
             search: ``\"bfs\"`` (default) or ``\"dfs\"``. DFS yields deep paths earlier,
                 which is better for sampling a few two-step pathways.
+            max_expansions: optional cap on billed work (``linearizations_applied`` +
+                ``site_applies``). Classic charges one ``site_applies`` per frontier
+                ``metabolize`` call so historical caps stay comparable; guided charges
+                each plan linearization / non-plan site apply. When hit, search stops
+                and ``counters.budget_exhausted`` (or ``counters['budget_exhausted']``)
+                is set True.
+            counters: optional :class:`~xenosite.forest.PathSearchCounters` or mutable
+                dict with the same keys. Created when omitted if ``max_expansions``
+                is set. Dict callers see the full guided-comparable field set.
 
         """
+
+        from .guided_path import coerce_path_counters
+        from .utils import path_counter_scope
+
+        counters = coerce_path_counters(counters, max_expansions)
 
         if end_mol:
             desired_endpoint_structures = set(can_smi(rdmol=end_mol))
@@ -347,6 +363,10 @@ class RuleSet(Phase1Site, ReactionRule):
             writer = self.initialize_metabolite_table(
                 openfilehandle, depth=depth)
 
+        path_kwargs = dict(kwargs)
+        path_kwargs["max_expansions"] = max_expansions
+        path_kwargs["counters"] = counters
+
         if search == 'dfs':
             path_iter = self._metabolite_paths_dfs(
                 start,
@@ -355,35 +375,60 @@ class RuleSet(Phase1Site, ReactionRule):
                 desired_endpoint_structures=desired_endpoint_structures,
                 format_output_site=False,
                 depth=depth,
-                **kwargs)
+                **path_kwargs)
         elif search == 'bfs':
             path_iter = self._metabolite_paths_bfs(
                 [(start, [], [start])],
                 desired_endpoint_structures=desired_endpoint_structures,
                 format_output_site=False,
                 depth=depth,
-                **kwargs)
+                **path_kwargs)
         else:
             raise ValueError("search must be 'bfs' or 'dfs', got %r" % (search,))
 
-        for smi, sites, mols in path_iter:
-            
-            fsite = sorted(sites)
+        with path_counter_scope(counters):
+            for smi, sites, mols in path_iter:
+                
+                fsite = sorted(sites)
 
-            fline = str((list(map(unmapped_smiles, mols)), fsite))
+                fline = str((list(map(unmapped_smiles, mols)), fsite))
 
-            if fline not in seen:
-                seen.add(fline)
+                if fline not in seen:
+                    seen.add(fline)
 
-                if metabolite_table:
-                    self.write_metabolite_table_row(sites, mols, writer)
+                    if metabolite_table:
+                        self.write_metabolite_table_row(sites, mols, writer)
 
-                if outmols:
-                    yield smi, sites, mols
-                else:
-                    yield fline
+                    if outmols:
+                        yield smi, sites, mols
+                    else:
+                        yield fline
         if metabolite_table:
             openfilehandle.close()
+
+    def _budget_tick(self, counters, max_expansions):
+        """Charge one classic metabolize as one billed site apply.
+
+        True while under budget; False once ``max_expansions`` is reached.
+        Also increments ``rule_expansions`` (metabolize calls) for diagnostics.
+        """
+        if counters is None:
+            return True
+        if not counters.under_budget(max_expansions):
+            return False
+        counters.rule_expansions = int(counters.rule_expansions) + 1
+        counters.site_applies = int(counters.site_applies) + 1
+        counters._sync()
+        return True
+
+    def _count_classic_products(self, counters, next_step, products):
+        """Record site/product detail so classic counters match guided fields."""
+        if counters is None:
+            return
+        counters.sites_considered = int(counters.sites_considered) + 1
+        n = sum(1 for p in products if p)
+        counters.mol_edits = int(counters.mol_edits) + n
+        counters._sync()
 
     def _process_sites(self, sites):
         return eval(sites)
@@ -505,6 +550,8 @@ class RuleSet(Phase1Site, ReactionRule):
                               strict=True,
                               expand_star_conjugates=False,
                               shuffle_rng=None,
+                              max_expansions=None,
+                              counters=None,
                               **kwargs):
 
         if isinstance(depth, str):
@@ -549,6 +596,9 @@ class RuleSet(Phase1Site, ReactionRule):
                 if rulename in termination_rulenames:
                     continue
 
+            if not self._budget_tick(counters, max_expansions):
+                return
+
             reactions = self.metabolize(resmol, strict=strict, **kwargs)
             if shuffle_rng is not None:
                 reactions = list(reactions)
@@ -565,6 +615,8 @@ class RuleSet(Phase1Site, ReactionRule):
                 products = list(clean(next_products))
                 if shuffle_rng is not None:
                     shuffle_rng.shuffle(products)
+
+                self._count_classic_products(counters, next_step, products)
 
                 for next_product in products:
 
@@ -616,6 +668,8 @@ class RuleSet(Phase1Site, ReactionRule):
                     quit_if_not_ended_in_termination_rulenames,
                     expand_star_conjugates=expand_star_conjugates,
                     shuffle_rng=shuffle_rng,
+                    max_expansions=max_expansions,
+                    counters=counters,
                     **kwargs):
 
                 yield pro, pat, propath
@@ -634,6 +688,8 @@ class RuleSet(Phase1Site, ReactionRule):
                               strict=True,
                               expand_star_conjugates=False,
                               shuffle_rng=None,
+                              max_expansions=None,
+                              counters=None,
                               **kwargs):
         """Depth-first pathway enumeration.
 
@@ -665,6 +721,9 @@ class RuleSet(Phase1Site, ReactionRule):
             if rulename in termination_rulenames:
                 return
 
+        if not self._budget_tick(counters, max_expansions):
+            return
+
         reactions = self.metabolize(resmol, strict=strict, **kwargs)
         if shuffle_rng is not None:
             reactions = list(reactions)
@@ -675,6 +734,8 @@ class RuleSet(Phase1Site, ReactionRule):
             products = list(clean(next_products))
             if shuffle_rng is not None:
                 shuffle_rng.shuffle(products)
+
+            self._count_classic_products(counters, next_step, products)
 
             for next_product in products:
 
@@ -725,6 +786,8 @@ class RuleSet(Phase1Site, ReactionRule):
                             expand_star_conjugates=expand_star_conjugates,
                             shuffle_rng=shuffle_rng,
                             strict=strict,
+                            max_expansions=max_expansions,
+                            counters=counters,
                             **kwargs):
                         yield pro, pat, propath
                         if desired_endpoint_structures is not None and not desired_endpoint_structures and not all_paths:

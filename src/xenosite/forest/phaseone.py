@@ -144,6 +144,16 @@ PhaseOneRS = RuleSet(rules=[
 
 PhaseOneRS.rulenames = sorted([x.name for x in PhaseOneRS])
 
+# Guided-search default: QuinoneFormation first (cheap quinone hops), then Phase I.
+# QF is inert on non-quinone targets (formula / chemistry), so the stack does not
+# slow TBA / cleavage paths relative to PhaseOneRS alone.
+PhaseOneQF = RuleSet(
+    rules=[rules.QuinoneFormation(), PhaseOneRS],
+    name="PhaseOneQF",
+    longname="Phase I + Quinone Formation",
+)
+PhaseOneQF.rulenames = sorted([x.name for x in PhaseOneQF])
+
 
 if __name__ == '__main__':
     import doctest
