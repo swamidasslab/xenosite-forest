@@ -118,9 +118,7 @@ def test_resfrags_compute_once_per_mode_on_full_apap(monkeypatch):
     monkeypatch.setattr(Resonate, "_resfrags", counting_resfrags)
 
     list(rulesets.load_ruleset("Full").metabolites(Mol(MolFromSmiles(APAP))))
-    # Kekulize (inside edit_mol) drops resonance, so producers refill on the
-    # substrate and on the standardize template. Still well below uncached.
-    assert calls["n"] == 5
+    assert calls["n"] == 3  # conj@substrate + conj@template + aromatic@template
 
     calls["n"] = 0
     with _resonance_cache_disabled():
@@ -205,15 +203,13 @@ def test_install_product_forest_clears_resonance():
     assert "resonance" not in product._forest
 
 
-def test_full_metabolize_clears_substrate_bfs_on_kekulize():
+def test_bfs_compute_once_across_full_apap():
     mol = Mol(MolFromSmiles(APAP))
     list(rulesets.load_ruleset("Full").metabolites(mol))
-    cache = mol._forest.get("resonance")
-    # In-place Kekulize drops the substrate cache. A later conjugated
-    # consumer may refill that mode once; BFS is not recomputed on the parent.
-    assert cache is not None
-    assert cache.bfs_compute_count == 0
-    assert cache.mode("conjugated").compute_count == 1
+    cache = _resonance_cache(mol)
+    assert cache.bfs_compute_count == 1
+    # Kekulize-for-SMARTS must not have wiped / replaced the parent's cache.
+    assert mol._forest.get("resonance") is cache
 
 
 # ---------------------------------------------------------------------------

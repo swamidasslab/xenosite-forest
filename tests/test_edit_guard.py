@@ -1,4 +1,8 @@
-"""Closed mols reject structural edits; edit_mol clears resonance after mutation."""
+"""Closed mols reject structural edits; edit_mol clears resonance after mutation.
+
+The guard is opt-in. These tests enter it and uninstall afterwards so the
+rest of the suite does not run with RDKit mutators patched.
+"""
 
 from rdkit.Chem.rdchem import BondType
 from rdkit.Chem.rdmolfiles import MolFromSmiles
@@ -6,16 +10,39 @@ from rdkit.Chem.rdmolfiles import MolFromSmiles
 import pytest
 
 from xenosite.forest.base import _resonance_cache, copy_mol
-from xenosite.forest.edit_guard import MolClosedError, edit_mol
+from xenosite.forest.edit_guard import (
+    MolClosedError,
+    _uninstall,
+    edit_guard,
+    edit_mol,
+    guard_installed,
+)
 
 
-def test_closed_mol_rejects_bond_edit():
+@pytest.fixture
+def guarded():
+    assert not guard_installed()
+    with edit_guard():
+        yield
+    _uninstall()
+    assert not guard_installed()
+
+
+def test_edit_mol_does_not_install_guard():
+    mol = MolFromSmiles("C=C")
+    assert not guard_installed()
+    with edit_mol(mol):
+        mol.GetBondWithIdx(0).SetBondType(BondType.SINGLE)
+    assert not guard_installed()
+
+
+def test_closed_mol_rejects_bond_edit(guarded):
     mol = MolFromSmiles("C=C")
     with pytest.raises(MolClosedError):
         mol.GetBondWithIdx(0).SetBondType(BondType.SINGLE)
 
 
-def test_closed_mol_allows_props():
+def test_closed_mol_allows_props(guarded):
     mol = MolFromSmiles("C")
     mol.GetAtomWithIdx(0).SetProp("note", "ok")
     mol.GetAtomWithIdx(0).SetAtomMapNum(3)
@@ -23,7 +50,7 @@ def test_closed_mol_allows_props():
     assert mol.GetAtomWithIdx(0).GetAtomMapNum() == 3
 
 
-def test_edit_mol_allows_mutation_and_clears_resonance():
+def test_edit_mol_allows_mutation_and_clears_resonance(guarded):
     mol = MolFromSmiles("c1ccccc1")
     cache = _resonance_cache(mol)
     assert mol._forest["resonance"] is cache
@@ -32,7 +59,7 @@ def test_edit_mol_allows_mutation_and_clears_resonance():
     assert "resonance" not in mol._forest
 
 
-def test_edit_mol_without_mutation_keeps_resonance():
+def test_edit_mol_without_mutation_keeps_resonance(guarded):
     mol = MolFromSmiles("C")
     cache = _resonance_cache(mol)
     with edit_mol(mol):
@@ -40,7 +67,7 @@ def test_edit_mol_without_mutation_keeps_resonance():
     assert mol._forest["resonance"] is cache
 
 
-def test_closed_mol_rejects_kekulize():
+def test_closed_mol_rejects_kekulize(guarded):
     from rdkit.Chem import Kekulize
 
     mol = MolFromSmiles("c1ccccc1")
@@ -48,7 +75,7 @@ def test_closed_mol_rejects_kekulize():
         Kekulize(mol)
 
 
-def test_copy_while_open_does_not_stay_open():
+def test_copy_while_open_does_not_stay_open(guarded):
     mol = MolFromSmiles("C=C")
     with edit_mol(mol):
         twin = copy_mol(mol)

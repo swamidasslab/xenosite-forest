@@ -7,8 +7,9 @@ raise :class:`MolClosedError` unless the molecule was opened with
 refresh) stay allowed.
 
 ``edit_mol`` unlocks one molecule and drops its resonance cache if a guarded
-mutator actually ran (Kekulize counts). Guards are off in production until
-:func:`edit_guard` is entered; tests enter one for the whole session.
+mutator actually ran (Kekulize counts). Wrappers are not installed until
+:func:`edit_guard` is entered. ``edit_mol`` does not install them, and the
+test suite does not enter a guard.
 
 .. code-block:: python
 
@@ -33,6 +34,7 @@ from rdkit.Chem.rdmolops import Kekulize as _OpsKekulize
 
 _STACK: ContextVar[tuple] = ContextVar("xenosite_edit_guard_stack", default=())
 _INSTALLED = False
+_RESTORES: list = []
 _OPEN_PROP = "_forestEditOpen"
 _TOKEN = 0
 
@@ -195,8 +197,19 @@ _RWMOL_EDITS = (
 )
 
 
+def _replace(obj, name: str, wrapped) -> None:
+    current = getattr(obj, name, None)
+    if current is None or getattr(current, "_edit_guard_wrapped", False):
+        return
+    try:
+        setattr(obj, name, wrapped)
+    except Exception:
+        return
+    _RESTORES.append((obj, name, current))
+
+
 def _install() -> None:
-    """Install wrappers once. Cheap no-op when the guard stack is empty."""
+    """Patch RDKit mutators. Only :func:`edit_guard` calls this."""
     global _INSTALLED
     if _INSTALLED:
         return
@@ -214,7 +227,7 @@ def _install() -> None:
             current = getattr(cls, name, None)
             if current is None or getattr(current, "_edit_guard_wrapped", False):
                 continue
-            setattr(cls, name, _wrap_method(current, name))
+            _replace(cls, name, _wrap_method(current, name))
 
     wrapped = _wrap_kekulize(_OpsKekulize)
     import sys
@@ -222,9 +235,9 @@ def _install() -> None:
     import rdkit.Chem as Chem
     import rdkit.Chem.rdmolops as rdmolops
 
-    rdmolops.Kekulize = wrapped
-    Chem.Kekulize = wrapped
-    rdkit_ids = {id(_Kekulize), id(_OpsKekulize), id(Chem.Kekulize)}
+    _replace(rdmolops, "Kekulize", wrapped)
+    _replace(Chem, "Kekulize", wrapped)
+    rdkit_ids = {id(_Kekulize), id(_OpsKekulize)}
     # `from rdkit... import Kekulize` binds a separate global per module.
     for mod in list(sys.modules.values()):
         if mod is None:
@@ -242,11 +255,22 @@ def _install() -> None:
         if id(current) in rdkit_ids or getattr(current, "__module__", "").startswith(
             "rdkit"
         ):
-            try:
-                mod.Kekulize = wrapped
-            except Exception:
-                continue
+            _replace(mod, "Kekulize", wrapped)
     _INSTALLED = True
+
+
+def _uninstall() -> None:
+    """Restore methods patched by :func:`_install`. Tests use this so the suite stays unpatched."""
+    global _INSTALLED
+    if not _INSTALLED:
+        return
+    for obj, name, orig in reversed(_RESTORES):
+        try:
+            setattr(obj, name, orig)
+        except Exception:
+            continue
+    _RESTORES.clear()
+    _INSTALLED = False
 
 
 @contextmanager
@@ -269,12 +293,14 @@ def edit_mol(mol, *, clear: str = "if_mutated") -> Iterator:
     """Open ``mol`` for structural edits.
 
     On exit, drop ``mol._forest['resonance']`` (and a cached standardize view)
-    when a guarded mutator ran. ``clear="always"`` drops it even if every edit
-    went through an unwrapped C++ path. ``clear="never"`` leaves the cache.
+    when a guarded mutator ran. That only happens if :func:`edit_guard` has
+    installed wrappers. ``clear="always"`` drops the cache either way.
+    ``clear="never"`` leaves it.
     """
     if clear not in ("if_mutated", "always", "never"):
         raise ValueError("clear must be 'if_mutated', 'always', or 'never'")
-    _install()
+    # Do not install wrappers here. Opening a mol must not patch RDKit for
+    # the rest of the process; only an explicit edit_guard() does that.
     token = _next_token() if hasattr(mol, "SetProp") else None
     if token is not None:
         _set_tokens(mol, _tokens(mol) | {token})

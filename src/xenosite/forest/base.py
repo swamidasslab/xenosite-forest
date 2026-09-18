@@ -1962,6 +1962,10 @@ class EditMol(QueryMol):
             if attach_path:
                 mol.SetProp("path", str(atoms))
 
+        # Bond edits invalidate any cached resonance forms. edit_mol only
+        # sees the mutation when the guard is installed, which it is not yet.
+        _clear_resonance(mol)
+
     def apply_modifications(self, mol, modifications, **kwargs):
         """Makes an editable copy of mol and successively applies each submitted modification."""
 
