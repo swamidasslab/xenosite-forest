@@ -119,17 +119,39 @@ def test_initialize_tags_skips_explicit_hydrogens():
     )
 
 
-def test_tag_copies_missing_previous_tags():
+def test_tag_cleavage_drops_sibling_labels():
+    """Split products keep only their own labels; siblings are not removed[]."""
     mol = MolFromSmiles("CCO")
     _, dehydrated = next(rules.Dehydration().metabolize(mol))
-    cc = dehydrated[0]
-    _, hydroxylated = next(rules.Hydroxylation().metabolize(cc))
-    product = hydroxylated[0]
-    tags = AtomTracker.tags(product)
-    depths = AtomTracker.depths(tags)
+    assert len(dehydrated) == 2
+    cc = next(p for p in dehydrated if p.GetNumHeavyAtoms() == 2)
+    water = next(p for p in dehydrated if p.GetNumHeavyAtoms() == 1)
+    cc_tags = AtomTracker.tags(cc)
+    depths = AtomTracker.depths(cc_tags)
     assert 0 in depths and 1 in depths
-    # Oxygen lost in dehydration is still in the tag record (copied forward).
-    assert any(len(rec["depth"]) == 1 and rec["depth"] == [0] for rec in tags.values())
+    # No depth-0-only ghost for the oxygen — it lives on the water fragment.
+    assert not any(rec["depth"] == [0] for rec in cc_tags.values())
+    assert (cc._forest["atom_trace"].get("removed") or []) == []
+    water_tags = AtomTracker.tags(water)
+    assert len(water_tags) == 1
+    assert all(0 in rec["depth"] for rec in water_tags.values())
+
+
+def test_tag_record_removals_chemical_deletion():
+    """In-place atom loss with record_removals=True appends a removed event."""
+    mol = MolFromSmiles("CCO")
+    tracker = AtomTracker()
+    tracker.initialize_tags(mol)
+    # Build a CC product mapped from CCO carbons (drop oxygen).
+    product = MolFromSmiles("CC")
+    for i, atom in enumerate(product.GetAtoms()):
+        atom.SetProp(AtomTracker.previous_index_prop_name, str(i))
+    tracker.tag(product, reactant=mol, record_removals=True, removed_by="Dehydration")
+    removed = product._forest["atom_trace"]["removed"]
+    assert len(removed) == 1
+    assert removed[0]["removed_by"] == "Dehydration"
+    assert any(rec["depth"] == [0] for rec in removed[0]["records"].values())
+    assert not any(rec["depth"] == [0] for rec in AtomTracker.tags(product).values())
 
 
 def test_next_tag_missing_and_non_integer():

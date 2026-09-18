@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from xenosite.forest import PathOutcome, PathSearchCounters, find_path
-from xenosite.forest.guided_path import CleavageSide, _site_key_set, _steps_key
+from xenosite.forest.guided_path import CleavageSide, _site_key_set
 
 
 def test_macrocycle_ring_open_then_bifurcate_spans_opens():
@@ -47,7 +47,7 @@ def test_macrocycle_ring_open_then_bifurcate_spans_opens():
 
 
 def test_multi_ndealk_distinct_required_routes_same_aldehyde():
-    """Two topologically distinct Required step paths to the same dialdehyde."""
+    """Two-arm N-dealk to the dialdehyde: And-equivalent walks → one Required plan."""
     reactant = "CN(C)Cc1ccc(CN(C)CC)cc1"
     product = "O=Cc1ccc(C=O)cc1"
     counters = PathSearchCounters()
@@ -67,18 +67,22 @@ def test_multi_ndealk_distinct_required_routes_same_aldehyde():
         for h in hits
         if len(h.steps) == 2 and all(s[0] == "NDealkylation" for s in h.steps)
     ]
-    assert len(two_step) >= 2, "expected ≥2 Required two-cleave routes; got %s" % (
+    assert len(two_step) >= 1, "expected a two-cleave Required route; got %s" % (
         [h.plan for h in hits],
     )
-    keys = {_steps_key(h.steps) for h in two_step}
-    assert len(keys) >= 2, "Required step sites must differ across routes"
-    maybes = {str(h.maybe) for h in two_step}
-    assert len(maybes) >= 2, "each route should carry its own Maybe"
-    for h in two_step:
-        assert isinstance(h, PathOutcome)
-        assert [s[0] for s in h.steps] == ["NDealkylation", "NDealkylation"]
-        assert h.maybe
-
+    outcome = two_step[0]
+    assert isinstance(outcome, PathOutcome)
+    assert outcome.maybe
+    # Unordered Deps: both arm orders are linearizations of the same plan.
+    assert outcome.plan.contains(
+        ["NDealkylation", "NDealkylation"], by="rule"
+    )
+    assert outcome.plan.n_linearizations() >= 2
+    # Asymmetric arms → distinct discarded sides (CNC vs CCNC).
+    sides = {e.side for e in outcome.maybe.entries}
+    assert len(sides) >= 2, sides
+    # Longer routes remain available as separate PathOutcomes.
+    assert len(hits) >= 2
 
 def test_impossible_targets_abort_without_budget_exhaustion():
     """Heuristics must empty the frontier — miss-after-budget is not a pass."""

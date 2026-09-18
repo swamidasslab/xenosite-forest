@@ -702,13 +702,25 @@ class AtomTracker(object):
         forest = getattr(mol, "_forest", None) or {}
         if forest.get("atom_trace") is not None:
             return
-        # Labels without forest: Mol copy dropped ``_forest``. Do not re-stamp
-        # depth-0 history (that would erase lineage). ``carry_forest`` must have
-        # restored the trace; if not, leave untagged so callers surface the miss.
-        if any(
-            a.GetAtomicNum() != 1 and a.HasProp(self.atom_tag_prop_name)
+        # Labels without forest: ``Chem.Mol()`` / RDKit copy dropped ``_forest``
+        # but kept ``_forestLabel``. Rebuild a live snapshot from those labels
+        # so metabolize/tag can continue (pre-copy history is unavailable;
+        # current idxs become depth 0 of the restored trace).
+        labeled = [
+            a
             for a in mol.GetAtoms()
-        ):
+            if a.GetAtomicNum() != 1 and a.HasProp(self.atom_tag_prop_name)
+        ]
+        if labeled:
+            records = {}
+            for atom in labeled:
+                label = atom.GetProp(self.atom_tag_prop_name)
+                try:
+                    tag = int(label)
+                except ValueError:
+                    tag = label
+                records[tag] = {"idx": [atom.GetIdx()], "depth": [0]}
+            self._save_tags(mol, records)
             return
 
         if mol.HasProp(self.tag_name):
@@ -2268,7 +2280,15 @@ class ReactionRule(AtomTracker):
                     except TypeError:
                         origin_site = frozenset()
                 for metabolite in metabolites:
-                    self.tag(metabolite, reactant=mol, strict=strict)
+                    self.tag(
+                        metabolite,
+                        reactant=mol,
+                        strict=strict,
+                        # Single product → chemical deletion goes to removed[].
+                        # Multi-fragment cleavage → siblings are on other
+                        # products; drop absences (do not record).
+                        record_removals=len(metabolites) == 1,
+                    )
                     metabolite = self._align_and_stamp(metabolite)
                     install_product_forest(
                         mol,
