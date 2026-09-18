@@ -1,5 +1,9 @@
 # Lab log
 
+## 2026-09-18
+
+- AtomTracker.tags before baseline (`uv run pytest tests/test_atom_trace_profile.py -q -n0 -s`): benzene PhaseOneRS depth-1→depth-2 expand — wall=0.638s, products=165, parents=7, `literal_eval_cum`=0.139s, `deepcopy_cum`=0.131s, `tags_cum`=0.280s (cProfile cumtime). Characterization suite locked in `tests/test_atom_trace_char.py` (green on string-prop storage).
+
 ## 2026-09-17
 
 - Guided search: a non-molecule product, an unknown `enumerate_for_path` kind, an unknown `search` mode, or a rule that raises is a broken pipeline and now raises. Depth, budget, `could_help`, `child_may_reach`, terminal/star, and seen-duplicates stay ordinary misses. A linearization whose `apply` does not fire is also a miss (caught), not an assertion.

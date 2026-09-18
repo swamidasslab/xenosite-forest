@@ -140,6 +140,9 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::xenosite.forest.unstable.UnstableWarning",
 ]
+markers = [
+    "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
+]
 
 [tool.coverage.run]
 source_pkgs = ["xenosite.forest"]
