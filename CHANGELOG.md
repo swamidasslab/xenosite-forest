@@ -10,6 +10,33 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.5.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.1) - 2026-09-18
+
+### Added
+
+- Conjugation path policy: one unlabeled `*` peer via `is_redundant`; star products terminal.
+- Optional `include_sites` / `exclude_sites` on `metabolize` (default: no filter).
+- Optional `max_expansions` / `counters` on classic `RuleSet.find_path` (BFS/DFS): accepts `PathSearchCounters` (or a dict mirror); caps billed work so classic and guided counters are comparable.
+- Optional extra `predict` (`xenosite-forest[predict]` → `xenosite-predict`); not installed on CI.
+- Package `find_path` (alias `find_path_guided`): MCS-guided search; default `PhaseOneQF`, `depth=None`, `max_expansions=200`; yields `PathOutcome` (Required `plan` + cleavage-side `maybe`). Unstable API.
+- Per-SMARTS `formula_hint` / `FormulaHint` on reaction options; `metabolize(..., toward_target=)` skips incompatible SMARTS. Dehydrogenation methide is opt-in (not default Phase I).
+- `Deps` (`StepPlan` specialization): flat steps + precedes; linearizations are topological sorts. Guided emission uses `Deps` (not Kahn→And/Seq).
+- `NDealkylation.is_redundant` when `Dealkylation` peers are present; duplicate `Epoxidation` instances dropped.
+- `StepPlan.n_linearizations()`: count total orders without enumerating (`Deps` uses subset DP, `n≤20`).
+
+### Changed
+
+- Attached plan JSON is an expression tree (`op`: `seq`/`and`/`or`/`step`/`deps`); legacy flat `steps`+`precedes` still loads.
+- Cleavage site prune / priority under guided search (MCS frontier, safe-drop interior/exterior, chem-disagree as frontier-only). Early abort when T introduces unreachable elements.
+- Guided `max_expansions` caps `PathSearchCounters.billed()` (`linearizations_applied` + `site_applies`), not `rule_expansions`.
+- Package `__all__` trimmed: emission helpers (`and_cleave_plan`, `CleavageSide`, `MaybeFilter`, PathContext utils, `@unstable`) are submodule-only. Docs keep `find_path` short.
+- QuinoneFormation guided enum can emit phase1 plans without materializing/clean; `include_sites` restricts resonance fanout before `clean`.
+- Store atom traces on mol._forest with stable `_forestLabel` (not CX `atomLabel`); metabolize records atom_refs; copy_mol preserves forest.
+- `@unstable` / `UnstableWarning` on public guided surface: `find_path`, `PathOutcome`, `PathSearchCounters`, `Deps`, `StepPlan.n_linearizations`.
+- `AtomRef.added_by` is `(rule, site)` with frame `depth` for those site idxs; origin refs also carry `depth` (created atoms lack depth-0); `atom_trace` keeps live `records` plus a `removed` event list (cleavage siblings are dropped, not recorded).
+- `QuinoneFormation.phase1_steps` / Phase I emitters return a single `StepPlan`. Prefer `plan.branches()` / `plan.linearizations()`.
+
+
 ## [0.4.0] - 2026-09-17
 
 ### Added
