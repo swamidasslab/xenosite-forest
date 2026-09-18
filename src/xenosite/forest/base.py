@@ -57,9 +57,9 @@ _log = logging.getLogger(__name__)
 #
 # Schema (reserved keys):
 #   resonance   -> ResonanceCache (lazy joined forms / bfs_all_pairs)
-#   atom_refs   -> AtomRefsIndex (creation lookup for AtomRef.added_by)
-#                 Keys are (rule, site) as metabolize saw them on the parent;
-#                 AtomRef.resolve projects site through atom_trace frames.
+#   atom_refs   -> AtomRefsIndex. Still written and copied.
+#                 TODO: remove once atom_trace records have some history.
+#                 AtomRef.resolve does not read this index.
 #   atom_trace  -> {
 #                    "records": {label: record},   # live labels only
 #                    "removed": [event, ...],      # chemical-removal history
@@ -153,12 +153,10 @@ def _copy_forest(src, dst):
 
 
 class AtomRefsIndex:
-    """Maps AtomRef.added_by ``(rule, site)`` -> current GetIdx on a mol.
+    """Maps ``(rule, site)`` to a GetIdx. Not used by ``AtomRef.resolve``.
 
-    ``site`` is whatever GetIdx frozenset metabolize saw on the parent at
-    recording time (often the current frame of that step, not depth-0).
-    ``AtomRef.resolve`` projects the caller's site through ``atom_trace``
-    starting at ``AtomRef.depth`` (the frame those site idxs were written in).
+    TODO: remove once ``atom_trace`` records have some history. The trace
+    stamp is the creation record; this index is only still written and copied.
     """
 
     __slots__ = ("_entries",)
