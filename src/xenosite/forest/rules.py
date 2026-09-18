@@ -402,6 +402,7 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
         except Exception:
             need_o = None
         seen = set()
+        short = []
         for _res, pair, path in self.resonate_with_pair_paths(
             template_mol, valid_atoms=set(matches)
         ):
@@ -420,18 +421,50 @@ class QuinoneFormation(AromaticSystems, ResonancePairRule):
                 continue
             if not pathway_alternatives(expr):
                 continue
-            # Skip plans that add more O than the target needs (e.g. bis-OH when
-            # phenol→BQ only needs one).
+            # Hydroxylation and oxidative dehalogenation each add one oxygen.
+            # Yield exact-deficit plans first. Plans that add more O cannot be
+            # the direct step. Plans that add less are a fallback: applying
+            # them when an exact plan already hit (phenol → hydroxyquinone)
+            # enqueues a Phase I search the exact plan already covers.
             if need_o is not None:
-                max_oh = 0
-                for lin in expr.linearizations():
-                    max_oh = max(
-                        max_oh,
-                        sum(1 for s in lin.steps if s.rule == "Hydroxylation"),
+                oh_counts = [
+                    sum(
+                        1
+                        for s in lin.steps
+                        if s.rule in ("Hydroxylation", "OxidativeDehalogenation")
                     )
-                if max_oh > need_o:
+                    for lin in expr.linearizations()
+                ]
+                if not oh_counts or any(n > need_o for n in oh_counts):
+                    continue
+                if any(n != need_o for n in oh_counts):
+                    short.append(("plan", expr, site))
                     continue
             yield ("plan", expr, site)
+        for item in short:
+            yield item
+
+    def rules_covered_by_phase1(self):
+        """OH and DH hops are the steps inside these quinone plans."""
+        return ("Hydroxylation", "Dehydrogenation", "OxidativeDehalogenation")
+
+    def child_may_reach(self, parent, child, target, ctx) -> bool:
+        """A quinone with the target formula is not an intermediate.
+
+        Dehydrogenation does not turn one quinone isomer into another, so
+        enqueueing it only restarts enumerate on a dead node.
+        """
+        if not super(QuinoneFormation, self).child_may_reach(parent, child, target, ctx):
+            return False
+        from .guided_path import _canon
+        from .path_context import heavy_formula_equal
+
+        try:
+            if heavy_formula_equal(child, target) and _canon(child) != _canon(target):
+                return False
+        except Exception:
+            return True
+        return True
 
     def tag_quinone_fragments(self, mol):
         frags = list(GetMolFrags(mol, asMols=True, sanitizeFrags=False))
