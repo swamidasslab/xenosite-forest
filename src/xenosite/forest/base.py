@@ -2496,8 +2496,9 @@ class ReactionRule(AtomTracker):
 
         Guided search tries these rules first when a large matched region is
         aromatic on the reactant and not on the target, and only expands them
-        at sites on that system. Override on the rule; do not infer it from
-        SMARTS.
+        at sites on that system, including atoms bonded to it. Later steps in
+        the same plan are not required to sit on the system. Override on the
+        rule; do not infer it from SMARTS.
         """
         return False
 

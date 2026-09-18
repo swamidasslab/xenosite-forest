@@ -1,1 +1,1 @@
-Guided search tries rules that can dearomatize first when a large matched region is aromatic on the reactant and not on the target, and only at sites on that system. Match-boundary sites are expanded before other sites.
+Guided search tries rules that can dearomatize first when a large matched region is aromatic on the reactant and not on the target, and only at sites on that system, including atoms bonded to it. Match-boundary sites are expanded before other sites.

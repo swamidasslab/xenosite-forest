@@ -1024,11 +1024,34 @@ def _expansion_site_groups(site, expr=None):
     return groups
 
 
-def _groups_on_systems(groups, systems) -> bool:
+def _system_with_ends(systems, mol) -> set:
+    """Aromatic-system atoms plus the atoms bonded to them.
+
+    Quinone and dehydrogenation ends are the OH / NH atoms on the ring, which
+    are not themselves aromatic. Atoms two bonds out (a methoxy carbon) are
+    not included.
+    """
+    union = set().union(*systems) if systems else set()
+    extended = set(union)
+    for idx in union:
+        try:
+            atom = mol.GetAtomWithIdx(int(idx))
+        except Exception:
+            continue
+        for nbr in atom.GetNeighbors():
+            extended.add(nbr.GetIdx())
+    return extended
+
+
+def _site_on_systems(groups, systems, mol) -> bool:
+    """True when the expansion site touches a system that must be dearomatized.
+
+    Only the site is checked. A later plan step, such as removing a
+    substituent, does not drop a site that is already on the system.
+    """
     if not systems or not groups:
         return True
-    union = set().union(*systems)
-    return all(set(group) & union for group in groups)
+    return bool(set(groups[0]) & _system_with_ends(systems, mol))
 
 
 def _guided_mol_search(
@@ -1118,7 +1141,7 @@ def _guided_mol_search(
                 if (
                     needs_dear
                     and _can_dearomatize(rule)
-                    and not _groups_on_systems(groups, systems)
+                    and not _site_on_systems(groups, systems, mol)
                 ):
                     counters.nodes_pruned += 1
                     counters._sync()
