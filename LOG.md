@@ -2,6 +2,7 @@
 
 ## 2026-09-18
 
+- AtomTracker.tags → ``mol._forest["atom_trace"]``; stable ``atomLabel`` per heavy atom (stamped once); ``copy_mol`` / ``carry_forest`` preserve forest across RDKit copies; ``install_product_forest`` records ``atom_refs`` from metabolize (shared with Step.apply). Resonance not shared onto reaction products. Profile (`tests/test_atom_trace_profile.py -n0 -s`): **before** wall=0.638s literal_eval_cum=0.139s deepcopy_cum=0.131s tags_cum=0.280s → **after** wall=0.358s literal_eval_cum=0 deepcopy_cum=0 tags_cum=0.006s (benzene PhaseOneRS depth-1→2, products=165).
 - AtomTracker.tags before baseline (`uv run pytest tests/test_atom_trace_profile.py -q -n0 -s`): benzene PhaseOneRS depth-1→depth-2 expand — wall=0.638s, products=165, parents=7, `literal_eval_cum`=0.139s, `deepcopy_cum`=0.131s, `tags_cum`=0.280s (cProfile cumtime). Characterization suite locked in `tests/test_atom_trace_char.py` (green on string-prop storage).
 
 ## 2026-09-17

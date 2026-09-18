@@ -17,6 +17,7 @@ from .base import (
     ResonanceRule,
     SmartsReactionRule,
     clean,
+    copy_mol,
 )
 from .path_context import (
     ADD_O,
@@ -730,7 +731,7 @@ class Tautomerization(ResonanceRule):
                         full_path = path + [endpoint]
 
                     # make a copy
-                    metabolite = Mol(res_struct)
+                    metabolite = copy_mol(res_struct)
 
                     self.swap_bonds_along_path(metabolite, full_path)
 

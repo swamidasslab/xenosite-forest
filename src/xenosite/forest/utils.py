@@ -224,7 +224,9 @@ def sanitize_metabolite(mol):
     attempts = (False, True) if keep_hs_plausible else (True,)
     for reset_hs in attempts:
         try:
-            return _sanitize_kekulize(Chem.Mol(mol), reset_hs=reset_hs)
+            from .base import copy_mol
+
+            return _sanitize_kekulize(copy_mol(mol), reset_hs=reset_hs)
         except Exception:
             continue
     return None
@@ -238,6 +240,9 @@ def clean(mol):
     Leaving leftover fragments from a failed reaction would emit chemically
     incomplete structures (for example acetaldehyde from a failed quinone
     formation).
+
+    Preserves ``mol._forest`` across ``GetMolFrags`` / sanitize by remapping
+    through stable ``atomLabel`` props on atoms.
     """
     if isinstance(mol, (list, tuple)):
         parts = [clean(x) for x in mol]
@@ -245,8 +250,11 @@ def clean(mol):
             return []
         return list(itertools.chain.from_iterable(parts))
 
+    from .base import carry_forest
+
     out = []
     for frag in Chem.GetMolFrags(mol, asMols=True, sanitizeFrags=False):
+        carry_forest(mol, frag)
         sanitized = sanitize_metabolite(frag)
         if sanitized is None:
             note_sanitize_drop(1)
@@ -256,6 +264,7 @@ def clean(mol):
                 sanitize_reason(frag) or "RDKit sanitization failed",
             )
             return []
+        carry_forest(frag, sanitized)
         out.append(sanitized)
     return out
 

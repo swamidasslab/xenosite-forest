@@ -3,7 +3,6 @@
 # Standard Library
 import ast
 import collections
-import copy
 import itertools
 import logging
 import re
@@ -56,12 +55,16 @@ _log = logging.getLogger(__name__)
 # Private mol._forest bag (not a public API).
 #
 # Schema (reserved keys):
-#   resonance  -> ResonanceCache (lazy joined forms / bfs_all_pairs)
-#   atom_refs  -> AtomRefsIndex (Step.apply creation lookup for AtomRef)
+#   resonance   -> ResonanceCache (lazy joined forms / bfs_all_pairs)
+#   atom_refs   -> AtomRefsIndex (creation lookup for AtomRef.added_by)
+#   atom_trace  -> {"records": {label: {"idx","depth"}}, "last_tag": int}
+#                 label matches the stable atomLabel prop on each heavy atom
+#                 (stamped once; never rewritten). Remap via carry_forest after
+#                 Mol()/GetMolFrags.
 #
 # Share with _copy_forest (same dict object) when caches should be shared.
-# Step/linearization apply may install a new dict that shares ``resonance``
-# but copies ``atom_refs`` so creation bookkeeping does not mutate the parent.
+# Product handoff installs a new dict that shares ``resonance`` but copies
+# ``atom_refs`` / ``atom_trace`` so bookkeeping does not mutate the parent.
 # Do not store public phase1_steps JSON here (mol prop only).
 # ---------------------------------------------------------------------------
 
@@ -101,6 +104,243 @@ def _copy_forest(src, dst):
         dst._forest = forest
 
 
+class AtomRefsIndex:
+    """Maps (added_by, reactant-frame at) -> current GetIdx on a mol."""
+
+    __slots__ = ("_entries",)
+
+    def __init__(self, entries=None):
+        # (rule_name, frozenset[int]) -> int
+        self._entries = dict(entries or ())
+
+    def copy(self):
+        return AtomRefsIndex(self._entries)
+
+    def set(self, added_by: str, at: frozenset, idx: int) -> None:
+        self._entries[(added_by, frozenset(at))] = int(idx)
+
+    def lookup(self, added_by: str, at: frozenset):
+        return self._entries.get((added_by, frozenset(at)))
+
+    def items(self):
+        return self._entries.items()
+
+    def remap_from_parent(self, parent_mol, child_mol):
+        """Rebuild entries with child GetIdx via react_atom_idx from parent."""
+        out = AtomRefsIndex()
+        for key, parent_idx in self._entries.items():
+            for atom in child_mol.GetAtoms():
+                if (
+                    atom.HasProp("react_atom_idx")
+                    and int(atom.GetProp("react_atom_idx")) == parent_idx
+                ):
+                    out._entries[key] = atom.GetIdx()
+                    break
+                if (
+                    atom.HasProp("current_idx")
+                    and int(atom.GetProp("current_idx")) == parent_idx
+                ):
+                    out._entries[key] = atom.GetIdx()
+                    break
+        return out
+
+
+def _atom_refs_index(mol) -> AtomRefsIndex:
+    forest = _forest_state(mol)
+    index = forest.get("atom_refs")
+    if index is None:
+        index = AtomRefsIndex()
+        forest["atom_refs"] = index
+    return index
+
+
+def _record_atom_creations(rule_name, origin_at, before, after, index: AtomRefsIndex):
+    """Record atoms created by ``rule_name`` at ``origin_at`` onto ``index``."""
+    origin_at = frozenset(origin_at or ())
+    if not origin_at:
+        return
+
+    old_on_after = set()
+    for atom in after.GetAtoms():
+        if atom.GetAtomMapNum() > 0 or atom.HasProp("react_atom_idx"):
+            old_on_after.add(atom.GetIdx())
+    new_atoms = [
+        atom for atom in after.GetAtoms() if atom.GetIdx() not in old_on_after
+    ]
+    if not new_atoms:
+        return
+
+    chosen = None
+    if len(new_atoms) == 1:
+        chosen = new_atoms[0]
+    else:
+        from .step_plan import _resolve_origin
+
+        targets = set()
+        for origin in origin_at:
+            try:
+                targets.add(_resolve_origin(after, origin))
+            except KeyError:
+                continue
+        for atom in new_atoms:
+            for t in targets:
+                if atom.GetIdx() != t and after.GetBondBetweenAtoms(
+                    atom.GetIdx(), t
+                ):
+                    chosen = atom
+                    break
+            if chosen is not None:
+                break
+        if chosen is None:
+            chosen = new_atoms[0]
+
+    index.set(rule_name, origin_at, chosen.GetIdx())
+
+
+def install_product_forest(
+    parent,
+    product,
+    *,
+    rule_name=None,
+    origin_site=None,
+    record_creation=True,
+):
+    """Install/remap ``_forest`` on ``product``; optionally record creations.
+
+    Does **not** share ``resonance`` with ``parent`` (reaction products need a
+    fresh cache). Remaps ``atom_refs`` from parent when the product does not
+    already carry an index. Preserves ``atom_trace`` from tagging.
+    """
+    parent_forest = getattr(parent, "_forest", None) or {}
+    child = getattr(product, "_forest", None)
+    if child is None:
+        child = {}
+        product._forest = child
+
+    # Reaction products must not reuse the reactant's resonance forms.
+    child.pop("resonance", None)
+
+    # Keep product atom_trace from tagging; do not pull parent's live dict.
+    if "atom_refs" not in child or child.get("atom_refs") is None:
+        prev = parent_forest.get("atom_refs")
+        if prev is not None:
+            child["atom_refs"] = prev.remap_from_parent(parent, product)
+        else:
+            child["atom_refs"] = AtomRefsIndex()
+
+    if (
+        record_creation
+        and rule_name is not None
+        and origin_site is not None
+    ):
+        _record_atom_creations(
+            rule_name, origin_site, parent, product, child["atom_refs"]
+        )
+    return child["atom_refs"]
+
+
+def carry_forest(src, dst, share_resonance=None):
+    """Copy ``src._forest`` onto ``dst``, remapping idxs via stable ``atomLabel``.
+
+    RDKit ``Mol()`` / ``GetMolFrags`` drop Python attrs but keep atom props.
+    Each heavy atom keeps a unique ``atomLabel`` stamped once; this rebuilds
+    ``atom_trace`` / ``atom_refs`` current idxs from those labels.
+
+    Resonance is shared only for same-size copies (``share_resonance`` default).
+    Fragments must not reuse the parent's resonance cache.
+    """
+    src_forest = getattr(src, "_forest", None)
+    if not src_forest:
+        return dst
+
+    if share_resonance is None:
+        try:
+            share_resonance = src.GetNumAtoms() == dst.GetNumAtoms()
+        except Exception:
+            share_resonance = False
+
+    label_to_idx = {}
+    for atom in dst.GetAtoms():
+        if atom.GetAtomicNum() == 1:
+            continue
+        if atom.HasProp(AtomTracker.atom_tag_prop_name):
+            label_to_idx[atom.GetProp(AtomTracker.atom_tag_prop_name)] = atom.GetIdx()
+
+    child = {}
+    if share_resonance and "resonance" in src_forest:
+        child["resonance"] = src_forest["resonance"]
+
+    trace = src_forest.get("atom_trace")
+    if trace and "records" in trace:
+        records = {}
+        depths_present = set()
+        for tag, rec in trace["records"].items():
+            records[tag] = {
+                "idx": list(rec["idx"]),
+                "depth": list(rec["depth"]),
+            }
+            depths_present.update(rec["depth"])
+        last_depth = max(depths_present) if depths_present else None
+        if last_depth is not None:
+            for tag, rec in records.items():
+                if last_depth not in rec["depth"]:
+                    continue
+                label = str(tag)
+                if label not in label_to_idx:
+                    continue
+                i = rec["depth"].index(last_depth)
+                rec["idx"][i] = label_to_idx[label]
+        child["atom_trace"] = {
+            "records": records,
+            "last_tag": trace.get("last_tag", max(records) if records else 0),
+        }
+
+    prev_refs = src_forest.get("atom_refs")
+    if prev_refs is not None:
+        # Remap creation idxs by atomLabel when the created atom still carries it.
+        remapped = AtomRefsIndex()
+        # Build idx->label on src for entries, then label->idx on dst.
+        src_idx_to_label = {}
+        for atom in src.GetAtoms():
+            if atom.HasProp(AtomTracker.atom_tag_prop_name):
+                src_idx_to_label[atom.GetIdx()] = atom.GetProp(
+                    AtomTracker.atom_tag_prop_name
+                )
+        for key, src_idx in prev_refs.items():
+            label = src_idx_to_label.get(src_idx)
+            if label is not None and label in label_to_idx:
+                remapped.set(key[0], key[1], label_to_idx[label])
+            else:
+                # Fall back to react_atom_idx remap.
+                for atom in dst.GetAtoms():
+                    if (
+                        atom.HasProp("react_atom_idx")
+                        and int(atom.GetProp("react_atom_idx")) == src_idx
+                    ):
+                        remapped.set(key[0], key[1], atom.GetIdx())
+                        break
+        child["atom_refs"] = remapped
+
+    dst._forest = child
+    return dst
+
+
+def copy_mol(mol):
+    """``Chem.Mol(mol)`` that also carries ``_forest`` (via :func:`carry_forest`).
+
+    Use this instead of bare ``Chem.Mol`` / ``Mol`` whenever the copy must keep
+    atom-trace or atom_refs history. Throwaway copies for SMILES / sanitize
+    probes can still use ``Chem.Mol`` directly.
+    """
+    if mol is None:
+        return None
+    out = Chem.Mol(mol)
+    carry_forest(mol, out)
+    # Mol-level props (LAST_TAG, phase1_steps, …) are copied by Chem.Mol;
+    # Python ``_forest`` is not — carry_forest restores it.
+    return out
+
+
 def _resonance_cache(mol):
     """Return the mol's ResonanceCache when caching is enabled, else None."""
     if not _RESONANCE_CACHE_ENABLED:
@@ -138,7 +378,7 @@ class _ModeResonanceCache(object):
             if i < len(self._items):
                 joined, system = self._items[i]
                 i += 1
-                yield Mol(joined), system
+                yield copy_mol(joined), system
                 continue
             if self._done:
                 return
@@ -214,6 +454,7 @@ class AtomTracker(object):
     tag_name = "ATOM_INDEX_PATHS"
     last_tag_name = "LAST_TAG"
     previous_index_prop_name = "current_idx"
+    atom_tag_prop_name = "atomLabel"
 
     def __init__(self, *args, **kwargs):
         super(AtomTracker, self).__init__()
@@ -263,6 +504,46 @@ class AtomTracker(object):
         ]
 
     @classmethod
+    def _copy_tag_records(cls, records):
+        """Shallow-copy tag records (list copies); avoids ``copy.deepcopy``."""
+        return {
+            tag: {"idx": list(data["idx"]), "depth": list(data["depth"])}
+            for tag, data in records.items()
+        }
+
+    @classmethod
+    def _load_atom_trace(cls, mol, strict=True):
+        """Return ``{"records": dict, "last_tag": int}`` from ``_forest`` or legacy prop."""
+        forest = getattr(mol, "_forest", None) or {}
+        trace = forest.get("atom_trace")
+        if trace is not None and "records" in trace:
+            return trace
+
+        try:
+            raw = mol.GetProp(cls.tag_name)
+        except KeyError as err:
+            if strict:
+                raise err
+            return {"records": {}, "last_tag": 0}
+
+        try:
+            records = ast.literal_eval(raw)
+        except (SyntaxError, ValueError) as err:
+            if strict:
+                raise err
+            return {"records": {}, "last_tag": 0}
+
+        try:
+            last_tag = int(mol.GetProp(cls.last_tag_name))
+        except (KeyError, ValueError):
+            last_tag = max(records) if records else 0
+
+        trace = {"records": records, "last_tag": last_tag}
+        # Migrate once onto _forest so later reads skip literal_eval.
+        _forest_state(mol)["atom_trace"] = trace
+        return trace
+
+    @classmethod
     def tags(cls, record, depth=None, idx=None, strict=True, compact=False, **kwargs):
         # Tag records use 0-based RDKit indices (GetIdx()). compact_tags()
         # converts those to 1-based atom numbers (SMILES :N) when compact=True.
@@ -275,15 +556,8 @@ class AtomTracker(object):
                 ]
             )
         if isinstance(record, Mol):
-            try:
-                record = ast.literal_eval(record.GetProp(cls.tag_name))
-
-            except (KeyError, SyntaxError, ValueError) as err:
-
-                if strict:
-                    raise err
-                else:
-                    record = {}
+            trace = cls._load_atom_trace(record, strict=strict)
+            record = trace["records"]
         elif not isinstance(record, dict):
             raise ValueError("Must submit RDKit Mol or dict")
 
@@ -300,7 +574,7 @@ class AtomTracker(object):
             }
 
         if idx is None and depth is None:
-            record = copy.deepcopy(record)
+            record = cls._copy_tag_records(record)
 
         if compact:
             return cls.compact_tags(record)
@@ -367,29 +641,53 @@ class AtomTracker(object):
 
     def initialize_tags(self, mol):
         # Tags use 0-based RDKit indices (GetIdx()). Public AtomTrace converts to
-        # 1-based atom numbers.
+        # 1-based atom numbers. Each heavy atom gets a unique atomLabel once;
+        # ``_forest["atom_trace"]`` maps those labels to idxs across depths.
 
-        if not mol.HasProp(self.tag_name):
+        forest = getattr(mol, "_forest", None) or {}
+        if forest.get("atom_trace") is not None:
+            return
+        # Labels without forest: Mol copy dropped ``_forest``. Do not re-stamp
+        # depth-0 history (that would erase lineage). ``carry_forest`` must have
+        # restored the trace; if not, leave untagged so callers surface the miss.
+        if any(
+            a.GetAtomicNum() != 1 and a.HasProp(self.atom_tag_prop_name)
+            for a in mol.GetAtoms()
+        ):
+            return
 
-            initial_tags = {}
-            for atom in mol.GetAtoms():
-                if atom.GetAtomicNum() == 1:
-                    continue
+        if mol.HasProp(self.tag_name):
+            # Legacy string prop — migrate via tags().
+            self.tags(mol, strict=False)
+            return
 
-                atom.SetProp("initial", "1")
-                idx = atom.GetIdx()
-                initial_tags[idx] = {"idx": [idx], "depth": [0]}
+        initial_tags = {}
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                continue
 
-            self._save_tags(mol, initial_tags)
+            atom.SetProp("initial", "1")
+            idx = atom.GetIdx()
+            initial_tags[idx] = {"idx": [idx], "depth": [0]}
+            atom.SetProp(self.atom_tag_prop_name, str(idx))
+
+        self._save_tags(mol, initial_tags)
 
     def tag(self, product, reactant, strict=True, **kwargs):
         """Copies all atom tags from reactant and updates the tags in product."""
 
         previous_tags = self.tags(reactant, strict=strict)
         next_depth = self.next_depth(previous_tags)
-        # ext_depth = max(self.depths(previous_tags)) + 1
 
-        new_tags = self.tags(previous_tags, depth=next_depth - 1, strict=strict)
+        # Extend only tags present at the reactant frontier; copy the rest.
+        frontier = next_depth - 1
+        new_tags = {}
+        for tag, rec in previous_tags.items():
+            if frontier in rec["depth"]:
+                new_tags[tag] = {
+                    "idx": list(rec["idx"]),
+                    "depth": list(rec["depth"]),
+                }
 
         old_to_new_atom_indexes = self._old_to_new_atom_indexes(product)
 
@@ -409,9 +707,12 @@ class AtomTracker(object):
 
                 new_atom_indexes.remove(new_index)
 
-        # Copy all missing tags
         for tag in set(previous_tags) - set(new_tags):
-            new_tags[tag] = previous_tags[tag]
+            rec = previous_tags[tag]
+            new_tags[tag] = {
+                "idx": list(rec["idx"]),
+                "depth": list(rec["depth"]),
+            }
 
         self._save_tags(
             product,
@@ -422,6 +723,13 @@ class AtomTracker(object):
 
     @classmethod
     def _next_tag(cls, mol):
+        forest = getattr(mol, "_forest", None) or {}
+        trace = forest.get("atom_trace")
+        if trace is not None and "last_tag" in trace:
+            try:
+                return int(trace["last_tag"]) + 1
+            except (TypeError, ValueError):
+                pass
         try:
             last_tag = mol.GetProp(cls.last_tag_name)
         except KeyError:
@@ -433,7 +741,6 @@ class AtomTracker(object):
             last_tag_depth = 0
 
         return last_tag_depth + 1
-        # return int(mol.GetProp(self.last_tag_name)) + 1
 
     def _tag_new_atoms(self, new_tags, untagged_atom_indexes, next_depth, next_tag):
 
@@ -594,7 +901,11 @@ class AtomTracker(object):
             mol_props = {
                 name: product.GetProp(name) for name in product.GetPropNames()
             }
+            # Preserve private _forest across renumber (RDKit drops Python attrs).
+            forest = getattr(product, "_forest", None)
             product = RenumberAtoms(product, new_order)
+            if forest is not None:
+                product._forest = forest
             for name, value in mol_props.items():
                 if not product.HasProp(name):
                     product.SetProp(name, value)
@@ -615,8 +926,29 @@ class AtomTracker(object):
         if isinstance(tags, defaultdict):
             tags = {x: y for x, y in list(tags.items())}
 
-        mol.SetProp(self.tag_name, str(tags))
-        mol.SetProp(self.last_tag_name, str(max(tags)))
+        last_tag = max(tags) if tags else 0
+        forest = _forest_state(mol)
+        forest["atom_trace"] = {"records": tags, "last_tag": last_tag}
+
+        # One stable atomLabel per heavy atom (never rewritten). History lives
+        # only in ``_forest["atom_trace"]`` keyed by that label.
+        if tags:
+            depths = self.depths(tags)
+            last_depth = max(depths) if depths else None
+            for tag, rec in tags.items():
+                if last_depth is None or last_depth not in rec["depth"]:
+                    continue
+                idx = rec["idx"][rec["depth"].index(last_depth)]
+                atom = mol.GetAtomWithIdx(idx)
+                if atom.GetAtomicNum() == 1:
+                    continue
+                label = str(tag)
+                if not atom.HasProp(self.atom_tag_prop_name):
+                    atom.SetProp(self.atom_tag_prop_name, label)
+
+        # Do not write the growing ATOM_INDEX_PATHS string. Keep LAST_TAG for
+        # callers / legacy _next_tag fallbacks that still read the mol prop.
+        mol.SetProp(self.last_tag_name, str(last_tag))
 
     @staticmethod
     def all_atom_prop_names(mol):
@@ -653,7 +985,7 @@ class ConjugatedSystems(object):
         """
 
         # This makes a copy to prevent the input molecule being unexpectedly modified
-        mol = Mol(mol)
+        mol = copy_mol(mol)
 
         # The input molecule will be fragmented and rejoined.
         # There is no guarantee that the atom ordering will remain the same.
@@ -685,7 +1017,7 @@ class ConjugatedSystems(object):
         True
 
         """
-        mol = Mol(mol)
+        mol = copy_mol(mol)
 
         bonds_to_break = []
         for idx in system:
@@ -1564,7 +1896,7 @@ class Resonate(ConjugatedSystems, EditMol):
                     if valid_atoms and not set(pair).issubset(valid_atoms):
                         continue
                     for path in all_system_paths[frozenset(pair)]:
-                        yield Mol(res_struct), pair, path
+                        yield copy_mol(res_struct), pair, path
             return
 
         for system_fragment, the_rest, bonds, system in self._resfrags(
@@ -1579,7 +1911,7 @@ class Resonate(ConjugatedSystems, EditMol):
                     continue
 
                 for path in all_system_paths[frozenset(pair)]:
-                    yield Mol(res_struct), pair, path
+                    yield copy_mol(res_struct), pair, path
 
     def _resfrags(self, mol, output_systems=False):
         """
@@ -1846,9 +2178,24 @@ class ReactionRule(AtomTracker):
 
             if tagging:
                 aligned = []
+                # Formation site atoms are reactant-frame idxs when unformatted.
+                origin_site = site[1] if isinstance(site, tuple) and len(site) == 2 else site
+                if not isinstance(origin_site, frozenset):
+                    try:
+                        origin_site = frozenset(origin_site)
+                    except TypeError:
+                        origin_site = frozenset()
                 for metabolite in metabolites:
                     self.tag(metabolite, reactant=mol, strict=strict)
-                    aligned.append(self._align_and_stamp(metabolite))
+                    metabolite = self._align_and_stamp(metabolite)
+                    install_product_forest(
+                        mol,
+                        metabolite,
+                        rule_name=self.name,
+                        origin_site=origin_site,
+                        record_creation=True,
+                    )
+                    aligned.append(metabolite)
                 metabolites = aligned
                 self._stamp_origin_maps(mol)
 

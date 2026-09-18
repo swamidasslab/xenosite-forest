@@ -153,6 +153,58 @@ def test_step_apply_hydroxylation_atom_refs_snapshot():
     )
 
 
+def test_metabolize_and_step_apply_share_atom_refs():
+    mol = MolFromSmiles("CCO")
+    _, metab = next(
+        rules.Hydroxylation().metabolites_from_sites(mol, [frozenset({0})])
+    )
+    apply_outs = Step("Hydroxylation", {AtomRef(origin=0)}).apply(MolFromSmiles("CCO"))
+    assert list(_atom_refs_index(metab[0]).items()) == list(
+        _atom_refs_index(apply_outs[0]).items()
+    )
+    assert list(_atom_refs_index(metab[0]).items()) == [
+        (("Hydroxylation", frozenset({0})), 1)
+    ]
+
+
+def test_atom_label_stable_across_step_string_equality():
+    """Parent atomLabels persist on child atoms; new atoms get a new label once."""
+    parent = MolFromSmiles("CC")
+    AtomTracker().initialize_tags(parent)
+    parent_labels = {
+        a.GetProp(AtomTracker.atom_tag_prop_name)
+        for a in parent.GetAtoms()
+        if a.HasProp(AtomTracker.atom_tag_prop_name)
+    }
+    assert parent_labels == {"0", "1"}
+
+    _, products = next(rules.Hydroxylation().metabolize(parent))
+    child = products[0]
+    child_by_label = {
+        a.GetProp(AtomTracker.atom_tag_prop_name): a.GetIdx()
+        for a in child.GetAtoms()
+        if a.HasProp(AtomTracker.atom_tag_prop_name)
+    }
+    assert set(child_by_label) >= parent_labels
+    # Surviving carbons keep the same label strings.
+    assert "0" in child_by_label and "1" in child_by_label
+    new_labels = set(child_by_label) - parent_labels
+    assert len(new_labels) == 1
+    # Labels are not rewritten on a second save of the same mol.
+    before = {
+        a.GetIdx(): a.GetProp(AtomTracker.atom_tag_prop_name)
+        for a in child.GetAtoms()
+        if a.HasProp(AtomTracker.atom_tag_prop_name)
+    }
+    AtomTracker()._save_tags(child, AtomTracker.tags(child))
+    after = {
+        a.GetIdx(): a.GetProp(AtomTracker.atom_tag_prop_name)
+        for a in child.GetAtoms()
+        if a.HasProp(AtomTracker.atom_tag_prop_name)
+    }
+    assert before == after
+
+
 def test_two_step_tag_history_public_shape():
     """Depth-2 products expose multi-depth history via tags() (public API)."""
     result = list(

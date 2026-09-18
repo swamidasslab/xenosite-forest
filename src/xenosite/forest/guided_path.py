@@ -18,6 +18,7 @@ from rdkit import Chem
 from .path_context import PathContext
 from .phaseone import PhaseOneQF, PhaseOneRS
 from .rulesets import RULESETS, RuleSet, load_ruleset
+from .base import copy_mol
 from .step_plan import (
     And,
     Deps,
@@ -909,7 +910,7 @@ def find_path(
         return
 
     if _canon(reactant) == target_smi:
-        yield _pack_hit([target_smi], [], [Chem.Mol(reactant)])
+        yield _pack_hit([target_smi], [], [copy_mol(reactant)])
         return
 
     seen_path_keys = set()
@@ -962,7 +963,7 @@ def _guided_mol_search(
     **kwargs,
 ):
     """Yield ``(smiles_path, step_path, mol_path, cleavage_side_bags)``."""
-    start = Chem.Mol(reactant)
+    start = copy_mol(reactant)
     # (mol, smi_path, step_path, mol_path, depth_left, bags, open_sites)
     item0 = (start, [_canon(start)], [], [start], depth, (), ())
     if search == "dfs":

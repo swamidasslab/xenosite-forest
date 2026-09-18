@@ -18,7 +18,16 @@ from typing import Iterator, Sequence, Union
 
 from rdkit import Chem
 
-from .base import AtomTracker, _copy_forest, _forest_state
+from .base import (
+    AtomTracker,
+    AtomRefsIndex,
+    _atom_refs_index,
+    _copy_forest,
+    _forest_state,
+    copy_mol,
+    install_product_forest,
+    _record_atom_creations,
+)
 from .unstable import unstable
 
 # Private storage key for StepPlan.attach_to_mol / from_mol / try_from_mol.
@@ -61,109 +70,16 @@ def get_rule(name: str, pathways=()):
 
 # ---------------------------------------------------------------------------
 # Private atom_refs index on mol._forest
+# (AtomRefsIndex / install_product_forest live in base.py)
 # ---------------------------------------------------------------------------
 
 
-class AtomRefsIndex:
-    """Maps (added_by, reactant-frame at) -> current GetIdx on a mol."""
-
-    __slots__ = ("_entries",)
-
-    def __init__(self, entries=None):
-        # (rule_name, frozenset[int]) -> int
-        self._entries = dict(entries or ())
-
-    def copy(self) -> AtomRefsIndex:
-        return AtomRefsIndex(self._entries)
-
-    def set(self, added_by: str, at: frozenset, idx: int) -> None:
-        self._entries[(added_by, frozenset(at))] = int(idx)
-
-    def lookup(self, added_by: str, at: frozenset):
-        return self._entries.get((added_by, frozenset(at)))
-
-    def items(self):
-        return self._entries.items()
-
-    def remap_from_parent(self, parent_mol, child_mol) -> AtomRefsIndex:
-        """Rebuild entries with child GetIdx via react_atom_idx from parent."""
-        out = AtomRefsIndex()
-        for key, parent_idx in self._entries.items():
-            for atom in child_mol.GetAtoms():
-                if (
-                    atom.HasProp("react_atom_idx")
-                    and int(atom.GetProp("react_atom_idx")) == parent_idx
-                ):
-                    out._entries[key] = atom.GetIdx()
-                    break
-        return out
-
-
-def _atom_refs_index(mol) -> AtomRefsIndex:
-    forest = _forest_state(mol)
-    index = forest.get("atom_refs")
-    if index is None:
-        index = AtomRefsIndex()
-        forest["atom_refs"] = index
-    return index
-
-
-def _install_product_forest(parent, product) -> AtomRefsIndex:
-    """New ``_forest`` dict: share resonance, remap/copy atom_refs."""
-    parent_forest = getattr(parent, "_forest", None) or {}
-    child = {}
-    if "resonance" in parent_forest:
-        child["resonance"] = parent_forest["resonance"]
-    prev = parent_forest.get("atom_refs")
-    if prev is not None:
-        child["atom_refs"] = prev.remap_from_parent(parent, product)
-    else:
-        child["atom_refs"] = AtomRefsIndex()
-    product._forest = child
-    return child["atom_refs"]
-
-
-def _record_creations(step: Step, before, after, index: AtomRefsIndex) -> None:
+def _record_creations(step, before, after, index: AtomRefsIndex) -> None:
     """Record atoms created by ``step`` onto ``index`` (keyed by origin site)."""
     origin_at = frozenset(
         ref.origin for ref in step.site if ref.origin is not None
     )
-    if not origin_at:
-        return
-
-    old_on_after = set()
-    for atom in after.GetAtoms():
-        if atom.GetAtomMapNum() > 0 or atom.HasProp("react_atom_idx"):
-            old_on_after.add(atom.GetIdx())
-    new_atoms = [
-        atom for atom in after.GetAtoms() if atom.GetIdx() not in old_on_after
-    ]
-    if not new_atoms:
-        return
-
-    chosen = None
-    if len(new_atoms) == 1:
-        chosen = new_atoms[0]
-    else:
-        targets = set()
-        for origin in origin_at:
-            try:
-                targets.add(_resolve_origin(after, origin))
-            except KeyError:
-                continue
-        for atom in new_atoms:
-            for t in targets:
-                if atom.GetIdx() != t and after.GetBondBetweenAtoms(
-                    atom.GetIdx(), t
-                ):
-                    chosen = atom
-                    break
-            if chosen is not None:
-                break
-        if chosen is None:
-            chosen = new_atoms[0]
-
-    index.set(step.rule, origin_at, chosen.GetIdx())
+    _record_atom_creations(step.rule, origin_at, before, after, index)
 
 
 def _resolve_origin(mol, origin: int) -> int:
@@ -371,9 +287,7 @@ class Step:
 
     def apply(self, mol, **kwargs) -> list:
         """Run the named Forest rule at the resolved site; update ``_forest``."""
-        parent = mol
-        mol = Chem.Mol(mol)
-        _copy_forest(parent, mol)
+        mol = copy_mol(mol)
         _ensure_apply_ready(mol)
         rule = get_rule(self.rule, pathways=self.pathways)
         site = self.resolve_site(mol)
@@ -391,8 +305,21 @@ class Step:
             for frag in frags:
                 if not frag:
                     continue
-                index = _install_product_forest(mol, frag)
-                _record_creations(self, mol, frag, index)
+                # metabolize (tag_atoms=True) already installs _forest + creations.
+                already = (
+                    getattr(frag, "_forest", None) is not None
+                    and frag._forest.get("atom_refs") is not None
+                )
+                origin_at = frozenset(
+                    ref.origin for ref in self.site if ref.origin is not None
+                )
+                install_product_forest(
+                    mol,
+                    frag,
+                    rule_name=self.rule,
+                    origin_site=origin_at,
+                    record_creation=not already,
+                )
                 products.append(frag)
         return products
 
@@ -422,7 +349,7 @@ class Linearization:
             raise ValueError("drop_last must be >= 0")
         if drop_last:
             if drop_last >= len(self.steps):
-                return [Chem.Mol(mol)]
+                return [copy_mol(mol)]
             toward_refs = list(toward or ())
             for step in self.steps[-drop_last:]:
                 toward_refs.extend(step.site)
@@ -431,9 +358,8 @@ class Linearization:
             )
 
         if not self.steps:
-            return [Chem.Mol(mol)]
-        root = Chem.Mol(mol)
-        _copy_forest(mol, root)
+            return [copy_mol(mol)]
+        root = copy_mol(mol)
         _ensure_apply_ready(root)
         currents = [root]
         toward_refs = list(toward or ())

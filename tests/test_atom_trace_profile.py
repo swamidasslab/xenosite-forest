@@ -23,9 +23,11 @@ pytestmark = pytest.mark.profile
 
 
 def _expand(mols):
+    from xenosite.forest.base import copy_mol
+
     nxt = []
     for m in mols:
-        for _site, prods in PhaseOneRS.metabolize(Chem.Mol(m)):
+        for _site, prods in PhaseOneRS.metabolize(copy_mol(m)):
             nxt.extend(p for p in prods if p is not None)
     return nxt
 
