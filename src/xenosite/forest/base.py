@@ -2449,6 +2449,14 @@ class ReactionRule(AtomTracker):
 
         return elements_may_add_from_hints(self.formula_hints())
 
+    def rules_covered_by_phase1(self):
+        """Rule names already represented by this rule's phase1 plans.
+
+        When those plans are emitted, guided search skips the named rules on
+        the same node so it does not replay the plan as separate hops.
+        """
+        return ()
+
     def could_help(self, mol, target, ctx) -> bool:
         """False ⇒ this rule cannot appear on any path from ``mol`` to ``target``.
 
