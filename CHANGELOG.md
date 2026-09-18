@@ -10,6 +10,13 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.5.2](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.2) - 2026-09-18
+
+### Fixed
+
+- SMARTS `metabolites` kekulizes the caller's mol again and drops its resonance cache. `standardize` no longer keeps a kekule prototype.
+
+
 ## [0.5.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.1) - 2026-09-18
 
 ### Added
