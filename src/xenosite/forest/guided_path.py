@@ -1006,12 +1006,7 @@ def _guided_mol_search(
 
         ctx = PathContext.from_mols(mol, product)
 
-        covered_rules = set()
         for rule in _rules_for_mol(active, mol, product):
-            if rule.name in covered_rules:
-                counters.nodes_pruned += 1
-                counters._sync()
-                continue
             if not counters.under_budget(max_expansions):
                 return
             if not rule.could_help(mol, product, ctx):
@@ -1029,22 +1024,13 @@ def _guided_mol_search(
                     **kwargs,
                 )
             )
-            saw_target = False
             for kind, *payload in items:
-                if (
-                    kind == "plan"
-                    and saw_target
-                    and rule.rules_covered_by_phase1()
-                ):
-                    # Exact-deficit quinone plans are listed first. Once one
-                    # hits, do not apply the shorter fallback plans.
-                    continue
                 if kind == "plan":
                     expr, site = payload
                     counters.plans_expanded += 1
                     counters.sites_considered += 1
                     counters._sync()
-                    for outcome in _apply_plan_branches(
+                    yield from _apply_plan_branches(
                         mol,
                         expr,
                         site,
@@ -1061,9 +1047,7 @@ def _guided_mol_search(
                         seen,
                         counters,
                         max_expansions=max_expansions,
-                    ):
-                        saw_target = True
-                        yield outcome
+                    )
                 elif kind == "hop":
                     site, products = payload
                     if not counters.under_budget(max_expansions):
@@ -1130,8 +1114,6 @@ def _guided_mol_search(
                         "enumerate_for_path yielded %r; expected 'plan' or 'hop'"
                         % (kind,)
                     )
-            if saw_target and expand_phase1_plans:
-                covered_rules.update(rule.rules_covered_by_phase1())
 
 
 def _apply_plan_branches(
