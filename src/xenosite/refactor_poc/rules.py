@@ -651,7 +651,22 @@ def resolve_effect(mol, mapped, info):
         partner = mol.GetAtomWithIdx(mapped[branch])
         effect["partner"] = partner.GetSymbol()
         effect["partner_h"] = partner.GetTotalNumHs()
+    if effect.get("cleaves"):
+        effect["breaks_ring"] = _cleavage_breaks_ring(mol, mapped, site_map)
     return effect
+
+
+def _cleavage_breaks_ring(mol: Mol, mapped, site_map) -> bool:
+    """True when the two site atoms share a ring, so the cleaved bond is in it."""
+
+    if not isinstance(site_map, tuple) or len(site_map) != 2:
+        return False
+    left = mapped.get(site_map[0])
+    right = mapped.get(site_map[1])
+    if not isinstance(left, int) or not isinstance(right, int):
+        return False
+    rings = ring_membership(mol)
+    return bool(set(rings.get(left, ())) & set(rings.get(right, ())))
 
 
 def merge_effects(left, right, both_aromatic):
@@ -1682,6 +1697,48 @@ class Dealkylation(SmartsReactionRule):
                 *branches(_whens(2, (7, 8, 16)), removes="H", cleaves=True),
                 site_map=(1, 2),
             ),
+        ),
+    )
+
+
+def _ndealk(smarts: str, leave_count: int | None, **effect) -> tuple[str, PatternInfo]:
+    """One N-dealkylation pattern. ``leave_count`` is the named leaving atoms."""
+
+    return (
+        smarts,
+        describe(
+            cleaves=True,
+            partner="N",
+            leave_count=leave_count,
+            site_map=(1, 2),
+            **effect,
+        ),
+    )
+
+
+class NDealkylation(SmartsReactionRule):
+    """Cleaves a carbon-nitrogen bond and oxygenates the carbon side.
+
+    These are the nitrogen rows of dealkylation. A methyl carbon is the whole
+    leaving piece (``leave_count`` 1). Any larger alkyl still carries atoms
+    the pattern does not name, so ``leave_count`` is None. ``breaks_ring`` is
+    filled from the cleaved bond, not stored as a second class.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        _ndealk("[#6H3:1][#7:2]>>([*:2].[*:1](=O)O)", 1, adds="OO"),
+        _ndealk("[#6H3:1][#7:2]>>([*:2].[*:1]=O)", 1, adds="O"),
+        _ndealk("[#6H3:1][#7:2]>>([*:2].[*:1]-O)", 1, adds="O"),
+        _ndealk("[#6H2:1][#7:2]>>([*:2].[*:1](=O)O)", None, adds="OO"),
+        _ndealk("[#6H2:1][#7:2]>>([*:2].[*:1]=O)", None, adds="O"),
+        _ndealk("[#6H2:1][#7:2]>>([*:2].[*:1]-O)", None, adds="O"),
+        _ndealk("[#6H1:1][#7:2]>>([*:2].[*:1]=O)", None, adds="O"),
+        _ndealk("[#6H1:1][#7:2]>>([*:2].[*:1]-O)", None, adds="O"),
+        _ndealk("[#6H0:1][#7:2]>>([*:2].[*:1]-O)", None, adds="O"),
+        _ndealk(
+            "[#8H1:3]-[#6:1]-[#7:2]>>([*:3]=[*:1].[*:2])",
+            None,
+            removes="H",
         ),
     )
 

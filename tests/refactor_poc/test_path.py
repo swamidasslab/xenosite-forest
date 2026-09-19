@@ -267,7 +267,7 @@ def test_impossible_targets_stay_under_the_old_ceiling():
 
 
 def test_ndealkylation_hard_pairs_when_the_class_exists():
-    """Macrocycle and dialdehyde. Skipped until the catalog ports the class."""
+    """Macrocycle and dialdehyde on the N-dealkylation ruleset."""
 
     ruleset = _ruleset("NDealkylation")
     cases = [

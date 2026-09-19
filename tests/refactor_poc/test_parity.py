@@ -9,12 +9,14 @@ from rdkit import Chem
 
 from xenosite.forest.rules import Dealkylation as OldDealkylation
 from xenosite.forest.rules import Hydroxylation as OldHydroxylation
+from xenosite.forest.rules import NDealkylation as OldNDealkylation
 from xenosite.forest.rules import QuinoneFormation as OldQuinone
 from xenosite.refactor_poc.find_path import bfs
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
+    NDealkylation,
     QuinoneFormation,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
@@ -64,8 +66,11 @@ def _old(rule, smiles):
     return _fragments(pieces)
 
 
-def _new(rule, smiles):
-    return _fragments(product for product, _info in rule.metabolize(Chem.MolFromSmiles(smiles)))
+def _new(rule, smiles, **kwargs):
+    return _fragments(
+        product
+        for product, _info in rule.metabolize(Chem.MolFromSmiles(smiles), **kwargs)
+    )
 
 
 def test_ethane_hydroxylation_matches_old():
@@ -88,6 +93,47 @@ def test_anisole_dealkylation_matches_old():
     new = _new(Dealkylation(), "COc1ccccc1")
     assert new == old
     assert "Oc1ccccc1" in new
+
+
+def test_trimethylamine_ndealkylation_matches_old():
+    old = _old(OldNDealkylation(), "CN(C)C")
+    new = _new(NDealkylation(), "CN(C)C")
+    assert "CNC" in new
+    assert new == old
+
+
+def test_filter_skips_named_methyl_and_keeps_open_alkyl():
+    """The skip reads ``leave_count``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        count = info["options"].get("leave_count")
+        if count is not None:
+            refused.append((site, count, info["options"].get("partner")))
+            return False
+        return True
+
+    products = _new(
+        NDealkylation(),
+        "CCN(C)C",
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(count == 1 and partner == "N" for _site, count, partner in refused)
+    assert "CC=O" in products
+    assert "C=O" not in products
+
+
+def test_cleaved_ring_bond_sets_breaks_ring():
+    flags = {
+        (info["options"].get("leave_count"), info["options"].get("breaks_ring"))
+        for _product, info in NDealkylation().metabolize(
+            Chem.MolFromSmiles("CN1CCCCC1")
+        )
+    }
+    assert (1, False) in flags
+    assert (None, True) in flags
 
 
 def test_benzene_and_phenol_quinone_match_old():

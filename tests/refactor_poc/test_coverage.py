@@ -7,7 +7,12 @@ file only seeds the rules the easy pairs already use.
 import pytest
 from rdkit import Chem
 
-from xenosite.refactor_poc.rules import Dealkylation, Dehydrogenation, Hydroxylation
+from xenosite.refactor_poc.rules import (
+    Dealkylation,
+    Dehydrogenation,
+    Hydroxylation,
+    NDealkylation,
+)
 
 
 def _canon(smiles):
@@ -60,6 +65,12 @@ def _pattern(rule, smarts):
             Dehydrogenation,
             "O=C1C=CC(=O)C=C1",
             "[#6:1]-[#8H:2]",
+        ),
+        (
+            "CN(C)C",
+            NDealkylation,
+            "CNC",
+            "[#6H3:1][#7:2]>>([*:2].[*:1]=O)",
         ),
     ],
 )
