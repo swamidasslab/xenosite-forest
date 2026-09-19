@@ -2434,3 +2434,11 @@ class ConjugationRule(SmartsReactionRule):
                     for product in products
                 ]
             yield ProductsOfReaction(info=por.info, products=products)
+
+
+class Acetylation(ConjugationRule):
+    """Adds an acetyl to OH, NH, and SH.
+
+    Calls :class:`ConjugationRule`. The acetyl SMARTS and the star collapse
+    stay there. ``as_star=False`` keeps the acetyl. A filter reads ``symbol``.
+    """

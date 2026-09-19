@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- Acetylation calls ConjugationRule. The acetyl SMARTS stay on that class. Phenol with `as_star` false matches the old library as `CC(=O)Oc1ccccc1`. A filter skips the nitrogen on 4-aminophenol by reading `symbol`. On 2-mercaptoethanol both matches still emit the thioacetate; that parent reaction was not changed.
+
 - ConjugationRule collapses the acetyl adduct to a star by default. Those SMARTS stay on this class until Acetylation, Sulfation, Glucuronidation, and Glutathionation are their own classes. A filter reads `symbol`. Star labels are not a mode on every rule.
 
 - Kekulé parents: match once with `=,:`; one parent per assignment of the conjugated system that contains the hit; other systems stay aromatic. Helpers take a dict and do not touch `_forest`; the rule stores that dict.

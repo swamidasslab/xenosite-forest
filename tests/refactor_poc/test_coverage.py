@@ -8,6 +8,7 @@ import pytest
 from rdkit import Chem
 
 from xenosite.refactor_poc.rules import (
+    Acetylation,
     AzoSplitting,
     BenzodioxoleReduction,
     ConjugationRule,
@@ -107,9 +108,20 @@ def _pattern(rule, smarts):
             "*Oc1ccccc1",
             "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
         ),
+        (
+            "Oc1ccccc1",
+            Acetylation,
+            "CC(=O)Oc1ccccc1",
+            "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
+        ),
     ],
 )
 def test_rule_emits_the_target_for_that_pattern(reactant, rule_cls, target, smarts):
-    rule = rule_cls()
+    # Star collapse stays on the conjugation class. A row whose target is the
+    # acetyl, not the star, asks for that conjugate.
+    if getattr(rule_cls, "as_star", False) and "*" not in target:
+        rule = rule_cls(as_star=False)
+    else:
+        rule = rule_cls()
     pattern = _pattern(rule, smarts)
     assert _canon(target) in _fragments(rule, reactant, pattern)

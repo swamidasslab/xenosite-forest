@@ -7,6 +7,7 @@ reason. These four are not xfail.
 
 from rdkit import Chem
 
+from xenosite.forest.rules import Acetylation as OldAcetylation
 from xenosite.forest.rules import AzoSplitting as OldAzoSplitting
 from xenosite.forest.rules import BenzodioxoleReduction as OldBenzodioxoleReduction
 from xenosite.forest.rules import ConjugationRule as OldConjugationRule
@@ -15,9 +16,12 @@ from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
 from xenosite.forest.rules import NitroaromaticReduction as OldNitroaromaticReduction
 from xenosite.forest.rules import QuinoneFormation as OldQuinone
-from xenosite.forest.rules import ThiopheneSulfurOxidation as OldThiopheneSulfurOxidation
+from xenosite.forest.rules import (
+    ThiopheneSulfurOxidation as OldThiopheneSulfurOxidation,
+)
 from xenosite.refactor_poc.find_path import bfs
 from xenosite.refactor_poc.rules import (
+    Acetylation,
     AzoSplitting,
     BenzodioxoleReduction,
     ConjugationRule,
@@ -345,6 +349,50 @@ def test_filter_skips_nitrogen_and_keeps_the_phenol_star():
     )
     assert "*Oc1ccc(N)cc1" in products
     assert "*Nc1ccc(O)cc1" not in products
+
+
+def test_phenol_acetyl_matches_old():
+    """The target contains the acetyl conjugate. Canonical SMILES; order does not matter."""
+
+    old = _old(OldAcetylation(as_star=False), _PHENOL)
+    new = _new(Acetylation(as_star=False), _PHENOL)
+    assert "CC(=O)Oc1ccccc1" in new
+    assert all("C(=O)" in smiles for smiles in new)
+    assert new == old
+
+
+def test_filter_skips_nitrogen_and_keeps_the_phenol_acetyl():
+    """The skip reads ``symbol``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        symbol = info["options"].get("symbol")
+        if symbol == "N":
+            refused.append(
+                (
+                    site,
+                    symbol,
+                    info["options"].get("adds"),
+                    info["options"].get("leave_count"),
+                    info["options"].get("cleaves"),
+                )
+            )
+            return False
+        return True
+
+    products = _new(
+        Acetylation(as_star=False),
+        _AMINOPHENOL,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(
+        symbol == "N" and added == "CCO" and count is None and not cleaved
+        for _site, symbol, added, count, cleaved in refused
+    )
+    assert "CC(=O)Oc1ccc(N)cc1" in products
+    assert "CC(=O)Nc1ccc(O)cc1" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():
