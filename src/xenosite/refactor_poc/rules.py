@@ -1780,6 +1780,36 @@ class BenzodioxoleReduction(SmartsReactionRule):
     )
 
 
+class NitroaromaticReduction(SmartsReactionRule):
+    """Cleaves one N-O of a nitro group on a ring carbon, leaving the nitroso.
+
+    That oxygen is the whole leaving piece, and both patterns name it, so
+    ``leave_count`` is 1. ``breaks_ring`` is filled from the cleaved bond.
+    A filter reads ``leave_count``.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#8-1:1]-[#7+1:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
+            describe(
+                cleaves=True,
+                partner="N",
+                leave_count=1,
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#8:1]-[#7:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
+            describe(
+                cleaves=True,
+                partner="N",
+                leave_count=1,
+                site_map=(1, 2),
+            ),
+        ),
+    )
+
+
 _HALIDE = (9, 17, 35, 53, 85)
 
 

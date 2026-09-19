@@ -1,6 +1,6 @@
 # TODO
 
-- refactor_poc PhaseOne omits forest rules with no class in rules.py yet: Tautomerization, NitroaromaticReduction, ThiopheneSulfurOxidation, conjugations
+- refactor_poc PhaseOne omits forest rules with no class in rules.py yet: Tautomerization, ThiopheneSulfurOxidation, conjugations
 - Hydrogenation conjugated path-flips (old pair-path bond swap) are not in refactor_poc; SMARTS cover C#C and C=C only
 - refactor_poc: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)
 - refactor_poc search: consult `src/xenosite/refactor_poc/HEURISTICS.md` before changing find_path or explaining a miss

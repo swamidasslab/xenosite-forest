@@ -28,3 +28,12 @@ The old library kekulizes once. That form of pyridazine has an N-N single bond, 
 - Shared: none
 
 The same SMARTS on `c1ccc(N=Nc2ccnnc2)cc1` is what both libraries emit, including the ring-opened fragments. Those sets match.
+
+## Nitro reduction of 1,4-dinitrobenzene
+
+Kekulé copies rewrite one nitro as `[N+](=[O-])O` before the reaction. The oxygen then has valence 2. Nitrobenzene has no second nitro, and its fragments match.
+
+- Reactant: `O=[N+]([O-])c1ccc([N+](=O)[O-])cc1`
+- Only old: `O=Nc1ccc([N+](=O)[O-])cc1`
+- Only new: `O=NC1=CC=C([N+](=[O-])O)C=C1` (does not parse)
+- Shared: `O`

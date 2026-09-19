@@ -14,6 +14,7 @@ from xenosite.refactor_poc.rules import (
     Dehydrogenation,
     Hydroxylation,
     NDealkylation,
+    NitroaromaticReduction,
 )
 
 
@@ -85,6 +86,12 @@ def _pattern(rule, smarts):
             BenzodioxoleReduction,
             "Oc1ccccc1O",
             "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
+        ),
+        (
+            "O=[N+]([O-])c1ccccc1",
+            NitroaromaticReduction,
+            "O=Nc1ccccc1",
+            "[#8-1:1]-[#7+1:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
         ),
     ],
 )
