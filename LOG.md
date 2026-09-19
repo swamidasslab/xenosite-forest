@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Glucuronidation calls ConjugationRule. Phenol with `as_star` false matches the old library as `O=C(O)C1OC(Oc2ccccc2)C(O)C(O)C1O`. A filter skips the benzylic alcohol on 4-hydroxybenzyl alcohol by reading `partner_h`. The old acid SMARTS rewrites `=N`, `=P`, and `=S` as oxygen; that product is not that group's glucuronide, recorded in `DIVERGENCES.md`. The carbonyl pattern matches `=[#8]` on an OH or an anion, so a carboxylate still forms the acyl glucuronide.
+
+## 2026-09-19
+
 - Sulfation calls ConjugationRule. Phenol with `as_star` false matches the old library as `O=S(=O)(O)Oc1ccccc1`. A filter skips the benzylic alcohol on 4-hydroxybenzyl alcohol by reading `partner_h`. The old arene-oxide SMARTS writes a methyl sulfone and drops the epoxide oxygen; that product is not a sulfate, recorded in `DIVERGENCES.md`.
 
 - Acetylation calls ConjugationRule. The acetyl SMARTS stay on that class. Phenol with `as_star` false matches the old library as `CC(=O)Oc1ccccc1`. A filter skips the nitrogen on 4-aminophenol by reading `symbol`. On 2-mercaptoethanol both matches still emit the thioacetate; that parent reaction was not changed.

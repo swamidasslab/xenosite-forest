@@ -14,6 +14,7 @@ from xenosite.refactor_poc.rules import (
     ConjugationRule,
     Dealkylation,
     Dehydrogenation,
+    Glucuronidation,
     Hydroxylation,
     NDealkylation,
     NitroaromaticReduction,
@@ -120,6 +121,19 @@ def _pattern(rule, smarts):
             Sulfation,
             "O=S(=O)(O)Oc1ccccc1",
             "[#6:1][#8H1:2]>>[*:1][*:2]S(=O)(=O)O",
+        ),
+        (
+            "Oc1ccccc1",
+            Glucuronidation,
+            "O=C(O)C1OC(Oc2ccccc2)C(O)C(O)C1O",
+            "[#8H1:1][#6:2]>>O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2])1",
+        ),
+        (
+            "O=C([O-])c1ccccc1",
+            Glucuronidation,
+            "O=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1",
+            "[#8H1,#8-:1][#6:2](=[#8:3])[#6:4]>>"
+            "O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1",
         ),
     ],
 )

@@ -73,3 +73,18 @@ The same writing on `Clc1ccc(c(c1)Cl)C1=CC2(Cl)OC2C=C1Cl` is only old `CS(=O)(=O
 `OC1=CC2OC2C=C1` still shares the sulfate `O=S(=O)(O)OC1=CC2OC2C=C1`. Only old there: `CS(=O)(=O)c1ccc(O)cc1`, `CS(=O)(=O)c1cccc(O)c1`.
 
 More correct. Not a problem in the proof of concept. Those strings are methyl sulfones. A sulfate conjugate keeps the oxygen and adds `S(=O)(=O)O`. The epoxide oxygen has no hydrogen, so it is not a sulfate site.
+
+## Carbonyl heteroatom rewritten as oxygen
+
+The old first SMARTS is `[#8:1][#6:2](=[O,N,P,S:3])[#6:4]` and the product writes `=[#8:3]`. Nitrogen, phosphorus, and sulfur become oxygen. That product is a carboxylic glucuronide, not the glucuronide of the matched group.
+
+- Reactant: `N=C(O)c1ccccc1`
+- Only old: `O=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1`
+- Only new: none
+- Shared: `N=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1`
+
+The same writing on `S=C(O)c1ccccc1` is only old `O=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1`. Shared: `O=C(O)C1OC(OC(=S)c2ccccc2)C(O)C(O)C1O`.
+
+On `N=C([O-])C` the alcohol pattern does not match. Only old: `CC(=O)OC1OC(C(=O)O)C(O)C(O)C1O`. Shared: none. `S=C([O-])C` and `P=C([O-])C` are the same only-old carboxylate.
+
+More correct. Not a problem in the proof of concept. Those strings replace the heteroatom with oxygen. A glucuronide of `N=C(O)-` or `S=C(O)-` keeps that atom. The pattern here matches `=[#8]` on an OH or an anion, so benzoate still gives the acyl glucuronide. An ester oxygen is not that site: the old product does not sanitize, and this pattern does not match it.

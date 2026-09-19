@@ -2466,3 +2466,33 @@ class Sulfation(ConjugationRule):
             ),
         ),
     )
+
+
+class Glucuronidation(ConjugationRule):
+    """Adds a glucuronide to an alcohol, a phenol, or a carboxylic oxygen.
+
+    Calls :class:`ConjugationRule`. The glucuronide SMARTS live here. The
+    star collapse stays there. ``as_star=False`` keeps the glucuronide. The
+    carbon beside an alcohol oxygen is the partner. A filter reads
+    ``partner_h``. The carbonyl pattern matches ``=[#8]`` only.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#8H1:1][#6:2]>>O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2])1",
+            describe(
+                *branches(
+                    _whens(2, (6,)),
+                    site_map=1,
+                    adds="CCCCCCOOOOOO",
+                    removes="H",
+                ),
+                site_map=1,
+            ),
+        ),
+        (
+            "[#8H1,#8-:1][#6:2](=[#8:3])[#6:4]>>"
+            "O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1",
+            describe(adds="CCCCCCOOOOOO", site_map=1),
+        ),
+    )
