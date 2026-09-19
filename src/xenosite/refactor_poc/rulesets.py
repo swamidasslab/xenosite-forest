@@ -5,6 +5,7 @@ each child, so the set does not hide that child's patterns. A pattern the
 filter refuses is not run. A pattern it accepts is.
 """
 
+from xenosite.refactor_poc.rdkitutil import Mol
 from .rules import (
     Dealkylation,
     Dehydration,
@@ -59,7 +60,7 @@ class RuleSet(ReactionRule):
 
     def metabolites(
         self,
-        mol,
+        mol: Mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
         order_key=None,

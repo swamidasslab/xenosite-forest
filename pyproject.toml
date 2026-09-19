@@ -155,8 +155,3 @@ show_missing = true
 
 [tool.pyright]
 include = ["src/xenosite/refactor_poc/records.py"]
-exclude = [
-    "src/xenosite/refactor_poc/rdkitutil.py",
-    "src/xenosite/refactor_poc/phaseone.py",
-    "src/xenosite/forest",
-]

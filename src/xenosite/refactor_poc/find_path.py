@@ -14,6 +14,8 @@ from typing import Any, cast
 
 
 from xenosite.refactor_poc.rdkitutil import (
+    Atom,
+    Mol,
     as_mol,
     cannonicalize_order,
     canon_smiles,
@@ -154,7 +156,7 @@ class PathOutcome:
 # ---------------------------------------------------------------------------
 
 
-def _hydrogens(atom):
+def _hydrogens(atom: Atom):
     try:
         return atom.GetTotalNumHs()
     except RuntimeError:
@@ -172,8 +174,8 @@ class AtomDiff:
 
     def __init__(
         self,
-        reactant,
-        target,
+        reactant: Mol,
+        target: Mol,
         mapping,
         needs_oxygen,
         needs_carbonyl,
@@ -247,7 +249,7 @@ class AtomDiff:
         )
 
 
-def _mapping_score(reactant, target, r_match, t_match):
+def _mapping_score(reactant: Mol, target: Mol, r_match, t_match):
     """Prefer a pairing that keeps rings on rings and bond orders put."""
 
     score = 0
@@ -284,7 +286,7 @@ def _mapping_score(reactant, target, r_match, t_match):
     return score
 
 
-def _best_mapping(reactant, target):
+def _best_mapping(reactant: Mol, target: Mol):
     # why not uniquify to reduce combinatorial explosion?
     reactant_hits = mcs_matches(reactant, target).embeddings[:24]
     target_hits = mcs_target_matches(reactant, target).embeddings[:24]
@@ -305,7 +307,7 @@ def _best_mapping(reactant, target):
     return {r: t for r, t in zip(r_match, t_match)}
 
 
-def atom_diff(reactant, target):
+def atom_diff(reactant: Mol | str, target: Mol | str):
     """Pair reactant atoms with target atoms and record the local change.
 
     String inputs are parsed with ``MolFromSmiles``. Indexes then refer to
@@ -455,7 +457,7 @@ def _pattern_could_help(info, diff):
     return True
 
 
-def _alkyl_bond_raises(mol, atom_idx, diff):
+def _alkyl_bond_raises(mol: Mol, atom_idx, diff):
     """True when an exocyclic C-C bond at ``atom_idx`` is higher in the target."""
 
     atom = mol.GetAtomWithIdx(atom_idx)
@@ -467,7 +469,7 @@ def _alkyl_bond_raises(mol, atom_idx, diff):
     return False
 
 
-def _site_could_help(site, info, diff, mol):
+def _site_could_help(site, info, diff, mol: Mol):
     """``filter_sites`` sees one resolved effect and the local atom diff."""
 
     effect = info.get("options") or {}
@@ -513,7 +515,7 @@ def _site_could_help(site, info, diff, mol):
     return True
 
 
-def _filters(diff, enabled, mol):
+def _filters(diff, enabled, mol: Mol):
     if not enabled:
         return (lambda rule, info: True), (lambda site, info: True)
 
@@ -543,7 +545,7 @@ def _rule_can_cleave(rule: Any) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _atom_ref(mol, idx):
+def _atom_ref(mol: Mol, idx):
     """Origin index, or ``added_by`` when this atom was created by a step.
 
     ``added_by`` on the record is a transform id (``R1``). The rule name and
@@ -574,11 +576,11 @@ def _atom_ref(mol, idx):
     return AtomRef(added_by=(name, frozenset(site)))
 
 
-def _step(mol, rule_name, site):
+def _step(mol: Mol, rule_name, site):
     return Step(rule_name, frozenset(_atom_ref(mol, idx) for idx in site))
 
 
-def _steps_for(mol, info):
+def _steps_for(mol: Mol, info):
     """Phase-I steps for one accepted edit.
 
     QuinoneFormation is not itself a step. The hop stands in for the
@@ -591,7 +593,7 @@ def _steps_for(mol, info):
     return (_step(mol, info["rule"].name, info["site"]),)
 
 
-def _bonded(mol, idx, atomic_num):
+def _bonded(mol: Mol, idx, atomic_num):
     """Neighbor of ``idx`` with this atomic number, if the mol already has one."""
 
     atom = mol.GetAtomWithIdx(idx)
@@ -601,7 +603,7 @@ def _bonded(mol, idx, atomic_num):
     return None
 
 
-def _quinone_phase1(mol, info):
+def _quinone_phase1(mol: Mol, info):
     """Hydroxylations that supply missing oxygens, then one dehydrogenation.
 
     An end that already carries oxygen keeps that atom. An end that
@@ -669,7 +671,7 @@ def default_ruleset():
     )
 
 
-def _finish(parent, raw_products, info, counters):
+def _finish(parent: Mol, raw_products, info, counters):
     """Sanitize and trace each fragment. Failed sanitizes are dropped."""
 
     finished = []
@@ -686,7 +688,7 @@ def _finish(parent, raw_products, info, counters):
     return finished
 
 
-def _keep_fragment(finished, target):
+def _keep_fragment(finished, target: Mol):
     """The fragment closest to ``target``. The rest were cleaved off."""
 
     best = None
@@ -707,15 +709,15 @@ def _keep_fragment(finished, target):
 
 @dataclass
 class _Walk:
-    mol: object
+    mol: Mol
     steps: tuple
     sides: tuple
     opens: tuple
 
 
 def find_path(
-    reactant,
-    target,
+    reactant: Mol | str,
+    target: Mol | str,
     ruleset=None,
     counters=None,
     *,

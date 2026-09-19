@@ -1,4 +1,7 @@
-"""The only proof-of-concept module that imports RDKit.
+"""Molecule questions for the proof of concept.
+
+RDKit itself is imported in :mod:`xenosite.refactor_poc.rdkit_api`. This
+module calls those names.
 
 Answers about a molecule are cached on ``get_forest(mol)["structure"]``.
 The key is one string. Process-wide data, such as parsed SMARTS reactions,
@@ -24,18 +27,31 @@ from __future__ import annotations
 import ast
 import copy
 from collections import defaultdict, deque
+from collections.abc import Iterable
 from typing import Any
 
-from rdkit import Chem, rdBase
-from rdkit.Chem import AllChem, GetMolFrags, SanitizeMol, rdFMCS
-from rdkit.Chem.AllChem import CanonicalRankAtoms, MolToSmiles, RenumberAtoms
-from rdkit.Chem.rdchem import (
+from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
     Atom,
+    AtomCompare,
+    Bond,
+    BondCompare,
     BondType,
+    CanonicalRankAtoms,
+    ChemicalReaction,
+    DisableLog,
+    FindMCS,
+    GetMolFrags,
     Mol,
+    MolFromSmarts,
+    MolFromSmiles,
+    MolToSmiles,
     RWMol,
+    ReactionFromSmarts,
+    RenumberAtoms,
     ResonanceMolSupplier,
+    SanitizeFlags,
+    SanitizeMol,
 )
 
 from xenosite.refactor_poc.records import (
@@ -46,15 +62,16 @@ from xenosite.refactor_poc.records import (
     Structure,
 )
 
-rdBase.DisableLog("rdApp.*")
+DisableLog("rdApp.*")
 
-_REACTION_CACHE: dict[str, Any] = {}
+_REACTION_CACHE: dict[str, ChemicalReaction] = {}
 
 
-def get_forest(mol: Any, new_structure: bool = False) -> Forest:
-    forest = getattr(mol, "_forest", None)
+def get_forest(mol: Mol, new_structure: bool = False) -> Forest:
+    forest: Forest | None = mol._forest
     if forest is None:
-        forest = {"structure": {}}
+        structure: Structure = {}
+        forest = {"structure": structure}
         mol._forest = forest
 
     if new_structure:
@@ -64,11 +81,14 @@ def get_forest(mol: Any, new_structure: bool = False) -> Forest:
     return forest
 
 
-def _structure(mol: Any) -> Structure:
-    return get_forest(mol)["structure"]
+def _structure(mol: Mol) -> Structure:
+    forest = get_forest(mol)
+    if "structure" not in forest:
+        raise KeyError("structure")
+    return forest["structure"]
 
 
-def sanitize_mol(mol: Any) -> int:
+def sanitize_mol(mol: Mol) -> int:
     """Sanitize a copy and cache the RDKit status code. Does not edit ``mol``."""
 
     structure = _structure(mol)
@@ -80,13 +100,13 @@ def sanitize_mol(mol: Any) -> int:
     return sanitized
 
 
-def sanitize_catch(mol: Any) -> int:
+def sanitize_catch(mol: Mol) -> int:
     """Sanitize ``mol`` in place. Not cached: this call edits the molecule."""
 
     return int(SanitizeMol(mol, catchErrors=True))
 
 
-def topol_equiv(mol: Any) -> dict[int, int]:
+def topol_equiv(mol: Mol) -> dict[int, int]:
     """Map each atom index to its topological class. The same dict on a hit."""
 
     structure = _structure(mol)
@@ -107,7 +127,7 @@ def topol_equiv(mol: Any) -> dict[int, int]:
     return classes
 
 
-def molecule_formula(mol: Any) -> Formula:
+def molecule_formula(mol: Mol) -> Formula:
     """Heavy-atom counts, total hydrogens, and formal charge.
 
     Explicit hydrogens are counted through ``GetTotalNumHs`` on the heavy
@@ -136,7 +156,7 @@ def molecule_formula(mol: Any) -> Formula:
     return formula
 
 
-def copy_mol(mol: Any) -> Any:
+def copy_mol(mol: Mol) -> Mol:
     """``Chem.Mol`` copy that also carries a deep-copied forest."""
 
     out = Mol(mol)
@@ -146,7 +166,7 @@ def copy_mol(mol: Any) -> Any:
     return out
 
 
-def rw_copy(mol: Any) -> Any:
+def rw_copy(mol: Mol) -> RWMol:
     """Editable chemistry copy. The source is not edited.
 
     ``_forest`` is not carried. This copy is about to be edited, and a
@@ -157,18 +177,18 @@ def rw_copy(mol: Any) -> Any:
     return RWMol(Mol(mol))
 
 
-def reaction_from_smarts(smarts: str) -> Any:
+def reaction_from_smarts(smarts: str) -> ChemicalReaction:
     """Parse a SMARTS reaction once. The cache is process-wide, not per mol."""
 
     rxn = _REACTION_CACHE.get(smarts)
     if rxn is None:
-        rxn = AllChem.ReactionFromSmarts(smarts)
+        rxn = ReactionFromSmarts(smarts)
         rxn._setImplicitPropertiesFlag(False)
         _REACTION_CACHE[smarts] = rxn
     return rxn
 
 
-def run_reactants(smarts: str, mol: Any) -> tuple[Any, ...]:
+def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[Mol, ...], ...]:
     """Run one cached reaction on ``mol``. Empty when RDKit refuses the run."""
 
     reaction = reaction_from_smarts(smarts)
@@ -181,7 +201,7 @@ def run_reactants(smarts: str, mol: Any) -> tuple[Any, ...]:
     return tuple(product_sets)
 
 
-def cannonicalize_order(mol: Any, tracing_reset: bool = True) -> tuple[Any, str]:
+def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]:
     """Renumber into canonical SMILES order. Returns the new mol and that SMILES.
 
     The mol is not a record field, so this stays a tuple. The SMILES is also
@@ -206,17 +226,24 @@ def cannonicalize_order(mol: Any, tracing_reset: bool = True) -> tuple[Any, str]
     return renumbered, csmi
 
 
-def _reordered_forest_labels(mol: Any) -> None:
+def _reordered_forest_labels(mol: Mol) -> None:
     forest = get_forest(mol)
     for atom in mol.GetAtoms():
         index = atom.GetIdx()
         if atom.GetAtomicNum() != 1:
             tag = atom.GetProp("forestLabel")
-            record = forest["atom_trace"]["records"][tag]
+            if "atom_trace" not in forest:
+                raise KeyError("atom_trace")
+            trace = forest["atom_trace"]
+            if "records" not in trace:
+                raise KeyError("records")
+            record = trace["records"][tag]
+            if "idx" not in record:
+                raise KeyError("idx")
             record["idx"][-1] = index
 
 
-def get_csmi(mol: Any) -> str:
+def get_csmi(mol: Mol) -> str:
     structure = _structure(mol)
     csmi = structure.get("csmi")
     if not csmi:
@@ -225,20 +252,20 @@ def get_csmi(mol: Any) -> str:
     return csmi
 
 
-def mol_from_smiles(smiles: str) -> Any:
-    mol = Chem.MolFromSmiles(smiles)
+def mol_from_smiles(smiles: str) -> Mol:
+    mol = MolFromSmiles(smiles)
     if mol is None:
         raise ValueError("could not parse %r" % (smiles,))
     return mol
 
 
-def as_mol(value: Any) -> Any:
+def as_mol(value: Mol | str) -> Mol:
     if isinstance(value, str):
         return mol_from_smiles(value)
     return value
 
 
-def canon_smiles(value: Any) -> str:
+def canon_smiles(value: Mol | str) -> str:
     """Canonical SMILES with atom-map numbers cleared on a copy."""
 
     mol = as_mol(value)
@@ -252,7 +279,7 @@ def _bond_key(left: int, right: int) -> tuple[int, int]:
     return (left, right) if left < right else (right, left)
 
 
-def _current_bond_map(mol: Any) -> dict[tuple[int, int], float]:
+def _current_bond_map(mol: Mol) -> dict[tuple[int, int], float]:
     bonds = {}
     for bond in mol.GetBonds():
         left, right = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
@@ -260,7 +287,7 @@ def _current_bond_map(mol: Any) -> dict[tuple[int, int], float]:
     return bonds
 
 
-def _connected_components(mol: Any, atoms: Any) -> list[frozenset[int]]:
+def _connected_components(mol: Mol, atoms: Iterable[int]) -> list[frozenset[int]]:
     atoms = set(atoms)
     seen: set[int] = set()
     systems = []
@@ -284,7 +311,7 @@ def _connected_components(mol: Any, atoms: Any) -> list[frozenset[int]]:
     return systems
 
 
-def _load_resonance(mol: Any) -> None:
+def _load_resonance(mol: Mol) -> None:
     """Cache kekulé bond maps and conjugated-atom sets on structure."""
 
     structure = _structure(mol)
@@ -337,17 +364,23 @@ def _load_resonance(mol: Any) -> None:
     structure["conjugated_systems"] = tuple(groups)
 
 
-def resonance_bond_maps(mol: Any) -> tuple[dict[tuple[int, int], float], ...]:
+def resonance_bond_maps(mol: Mol) -> tuple[dict[tuple[int, int], float], ...]:
     _load_resonance(mol)
-    return _structure(mol)["resonance_bonds"]
+    structure = _structure(mol)
+    if "resonance_bonds" not in structure:
+        raise KeyError("resonance_bonds")
+    return structure["resonance_bonds"]
 
 
-def conjugated_systems(mol: Any) -> tuple[frozenset[int], ...]:
+def conjugated_systems(mol: Mol) -> tuple[frozenset[int], ...]:
     _load_resonance(mol)
-    return _structure(mol)["conjugated_systems"]
+    structure = _structure(mol)
+    if "conjugated_systems" not in structure:
+        raise KeyError("conjugated_systems")
+    return structure["conjugated_systems"]
 
 
-def aromatic_systems(mol: Any) -> tuple[frozenset[int], ...]:
+def aromatic_systems(mol: Mol) -> tuple[frozenset[int], ...]:
     structure = _structure(mol)
     if "aromatic_systems" not in structure:
         aromatic = {atom.GetIdx() for atom in mol.GetAromaticAtoms()}
@@ -355,11 +388,11 @@ def aromatic_systems(mol: Any) -> tuple[frozenset[int], ...]:
     return structure["aromatic_systems"]
 
 
-def ring_membership(mol: Any) -> dict[int, tuple[tuple[int, ...], ...]]:
+def ring_membership(mol: Mol) -> dict[int, tuple[tuple[int, ...], ...]]:
     structure = _structure(mol)
     if "rings" not in structure:
         work = Mol(mol)
-        SanitizeMol(work, Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
+        SanitizeMol(work, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
         atom_rings = work.GetRingInfo().AtomRings()
         structure["rings"] = {
             idx: tuple(ring for ring in atom_rings if idx in ring)
@@ -368,10 +401,10 @@ def ring_membership(mol: Any) -> dict[int, tuple[tuple[int, ...], ...]]:
     return structure["rings"]
 
 
-def smarts_matches(mol: Any, smarts: str) -> tuple[dict[int, int], ...]:
+def smarts_matches(mol: Mol, smarts: str) -> tuple[dict[int, int], ...]:
     cache = _structure(mol).setdefault("smarts_matches", {})
     if smarts not in cache:
-        query = Chem.MolFromSmarts(smarts)
+        query = MolFromSmarts(smarts)
         hits = []
         if query is not None:
             mapnos = [atom.GetAtomMapNum() for atom in query.GetAtoms()]
@@ -391,7 +424,7 @@ def _bump(counters: Any, name: str, amount: int = 1) -> None:
     setattr(counters, name, getattr(counters, name) + amount)
 
 
-def sanitized_fragments(mol: Any, counters: Any = None) -> FragmentSplit:
+def sanitized_fragments(mol: Mol, counters: Any = None) -> FragmentSplit:
     """Split, drop the dealkylation leaving group, sanitize.
 
     Empty pieces when any fragment fails. Callers read ``pieces``.
@@ -411,11 +444,11 @@ def sanitized_fragments(mol: Any, counters: Any = None) -> FragmentSplit:
     return FragmentSplit(pieces=tuple(out))
 
 
-def split_fragments(raw: Any) -> FragmentSplit:
+def split_fragments(raw: Mol) -> FragmentSplit:
     """One mol, or the fragments of a disconnected reaction product."""
 
     try:
-        groups = Chem.GetMolFrags(raw)
+        groups = GetMolFrags(raw)
     except ValueError:
         return FragmentSplit(pieces=(raw,))
     if len(groups) <= 1:
@@ -424,7 +457,7 @@ def split_fragments(raw: Any) -> FragmentSplit:
     return FragmentSplit(pieces=tuple(frags))
 
 
-def mcs_matches(reactant: Any, target: Any) -> McsResult:
+def mcs_matches(reactant: Mol, target: Mol) -> McsResult:
     """Every full-size embedding of ``target`` on ``reactant``, not only the best.
 
     The reactant structure holds the NamedTuple, keyed by the target's
@@ -447,19 +480,22 @@ def mcs_matches(reactant: Any, target: Any) -> McsResult:
     return found
 
 
-def mcs_target_matches(reactant: Any, target: Any) -> McsResult:
+def mcs_target_matches(reactant: Mol, target: Mol) -> McsResult:
     """Target-side embeddings for the same MCS query. Filled with :func:`mcs_matches`."""
 
     mcs_matches(reactant, target)
     key = get_csmi(target)
-    return _structure(reactant)["mcs_targets"][key]
+    structure = _structure(reactant)
+    if "mcs_targets" not in structure:
+        raise KeyError("mcs_targets")
+    return structure["mcs_targets"][key]
 
 
-def _mcs_query(reactant: Any, target: Any) -> Any:
-    mcs = rdFMCS.FindMCS(
+def _mcs_query(reactant: Mol, target: Mol) -> Mol | None:
+    mcs = FindMCS(
         [reactant, target],
-        atomCompare=rdFMCS.AtomCompare.CompareElements,
-        bondCompare=rdFMCS.BondCompare.CompareAny,
+        atomCompare=AtomCompare.CompareElements,
+        bondCompare=BondCompare.CompareAny,
         matchValences=False,
         ringMatchesRingOnly=False,
         completeRingsOnly=False,
@@ -467,10 +503,10 @@ def _mcs_query(reactant: Any, target: Any) -> Any:
     )
     if mcs.numAtoms <= 0 or mcs.canceled:
         return None
-    return Chem.MolFromSmarts(mcs.smartsString)
+    return MolFromSmarts(mcs.smartsString)
 
 
-def _full_matches(mol: Any, query: Any) -> tuple[tuple[int, ...], ...]:
+def _full_matches(mol: Mol, query: Mol | None) -> tuple[tuple[int, ...], ...]:
     if query is None:
         return ()
     size = query.GetNumAtoms()
