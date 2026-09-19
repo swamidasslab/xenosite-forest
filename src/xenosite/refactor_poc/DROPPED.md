@@ -70,7 +70,8 @@ poc calls. The capability stays. Quinone rules are composite look-aheads.
 Epoxidation is a complete subset of stable oxidation. N-dealkylation is a
 complete subset of unstable oxidation. That is what avoids rewalking the
 same chemistry and what explains which rule fired. A ruleset is still a
-rule.
+rule. The epoxidation and N-dealkylation phase-I shapes themselves are
+deferred: those rules are not in the default set. Status: not decided.
 
 Old tests: `tests/test_phaseone.py`.
 

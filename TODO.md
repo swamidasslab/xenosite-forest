@@ -1,5 +1,6 @@
 # TODO
 
+- Defer epoxidation and N-dealkylation phase-I shapes; those rules are not in the default set
 - Later: SMARTS least-common atoms first, and the isotope atom first when a tag is used
 - Tautomer matching (TautomerQuery versus a Tautomerization rule) is deferred; it is out of this phase because it is not needed for Phase I + quinone formation + conjugation
 - refactor_poc PhaseOne omits Tautomerization, Sulfation, Glucuronidation, and Glutathionation
