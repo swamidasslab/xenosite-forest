@@ -143,6 +143,7 @@ filterwarnings = [
 ]
 markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
+    "regression: deferred bug, not correct behavior or out of scope",
 ]
 
 [tool.coverage.run]
