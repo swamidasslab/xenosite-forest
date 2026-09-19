@@ -117,3 +117,28 @@ def test_anisole_to_phenol_cleaves_and_keeps_the_methyl_side():
     assert outcome.allows(side=side), message
     # The methyl fragment is not another search node.
     assert counters.nodes == 2, message
+
+
+def test_benzene_to_quinone_is_two_hydroxylations_then_dehydrogenation():
+    quinone = "O=C1C=CC(=O)C=C1"
+    on = PathCounters()
+    hits = list(find_path("c1ccccc1", quinone, counters=on))
+    message = _billed(on)
+    assert hits, message
+    steps = hits[0].plan.children
+    names = [step.rule for step in steps]
+    assert names.count("Hydroxylation") == 2, message
+    assert names.count("Dehydrogenation") == 1, message
+    hydroxyl = [i for i, name in enumerate(names) if name == "Hydroxylation"]
+    dehydrogenation = names.index("Dehydrogenation")
+    edges = set(hits[0].plan.precedes)
+    assert (hydroxyl[0], hydroxyl[1]) not in edges, message
+    assert (hydroxyl[1], hydroxyl[0]) not in edges, message
+    assert (hydroxyl[0], dehydrogenation) in edges, message
+    assert (hydroxyl[1], dehydrogenation) in edges, message
+    assert hits[0].smiles == canon_smiles(quinone), message
+
+    off = PathCounters()
+    off_hits = list(find_path("c1ccccc1", quinone, counters=off, use_filters=False))
+    assert off_hits, _billed(off)
+    assert on.billed < off.billed, "on %s; off %s" % (_billed(on), _billed(off))
