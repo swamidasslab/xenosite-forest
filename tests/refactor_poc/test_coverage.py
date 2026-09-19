@@ -15,6 +15,7 @@ from xenosite.refactor_poc.rules import (
     Hydroxylation,
     NDealkylation,
     NitroaromaticReduction,
+    ThiopheneSulfurOxidation,
 )
 
 
@@ -92,6 +93,12 @@ def _pattern(rule, smarts):
             NitroaromaticReduction,
             "O=Nc1ccccc1",
             "[#8-1:1]-[#7+1:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
+        ),
+        (
+            "c1ccsc1",
+            ThiopheneSulfurOxidation,
+            "[O-][s+]1cccc1",
+            "[#6:2]1=[#6:3][#6:4]=[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
         ),
     ],
 )

@@ -1810,6 +1810,21 @@ class NitroaromaticReduction(SmartsReactionRule):
     )
 
 
+class ThiopheneSulfurOxidation(SmartsReactionRule):
+    """Oxidizes the sulfur of a thiophene to the S-oxide.
+
+    The pattern adds oxygen and names no leaving atom, so ``leave_count``
+    stays None. It does not cleave. A filter reads ``adds``.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6:2]1=[#6:3][#6:4]=[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
+            describe(adds="O", symbol="S"),
+        ),
+    )
+
+
 _HALIDE = (9, 17, 35, 53, 85)
 
 

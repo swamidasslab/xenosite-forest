@@ -37,3 +37,14 @@ Kekulé copies rewrite one nitro as `[N+](=[O-])O` before the reaction. The oxyg
 - Only old: `O=Nc1ccc([N+](=O)[O-])cc1`
 - Only new: `O=NC1=CC=C([N+](=[O-])O)C=C1` (does not parse)
 - Shared: `O`
+
+## Thiophene S-oxidation of benzothiophene
+
+The old library kekulizes once. That form is `C1=CC=C2SC=CC2=C1`, so the thiophene ring is not `C=C-C=C-S` and the oxidation does not run. The other Kekulé form is that pattern, and the same SMARTS writes the S-oxide. Thiophene itself has no second writing to miss: both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
+
+- Reactant: `c1ccc2sccc2c1`
+- Only old: none
+- Only new: `[O-][s+]1ccc2ccccc21`
+- Shared: none
+
+Dibenzothiophene (`c1ccc2c(c1)sc1ccccc12`): only new `[O-][s+]1c2ccccc2c2ccccc21`.

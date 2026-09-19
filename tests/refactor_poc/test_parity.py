@@ -14,6 +14,7 @@ from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
 from xenosite.forest.rules import NitroaromaticReduction as OldNitroaromaticReduction
 from xenosite.forest.rules import QuinoneFormation as OldQuinone
+from xenosite.forest.rules import ThiopheneSulfurOxidation as OldThiopheneSulfurOxidation
 from xenosite.refactor_poc.find_path import bfs
 from xenosite.refactor_poc.rules import (
     AzoSplitting,
@@ -24,6 +25,7 @@ from xenosite.refactor_poc.rules import (
     NDealkylation,
     NitroaromaticReduction,
     QuinoneFormation,
+    ThiopheneSulfurOxidation,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
 
@@ -249,6 +251,49 @@ def test_filter_skips_named_nitro_oxygen():
     )
     assert "O=Nc1ccccc1" not in products
     assert "O" not in products
+
+
+_THIOPHENE = "c1ccsc1"
+
+
+def test_thiophene_sulfur_oxidation_matches_old():
+    old = _old(OldThiopheneSulfurOxidation(), _THIOPHENE)
+    new = _new(ThiopheneSulfurOxidation(), _THIOPHENE)
+    assert "[O-][s+]1cccc1" in new
+    assert new == old
+
+
+def test_filter_skips_sulfur_oxygen_addition():
+    """The skip reads ``adds``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        added = info["options"].get("adds")
+        if added:
+            refused.append(
+                (
+                    site,
+                    added,
+                    info["options"].get("symbol"),
+                    info["options"].get("leave_count"),
+                    info["options"].get("cleaves"),
+                )
+            )
+            return False
+        return True
+
+    products = _new(
+        ThiopheneSulfurOxidation(),
+        _THIOPHENE,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(
+        added == "O" and symbol == "S" and count is None and not cleaved
+        for _site, added, symbol, count, cleaved in refused
+    )
+    assert "[O-][s+]1cccc1" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():
