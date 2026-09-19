@@ -94,8 +94,9 @@ def test_ruleset_does_not_edit_its_input():
     assert transform_id.startswith("R")
     addition = trace["additions"][transform_id]
     assert addition["name"] in {"Hydroxylation", "Dealkylation"}
-    assert "Poc" in addition["rules"]
-    assert addition["name"] in addition["rules"]
+    names = tuple(getattr(item, "name", item) for item in addition["rules"])
+    assert "Poc" in names
+    assert addition["name"] in names
     assert addition["depth"] == 0
     assert "site" in addition and "effect" in addition
     assert trace["formula"]["counts"]["C"] >= 1

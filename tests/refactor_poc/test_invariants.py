@@ -107,7 +107,8 @@ def test_a_new_atom_points_at_one_addition_record():
     assert transform_id in trace["delta_formula"]
     addition = trace["additions"][transform_id]
     assert set(_ADDITION_FIELDS) <= set(addition)
-    assert addition["rules"] == ("Poc", "Hydroxylation")
+    names = tuple(getattr(item, "name", item) for item in addition["rules"])
+    assert names == ("Poc", "Hydroxylation")
     assert addition["name"] == "Hydroxylation"
     assert addition["depth"] == 0
     delta = trace["delta_formula"][transform_id]
