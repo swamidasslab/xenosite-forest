@@ -86,7 +86,7 @@ SulfurReduction bonds
 >>> next(bfs(['CCNO','CCN'],phase1=True,outmols=False))
 "(['CCNO', 'CCN'], [('Dehydration', frozenset({2, 3}))])"
 >>> next(bfs(['[O-]-[N+](C1=CC=C(O1)C=NN2C(=O)NC(=O)C2)=O','N(C1=CC=C(O1)C=NN2C(=O)NC(=O)C2)=O'],phase1=True,outmols=False))
-"(['O=C1CN(N=CC2=CC=C([N+](=O)[O-])O2)C(=O)N1', 'O=Nc1ccc(C=NN2CC(=O)NC2=O)o1'], [('NitrogenReduction', frozenset({0, 1}))])"
+"(['O=C1CN(N=Cc2ccc([N+](=O)[O-])o2)C(=O)N1', 'O=Nc1ccc(C=NN2CC(=O)NC2=O)o1'], [('NitrogenReduction', frozenset({0, 1}))])"
 
 >>> next(bfs(['CC=O','CCO'],phase1=True,outmols=False)) # doctest: +SKIP
 "(['CC=O', 'CCO'], [('Hydrogenation', frozenset({1, 2}))])"

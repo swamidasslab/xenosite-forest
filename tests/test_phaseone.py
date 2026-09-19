@@ -158,7 +158,7 @@ def test_nitrogen_reduction1():
             "O=Nc1ccc(C=NN2CC(=O)NC2=O)o1",
             [("NitrogenReduction", {0, 1})],
             [
-                "O=C1CN(N=CC2=CC=C([N+](=O)[O-])O2)C(=O)N1",
+                "O=C1CN(N=Cc2ccc([N+](=O)[O-])o2)C(=O)N1",
                 "O=Nc1ccc(C=NN2CC(=O)NC2=O)o1",
             ],
         ),
