@@ -16,6 +16,7 @@ from .base import (
     ResonancePairRule,
     ResonanceRule,
     SmartsReactionRule,
+    _site_atom_set,
     clean,
     copy_mol,
 )
@@ -1129,6 +1130,74 @@ class Hydroxylation(SmartsReactionRule):
 
         return oxygen_deficit(mol, target) > 0
 
+    def _symmetry_ranks(self, mol):
+        """Topological ranks with atom maps ignored.
+
+        Search products keep origin maps. Those maps are labels, not
+        chemistry, and they would otherwise split a symmetric class (the two
+        ortho carbons of phenol) into singletons.
+        """
+        from rdkit.Chem import Mol
+
+        copy = Mol(mol)
+        self._clear_atom_maps(copy)
+        return self.topol_equiv(copy)
+
+    def _oxygen_saturated_atoms(self, mol, ctx):
+        """Atoms whose whole topological class already has enough oxygens.
+
+        A class is kept if any member still needs an oxygen. Hydroxylating
+        one ortho carbon of phenol is the same product as the other, and the
+        match may assign the missing oxygen to only one of them.
+        """
+        from .path_context import atom_has_enough_oxygens
+
+        if ctx is None:
+            return set()
+        try:
+            ranks = self._symmetry_ranks(mol)
+        except Exception:
+            ranks = {}
+        needy_ranks = set()
+        flags = {}
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() <= 1:
+                continue
+            idx = atom.GetIdx()
+            enough = atom_has_enough_oxygens(mol, idx, ctx)
+            flags[idx] = enough
+            if not enough:
+                needy_ranks.add(ranks.get(idx))
+        return {
+            idx
+            for idx, enough in flags.items()
+            if enough and ranks.get(idx) not in needy_ranks
+        }
+
+    def _drop_oxygen_saturated_sites(self, mol, ctx, sites):
+        """Drop sites whose atoms already have as many oxygens as the target."""
+        if not sites or ctx is None:
+            return sites
+        saturated = self._oxygen_saturated_atoms(mol, ctx)
+        kept = []
+        for site in sites:
+            atoms = _site_atom_set(site)
+            if atoms and atoms <= saturated:
+                continue
+            kept.append(site)
+        return kept
+
+    def enumerate_for_path(self, mol, ctx, **kwargs):
+        """Skip hydroxylations on atoms that already have enough oxygens."""
+        saturated = self._oxygen_saturated_atoms(mol, ctx)
+        for item in SmartsReactionRule.enumerate_for_path(self, mol, ctx, **kwargs):
+            kind = item[0]
+            site = item[2] if kind == "plan" else item[1]
+            atoms = _site_atom_set(site)
+            if atoms and atoms <= saturated:
+                continue
+            yield item
+
     def sites_toward(self, mol, target, ctx):
         """Conserved MCS atoms, one representative per topological orbit."""
         if ctx is None or not getattr(ctx, "conserved_r_atoms", None):
@@ -1137,7 +1206,10 @@ class Hydroxylation(SmartsReactionRule):
         r_only = set(getattr(ctx, "r_only_atoms", ()) or ())
         if not r_only or len(conserved) == 0:
             return None
-        ranks = self.topol_equiv(mol)
+        try:
+            ranks = self._symmetry_ranks(mol)
+        except Exception:
+            ranks = self.topol_equiv(mol)
         seen_ranks = set()
         out = []
         for a in sorted(conserved):
@@ -1146,7 +1218,12 @@ class Hydroxylation(SmartsReactionRule):
                 continue
             seen_ranks.add(rank)
             out.append(frozenset([a]))
-        return out or None
+        # Atoms that already match the target's oxygen count are not where the
+        # missing oxygens go. An empty list means "no site", not "unrestricted".
+        out = self._drop_oxygen_saturated_sites(mol, ctx, out)
+        if not out:
+            return []
+        return out
 
     def child_may_reach(self, parent, child, target, ctx) -> bool:
         if ctx is not None:

@@ -201,12 +201,6 @@ def _assert_plan_exact_for_target(mol, plan, target: str):
 # covers it.
 _NOT_A_SHORT_SPINE = ("COc1ccc(O)cc1", "O=C1C=CC(OC(O)O)=CC1=O")
 
-# 4-Methoxyphenol → hydroxyquinone. Create is two hydroxylations then quinone
-# formation, but find_path bills 152 and exhausts ``_BUDGET`` (120). Same on
-# main. TODO: fix the search order so this lands inside the budget, then drop
-# the xfail and this fuzz skip.
-_METHOXYPHENOL_HYDROXYQUINONE = ("COc1ccc(O)cc1", "O=C1C=C(O)C(=O)C(O)=C1")
-
 
 def _canon_pair(pair) -> tuple:
     return tuple(_canon(s) for s in pair)
@@ -214,10 +208,6 @@ def _canon_pair(pair) -> tuple:
 
 def _is_not_a_short_spine(r_smi: str, t_smi: str) -> bool:
     return (_canon(r_smi), _canon(t_smi)) == _canon_pair(_NOT_A_SHORT_SPINE)
-
-
-def _is_over_budget_quinone(r_smi: str, t_smi: str) -> bool:
-    return (_canon(r_smi), _canon(t_smi)) == _canon_pair(_METHOXYPHENOL_HYDROXYQUINONE)
 
 
 def _assert_qf_phase1_plan_exact(r_smi: str, t_smi: str, recipe) -> None:
@@ -302,8 +292,6 @@ def test_fuzz_find_path_expands_qf_phase1_plan_exact(case):
     r_smi, t_smi, recipe = case
     # Four-step orthocarbonate quinone: not a <=3 spine. See the dedicated test.
     assume(not _is_not_a_short_spine(r_smi, t_smi))
-    # Hydroxyquinone exceeds _BUDGET. See the xfail; do not count it here.
-    assume(not _is_over_budget_quinone(r_smi, t_smi))
     _assert_qf_phase1_plan_exact(r_smi, t_smi, recipe)
 
 
@@ -339,28 +327,21 @@ def test_find_path_methoxyphenol_ocarbonate_quinone():
     assert any(s.rule == "Dehydrogenation" for s in outcome.plan.steps)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "TODO: fix search order. 4-methoxyphenol → hydroxyquinone bills 152 "
-        "expansions and exhausts _BUDGET (120). Drop this xfail and the fuzz "
-        "skip once it fits."
-    ),
-)
 def test_find_path_methoxyphenol_hydroxyquinone_within_budget():
-    """4-Methoxyphenol → hydroxyquinone should fit the expansion budget.
+    """4-Methoxyphenol → hydroxyquinone fits the expansion budget.
 
-    Create recipe is Hydroxylation, Hydroxylation, QuinoneFormation. ``find_path``
-    reaches the product, but only after ``_BUDGET``.
+    Hydroxylation skips carbons that already have as many oxygens as the
+    target, so the first path is found before ``_BUDGET``.
     """
     counters = PathSearchCounters()
     hits = list(
         find_path(
-            *_METHOXYPHENOL_HYDROXYQUINONE,
+            "COc1ccc(O)cc1",
+            "O=C1C=C(O)C(=O)C(O)=C1",
             ruleset=_find_ruleset(),
             depth=5,
             maybe_prefixes=False,
-            max_paths=8,
+            max_paths=1,
             max_expansions=_BUDGET,
             expand_phase1_plans=True,
             counters=counters,
@@ -369,6 +350,12 @@ def test_find_path_methoxyphenol_hydroxyquinone_within_budget():
     assert hits, counters.as_dict()
     assert not counters.budget_exhausted
     assert counters.billed() < _BUDGET
+    outcome = hits[0]
+    _assert_no_opaque_quinone(outcome)
+    mol = _mol("COc1ccc(O)cc1")
+    target = _canon("O=C1C=C(O)C(=O)C(O)=C1")
+    assert _canon(outcome.smiles[-1]) == target
+    assert _plan_replays(mol, outcome.plan, target)
 
 
 def test_benzene_qf_find_path_no_opaque_quinone_plan_exact():

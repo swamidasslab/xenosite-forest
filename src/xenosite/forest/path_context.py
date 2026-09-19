@@ -23,6 +23,74 @@ def oxygen_deficit(mol, target) -> int:
     return int(_formula(target).get("O", 0) - _formula(mol).get("O", 0))
 
 
+def _oxygen_neighbor_count(mol, idx: int) -> int:
+    atom = mol.GetAtomWithIdx(int(idx))
+    return sum(1 for nbr in atom.GetNeighbors() if nbr.GetAtomicNum() == 8)
+
+
+def _mcs_oxygen_images(ctx) -> dict:
+    """Reactant atom → target atoms it maps to, across every MCS match.
+
+    Cached on ``ctx``. An atom missing from the map is in no embedding.
+    """
+    cached = getattr(ctx, "_mcs_oxygen_images", None)
+    if cached is not None:
+        return cached
+    images: dict = {}
+    reactant = getattr(ctx, "reactant", None)
+    target = getattr(ctx, "target", None)
+    mcs = getattr(ctx, "mcs_mol", None)
+    if reactant is not None and target is not None and mcs is not None:
+        try:
+            n_query = int(mcs.GetNumAtoms())
+        except Exception:
+            n_query = 0
+        if n_query > 0:
+            try:
+                r_matches = reactant.GetSubstructMatches(mcs)
+                t_matches = target.GetSubstructMatches(mcs)
+            except Exception:
+                r_matches, t_matches = (), ()
+            for rm in r_matches:
+                for tm in t_matches:
+                    if len(rm) != len(tm):
+                        continue
+                    for pos, ri in enumerate(rm):
+                        images.setdefault(int(ri), set()).add(int(tm[pos]))
+    if not images:
+        for ri, ti in (getattr(ctx, "r_to_t", None) or {}).items():
+            images.setdefault(int(ri), set()).add(int(ti))
+    try:
+        ctx._mcs_oxygen_images = images
+    except Exception:
+        pass
+    return images
+
+
+def atom_has_enough_oxygens(mol, atom_idx, ctx) -> bool:
+    """True if another oxygen on ``atom_idx`` cannot close a mapped gap.
+
+    Every MCS image of a mapped atom already has at least as many oxygen
+    neighbors. An unmapped atom that already carries an oxygen is also
+    enough: the target did not keep that atom as a place that still needs one.
+    """
+    if mol is None or ctx is None:
+        return False
+    try:
+        idx = int(atom_idx)
+        n_here = _oxygen_neighbor_count(mol, idx)
+    except Exception:
+        return False
+    images = _mcs_oxygen_images(ctx).get(idx)
+    target = getattr(ctx, "target", None)
+    if not images or target is None:
+        return n_here >= 1
+    try:
+        return all(_oxygen_neighbor_count(target, ti) <= n_here for ti in images)
+    except Exception:
+        return False
+
+
 def heavy_formula_equal(mol, target) -> bool:
     return _formula(mol) == _formula(target)
 
