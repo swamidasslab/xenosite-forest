@@ -6,6 +6,8 @@ metabolite the old code emits, and it is not permission to hide a product
 only the new code emits. Sites may differ when `topol_equiv` puts them in
 the same atom class. Order does not matter.
 
+Also give an assessment of whether the divergence is a problem or not, whether it is more or less correct and why, or if it is neutral.
+
 ## Hydroxylation of butylbenzene
 
 The old second pattern writes a carbonyl. Both patterns add OH and remove
