@@ -2180,6 +2180,8 @@ class Epoxidation(ResonanceRule):
 
     The reactant bond is ``=,:``, so an aromatic bond matches on the parent.
     The reaction runs on the cached kekulé parent for that bond.
+
+    NOTE: Downstream epoxidation model only considers carbone-carbon epoxides. Phase 1 model additionally considers carbon-nitrogen.
     """
 
     phase1_sites_on = "bonds"
