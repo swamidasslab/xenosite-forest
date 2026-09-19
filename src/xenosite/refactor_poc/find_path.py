@@ -538,19 +538,34 @@ def _rule_can_cleave(rule):
 
 
 def _atom_ref(mol, idx):
-    """Origin index, or ``added_by`` when this atom was created by a step."""
+    """Origin index, or ``added_by`` when this atom was created by a step.
+
+    ``added_by`` on the record is a transform id (``R1``). The rule name and
+    site are on ``atom_trace["additions"]``.
+    """
 
     atom = mol.GetAtomWithIdx(idx)
     forest = getattr(mol, "_forest", None) or {}
-    records = (forest.get("atom_trace") or {}).get("records") or {}
-    if atom.HasProp("forestLabel"):
-        record = records.get(atom.GetProp("forestLabel")) or {}
-        added = record.get("added_by")
-        if added:
-            rule = added["rule"]
-            name = rule if isinstance(rule, str) else rule.name
-            return AtomRef(added_by=(name, frozenset(added["site"])))
-    return idx
+    trace = forest.get("atom_trace") or {}
+    records = trace.get("records") or {}
+    if not atom.HasProp("forestLabel"):
+        return idx
+    record = records.get(atom.GetProp("forestLabel")) or {}
+    added = record.get("added_by")
+    if not added:
+        return idx
+    if isinstance(added, str):
+        detail = (trace.get("additions") or {}).get(added) or {}
+    else:
+        detail = added
+    name = detail.get("name")
+    if name is None:
+        rule = detail.get("rule")
+        name = rule if isinstance(rule, str) else getattr(rule, "name", None)
+    site = detail.get("site") or ()
+    if name is None:
+        return idx
+    return AtomRef(added_by=(name, frozenset(site)))
 
 
 def _step(mol, rule_name, site):
@@ -659,7 +674,7 @@ def _finish(parent, raw_products, info, counters):
                 continue
             for atom in piece.GetAtoms():
                 atom.SetAtomMapNum(0)
-            forest_trace(parent, piece, info["rule"], info["site"])
+            forest_trace(parent, piece, info)
             ordered, smiles = cannonicalize_order(piece)
             finished.append((ordered, smiles))
     return finished

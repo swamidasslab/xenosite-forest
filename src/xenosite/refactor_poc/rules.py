@@ -14,6 +14,7 @@ from xenosite.refactor_poc.rdkitutil import (
     cannonicalize_order,
     conjugated_systems,
     get_forest,
+    molecule_formula,
     reaction_from_smarts,
     resonance_bond_maps,
     ring_membership,
@@ -25,7 +26,9 @@ from xenosite.refactor_poc.rdkitutil import (
     topol_equiv,
 )
 
-from typing import Any, NamedTuple, TypedDict
+from typing import Any, NamedTuple
+
+from xenosite.refactor_poc.records import Effect, PatternInfo, When
 from collections.abc import Callable, Generator
 
 
@@ -140,7 +143,7 @@ class ReactionRule:
                 if self.is_terminal_rule:
                     set_terminal_product(p)
 
-                forest_trace(mol, p, info["rule"], site)
+                forest_trace(mol, p, info, executed=self)
 
                 p, csmi = cannonicalize_order(p)
 
@@ -197,6 +200,31 @@ def __getattr__(name):
     raise AttributeError("module %r has no attribute %r" % (__name__, name))
 
 
+def formula_delta(before, after):
+    """Change in atom counts and formal charge from ``before`` to ``after``."""
+
+    keys = set(before.get("counts") or {}) | set(after.get("counts") or {})
+    counts = {}
+    for key in keys:
+        delta = (after.get("counts") or {}).get(key, 0) - (
+            before.get("counts") or {}
+        ).get(key, 0)
+        if delta:
+            counts[key] = delta
+    return {
+        "counts": counts,
+        "charge": after.get("charge", 0) - before.get("charge", 0),
+    }
+
+
+def _rule_name(rule):
+    if rule is None:
+        return None
+    if isinstance(rule, str):
+        return rule
+    return getattr(rule, "name", type(rule).__name__)
+
+
 def install_forest(mol):
     """Install the forest data structure in the molecule."""
     forest = mol._forest = get_forest(mol)
@@ -208,8 +236,12 @@ def install_forest(mol):
             "records": {},
             "deletes": {},
             "transforms": [],
+            "additions": {},
+            "formula": molecule_formula(mol),
+            "delta_formula": {},
             "depth": 0,
             "last_tag": 0,
+            "next_transform": 1,
         }
 
         for a in mol.GetAtoms():
@@ -255,9 +287,39 @@ def reordered_forest_labels(mol):
             record["idx"][-1] = i
 
 
-def forest_trace(reactant, product, rule, site):
-    """Trace the forest of the molecule."""
+def _site_tuple(site):
+    if isinstance(site, int):
+        return (site,)
+    return tuple(sorted(site))
 
+
+def _trace_info(info):
+    """Pattern fields worth keeping, without a second copy of the rule object."""
+
+    kept = {}
+    for key, value in info.items():
+        if key == "rule":
+            kept[key] = _rule_name(value)
+        elif key == "rule_chain":
+            kept[key] = tuple(_rule_name(item) for item in value)
+        elif key == "options":
+            continue
+        else:
+            kept[key] = value
+    return kept
+
+
+def forest_trace(reactant, product, info, executed=None):
+    """Record one transform on the product's atom trace.
+
+    A new atom's ``added_by`` is an id such as ``R1``. The site, the rule
+    hierarchy, the resolved effect, and the formula change live once, under
+    ``atom_trace["additions"][id]``. ``depth`` is the reactant index frame
+    the site is written in.
+    """
+
+    rule = info.get("rule")
+    site = info.get("site")
     stamp_forest_labels(reactant)
     forest = get_forest(product, new_structure=True)
     parent_forest = get_forest(reactant)
@@ -266,8 +328,43 @@ def forest_trace(reactant, product, rule, site):
         install_forest(reactant)
 
     trace = copy.deepcopy(parent_forest["atom_trace"])
+    trace.setdefault("additions", {})
+    trace.setdefault("delta_formula", {})
+    trace.setdefault("transforms", [])
+    trace.setdefault("next_transform", 1)
+
+    number = trace["next_transform"]
+    trace["next_transform"] = number + 1
+    transform_id = "R%d" % number
 
     depth = trace["depth"] = trace["depth"] + 1
+    frame = depth - 1
+    chain = []
+    for item in tuple(info.get("rule_chain") or ()) + (
+        (executed,) if executed is not None else ()
+    ):
+        if item is rule or not isinstance(item, ReactionRule):
+            continue
+        if any(item is seen for seen in chain):
+            continue
+        chain.append(item)
+    if isinstance(rule, ReactionRule) and all(rule is not seen for seen in chain):
+        chain.append(rule)
+
+    before = trace.get("formula") or molecule_formula(reactant)
+    after = molecule_formula(product)
+    trace["formula"] = after
+    trace["delta_formula"][transform_id] = formula_delta(before, after)
+    trace["additions"][transform_id] = {
+        "site": _site_tuple(site),
+        "rules": tuple(chain),
+        "info": _trace_info(info),
+        "effect": dict(info.get("options") or {}),
+        "name": _rule_name(rule),
+        "phase1": info.get("phase1"),
+        "depth": frame,
+    }
+    trace["transforms"].append(transform_id)
 
     records = trace["records"]
     new_records = {}
@@ -285,12 +382,12 @@ def forest_trace(reactant, product, rule, site):
             new_records[str(tag)] = {
                 "idx": [product_idx],
                 "depth": [depth],
-                "added_by": {"rule": rule, "site": site, "depth": depth - 1},
+                "added_by": transform_id,
             }
             product_atom.SetProp("forestLabel", str(tag))
 
     for tag, record in records.items():
-        record["removed_by"] = (rule, site)
+        record["removed_by"] = transform_id
         trace["deletes"][tag] = record
 
     trace["records"] = new_records
@@ -298,59 +395,6 @@ def forest_trace(reactant, product, rule, site):
     product._forest["atom_trace"] = trace
 
     return trace
-
-
-class When(TypedDict, total=False):
-    """Constraint that picks one branch of a SMARTS OR once atoms are known."""
-
-    map: int
-    z: int
-    h: int
-
-
-class Effect(TypedDict, total=False):
-    """One concrete outcome.
-
-    Declared on a possibility, then filled in from the matched atoms:
-    ``symbol`` / ``h`` / ``site_aromatic`` are the site atom;
-    ``partner`` / ``partner_h`` are the atom the SMARTS OR was ambiguous about.
-    """
-
-    adds: str
-    removes: str
-    cleaves: bool
-    dearomatizes: bool
-    methide: bool
-    needs: str
-    partner: str
-    partner_h: int
-    symbol: str
-    h: int
-    site_aromatic: bool
-    when: When
-
-
-class PatternInfo(TypedDict, total=False):
-    """What a SMARTS pattern can do, and how to apply it.
-
-    ``filter_rules(rule, info)`` sees this whole object, before any match.
-    ``possibilities`` is every branch the SMARTS OR allows. ``span`` collapses
-    that list: a bare value means every branch agrees, a tuple means the
-    site has not chosen yet.
-
-    ``filter_sites(site, info)`` sees one resolved :class:`Effect` in
-    ``info["options"]``. Pair rules also set ``info["ends"]`` to the effect
-    at each end, so a merged ``adds`` / ``removes`` string is not the only
-    record of which end did what.
-
-    ``edit`` / ``site_map`` / ``skip_same_rings`` are mechanism, not chemistry.
-    """
-
-    possibilities: tuple[Effect, ...]
-    span: dict[str, Any]
-    edit: str
-    site_map: int
-    skip_same_rings: bool
 
 
 _EFFECT_DEFAULTS = {

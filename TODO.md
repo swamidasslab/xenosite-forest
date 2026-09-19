@@ -3,7 +3,7 @@
 - refactor_poc search: NDealkylation hard pairs (macrocycle, bis-N-dealk dialdehyde) stay skipped until that class is in the catalog
 - refactor_poc PhaseOne omits forest rules with no class in rules.py yet: NDealkylation, Tautomerization, AzoSplitting, BenzodioxoleReduction, NitroaromaticReduction, ThiopheneSulfurOxidation, conjugations
 - Hydrogenation conjugated path-flips (old pair-path bond swap) are not in refactor_poc; SMARTS cover C#C and C=C only
-- refactor_poc: recover phase I steps from `_forest` traces (rule objects are already stored)
+- refactor_poc: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)
 - refactor_poc search: consult `src/xenosite/refactor_poc/HEURISTICS.md` before changing find_path or explaining a miss
 - Guided `and_cleave_plan` SMARTS: optional per-SMARTS flags naming atoms made dirty on match, so match-before/after deps are less leaky (fewer false precedes; less rely on apply-replay)
 - Rank ``PathOutcome`` hits by likelihood via ``xenosite-predict`` using cleavage-side bags (without enumerating side reactions) — not this pass
