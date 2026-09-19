@@ -11,7 +11,7 @@ def test_tracker():
     reactant = "CC"
     product = "OCCO"
     depth = 2
-    correct_phase1_sites = (frozenset({"1.h"}), frozenset({"3.h"}))
+    correct_phase1_sites = (frozenset({0}), frozenset({2}))
 
 
     result = list(

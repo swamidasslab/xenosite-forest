@@ -187,9 +187,9 @@ Two scales. Mixing them is the confusing part.
 
 | Scale | What | Values |
 | --- | --- | --- |
-| **Atom number** (public) | `AtomTrace`, SMILES `:N`, `GetAtomMapNum()`, Phase I `1.h` | **1-based.** `0` on a map number means unmapped / new, not atom zero. |
+| **Atom number** (public) | `AtomTrace`, SMILES `:N`, `GetAtomMapNum()` | **1-based.** `0` on a map number means unmapped / new, not atom zero. Map numbers cannot be 0-based. |
 | **Depth / step** | `t.depths`, `map(start_depth=0)`, reaction count | **0-based.** Depth 0 is the original reactant. These are not atom numbers. |
-| **RDKit index** (internal only) | `GetIdx()`, `react_atom_idx`, `current_idx`, `ATOM_INDEX_PATHS` | **0-based.** Never export. |
+| **Atom index** | `GetIdx()`, `phase1=True` sites, `AtomRef.origin` | **0-based.** |
 
 Convert with `xenosite.forest.trace.atom_no` (GetIdx → atom number) and `rdkit_idx` (atom number → GetIdx).
 
@@ -230,14 +230,14 @@ smiles, steps, mols = next(
     bfs(["CCO", "C=CO"], ruleset="PhaseOneRS", depth=1, phase1=True)
 )
 print(smiles)  # product SMILES
-print(steps)   # [(rule_name, site_strings), ...]
+print(steps)   # [(rule_name, site), ...]  site is 0-based atom indexes
 ```
 
 With one molecule, `bfs` enumerates metabolites of that reactant. With two, it searches for a path from the first to the second. `depth` is the maximum number of sequential reactions. `dfs(...)` is the same API with depth-first order (better for sampling a few deep pathways). CLI: `--search dfs`.
 
 Optional shared knobs: `max_paths=N` stops after N yields (default unlimited); `shuffle_rng=random.Random(seed)` randomizes frontier / reaction / product order on both BFS and DFS.
 
-`phase1=True` formats sites as Phase I strings (for example `1.h` or `2.3`) instead of frozensets of atom indices.
+`phase1=True` reports sites as 0-based atom indexes, the same scale as `GetIdx()`. Without the flag, sites are those same indexes.
 
 Star conjugate adducts (`*` dummies from Phase II) are **not** metabolized further by default. Pass `expand_star_conjugates=True` (CLI: `--expand-star-conjugates`) to allow depth>1 expansion of those products.
 

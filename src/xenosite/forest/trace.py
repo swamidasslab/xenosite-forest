@@ -1,14 +1,19 @@
 """Public 1-based atom tracing for tagged metabolites.
 
-Atom numbers (``AtomTrace``, SMILES ``:N``, ``GetAtomMapNum()``, Phase I
-``1.h``) are **1-based**. ``0`` on a map number means unmapped / new, not atom
-zero.
+Atom numbers (``AtomTrace``, SMILES ``:N``, ``GetAtomMapNum()``) are
+**1-based**. ``0`` on a map number means unmapped / new, not atom zero.
+That is why map numbers are not 0-based: the first atom would be
+indistinguishable from "no map".
+
+``phase1=True`` sites are **0-based** atom indexes, the same scale as
+``GetIdx()``.
 
 Depths (``t.depths``, ``map(start_depth=0)``, reaction count) are **0-based**.
 Depth 0 is the original reactant. These are not atom numbers.
 
-RDKit ``GetIdx()`` is internal and 0-based. Convert with :func:`atom_no` and
-:func:`rdkit_idx` only; do not call a 1-based value ``idx``.
+RDKit ``GetIdx()`` is 0-based. Convert with :func:`atom_no` and
+:func:`rdkit_idx` only when crossing to a map number; do not call a 1-based
+value ``idx``.
 """
 
 from __future__ import annotations
