@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Forest states are classes on the local RDKit mol. `NoTracingMol` means `atom_trace` is absent and does not say whether `_forest` exists. `NoForestMol` is a `NoTracingMol` with `_forest` none, because a missing forest has no trace. `ForestNoTracingMol` is both `NoTracingMol` and `ForestMol`. `ForestTracingMol` is a `ForestMol` only. Constructors that do not copy `_forest` return `NoForestMol`. `ensure_forest` and `ensure_tracing` install in place and do not reset depth.
+
+## 2026-09-19
+
 - Glutathionation calls ConjugationRule. Styrene oxide with `as_star` false matches the old library as `NC(CCC(=O)NC(CSC(CO)c1ccccc1)C(=O)NCC(=O)O)C(=O)O`. A filter skips the carbon-chlorine site on epichlorohydrin by reading `partner`. Ring carbons are separate patterns so a second opening is not one embedding of the three ring atoms.
 
 ## 2026-09-19
