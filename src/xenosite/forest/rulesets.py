@@ -66,11 +66,12 @@ def unique_rulenames(ruleset):
 class Phase1Site(object):
     def __init__(self,
                  sdf_site_fields=['DH', 'HD', 'RD', 'SO', 'UO'],
-                 index_root=1,
+                 index_root=0,
                  strict=False,
                  *args,
                  **kwargs):
-        # Site strings are 1-based atom numbers, same scale as AtomTrace / SMILES maps.
+        # Sites are 0-based atom indexes (GetIdx). ``index_root`` only shifts
+        # SDF annotations that were stored on another scale; the default is no shift.
 
         self.index_root = index_root
         self.strict = strict
@@ -143,12 +144,12 @@ class Phase1Site(object):
         return outsites
 
     def atom_hydrogen_sites(self, site):
-        return frozenset(["%d.h" % s for s in site])
+        return frozenset(int(s) for s in site)
 
     def atoms_sites(self, site):
         if self.strict:
             assert len(site) == 1
-        return frozenset(["%d.%d" % (s, s) for s in site])
+        return frozenset(int(s) for s in site)
 
     def bonds_sites(self, site):
         try:
@@ -159,7 +160,7 @@ class Phase1Site(object):
                 raise
             else:
                 return site
-        return frozenset(["%d.%d" % tuple(site)])
+        return frozenset(int(s) for s in site)
 
 
 class RuleSet(Phase1Site, ReactionRule):
@@ -174,7 +175,7 @@ class RuleSet(Phase1Site, ReactionRule):
     >>> [name for name, site in path]
     ['Hydroxylation', 'Hydroxylation']
     >>> [sorted(site) for name, site in path]
-    [['1.h'], ['3.h']]
+    [[0], [2]]
 
     >>> reactant = Chem.MolFromSmiles("OC=CC=CC=CC=CN")
     >>> product = Chem.MolFromSmiles('N=CC=CC=CC=CC=O')
@@ -182,13 +183,13 @@ class RuleSet(Phase1Site, ReactionRule):
     >>> path[0][0]
     'Dehydrogenation'
     >>> sorted(path[0][1])
-    ['1.h', '10.h']
+    [0, 9]
 
     >>> reactant = Chem.MolFromSmiles("C=C")
     >>> product = Chem.MolFromSmiles('C1OC1')
     >>> smi, path, rdmols = next(StableOxygenationRS.find_path(reactant, product, phase1=True))
     >>> path[0][0], sorted(path[0][1])
-    ('Epoxidation', ['1.2'])
+    ('Epoxidation', [0, 1])
 
 
    """

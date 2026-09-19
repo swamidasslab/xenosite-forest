@@ -150,7 +150,7 @@ def main(argv=None):
         "-e",
         "--phase1",
         action="store_true",
-        help="Format sites as Phase I strings instead of frozensets.",
+        help="Report sites as 0-based atom indexes.",
     )
     parser.add_argument(
         "-m",

@@ -38,7 +38,7 @@ def test_dehydrogenation():
 
     cmp_pathway(
         result,
-        ("C=CO", [("Dehydrogenation", {"1.h", "2.h"})], ["CCO", "C=CO"]),
+        ("C=CO", [("Dehydrogenation", {0, 1})], ["CCO", "C=CO"]),
     )
 
 
@@ -47,7 +47,7 @@ def test_dealkylation1():
 
     cmp_pathway(
         result,
-        ("CCO", [("Dealkylation", {"2.3"})], ["CCN", "CCO"]),
+        ("CCO", [("Dealkylation", {1, 2})], ["CCN", "CCO"]),
     )
 
 
@@ -56,7 +56,7 @@ def test_dehydration1():
 
     cmp_pathway(
         result,
-        ("CC", [("Dehydration", {"2.3"})], ["CCO", "CC"]),
+        ("CC", [("Dehydration", {1, 2})], ["CCO", "CC"]),
     )
 
 
@@ -65,7 +65,7 @@ def test_dehydrogenation1():
 
     cmp_pathway(
         result,
-        ("C=CO", [("Dehydrogenation", {"2.h", "1.h"})], ["CCO", "C=CO"]),
+        ("C=CO", [("Dehydrogenation", {0, 1})], ["CCO", "C=CO"]),
     )
 
 
@@ -74,7 +74,7 @@ def test_dephosphorylation1():
 
     cmp_pathway(
         result,
-        ("CO", [("Dephosphorylation", {"2.3"})], ["COP(=O)(O)O", "CO"]),
+        ("CO", [("Dephosphorylation", {1, 2})], ["COP(=O)(O)O", "CO"]),
     )
 
 
@@ -83,7 +83,7 @@ def test_epoxidation1():
 
     cmp_pathway(
         result,
-        ("C1CO1", [("Epoxidation", {"1.2"})], ["C=C", "C1CO1"]),
+        ("C1CO1", [("Epoxidation", {0, 1})], ["C=C", "C1CO1"]),
     )
 
 
@@ -92,7 +92,7 @@ def test_epoxidation_opening1():
 
     cmp_pathway(
         result,
-        ("CCO", [("EpoxideOpening", {"1.2"})], ["C1CO1", "CCO"]),
+        ("CCO", [("EpoxideOpening", {0, 1})], ["C1CO1", "CCO"]),
     )
 
 
@@ -101,7 +101,7 @@ def test_hydrogenation1():
 
     cmp_pathway(
         result,
-        ("CCO", [("Hydrogenation", {"2.2", "3.3"})], ["CC=O", "CCO"]),
+        ("CCO", [("Hydrogenation", {1, 2})], ["CC=O", "CCO"]),
     )
 
 
@@ -110,7 +110,7 @@ def test_hydroxylation1():
 
     cmp_pathway(
         result,
-        ("CCO", [("Hydroxylation", {"1.h"})], ["CC", "CCO"]),
+        ("CCO", [("Hydroxylation", {0})], ["CC", "CCO"]),
     )
 
 
@@ -119,7 +119,7 @@ def test_hydrolysis1():
 
     cmp_pathway(
         result,
-        ("CC=O", [("Hydrolysis", {"2.3"})], ["O=C(O)C", "CC=O"]),
+        ("CC=O", [("Hydrolysis", {1, 2})], ["O=C(O)C", "CC=O"]),
     )
 
 
@@ -128,7 +128,7 @@ def test_nitrogen_oxidation1():
 
     cmp_pathway(
         result,
-        ("CCNO", [("NitrogenOxidation", {"3.3"})], ["CCN", "CCNO"]),
+        ("CCNO", [("NitrogenOxidation", {2})], ["CCN", "CCNO"]),
     )
 
 
@@ -137,7 +137,7 @@ def test_dehydration2():
 
     cmp_pathway(
         result,
-        ("CCN", [("Dehydration", {"3.4"})], ["CCNO", "CCN"]),
+        ("CCN", [("Dehydration", {2, 3})], ["CCNO", "CCN"]),
     )
 
 
@@ -156,7 +156,7 @@ def test_nitrogen_reduction1():
         result,
         (
             "O=Nc1ccc(C=NN2CC(=O)NC2=O)o1",
-            [("NitrogenReduction", {"1.2"})],
+            [("NitrogenReduction", {0, 1})],
             [
                 "O=C1CN(N=CC2=CC=C([N+](=O)[O-])O2)C(=O)N1",
                 "O=Nc1ccc(C=NN2CC(=O)NC2=O)o1",
@@ -170,7 +170,7 @@ def test_hydrogenation2():
 
     cmp_pathway(
         result,
-        ("CCO", [("Hydrogenation", {"2.2", "3.3"})], ["CC=O", "CCO"]),
+        ("CCO", [("Hydrogenation", {1, 2})], ["CC=O", "CCO"]),
     )
 
 
@@ -179,7 +179,7 @@ def test_oxidative_dehalogenation():
 
     cmp_pathway(
         result,
-        ("CCO", [("OxidativeDehalogenation", {"2.3"})], ["CCCl", "CCO"]),
+        ("CCO", [("OxidativeDehalogenation", {1, 2})], ["CCCl", "CCO"]),
     )
 
 
@@ -188,7 +188,7 @@ def test_reductive_dehalogenation():
 
     cmp_pathway(
         result,
-        ("CC", [("ReductiveDehalogenation", {"2.3"})], ["CCCl", "CC"]),
+        ("CC", [("ReductiveDehalogenation", {1, 2})], ["CCCl", "CC"]),
     )
 
 
@@ -197,7 +197,7 @@ def test_sulfur_oxidation():
 
     cmp_pathway(
         result,
-        ("CCSO", [("SulfurOxidation", {"3.3"})], ["CCS", "CCSO"]),
+        ("CCSO", [("SulfurOxidation", {2})], ["CCS", "CCSO"]),
     )
 
 
@@ -206,7 +206,7 @@ def test_sulfer_reduction():
 
     cmp_pathway(
         result,
-        ("CCS", [("SulfurReduction", {"3.4"})], ["CCSO", "CCS"]),
+        ("CCS", [("SulfurReduction", {2, 3})], ["CCSO", "CCS"]),
     )
 
 

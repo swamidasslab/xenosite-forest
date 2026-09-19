@@ -54,54 +54,54 @@ SulfurReduction bonds
 
 >>> from xenosite.forest.bfs import bfs
 >>> next(bfs(['CCN','CCO'],phase1=True,outmols=False))
-"(['CCN', 'CCO'], [('Dealkylation', frozenset({'2.3'}))])"
+"(['CCN', 'CCO'], [('Dealkylation', frozenset({1, 2}))])"
 
 >>> next(bfs(['CCO','CC'],phase1=True,outmols=False))
-"(['CCO', 'CC'], [('Dehydration', frozenset({'2.3'}))])"
+"(['CCO', 'CC'], [('Dehydration', frozenset({1, 2}))])"
 
 # >>> next(bfs(['CCO','C=CO'],phase1=True,outmols=False))
-# "(['CCO', 'C=CO'], [('Dehydrogenation', frozenset({'2.h', '1.h'}))])"
+# "(['CCO', 'C=CO'], [('Dehydrogenation', frozenset({0, 1}))])"
 
 >>> next(bfs(['COP(=O)(O)O','CO'],phase1=True,outmols=False))
-"(['COP(=O)(O)O', 'CO'], [('Dephosphorylation', frozenset({'2.3'}))])"
+"(['COP(=O)(O)O', 'CO'], [('Dephosphorylation', frozenset({1, 2}))])"
 
 >>> next(bfs(['C=C','C1OC1'],phase1=True,outmols=False))
-"(['C=C', 'C1CO1'], [('Epoxidation', frozenset({'1.2'}))])"
+"(['C=C', 'C1CO1'], [('Epoxidation', frozenset({0, 1}))])"
 
 >>> next(bfs(['C1OC1','CCO'],phase1=True,outmols=False))
-"(['C1CO1', 'CCO'], [('EpoxideOpening', frozenset({'1.2'}))])"
+"(['C1CO1', 'CCO'], [('EpoxideOpening', frozenset({0, 1}))])"
 
 # >>> next(bfs(['C=CO','CCO'],phase1=True,outmols=False))
-# "(['C=CO', 'CCO'], [('Hydrogenation', frozenset({'2.2', '1.1'}))])"
+# "(['C=CO', 'CCO'], [('Hydrogenation', frozenset({0, 1}))])"
 
 >>> next(bfs(['CC','CCO'],phase1=True,outmols=False))
-"(['CC', 'CCO'], [('Hydroxylation', frozenset({'1.h'}))])"
+"(['CC', 'CCO'], [('Hydroxylation', frozenset({0}))])"
 
 >>> next(bfs(['O=C(O)C','CC=O'],phase1=True,outmols=False))
-"(['CC(=O)O', 'CC=O'], [('Hydrolysis', frozenset({'2.3'}))])"
+"(['CC(=O)O', 'CC=O'], [('Hydrolysis', frozenset({1, 2}))])"
 
 >>> next(bfs(['CCN','CCNO'],phase1=True,outmols=False))
-"(['CCN', 'CCNO'], [('NitrogenOxidation', frozenset({'3.3'}))])"
+"(['CCN', 'CCNO'], [('NitrogenOxidation', frozenset({2}))])"
 
 >>> next(bfs(['CCNO','CCN'],phase1=True,outmols=False))
-"(['CCNO', 'CCN'], [('Dehydration', frozenset({'3.4'}))])"
+"(['CCNO', 'CCN'], [('Dehydration', frozenset({2, 3}))])"
 >>> next(bfs(['[O-]-[N+](C1=CC=C(O1)C=NN2C(=O)NC(=O)C2)=O','N(C1=CC=C(O1)C=NN2C(=O)NC(=O)C2)=O'],phase1=True,outmols=False))
-"(['O=C1CN(N=CC2=CC=C([N+](=O)[O-])O2)C(=O)N1', 'O=Nc1ccc(C=NN2CC(=O)NC2=O)o1'], [('NitrogenReduction', frozenset({'1.2'}))])"
+"(['O=C1CN(N=CC2=CC=C([N+](=O)[O-])O2)C(=O)N1', 'O=Nc1ccc(C=NN2CC(=O)NC2=O)o1'], [('NitrogenReduction', frozenset({0, 1}))])"
 
 >>> next(bfs(['CC=O','CCO'],phase1=True,outmols=False)) # doctest: +SKIP
-"(['CC=O', 'CCO'], [('Hydrogenation', frozenset({'2.2', '3.3'}))])"
+"(['CC=O', 'CCO'], [('Hydrogenation', frozenset({1, 2}))])"
 
 >>> next(bfs(['CCCl','CCO'],phase1=True,outmols=False))
-"(['CCCl', 'CCO'], [('OxidativeDehalogenation', frozenset({'2.3'}))])"
+"(['CCCl', 'CCO'], [('OxidativeDehalogenation', frozenset({1, 2}))])"
 
 >>> next(bfs(['CCCl','CC'],phase1=True,outmols=False))
-"(['CCCl', 'CC'], [('ReductiveDehalogenation', frozenset({'2.3'}))])"
+"(['CCCl', 'CC'], [('ReductiveDehalogenation', frozenset({1, 2}))])"
 
 >>> next(bfs(['CCS','CCSO'],phase1=True,outmols=False))
-"(['CCS', 'CCSO'], [('SulfurOxidation', frozenset({'3.3'}))])"
+"(['CCS', 'CCSO'], [('SulfurOxidation', frozenset({2}))])"
 
 >>> next(bfs(['CCSO','CCS'],phase1=True,outmols=False))
-"(['CCSO', 'CCS'], [('SulfurReduction', frozenset({'3.4'}))])"
+"(['CCSO', 'CCS'], [('SulfurReduction', frozenset({2, 3}))])"
 
 """
 
