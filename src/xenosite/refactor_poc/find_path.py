@@ -20,6 +20,7 @@ from xenosite.refactor_poc.rdkitutil import (
     cannonicalize_order,
     canon_smiles,
     copy_mol,
+    is_tracing,
     mcs_matches,
     mcs_target_matches,
     sanitize_catch,
@@ -553,17 +554,19 @@ def _atom_ref(mol: Mol, idx):
     """
 
     atom = mol.GetAtomWithIdx(idx)
-    forest = getattr(mol, "_forest", None) or {}
-    trace = forest.get("atom_trace") or {}
-    records = trace.get("records") or {}
-    if not atom.HasProp("forestLabel"):
+    if not is_tracing(mol) or not atom.HasProp("forestLabel"):
         return idx
-    record = records.get(atom.GetProp("forestLabel")) or {}
+    trace = mol._forest["atom_trace"]
+    record = trace["records"].get(atom.GetProp("forestLabel"))
+    if record is None:
+        return idx
     added = record.get("added_by")
     if not added:
         return idx
     if isinstance(added, str):
-        detail = (trace.get("additions") or {}).get(added) or {}
+        detail = trace["additions"].get(added)
+        if detail is None:
+            return idx
     else:
         detail = added
     name = detail.get("name")
@@ -571,6 +574,8 @@ def _atom_ref(mol: Mol, idx):
         rule = detail.get("rule")
         name = rule if isinstance(rule, str) else getattr(rule, "name", None)
     site = detail.get("site") or ()
+    if isinstance(site, int):
+        site = (site,)
     if name is None:
         return idx
     return AtomRef(added_by=(name, frozenset(site)))

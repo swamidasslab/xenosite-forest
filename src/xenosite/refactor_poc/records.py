@@ -151,6 +151,23 @@ class AtomTrace(TypedDict, total=False):
     next_transform: int
 
 
+class InitializedAtomTrace(TypedDict):
+    """The ``atom_trace`` dict ``install_forest`` writes.
+
+    Same fields as :class:`AtomTrace`. Every key is present. Not a second schema.
+    """
+
+    records: dict[str, AtomRecord]
+    deletes: dict[str, AtomRecord]
+    transforms: list[str]
+    additions: dict[str, TraceAddition]
+    formula: Formula
+    delta_formula: dict[str, Formula]
+    depth: int
+    last_tag: int
+    next_transform: int
+
+
 class KekuleParents(TypedDict, total=False):
     """Partial kekulé parents. Helpers fill this dict. A rule stores it.
 
@@ -208,3 +225,17 @@ class Forest(TypedDict, total=False):
     structure: Structure
     atom_trace: AtomTrace
     is_terminal_product: bool
+
+
+class UntracedForest(TypedDict, total=False):
+    """A forest with no ``atom_trace`` key. ``structure`` is filled in when needed."""
+
+    structure: Structure
+    is_terminal_product: bool
+
+
+class TracingForest(TypedDict):
+    """A forest whose trace is initialized. Same keys :class:`InitializedAtomTrace` names."""
+
+    structure: Structure
+    atom_trace: InitializedAtomTrace

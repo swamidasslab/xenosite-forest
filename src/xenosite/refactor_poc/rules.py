@@ -9,13 +9,15 @@ import copy
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
     BondType,
+    ForestMol,
+    ForestTracingMol,
     Mol,
     aromatic_systems,
     cannonicalize_order,
     conjugated_systems,
     copy_mol,
+    ensure_forest,
     ensure_kekule_parents,
-    get_forest,
     molecule_formula,
     parent_for_bond,
     parents_for_ends,
@@ -33,14 +35,24 @@ from xenosite.refactor_poc.rdkitutil import (
 
 from typing import Any, NamedTuple, cast
 
-from xenosite.refactor_poc.records import Effect, KekuleParents, PatternInfo, When
+from xenosite.refactor_poc.records import (
+    AtomTrace,
+    Effect,
+    Forest,
+    Formula,
+    InitializedAtomTrace,
+    KekuleParents,
+    PatternInfo,
+    TraceAddition,
+    When,
+)
 from collections.abc import Callable, Generator
 
 
-def set_terminal_product(mol, value=True):
-    forest = get_forest(mol)
-    forest["is_terminal_product"] = value
-    return mol
+def set_terminal_product(mol: Mol, value: bool = True) -> ForestMol:
+    held = ensure_forest(mol)
+    held._forest["is_terminal_product"] = value
+    return held
 
 
 class ProductsOfReaction(NamedTuple):
@@ -147,12 +159,10 @@ class ReactionRule:
         assert mol is not None
         # The caller's chemistry is not edited. A mol with no trace gets one,
         # at its current depth, so products can sit one step below it.
-        if getattr(mol, "_forest", None) is None or "atom_trace" not in mol._forest:
-            install_forest(mol)
-        parent_depth = mol._forest["atom_trace"]["depth"]
+        parent = ensure_tracing(mol)
+        parent_depth = parent._forest["atom_trace"]["depth"]
         # Matching, map clearing, and forest stamps happen on a copy.
-        mol = _work_copy(mol)
-        install_forest(mol)
+        mol = ensure_tracing(_work_copy(mol))
 
         if self.is_terminal_product(mol):
             return
@@ -207,11 +217,11 @@ class ReactionRule:
     def is_terminal_product(self, mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search."""
 
-        forest = cast(dict[str, Any], get_forest(mol))
-        if "is_terminal_product" in forest["structure"]:
-            return forest["structure"]["is_terminal_product"]
-
-        return False
+        forest = ensure_forest(mol)._forest
+        structure = forest.get("structure")
+        if not structure or "is_terminal_product" not in structure:
+            return False
+        return structure["is_terminal_product"]
 
     def metabolites(
         self,
@@ -259,7 +269,7 @@ def __getattr__(name):
     raise AttributeError("module %r has no attribute %r" % (__name__, name))
 
 
-def formula_delta(before, after):
+def formula_delta(before: Formula, after: Formula) -> Formula:
     """Change in atom counts and formal charge from ``before`` to ``after``."""
 
     keys = set(before.get("counts") or {}) | set(after.get("counts") or {})
@@ -290,55 +300,62 @@ def _work_copy(mol):
     return copy_mol(mol)
 
 
-def install_forest(mol):
-    """Install the forest data structure in the molecule."""
-    forest = mol._forest = get_forest(mol)
+def ensure_tracing(mol: Mol) -> ForestTracingMol:
+    """Forest is present and the trace is initialized. Does not reset depth.
 
-    forest["structure"] = forest.get("structure", {})
+    A missing trace is started the way :func:`install_forest` always has.
+    An existing trace, including its depth, is left in place.
+    """
 
+    held = ensure_forest(mol)
+    forest = held._forest
+    if "structure" not in forest:
+        forest["structure"] = {}
     if "atom_trace" not in forest:
-        forest["atom_trace"] = {
+        trace: InitializedAtomTrace = {
             "records": {},
             "deletes": {},
             "transforms": [],
             "additions": {},
-            "formula": molecule_formula(mol),
+            "formula": molecule_formula(held),
             "delta_formula": {},
             "depth": 0,
             "last_tag": 0,
             "next_transform": 1,
         }
-
-        for a in mol.GetAtoms():
+        forest["atom_trace"] = cast(AtomTrace, trace)
+        for a in held.GetAtoms():
             if a.GetAtomicNum() != 1:
                 i = a.GetIdx()
-                forest["atom_trace"]["records"][str(i)] = {
+                trace["records"][str(i)] = {
                     "idx": [i],
                     "depth": [0],
                 }
-
-                forest["atom_trace"]["last_tag"] = i
-
-    stamp_forest_labels(mol)
-
-    return forest
+                trace["last_tag"] = i
+    _write_forest_labels(cast(ForestTracingMol, held))
+    return cast(ForestTracingMol, held)
 
 
-def stamp_forest_labels(mol):
-    forest = cast(dict[str, Any], get_forest(mol))
-    if "atom_trace" not in forest:
-        install_forest(mol)
+def install_forest(mol: Mol) -> Forest:
+    """Install the forest data structure in the molecule."""
 
-    for tag, record in forest["atom_trace"]["records"].items():
-        i = record["idx"][-1]
-        atom = mol.GetAtomWithIdx(i)
-        atom.SetProp("forestLabel", tag)
-
-    return mol
+    return cast(Forest, ensure_tracing(mol)._forest)
 
 
-def reordered_forest_labels(mol):
-    forest = cast(dict[str, Any], get_forest(mol))
+def _write_forest_labels(mol: ForestTracingMol) -> None:
+    for tag, record in mol._forest["atom_trace"]["records"].items():
+        idx = record.get("idx")
+        if not idx:
+            raise KeyError("idx")
+        mol.GetAtomWithIdx(idx[-1]).SetProp("forestLabel", tag)
+
+
+def stamp_forest_labels(mol: Mol) -> ForestTracingMol:
+    return ensure_tracing(mol)
+
+
+def reordered_forest_labels(mol: ForestTracingMol) -> None:
+    trace = mol._forest["atom_trace"]
     # if "atom_trace" not in forest:
     #     install_forest(mol)
 
@@ -348,8 +365,11 @@ def reordered_forest_labels(mol):
         if atom.GetAtomicNum() != 1:
             assert atom.HasProp("forestLabel")
             tag = atom.GetProp("forestLabel")
-            record = forest["atom_trace"]["records"][tag]
-            record["idx"][-1] = i
+            record = trace["records"][tag]
+            idx = record.get("idx")
+            if not idx:
+                raise KeyError("idx")
+            idx[-1] = i
 
 
 def _site_tuple(site):
@@ -385,14 +405,9 @@ def forest_trace(reactant, product, info, executed=None):
 
     rule = info.get("rule")
     site = info.get("site")
-    stamp_forest_labels(reactant)
-    forest = get_forest(product, new_structure=True)
-    parent_forest = cast(dict[str, Any], get_forest(reactant))
-
-    if "atom_trace" not in parent_forest:
-        install_forest(reactant)
-
-    trace = copy.deepcopy(parent_forest["atom_trace"])
+    parent = stamp_forest_labels(reactant)
+    product = ensure_forest(product)
+    trace = copy.deepcopy(parent._forest["atom_trace"])
     trace.setdefault("additions", {})
     trace.setdefault("delta_formula", {})
     trace.setdefault("transforms", [])
@@ -420,15 +435,18 @@ def forest_trace(reactant, product, info, executed=None):
     after = molecule_formula(product)
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
-    trace["additions"][transform_id] = {
-        "site": _site_tuple(site),
-        "rules": tuple(chain),
-        "info": _trace_info(info),
-        "effect": dict(info.get("options") or {}),
-        "name": _rule_name(rule),
-        "phase1": info.get("phase1"),
-        "depth": frame,
-    }
+    trace["additions"][transform_id] = cast(
+        TraceAddition,
+        {
+            "site": _site_tuple(site),
+            "rules": tuple(chain),
+            "info": _trace_info(info),
+            "effect": dict(info.get("options") or {}),
+            "name": _rule_name(rule),
+            "phase1": info.get("phase1"),
+            "depth": frame,
+        },
+    )
     trace["transforms"].append(transform_id)
 
     records = trace["records"]
@@ -457,7 +475,7 @@ def forest_trace(reactant, product, info, executed=None):
 
     trace["records"] = new_records
 
-    product._forest["atom_trace"] = trace
+    product._forest["atom_trace"] = cast(AtomTrace, trace)
 
     return trace
 
@@ -1192,7 +1210,7 @@ def _site_atoms(mapped, info):
 def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
-    forest = get_forest(mol)
+    forest = ensure_forest(mol)._forest
     if "structure" not in forest:
         raise KeyError("structure")
     structure = forest["structure"]

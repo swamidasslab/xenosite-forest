@@ -2,6 +2,9 @@
 
 The ``TYPE_CHECKING`` branch is the type of those names. ``Mol._forest`` is
 declared there and is not assigned, so molecules do not share one forest.
+A constructor returns :class:`NoForestMol` when the object it builds has no
+``_forest``. RDKit copies do not keep that attribute. A function that hands
+back a molecule the caller already owned keeps that molecule's type.
 At runtime the same names are the real RDKit objects.
 
 Argument lists are the C++ signatures Boost printed when each used function
@@ -16,7 +19,7 @@ from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Literal, overload
 
 if TYPE_CHECKING:
-    from xenosite.refactor_poc.records import Forest
+    from xenosite.refactor_poc.records import Forest, TracingForest, UntracedForest
 
     class BondType:
         SINGLE: BondType
@@ -69,6 +72,9 @@ if TYPE_CHECKING:
     class Mol:
         _forest: None | Forest
 
+        def __new__(
+            cls, mol: Mol, quickCopy: bool = False, confId: int = -1
+        ) -> NoForestMol: ...
         def __init__(
             self, mol: Mol, quickCopy: bool = False, confId: int = -1
         ) -> None: ...
@@ -90,7 +96,34 @@ if TYPE_CHECKING:
             maxMatches: int = 1000,
         ) -> tuple[tuple[int, ...], ...]: ...
 
-    class RWMol(Mol):
+    class NoTracingMol(Mol):
+        """``atom_trace`` is absent. This does not say whether ``_forest`` exists."""
+
+        # Instance attributes are invariant. These states are narrower on purpose.
+        _forest: None | UntracedForest  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    class ForestMol(Mol):
+        """``_forest`` is present. The trace may or may not be."""
+
+        _forest: Forest  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    class NoForestMol(NoTracingMol):
+        """No ``_forest``. A missing forest has no trace."""
+
+        _forest: None  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    class ForestNoTracingMol(NoTracingMol, ForestMol):
+        """``_forest`` is present and ``atom_trace`` is absent."""
+
+        _forest: UntracedForest  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    class ForestTracingMol(ForestMol):
+        """``_forest`` is present and ``atom_trace`` is initialized."""
+
+        _forest: TracingForest  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    class RWMol(NoForestMol):
+        def __new__(cls, m: Mol) -> RWMol: ...
         def __init__(self, m: Mol) -> None: ...
         def AddAtom(self, atom: Atom) -> int: ...
         def AddBond(
@@ -99,14 +132,14 @@ if TYPE_CHECKING:
             endAtomIdx: int,
             order: BondType = BondType.UNSPECIFIED,
         ) -> int: ...
-        def GetMol(self) -> Mol: ...
+        def GetMol(self) -> NoForestMol: ...
         def RemoveAtom(self, idx: int) -> None: ...
         def RemoveBond(self, idx1: int, idx2: int) -> None: ...
 
     class ChemicalReaction:
         def RunReactants(
             self, reactants: tuple[Mol, ...], maxProducts: int = 1000
-        ) -> tuple[tuple[Mol, ...], ...]: ...
+        ) -> tuple[tuple[NoForestMol, ...], ...]: ...
         def _setImplicitPropertiesFlag(self, val: bool) -> None: ...
 
     class ResonanceMolSupplier:
@@ -115,7 +148,7 @@ if TYPE_CHECKING:
         ) -> None: ...
         def GetAtomConjGrpIdx(self, ai: int) -> int: ...
         def GetNumConjGrps(self) -> int: ...
-        def __iter__(self) -> Iterator[Mol | None]: ...
+        def __iter__(self) -> Iterator[NoForestMol | None]: ...
 
     class MCSResult:
         numAtoms: int
@@ -168,7 +201,7 @@ if TYPE_CHECKING:
         sanitizeFrags: bool = True,
         frags: object = None,
         fragsMolAtomMapping: object = None,
-    ) -> tuple[Mol, ...]: ...
+    ) -> tuple[NoForestMol, ...]: ...
     @overload
     def GetMolFrags(
         mol: Mol,
@@ -183,18 +216,18 @@ if TYPE_CHECKING:
         sanitizeFrags: bool = True,
         frags: object = None,
         fragsMolAtomMapping: object = None,
-    ) -> tuple[Mol, ...] | tuple[tuple[int, ...], ...]:
+    ) -> tuple[NoForestMol, ...] | tuple[tuple[int, ...], ...]:
         raise AssertionError("rdkit_api.GetMolFrags is the real RDKit function at runtime")
     def MolFromSmarts(
         SMARTS: str,
         mergeHs: bool = False,
         replacements: dict[str, str] | None = None,
-    ) -> Mol | None: ...
+    ) -> NoForestMol | None: ...
     def MolFromSmiles(
         SMILES: str,
         sanitize: bool = True,
         replacements: dict[str, str] | None = None,
-    ) -> Mol | None: ...
+    ) -> NoForestMol | None: ...
     def MolToSmiles(
         mol: Mol,
         isomericSmiles: bool = True,
@@ -211,7 +244,7 @@ if TYPE_CHECKING:
         replacements: dict[str, str] | None = None,
         useSmiles: bool = False,
     ) -> ChemicalReaction: ...
-    def RenumberAtoms(mol: Mol, newOrder: Sequence[int]) -> Mol: ...
+    def RenumberAtoms(mol: Mol, newOrder: Sequence[int]) -> NoForestMol: ...
     def SanitizeMol(
         mol: Mol, sanitizeOps: int = SanitizeFlags.SANITIZE_ALL, catchErrors: bool = False
     ) -> int: ...
@@ -242,3 +275,10 @@ else:
     MolFromSmiles = Chem.MolFromSmiles
     MolFromSmarts = Chem.MolFromSmarts
     SanitizeFlags = Chem.SanitizeFlags
+    # Typing-only states. Runtime molecules stay RDKit's Mol; these names
+    # exist so annotations can be imported. They are not a shared forest.
+    NoForestMol = Mol
+    NoTracingMol = Mol
+    ForestMol = Mol
+    ForestNoTracingMol = Mol
+    ForestTracingMol = Mol

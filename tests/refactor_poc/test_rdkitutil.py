@@ -34,35 +34,32 @@ def test_mcs_matches_cache_on_the_reactant():
     second = mcs_matches(reactant, target)
     assert first is second
     assert len(first.embeddings) > 1
-    held = get_forest(reactant)["structure"]["mcs_matches"][get_csmi(target)]
+    held = get_forest(reactant)._forest["structure"]["mcs_matches"][get_csmi(target)]
     assert held is first
     assert isinstance(held.embeddings, tuple)
 
 
-def test_new_structure_does_not_reuse_parent_caches():
+def test_a_fresh_mol_does_not_reuse_parent_caches():
     parent = Chem.MolFromSmiles("c1ccccc1O")
     parent_csmi = get_csmi(parent)
     parent_maps = resonance_bond_maps(parent)
 
     product = Chem.Mol(parent)
-    built = get_forest(product, new_structure=True)
-    assert "structure" not in built
-    structure = get_forest(product)["structure"]
+    fresh = get_forest(product)
+    structure = fresh._forest["structure"]
     assert "csmi" not in structure
     assert "resonance_bonds" not in structure
-    assert structure is not get_forest(parent)["structure"]
+    assert structure is not get_forest(parent)._forest["structure"]
     assert get_csmi(product) == parent_csmi
     assert resonance_bond_maps(product) is not parent_maps
 
     child = copy_mol(parent)
-    stripped = get_forest(child, new_structure=True)
-    assert "csmi" not in stripped.get("structure", {})
-    assert "resonance_bonds" not in stripped.get("structure", {})
+    assert get_forest(child)._forest["structure"]["csmi"] == parent_csmi
 
 
 def test_forest_stays_a_dict():
     mol = Chem.MolFromSmiles("CC")
-    forest = get_forest(mol)
+    forest = get_forest(mol)._forest
     forest["structure"]["csmi"] = "CC"
     forest["atom_trace"] = {"depth": 0}
     forest["not_a_schema_key"] = 1
@@ -87,7 +84,7 @@ def test_rw_copy_does_not_carry_the_structure_cache():
     get_csmi(parent)
     child = rw_copy(parent)
     assert getattr(child, "_forest", None) is None
-    assert get_forest(copy_mol(parent))["structure"]["csmi"] == get_csmi(parent)
+    assert get_forest(copy_mol(parent))._forest["structure"]["csmi"] == get_csmi(parent)
 
 
 def test_fragment_split_uses_pieces():

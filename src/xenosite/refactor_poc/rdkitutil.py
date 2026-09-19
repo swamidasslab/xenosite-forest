@@ -3,7 +3,7 @@
 RDKit itself is imported in :mod:`xenosite.refactor_poc.rdkit_api`. This
 module calls those names.
 
-Answers about a molecule are cached on ``get_forest(mol)["structure"]``.
+Answers about a molecule are cached on ``ensure_forest(mol)._forest["structure"]``.
 The key is one string. Process-wide data, such as parsed SMARTS reactions,
 stays a module dict. Do not cache a result on a molecule this function
 then edits. Edits belong on a copy from :func:`copy_mol` or :func:`rw_copy`.
@@ -32,7 +32,7 @@ import ast
 import copy
 from collections import defaultdict, deque
 from collections.abc import Iterable
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeGuard, TypeVar, cast, overload
 
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
@@ -45,11 +45,14 @@ from xenosite.refactor_poc.rdkit_api import (
     ChemicalReaction,
     DisableLog,
     FindMCS,
+    ForestMol,
+    ForestTracingMol,
     GetMolFrags,
     Mol,
     MolFromSmarts,
     MolFromSmiles,
     MolToSmiles,
+    NoForestMol,
     RWMol,
     ReactionFromSmarts,
     RenumberAtoms,
@@ -71,28 +74,73 @@ from xenosite.refactor_poc.records import (
 DisableLog("rdApp.*")
 
 _REACTION_CACHE: dict[str, ChemicalReaction] = {}
+_MolT = TypeVar("_MolT", bound=Mol)
+
+# Keys install_forest writes. is_tracing is true only when all of them are present.
+_TRACE_KEYS = (
+    "records",
+    "deletes",
+    "transforms",
+    "additions",
+    "formula",
+    "delta_formula",
+    "depth",
+    "last_tag",
+    "next_transform",
+)
 
 
-def get_forest(mol: Mol, new_structure: bool = False) -> Forest:
-    # Declared on the type, but a fresh RDKit mol has not been stamped yet.
+def _read_forest(mol: Mol) -> Forest | None:
     try:
-        forest: Forest | None = mol._forest
+        forest = mol._forest
     except AttributeError:
-        forest = None
-    if forest is None:
-        structure: Structure = {}
-        forest = {"structure": structure}
-        mol._forest = forest
-
-    if new_structure:
-        forest = copy.deepcopy(forest)
-        del forest["structure"]
-
+        return None
     return forest
 
 
+def is_forest(mol: Mol) -> TypeGuard[ForestMol]:
+    """True when ``_forest`` is present. Does not install one."""
+
+    return _read_forest(mol) is not None
+
+
+def is_tracing(mol: Mol) -> TypeGuard[ForestTracingMol]:
+    """True when ``atom_trace`` exists and has the keys the trace writer fills.
+
+    Does not install a forest or a trace.
+    """
+
+    forest = _read_forest(mol)
+    if forest is None:
+        return False
+    trace = forest.get("atom_trace")
+    if trace is None:
+        return False
+    return all(key in trace for key in _TRACE_KEYS)
+
+
+def ensure_forest(mol: ForestMol | Mol) -> ForestMol:
+    """Install a missing forest on ``mol`` and return that same object.
+
+    An existing forest is left alone, including its depth. This does not copy
+    and does not raise.
+    """
+
+    if is_forest(mol):
+        return mol
+    structure: Structure = {}
+    mol._forest = {"structure": structure}
+    return cast(ForestMol, mol)
+
+
+def get_forest(mol: ForestMol | Mol) -> ForestMol:
+    """Same function as :func:`ensure_forest`. The name callers already use."""
+
+    return ensure_forest(mol)
+
+
 def _structure(mol: Mol) -> Structure:
-    forest = get_forest(mol)
+    forest = ensure_forest(mol)._forest
     if "structure" not in forest:
         raise KeyError("structure")
     return forest["structure"]
@@ -167,12 +215,17 @@ def molecule_formula(mol: Mol) -> Formula:
 
 
 def copy_mol(mol: Mol) -> Mol:
-    """``Chem.Mol`` copy that also carries a deep-copied forest."""
+    """``Chem.Mol`` copy that also carries a deep-copied forest.
+
+    The constructor itself does not keep ``_forest``. This function does,
+    when the source has one, so the result is not :class:`NoForestMol`.
+    """
 
     out = Mol(mol)
-    forest = getattr(mol, "_forest", None)
-    if forest is not None:
-        out._forest = copy.deepcopy(forest)
+    if is_forest(mol):
+        stamped = cast(ForestMol, out)
+        stamped._forest = copy.deepcopy(mol._forest)
+        return stamped
     return out
 
 
@@ -198,7 +251,7 @@ def reaction_from_smarts(smarts: str) -> ChemicalReaction:
     return rxn
 
 
-def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[Mol, ...], ...]:
+def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[NoForestMol, ...], ...]:
     """Run one cached reaction on ``mol``. Empty when RDKit refuses the run."""
 
     reaction = reaction_from_smarts(smarts)
@@ -211,7 +264,7 @@ def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[Mol, ...], ...]:
     return tuple(product_sets)
 
 
-def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]:
+def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol, str]:
     """Renumber into canonical SMILES order. Returns the new mol and that SMILES.
 
     The mol is not a record field, so this stays a tuple. The SMILES is also
@@ -225,9 +278,8 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]
     for new_pos, old_idx in enumerate(smiles_order):
         renumber_map[old_idx] = new_pos
 
-    renumbered = RenumberAtoms(mol, renumber_map)
-    forest = get_forest(mol)
-    renumbered._forest = copy.deepcopy(forest)
+    renumbered = cast(ForestMol, RenumberAtoms(mol, renumber_map))
+    renumbered._forest = copy.deepcopy(ensure_forest(mol)._forest)
     renumbered._forest["structure"] = {"csmi": csmi}
 
     if tracing_reset:
@@ -235,17 +287,14 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]
 
     return renumbered, csmi
 
-def _reordered_forest_labels(mol: Mol) -> None:
-    forest = get_forest(mol)
+def _reordered_forest_labels(mol: ForestMol) -> None:
+    if not is_tracing(mol):
+        raise KeyError("atom_trace")
+    trace = mol._forest["atom_trace"]
     for atom in mol.GetAtoms():
         index = atom.GetIdx()
         if atom.GetAtomicNum() != 1:
             tag = atom.GetProp("forestLabel")
-            if "atom_trace" not in forest:
-                raise KeyError("atom_trace")
-            trace = forest["atom_trace"]
-            if "records" not in trace:
-                raise KeyError("records")
             record = trace["records"][tag]
             if "idx" not in record:
                 raise KeyError("idx")
@@ -261,13 +310,17 @@ def get_csmi(mol: Mol) -> str:
     return csmi
 
 
-def mol_from_smiles(smiles: str) -> Mol:
+def mol_from_smiles(smiles: str) -> NoForestMol:
     mol = MolFromSmiles(smiles)
     if mol is None:
         raise ValueError("could not parse %r" % (smiles,))
     return mol
 
 
+@overload
+def as_mol(value: str) -> NoForestMol: ...
+@overload
+def as_mol(value: _MolT) -> _MolT: ...
 def as_mol(value: Mol | str) -> Mol:
     if isinstance(value, str):
         return mol_from_smiles(value)
@@ -484,7 +537,7 @@ def _write_assignment(
     atoms: frozenset[int],
     bonds: frozenset[tuple[int, int]],
     seed: tuple[int, int],
-) -> tuple[Mol, dict[tuple[int, int], float]] | None:
+) -> tuple[NoForestMol, dict[tuple[int, int], float]] | None:
     """One kekulé assignment of ``atoms``. Other bonds stay as they were."""
 
     if seed[0] not in atoms or seed[1] not in atoms:
@@ -737,7 +790,7 @@ def mcs_target_matches(reactant: Mol, target: Mol) -> McsResult:
     return structure["mcs_targets"][key]
 
 
-def _mcs_query(reactant: Mol, target: Mol) -> Mol | None:
+def _mcs_query(reactant: Mol, target: Mol) -> NoForestMol | None:
     mcs = FindMCS(
         [reactant, target],
         atomCompare=AtomCompare.CompareElements,
