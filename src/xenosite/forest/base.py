@@ -2271,8 +2271,11 @@ class ReactionRule(AtomTracker):
 
         seen = []
         skipped = []
+        # SMARTS kekulize edits bonding in place. Run it on a copy so the
+        # caller's mol keeps its aromatic flags and resonance cache.
+        rxn_mol = copy_mol(mol)
         products_iter = self.metabolites(
-            mol,
+            rxn_mol,
             format_output_site=format_output_site,
             do_not_tag_atoms=do_not_tag_atoms,
             strict=strict,

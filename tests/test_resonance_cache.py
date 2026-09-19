@@ -18,7 +18,7 @@ from xenosite.forest.base import (
     _set_resonance_cache_enabled,
 )
 from xenosite.forest.rules import Dehydrogenation, Hydrogenation
-from xenosite.forest.utils import refresh_mol
+from xenosite.forest.utils import refresh_mol, unmapped_smiles
 
 APAP = "CC(=O)Nc1ccc(O)cc1"
 NAPH_STYRYL = "C1=CC=CC2=C1C=C(C=C2)CC3=CC=CC(=C3)C=C"
@@ -102,11 +102,11 @@ def test_phaseone_products_match_cache_on_off(name, smiles):
 
 
 def test_resfrags_recomputes_after_smarts_kekulize(monkeypatch):
-    """A mode is not recomputed on every consumer, but kekulize drops the cache.
+    """A mode is not recomputed on every consumer.
 
-    SMARTS rules kekulize the substrate in place, so a later conjugated
-    consumer fills it again. ``standardize`` copies do not share that cache.
-    Still below the uncached count.
+    ``metabolize`` kekulizes a copy, so the caller's cache is not the one
+    dropped. ``standardize`` copies do not share that cache either. Still
+    below the uncached count.
     """
     calls = {"n": 0}
     orig = Resonate._resfrags
@@ -202,6 +202,10 @@ def test_install_product_forest_clears_resonance():
 
 
 def test_smarts_metabolites_kekulize_clears_caller_resonance():
+    """Low-level ``metabolites`` still kekulizes its argument.
+
+    ``metabolize`` must not. See ``test_metabolize_does_not_kekulize_caller``.
+    """
     from xenosite.forest.rules import Hydroxylation
 
     mol = Mol(MolFromSmiles("c1ccccc1"))
@@ -213,12 +217,35 @@ def test_smarts_metabolites_kekulize_clears_caller_resonance():
     assert "resonance" not in mol._forest
 
 
-def test_full_metabolize_clears_substrate_resonance_on_kekulize():
+def test_metabolize_does_not_kekulize_caller():
+    """``metabolize`` kekulizes a copy. The input mol is left unmodified."""
+    from xenosite.forest.rules import Hydroxylation
+
+    mol = Mol(MolFromSmiles("c1ccccc1"))
+    cache = _resonance_cache(mol)
+    before = MolToSmiles(mol)
+    assert mol.GetBondWithIdx(0).GetIsAromatic()
+    hits = list(Hydroxylation().metabolize(mol, tag_atoms=False))
+    assert hits
+    assert MolToSmiles(mol) == before
+    assert mol.GetBondWithIdx(0).GetIsAromatic()
+    assert mol._forest.get("resonance") is cache
+
+    tagged = Mol(MolFromSmiles("c1ccccc1"))
+    list(Hydroxylation().metabolize(tagged))
+    assert tagged.GetBondWithIdx(0).GetIsAromatic()
+
+
+def test_full_metabolize_leaves_substrate_resonance():
     mol = Mol(MolFromSmiles(APAP))
-    _resonance_cache(mol)
+    cache = _resonance_cache(mol)
+    aromatic = [a.GetIsAromatic() for a in mol.GetAtoms()]
+    before = unmapped_smiles(mol)
     list(rulesets.load_ruleset("Full").metabolites(mol))
-    # Later SMARTS rules kekulize the substrate in place.
-    assert "resonance" not in mol._forest
+    # Tagging may stamp map numbers. Bonding and the resonance cache stay.
+    assert unmapped_smiles(mol) == before
+    assert [a.GetIsAromatic() for a in mol.GetAtoms()] == aromatic
+    assert mol._forest.get("resonance") is cache
 
 
 # ---------------------------------------------------------------------------
