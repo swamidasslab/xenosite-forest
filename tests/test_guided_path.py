@@ -20,6 +20,51 @@ def _smi(s):
     return Chem.MolFromSmiles(s)
 
 
+def test_hydroxylation_skips_atoms_that_already_have_enough_oxygen():
+    """Do not add an oxygen to an atom whose match already has that many.
+
+    On the hydroxyquinone the CH positions that stay CH are saturated.
+    The methoxy carbon of the orthocarbonate still needs two more oxygens.
+    """
+    from xenosite.forest.path_context import atom_has_enough_oxygens
+
+    quinone = _smi("O=C1C=C(O)C(=O)C(O)=C1")
+    mono = _smi("O=C1C=CC(=O)C(O)=C1")
+    ctx = PathContext.from_mols(mono, quinone)
+    assert atom_has_enough_oxygens(mono, 2, ctx)
+    assert not atom_has_enough_oxygens(mono, 3, ctx)
+
+    sites = []
+    for item in Hydroxylation().enumerate_for_path(mono, ctx, expand_phase1_plans=True):
+        site = item[2] if item[0] == "plan" else item[1]
+        atoms = site[1] if isinstance(site, tuple) else site
+        sites.append(frozenset(atoms))
+    assert frozenset({3}) in sites
+    assert frozenset({2}) not in sites
+
+    ortho = _smi("O=C1C=CC(OC(O)O)=CC1=O")
+    methoxy = _smi("COc1ccc(O)cc1")
+    ctx_ortho = PathContext.from_mols(methoxy, ortho)
+    assert not atom_has_enough_oxygens(methoxy, 0, ctx_ortho)
+
+    # Origin maps on a hydrolysis product must not split the ortho class.
+    # The match pins the missing oxygen on one ortho carbon; the other is
+    # the site metabolize actually emits, and it is the same product.
+    mapped = _smi("Oc1ccccc1")
+    for atom in mapped.GetAtoms():
+        atom.SetAtomMapNum(atom.GetIdx() + 1)
+    ctx_ph = PathContext.from_mols(mapped, _smi("Oc1ccccc1O"))
+    kept = []
+    for item in Hydroxylation().enumerate_for_path(
+        mapped, ctx_ph, expand_phase1_plans=True
+    ):
+        site = item[2] if item[0] == "plan" else item[1]
+        atoms = site[1] if isinstance(site, tuple) else site
+        kept.append(frozenset(int(a) for a in atoms))
+    assert any(atoms & {2, 6} for atoms in kept)
+    assert not any(atoms <= {3, 4, 5} for atoms in kept)
+
+
 def test_path_context_apap_napqi():
     ctx = PathContext.from_mols(
         _smi("CC(=O)Nc1ccc(O)cc1"),
