@@ -1,5 +1,6 @@
 # TODO
 
+- Tautomer matching (TautomerQuery versus a Tautomerization rule) is deferred; it is out of this phase because it is not needed for Phase I + quinone formation + conjugation
 - refactor_poc PhaseOne omits forest rules with no class in rules.py yet: Tautomerization, conjugations
 - Hydrogenation conjugated path-flips (old pair-path bond swap) are not in refactor_poc; SMARTS cover C#C and C=C only
 - refactor_poc: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)

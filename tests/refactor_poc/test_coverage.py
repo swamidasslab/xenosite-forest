@@ -10,6 +10,7 @@ from rdkit import Chem
 from xenosite.refactor_poc.rules import (
     AzoSplitting,
     BenzodioxoleReduction,
+    ConjugationRule,
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
@@ -99,6 +100,12 @@ def _pattern(rule, smarts):
             ThiopheneSulfurOxidation,
             "[O-][s+]1cccc1",
             "[#6:2]1=[#6:3][#6:4]=[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
+        ),
+        (
+            "Oc1ccccc1",
+            ConjugationRule,
+            "*Oc1ccccc1",
+            "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
         ),
     ],
 )

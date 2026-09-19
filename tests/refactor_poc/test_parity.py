@@ -9,6 +9,7 @@ from rdkit import Chem
 
 from xenosite.forest.rules import AzoSplitting as OldAzoSplitting
 from xenosite.forest.rules import BenzodioxoleReduction as OldBenzodioxoleReduction
+from xenosite.forest.rules import ConjugationRule as OldConjugationRule
 from xenosite.forest.rules import Dealkylation as OldDealkylation
 from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
@@ -19,6 +20,7 @@ from xenosite.refactor_poc.find_path import bfs
 from xenosite.refactor_poc.rules import (
     AzoSplitting,
     BenzodioxoleReduction,
+    ConjugationRule,
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
@@ -294,6 +296,55 @@ def test_filter_skips_sulfur_oxygen_addition():
         for _site, added, symbol, count, cleaved in refused
     )
     assert "[O-][s+]1cccc1" not in products
+
+
+_CONJUGATE = "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]"
+_PHENOL = "Oc1ccccc1"
+_AMINOPHENOL = "Nc1ccc(O)cc1"
+
+
+def test_phenol_star_conjugate_matches_old():
+    """The target contains the star. Canonical SMILES; order does not matter."""
+
+    old = _old(OldConjugationRule(rxns=_CONJUGATE), _PHENOL)
+    new = _new(ConjugationRule(), _PHENOL)
+    assert "*Oc1ccccc1" in new
+    assert all("*" in smiles for smiles in new)
+    assert new == old
+
+
+def test_filter_skips_nitrogen_and_keeps_the_phenol_star():
+    """The skip reads ``symbol``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        symbol = info["options"].get("symbol")
+        if symbol == "N":
+            refused.append(
+                (
+                    site,
+                    symbol,
+                    info["options"].get("adds"),
+                    info["options"].get("leave_count"),
+                    info["options"].get("cleaves"),
+                )
+            )
+            return False
+        return True
+
+    products = _new(
+        ConjugationRule(),
+        _AMINOPHENOL,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(
+        symbol == "N" and added == "CCO" and count is None and not cleaved
+        for _site, symbol, added, count, cleaved in refused
+    )
+    assert "*Oc1ccc(N)cc1" in products
+    assert "*Nc1ccc(O)cc1" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():

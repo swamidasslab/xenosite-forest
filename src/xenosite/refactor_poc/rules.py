@@ -24,6 +24,7 @@ from xenosite.refactor_poc.rdkitutil import (
     ring_membership,
     run_reactants,
     rw_copy,
+    sanitize_catch,
     sanitize_mol,
     sanitized_fragments,
     smarts_matches,
@@ -2306,3 +2307,130 @@ class OxidativeDehalogenation(SmartsReactionRule):
             ),
         ),
     )
+
+
+# No adduct molecule for these labels. They stay stars, and only on this rule.
+_STAR_ONLY = frozenset({"Protein", "DNA", "Cyanide"})
+
+
+def _has_star_conjugate(mol: Mol) -> bool:
+    return any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms())
+
+
+def _collapse_conjugate_to_star(product: Mol) -> Mol:
+    """Replace atoms the reaction added with one ``*`` at each attachment."""
+
+    new_atoms: set[int] = set()
+    for atom in product.GetAtoms():
+        if atom.GetAtomicNum() == 1:
+            continue
+        if atom.HasProp("react_atom_idx") or atom.HasProp("current_idx"):
+            continue
+        new_atoms.add(atom.GetIdx())
+    if not new_atoms:
+        return Mol(product)
+
+    attach: set[int] = set()
+    for bond in product.GetBonds():
+        begin = bond.GetBeginAtomIdx()
+        end = bond.GetEndAtomIdx()
+        begin_new = begin in new_atoms
+        end_new = end in new_atoms
+        if begin_new == end_new:
+            continue
+        attach.add(end if begin_new else begin)
+    if not attach:
+        return Mol(product)
+
+    def _after_remove(idx: int) -> int:
+        return idx - sum(1 for removed in new_atoms if removed < idx)
+
+    rw = rw_copy(product)
+    for idx in sorted(new_atoms, reverse=True):
+        rw.RemoveAtom(idx)
+    for parent in sorted(_after_remove(atom) for atom in attach):
+        dummy = rw.AddAtom(Atom(0))
+        rw.AddBond(parent, dummy, BondType.SINGLE)
+    collapsed = rw.GetMol()
+    sanitize_catch(collapsed)
+    return collapsed
+
+
+def _apply_star_conjugate(mol: Mol, label: str | None = None) -> Mol:
+    collapsed = _collapse_conjugate_to_star(mol)
+    if not label:
+        return collapsed
+    for atom in collapsed.GetAtoms():
+        if atom.GetAtomicNum() == 0:
+            atom.SetProp("atomLabel", label)
+    return collapsed
+
+
+class ConjugationRule(SmartsReactionRule):
+    """Attaches an acetyl and, by default, collapses that group to ``*``.
+
+    ``as_star`` and ``star_label`` belong on this class. ``Protein``,
+    ``DNA``, and ``Cyanide`` stay stars. The site heteroatom is ``symbol``.
+    A filter reads that. This reaction does not cleave.
+    """
+
+    as_star: bool = True
+    star_label: str | None = None
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
+            describe(
+                *branches(_whens(1, (7, 8, 16)), adds="CCO", removes="H"),
+            ),
+        ),
+    )
+
+    def __init__(
+        self,
+        as_star: bool | None = None,
+        star_label: str | None = None,
+        *args,
+        **kwargs,
+    ):
+        if as_star is None:
+            as_star = type(self).as_star
+        if star_label is None:
+            star_label = type(self).star_label
+        if star_label in _STAR_ONLY and as_star is False:
+            raise ValueError(
+                "%r cannot emit a full conjugate structure; use a star adduct"
+                % (star_label,)
+            )
+        if star_label in _STAR_ONLY:
+            as_star = True
+        self.as_star = as_star
+        self.star_label = star_label
+        super().__init__(*args, **kwargs)
+
+    def is_terminal_product(self, mol: Mol) -> bool:
+        if _has_star_conjugate(mol):
+            return True
+        return super().is_terminal_product(mol)
+
+    def metabolites(
+        self,
+        mol: Mol,
+        filter_rules=lambda rule, info: True,
+        filter_sites=lambda site, info: True,
+        context_mol: Mol | None = None,
+        **kwargs,
+    ):
+        for por in super().metabolites(
+            mol,
+            filter_rules=filter_rules,
+            filter_sites=filter_sites,
+            context_mol=context_mol,
+            **kwargs,
+        ):
+            products = por.products
+            if self.as_star:
+                products = [
+                    _apply_star_conjugate(product, self.star_label)
+                    for product in products
+                ]
+            yield ProductsOfReaction(info=por.info, products=products)

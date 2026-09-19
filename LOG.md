@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- ConjugationRule collapses the acetyl adduct to a star by default. Those SMARTS stay on this class until Acetylation, Sulfation, Glucuronidation, and Glutathionation are their own classes. A filter reads `symbol`. Star labels are not a mode on every rule.
+
 - Kekulé parents: match once with `=,:`; one parent per assignment of the conjugated system that contains the hit; other systems stay aromatic. Helpers take a dict and do not touch `_forest`; the rule stores that dict.
 
 - NDealkylation is the nitrogen rows of dealkylation. A methyl is `leave_count` 1 because that carbon is the whole leaving piece; a larger alkyl stays `None`. `breaks_ring` is set from the cleaved bond whenever the effect already cleaves, including Dealkylation, not from a rule-name branch. Trimethylamine fragment SMILES match the old library. The macrocycle and both dialdehyde searches find their targets.
