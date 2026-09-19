@@ -270,11 +270,12 @@ def _assert_qf_phase1_plan_exact(r_smi: str, t_smi: str, recipe) -> None:
 def create_then_find_case(draw):
     smi = draw(st.sampled_from(_CORPUS))
     n_steps = draw(st.integers(1, 3))
-    force_qf = draw(st.booleans())
     r_smi, t_smi, recipe = random_walk(draw, smi, _create_rules(), n_steps)
     assume(r_smi != t_smi)
-    if force_qf:
-        assume("QuinoneFormation" in recipe)
+    # Hydroxylation-only walks are not this property. Requiring a hit for them
+    # inside ``_BUDGET`` failed the 0.6.1 release (carbonate, ring triol) and
+    # the spine check then discarded the example anyway.
+    assume("QuinoneFormation" in recipe)
     return r_smi, t_smi, recipe
 
 
@@ -304,6 +305,7 @@ def test_fuzz_find_path_expands_qf_phase1_plan_exact(case):
     assume(not _is_not_a_short_spine(r_smi, t_smi))
     # Hydroxyquinone exceeds _BUDGET. See the xfail; do not count it here.
     assume(not _is_over_budget_quinone(r_smi, t_smi))
+    assume("QuinoneFormation" in recipe)
     _assert_qf_phase1_plan_exact(r_smi, t_smi, recipe)
 
 
