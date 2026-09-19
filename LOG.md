@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- refactor_poc `find_path` calls one `RuleSet`. The set is a rule: running it runs each child, and `filter_rules` / `filter_sites` still see the child pattern. Not a bare list of classes. `phaseone.py` stays dropped.
+- refactor_poc `find_path`: one MCS (element match, `CompareAny` bonds) plus the local change at each atom. Not `PathContext`. `mol_edits` is an accepted-site `RunReactants` or a pair-rule kekulé overlay; a refused site is `sites_skipped`. `billed = mol_edits + nodes`. When the target is smaller, non-cleaving patterns fail `filter_rules`. `Deps` edges come from `added_by`, not SMARTS replay.
 - refactor_poc rules: `ResonanceRule` / `ResonancePairRule` live in `rules.py` (no AtomTracker). Hydroxylation, then Dehydrogenation, then QuinoneFormation share them. `PatternInfo.possibilities` lists each SMARTS branch; `resolve_effect` narrows that from the matched atoms; `span` is a bare value when every branch agrees and a tuple when it does not.
 - Hydroxylation `[#6h2:1]>>[*:1]O` adds OH and removes one H. The `>>[*:1]=O` / `removes: HH` form was wrong.
 

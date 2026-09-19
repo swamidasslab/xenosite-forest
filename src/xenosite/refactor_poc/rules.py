@@ -167,7 +167,18 @@ class ReactionRule:
             site = info["site"]
             top_site = self._top_site(site, mol)
 
-            sig = (top_site, tuple(info["rule"]))
+            # Topological duplicates of one outcome collapse. A different SMARTS
+            # (rxn_num) or a different heavy-atom effect does not: dealkylation
+            # and sulfur oxidation emit several products from the same atoms.
+            effect = info.get("options") or {}
+            sig = (
+                top_site,
+                info.get("rxn_num"),
+                effect.get("adds"),
+                effect.get("removes"),
+                effect.get("cleaves"),
+                tuple(info["rule"]),
+            )
 
             if sig in seen:
                 continue
@@ -225,6 +236,52 @@ class ReactionRule:
         return clean(product), which will separate all fragments and sanitize each one.
         """
         raise NotImplementedError
+
+
+class RuleSet(ReactionRule):
+    """A rule that runs every rule it contains.
+
+    The container is the thing callers execute. ``filter_rules`` and
+    ``filter_sites`` are passed through to each child, so a pattern is
+    still refused on its own ``span`` and its own resolved effect.
+    Nested rulesets are flattened: executing the outer set runs the leaves.
+    """
+
+    def __init__(self, rules=(), name=None, longname=None):
+        contained = []
+        for rule in rules:
+            if isinstance(rule, type):
+                rule = rule()
+            if isinstance(rule, RuleSet):
+                contained.extend(rule.rules)
+            else:
+                contained.append(rule)
+        self.rules = tuple(contained)
+        if name is None and len(self.rules) == 1:
+            name = self.rules[0].name
+        super().__init__(name=name or "RuleSet", longname=longname)
+
+    def __iter__(self):
+        yield from self.rules
+
+    def metabolites(
+        self,
+        mol,
+        filter_rules=lambda rule, info: True,
+        filter_sites=lambda site, info: True,
+        order_key=None,
+        **kwargs,
+    ):
+        rules = self.rules
+        if order_key is not None:
+            rules = tuple(sorted(self.rules, key=order_key))
+        for rule in rules:
+            yield from rule.metabolites(
+                mol,
+                filter_rules=filter_rules,
+                filter_sites=filter_sites,
+                **kwargs,
+            )
 
 
 def install_forest(mol):
@@ -433,10 +490,12 @@ _SYMBOL = {
     7: "N",
     8: "O",
     9: "F",
+    15: "P",
     16: "S",
     17: "Cl",
     35: "Br",
     53: "I",
+    85: "At",
 }
 
 
@@ -524,10 +583,15 @@ def may(info, key, value=True):
 
     for possibility in info["possibilities"]:
         have = possibility.get(key, _EFFECT_DEFAULTS.get(key))
-        if isinstance(value, str) and isinstance(have, str) and key in (
-            "adds",
-            "removes",
-            "needs",
+        if (
+            isinstance(value, str)
+            and isinstance(have, str)
+            and key
+            in (
+                "adds",
+                "removes",
+                "needs",
+            )
         ):
             if value in have:
                 return True
@@ -616,10 +680,88 @@ def merge_effects(left, right, both_aromatic):
     }
 
 
+def _bump(counters, name, amount=1):
+    if counters is None:
+        return
+    setattr(counters, name, getattr(counters, name) + amount)
+
+
+def _isotope_smarts(smarts, mapped):
+    """Restrict a SMARTS reaction to one match.
+
+    The matched atoms are stamped with isotope ``8000 + map number``. The
+    query requires that isotope, so a site ``filter_sites`` refused is never
+    passed to ``RunReactants``.
+    """
+
+    import re
+
+    def repl(match):
+        mapno = int(match.group(2))
+        if mapno not in mapped:
+            return match.group(0)
+        isotope = 8000 + mapno
+        return "[" + str(isotope) + match.group(1) + ":" + match.group(2) + "]"
+
+    return re.sub(r"\[([^\[\]]*):(\d+)\]", repl, smarts)
+
+
+_REACTION_CACHE: dict[str, Any] = {}
+
+
+def _cached_reaction(smarts):
+    rxn = _REACTION_CACHE.get(smarts)
+    if rxn is None:
+        rxn = AllChem.ReactionFromSmarts(smarts)  # pyright: ignore[reportAttributeAccessIssue]
+        rxn._setImplicitPropertiesFlag(False)
+        _REACTION_CACHE[smarts] = rxn
+    return rxn
+
+
+def _site_indexes(mapped, pattern):
+    """Atom indexes the pattern calls the site. Defaults to map 1."""
+
+    key = pattern.get("site_map", 1)
+    if isinstance(key, (list, tuple)):
+        idxs = [mapped[k] for k in key if k in mapped]
+    elif key in mapped:
+        idxs = [mapped[key]]
+    else:
+        idxs = list(mapped.values())
+    return frozenset(idxs)
+
+
+def react_at(rule, smarts, mol, mapped, counters=None):
+    """Run ``smarts`` on one match. One call is one ``mol_edits``."""
+
+    _bump(counters, "mol_edits")
+    stamped = RWMol(Mol(mol))
+    for mapno, idx in mapped.items():
+        stamped.GetAtomWithIdx(idx).SetIsotope(8000 + mapno)
+    try:
+        reaction = _cached_reaction(_isotope_smarts(smarts, mapped))
+        product_sets = reaction.RunReactants((stamped,))
+    except (RuntimeError, ValueError):
+        return []
+    if not product_sets:
+        return []
+
+    products = []
+    for prod in product_sets[0]:
+        for atom in prod.GetAtoms():
+            if atom.GetIsotope() >= 8000:
+                atom.SetIsotope(0)
+            atom.SetAtomMapNum(0)
+        products.append(rule._lift_forest_labels(mol, prod))
+    return products
+
+
 class SmartsReactionRule(ReactionRule):
     """Performs reactions specified by SMARTS.
 
     Each entry is ``(smarts, options)`` with :class:`PatternInfo` options.
+    Matches are filtered before ``RunReactants``. One SMARTS is applied once
+    per topological site; a later SMARTS with the same formula effect still runs.
     """
 
     smarts: tuple[tuple[str, PatternInfo], ...] = ()
@@ -630,7 +772,10 @@ class SmartsReactionRule(ReactionRule):
 
         super().__init__(*args, **kwargs)
 
-        self.rxns = [(self._smarts2rxns(s, **kwargs), opt) for s, opt in self.smarts]
+        self.rxns = [
+            (smarts, self._smarts2rxns(smarts, **kwargs), opt)
+            for smarts, opt in self.smarts
+        ]
 
     def metabolites(
         self,
@@ -644,37 +789,57 @@ class SmartsReactionRule(ReactionRule):
 
         ``context_mol`` is the unsubstituted parent when ``mol`` is a kekulé
         copy. Resolution reads aromatic flags from it.
+
+        ``counters``, when passed, records one ``rule_expansions`` per call,
+        one ``sites_considered`` per match, ``sites_skipped`` when a filter
+        or a topological duplicate refuses the site, and one ``mol_edits``
+        inside :func:`react_at`.
         """
 
+        counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
+        _bump(counters, "rule_expansions")
+        seen = set()
 
-        for rxn_num, (rxn, pattern) in enumerate(self.rxns):
+        for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
             if not filter_rules(self, pattern):
                 continue
 
-            try:
-                reactant_products = rxn.RunReactants((mol,))  # pyright: ignore[reportAttributeAccessIssue]
-            except RuntimeError:
-                continue
-
-            for prod_num, prod in enumerate(reactant_products):
-                products = [self._lift_forest_labels(mol, p) for p in prod]
-                site = self._get_site(products)
-                mapped = {}
-                for product in products:
-                    mapno2idx, _ = self._get_product_mappings(product)
-                    mapped.update(mapno2idx)
+            reactant = smarts.split(">>", 1)[0]
+            for mapped in smarts_matches(mol, reactant):
+                site = _site_indexes(mapped, pattern)
+                if not site:
+                    continue
+                effect = resolve_effect(context, mapped, pattern)
                 info = {
                     "site": site,
                     "rule": self,
-                    "options": resolve_effect(context, mapped, pattern),
+                    "options": effect,
                     "rxn_num": rxn_num,
                 }
-                if filter_sites(site, info):
-                    yield ProductsOfReaction(
-                        info=info,
-                        products=products,
-                    )
+                _bump(counters, "sites_considered")
+                if not filter_sites(site, info):
+                    _bump(counters, "sites_skipped")
+                    continue
+                # Same SMARTS on a topological duplicate is one edit. A different
+                # SMARTS can share adds/cleaves and still be a different product
+                # (alcohol vs aldehyde; S-OH vs S-oxide).
+                signature = (
+                    self._top_site(site, mol),
+                    rxn_num,
+                    effect.get("adds"),
+                    effect.get("removes"),
+                    bool(effect.get("cleaves")),
+                    bool(effect.get("dearomatizes")),
+                )
+                if signature in seen:
+                    _bump(counters, "sites_skipped")
+                    continue
+                products = react_at(self, smarts, mol, mapped, counters)
+                if not products:
+                    continue
+                seen.add(signature)
+                yield ProductsOfReaction(info=info, products=products)
 
     def _smarts2rxns(self, smarts, use_implicit_properties=False, **kwargs):
         """Converts SMARTS reactions to RDKit reactions."""
@@ -1058,16 +1223,14 @@ def smarts_matches(mol, smarts):
         if query is not None:
             mapnos = [atom.GetAtomMapNum() for atom in query.GetAtoms()]
             for match in mol.GetSubstructMatches(query):
-                mapped = {
-                    mapno: idx for idx, mapno in zip(match, mapnos) if mapno
-                }
+                mapped = {mapno: idx for idx, mapno in zip(match, mapnos) if mapno}
                 if 1 in mapped:
                     hits.append(mapped)
         cache[smarts] = tuple(hits)
     return cache[smarts]
 
 
-def sanitized_fragments(mol):
+def sanitized_fragments(mol, counters=None):
     """Split, drop the dealkylation leaving group, sanitize. Empty if any frag fails."""
 
     if isinstance(mol, RWMol):
@@ -1078,6 +1241,7 @@ def sanitized_fragments(mol):
         if any(atom.HasProp("dealk-noncarbon") for atom in frag.GetAtoms()):
             continue
         if SanitizeMol(frag, catchErrors=True):
+            _bump(counters, "sanitize_dropped")
             return []
         out.append(frag)
     return out
@@ -1104,17 +1268,17 @@ def _paths_for_pair(bond_maps, start, end, neighbors):
     return found
 
 
-def pair_metabolites(rule, mol, filter_rules, filter_sites):
+def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
     """Shared ResonancePairRule loop.
 
     ``filter_rules`` drops endpoint patterns before they are matched.
     ``filter_sites`` drops a pair before any kekulé overlay or bond edit.
     """
 
+    _bump(counters, "rule_expansions")
+
     active = [
-        (smarts, info)
-        for smarts, info in rule.endpoints
-        if filter_rules(rule, info)
+        (smarts, info) for smarts, info in rule.endpoints if filter_rules(rule, info)
     ]
     if not active:
         return
@@ -1159,10 +1323,14 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites):
                     "rule": rule,
                     "options": merge_effects(end1, end2, both_aromatic),
                     "ends": (end1, end2),
+                    "end_atoms": (site_a, site_b),
                     "path_ends": frozenset((start, end)),
                 }
-                if filter_sites(site, preview):
-                    combos.append((map1, info1, map2, info2, preview))
+                _bump(counters, "sites_considered")
+                if not filter_sites(site, preview):
+                    _bump(counters, "sites_skipped")
+                    continue
+                combos.append((map1, info1, map2, info2, preview))
             if not combos:
                 continue
             if bond_maps is None:
@@ -1177,6 +1345,7 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites):
                     rings = ring_membership(mol)
                 ring_table = rings or {}
                 for bond_map, path in paths:
+                    _bump(counters, "mol_edits")
                     rw = overlay_kekule(mol, bond_map)
                     edit1 = EDITS.get(info1.get("edit", ""))
                     edit2 = EDITS.get(info2.get("edit", ""))
@@ -1188,7 +1357,7 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites):
                         break
                     if not swap_bonds_along_path(rw, path):
                         continue
-                    products = sanitized_fragments(rw)
+                    products = sanitized_fragments(rw, counters)
                     if not products:
                         continue
                     info = dict(preview)
@@ -1256,7 +1425,9 @@ class ResonancePairRule(ResonanceRule):
             filter_sites=filter_sites,
             **kwargs,
         )
-        yield from pair_metabolites(self, mol, filter_rules, filter_sites)
+        yield from pair_metabolites(
+            self, mol, filter_rules, filter_sites, counters=kwargs.get("counters")
+        )
 
 
 class Hydroxylation(SmartsReactionRule):
@@ -1266,6 +1437,9 @@ class Hydroxylation(SmartsReactionRule):
     ``[#6h2]`` is the subset with at least two hydrogens. The match records
     which of those the atom actually is.
     """
+
+    phase1_sites_on = "atom_hydrogen"
+    sites_on = "atom_hydrogen"
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -1306,6 +1480,9 @@ class Dehydrogenation(ResonancePairRule):
     sees the branch the two atoms selected, including whether the path
     actually dearomatizes.
     """
+
+    phase1_sites_on = "atom_hydrogen"
+    sites_on = "atom_hydrogen"
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -1459,4 +1636,3 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
     )
-
