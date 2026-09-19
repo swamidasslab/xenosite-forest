@@ -1505,3 +1505,396 @@ class Dealkylation(SmartsReactionRule):
         ),
     )
 
+
+_HALIDE = (9, 17, 35, 53, 85)
+
+
+class Dephosphorylation(SmartsReactionRule):
+    """Cleaves an O-P bond of a phosphate. The oxygen stays on the organic fragment."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#8:1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]",
+            describe(*branches(_whens(2, (15,)), cleaves=True)),
+        ),
+    )
+
+
+class EpoxideOpening(SmartsReactionRule):
+    """Opens an epoxide. One pattern only rearranges bonds; the other also adds OH."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])",
+            describe(adds=""),
+        ),
+        (
+            "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1]O)",
+            describe(adds="O"),
+        ),
+    )
+
+
+class Hydrolysis(SmartsReactionRule):
+    """Cleaves the single bond of a carboxylic derivative. One pattern also adds O."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])",
+            describe(
+                *branches(
+                    _whens(3, (7, 8, 16)),
+                    site_map=2,
+                    adds="O",
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2].[*:3])",
+            describe(
+                *branches(
+                    _whens(3, (7, 8, 16)),
+                    site_map=2,
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+    )
+
+
+class Dehydration(SmartsReactionRule):
+    """Drops an OH, or a carbonyl oxygen, off carbon or nitrogen."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
+            describe(
+                *branches(
+                    ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
+                    removes="OH",
+                    cleaves=True,
+                    partner="O",
+                )
+            ),
+        ),
+        (
+            "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
+            describe(removes="OH", cleaves=True, partner="O"),
+        ),
+        (
+            "[#6,#7:1]=[#8:2]>>[*:1].[*:2]",
+            describe(
+                *branches(
+                    ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
+                    removes="O",
+                    cleaves=True,
+                    partner="O",
+                )
+            ),
+        ),
+    )
+
+
+class Hydrogenation(ResonanceRule):
+    """Reduces C#C to C=C and C=C to C-C. Kekulé forms are searched.
+
+    Heavy-atom formula is unchanged (``adds`` is ``HH``).
+    """
+
+    phase1_sites_on = "atoms"
+    sites_on = "atoms"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6:1]#[#6:2]>>[*:1]=[*:2]",
+            describe(adds="HH", partner="C"),
+        ),
+        (
+            "[#6:1]=[#6:2]>>[*:1]-[*:2]",
+            describe(adds="HH", partner="C"),
+        ),
+    )
+
+
+class NitrogenReduction(SmartsReactionRule):
+    """Cleaves N-O of nitro, nitroso, and hydroxylamine groups.
+
+    The nitroso pattern uses ``[*:2]``. The old ``[*2]`` string emitted a dummy atom.
+    """
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
+            describe(removes="O", cleaves=True, partner="O"),
+        ),
+        (
+            "[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
+            describe(removes="O", cleaves=True, partner="O"),
+        ),
+        (
+            "[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])",
+            describe(removes="O", cleaves=True, partner="O"),
+        ),
+        (
+            "[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])",
+            describe(removes="OO", cleaves=True, partner="O"),
+        ),
+        (
+            "[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])",
+            describe(removes="OO", cleaves=True, partner="O"),
+        ),
+        (
+            "[#7:1]-[#8:2]>>([*:1].[*:2])",
+            describe(removes="O", cleaves=True, partner="O"),
+        ),
+        (
+            "[#7D2:1]=[#8:2]>>([*:1].[*:2])",
+            describe(removes="O", cleaves=True, partner="O"),
+        ),
+        (
+            "[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])",
+            describe(removes="OO", cleaves=True, partner="O"),
+        ),
+    )
+
+
+class OxygenReduction(SmartsReactionRule):
+    """Turns C=O / N=O into a single bond, or cleaves a peroxide."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#8:1]=[#6,#7:2]>>[*:1]-[*:2]",
+            describe(
+                *branches(
+                    ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
+                    adds="HH",
+                )
+            ),
+        ),
+        (
+            "[#8:1]-[#8:2]>>[*:1].[*:2]",
+            describe(cleaves=True, partner="O"),
+        ),
+    )
+
+# TODO: In chemistry (not current smarts), can ReductiveDehalogenation ever work on
+# an aromatic bond? If so, maybe this should be a ResonanceRule.
+class ReductiveDehalogenation(SmartsReactionRule):
+    """Cleaves a carbon-halogen bond. The second pattern also makes a double bond."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+    )
+
+
+class SulfurReduction(SmartsReactionRule):
+    """Cleaves S=O, S-S, and S-C / S-O single bonds."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#16:1]=[#8:2]>>[*:1].[*:2]",
+            describe(removes="O", cleaves=True, partner="O"),
+        ),
+        (
+            "[#16:1]-[#16:2]>>[*:1].[*:2]",
+            describe(cleaves=True, partner="S"),
+        ),
+        (
+            "[#16:1]-[#6,#8:2]>>[*:1].[*:2]",
+            describe(
+                *branches(({"map": 2, "z": 6},), cleaves=True),
+                *branches(({"map": 2, "z": 8},), cleaves=True, removes="O"),
+            ),
+        ),
+    )
+
+
+class Epoxidation(ResonanceRule):
+    """Adds an epoxide across a C=C or C=N bond. Kekulé forms are searched."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1",
+            describe(
+                *branches(
+                    ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
+                    adds="O",
+                )
+            ),
+        ),
+    )
+
+
+class SulfurOxidation(SmartsReactionRule):
+    """Adds oxygen to divalent or tetravalent sulfur (S-oxide, S-OH, or S=O)."""
+
+    phase1_sites_on = "atoms"
+    sites_on = "atoms"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#16;v2,v4:1]>>[*&H0&+:1][O-]",
+            describe(adds="O", symbol="S"),
+        ),
+        (
+            "[#16;v2,v4:1]>>[*:1][O]",
+            describe(adds="O", symbol="S"),
+        ),
+        (
+            "[#16;v2,v4:1]>>[*:1]=O",
+            describe(adds="O", symbol="S"),
+        ),
+    )
+
+
+class NitrogenOxidation(SmartsReactionRule):
+    """N-H to hydroxylamine, primary amine to nitroso, or tertiary N to N-oxide."""
+
+    phase1_sites_on = "atoms"
+    sites_on = "atoms"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#7v3h:1]>>[*:1]O",
+            describe(
+                *branches(
+                    ({"map": 1, "z": 7, "h": 1}, {"map": 1, "z": 7, "h": 2}),
+                    adds="O",
+                )
+            ),
+        ),
+        (
+            "[#7v3H2:1]>>[*:1]=O",
+            describe(adds="O", h=2, symbol="N"),
+        ),
+        (
+            "[#7v3H0:1]>>[*&H0&+:1][O-]",
+            describe(adds="O", h=0, symbol="N"),
+        ),
+    )
+
+
+class OxidativeDehalogenation(SmartsReactionRule):
+    """Replaces a carbon-bound halogen with OH, carbonyl, or a carboxylic acid."""
+
+    phase1_sites_on = "bonds"
+    sites_on = "bonds"
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    adds="O",
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    adds="O",
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6H2:2]>>[*:1].[*:2](O)=O",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    adds="OO",
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6:2][#6H1:3]>>[*:2](O)[*:3]-[*:1]",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    adds="O",
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    adds="OO",
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+        (
+            "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]",
+            describe(
+                *branches(
+                    _whens(1, _HALIDE),
+                    site_map=2,
+                    removes_partner=True,
+                    adds="OO",
+                    cleaves=True,
+                ),
+                site_map=2,
+            ),
+        ),
+    )
