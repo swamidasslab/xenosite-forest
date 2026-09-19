@@ -68,7 +68,11 @@ _REACTION_CACHE: dict[str, ChemicalReaction] = {}
 
 
 def get_forest(mol: Mol, new_structure: bool = False) -> Forest:
-    forest: Forest | None = mol._forest
+    # Declared on the type, but a fresh RDKit mol has not been stamped yet.
+    try:
+        forest: Forest | None = mol._forest
+    except AttributeError:
+        forest = None
     if forest is None:
         structure: Structure = {}
         forest = {"structure": structure}
@@ -224,7 +228,6 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]
         _reordered_forest_labels(renumbered)
 
     return renumbered, csmi
-
 
 def _reordered_forest_labels(mol: Mol) -> None:
     forest = get_forest(mol)
