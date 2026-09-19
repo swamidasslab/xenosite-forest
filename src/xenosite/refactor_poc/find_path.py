@@ -19,6 +19,7 @@ from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
+    QuinoneFormation,
     RuleSet,
     cannonicalize_order,
     forest_trace,
@@ -184,23 +185,29 @@ class AtomDiff:
         target,
         mapping,
         needs_oxygen,
+        needs_carbonyl,
+        needs_alcohol,
         cleaved,
         cleavage_bonds,
         loses_aromaticity,
         h_delta,
         n_extra,
         bond_order_mismatches,
+        bond_raises,
     ):
         self.reactant = reactant
         self.target = target
         self.mapping = mapping
         self.needs_oxygen = frozenset(needs_oxygen)
+        self.needs_carbonyl = frozenset(needs_carbonyl)
+        self.needs_alcohol = frozenset(needs_alcohol)
         self.cleaved = frozenset(cleaved)
         self.cleavage_bonds = set(cleavage_bonds)
         self.loses_aromaticity = frozenset(loses_aromaticity)
         self.h_delta = dict(h_delta)
         self.n_extra = n_extra
         self.bond_order_mismatches = bond_order_mismatches
+        self.bond_raises = set(bond_raises)
         self.reactant_heavy = reactant.GetNumHeavyAtoms()
         self.target_heavy = target.GetNumHeavyAtoms()
 
@@ -217,10 +224,19 @@ class AtomDiff:
         return any(delta < 0 for delta in self.h_delta.values())
 
     def site_is_cleavage(self, atoms):
+        """True when ``atoms`` is the bond that separates kept from gone.
+
+        Touching a leaving-group atom is not enough. The site has to be
+        the bridge itself, or one atom of that bridge.
+        """
+
         atoms = set(atoms)
-        if atoms & self.cleaved:
-            return True
-        return any(bond & atoms for bond in self.cleavage_bonds)
+        if not atoms:
+            return False
+        for bond in self.cleavage_bonds:
+            if bond <= atoms or atoms <= bond:
+                return True
+        return False
 
     def cost(self):
         """How much of the reactant still disagrees with the target.
@@ -325,13 +341,23 @@ def atom_diff(reactant, target):
     image = set(mapping.values())
 
     needs_oxygen = set()
+    needs_carbonyl = set()
+    needs_alcohol = set()
     for atom in target.GetAtoms():
         if atom.GetAtomicNum() != 8 or atom.GetIdx() in image:
             continue
         for neighbor in atom.GetNeighbors():
+            bond = target.GetBondBetweenAtoms(atom.GetIdx(), neighbor.GetIdx())
+            if bond is None:
+                continue
             for r_idx, t_idx in mapping.items():
-                if t_idx == neighbor.GetIdx():
-                    needs_oxygen.add(r_idx)
+                if t_idx != neighbor.GetIdx():
+                    continue
+                needs_oxygen.add(r_idx)
+                if bond.GetBondTypeAsDouble() >= 1.5:
+                    needs_carbonyl.add(r_idx)
+                else:
+                    needs_alcohol.add(r_idx)
 
     cleaved = set()
     for atom in reactant.GetAtoms():
@@ -344,6 +370,7 @@ def atom_diff(reactant, target):
     loses_aromaticity = set()
     h_delta = {}
     bond_order_mismatches = 0
+    bond_raises = set()
     for r_idx, t_idx in mapping.items():
         ra = reactant.GetAtomWithIdx(r_idx)
         ta = target.GetAtomWithIdx(t_idx)
@@ -355,15 +382,20 @@ def atom_diff(reactant, target):
         i = bond.GetBeginAtomIdx()
         j = bond.GetEndAtomIdx()
         if i not in mapping or j not in mapping:
-            if i in cleaved or j in cleaved:
+            # A cut that can reach the target joins a kept atom to a leaving
+            # atom. Bonds inside the leaving group are not that cut.
+            if (i in mapping) != (j in mapping):
                 cleavage_bonds.add(frozenset((i, j)))
             continue
         other = target.GetBondBetweenAtoms(mapping[i], mapping[j])
         if other is None:
             cleavage_bonds.add(frozenset((i, j)))
             continue
-        if abs(other.GetBondTypeAsDouble() - bond.GetBondTypeAsDouble()) >= 0.2:
+        delta = other.GetBondTypeAsDouble() - bond.GetBondTypeAsDouble()
+        if abs(delta) >= 0.2:
             bond_order_mismatches += 1
+        if delta >= 0.2:
+            bond_raises.add(frozenset((i, j)))
 
     n_extra = sum(
         1
@@ -375,12 +407,15 @@ def atom_diff(reactant, target):
         target,
         mapping,
         needs_oxygen,
+        needs_carbonyl,
+        needs_alcohol,
         cleaved,
         cleavage_bonds,
         loses_aromaticity,
         h_delta,
         n_extra,
         bond_order_mismatches,
+        bond_raises,
     )
 
 
@@ -443,7 +478,19 @@ def _pattern_could_help(info, diff):
     return True
 
 
-def _site_could_help(site, info, diff):
+def _alkyl_bond_raises(mol, atom_idx, diff):
+    """True when an exocyclic C-C bond at ``atom_idx`` is higher in the target."""
+
+    atom = mol.GetAtomWithIdx(atom_idx)
+    for neighbor in atom.GetNeighbors():
+        if neighbor.GetAtomicNum() != 6 or neighbor.GetIsAromatic():
+            continue
+        if frozenset((atom_idx, neighbor.GetIdx())) in diff.bond_raises:
+            return True
+    return False
+
+
+def _site_could_help(site, info, diff, mol):
     """``filter_sites`` sees one resolved effect and the local atom diff."""
 
     effect = info.get("options") or {}
@@ -457,8 +504,22 @@ def _site_could_help(site, info, diff):
         for atom, end in zip(end_atoms, ends):
             if _effect_adds_oxygen(end) and atom not in diff.needs_oxygen:
                 return False
-    elif _effect_adds_oxygen(effect):
-        if not any(atom in diff.needs_oxygen for atom in atoms):
+            # An alkyl partner turns the ring bond into an exocyclic double
+            # bond (methide). Skip it unless that C-C bond is higher in the target.
+            if (end.get("partner") or "") == "C" and not _alkyl_bond_raises(
+                mol, atom, diff
+            ):
+                return False
+    elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
+        oxygen_sites = [atom for atom in atoms if atom in diff.needs_oxygen]
+        if not oxygen_sites:
+            return False
+        # The local change is a carbonyl on a ring that stops being aromatic.
+        # A bare hydroxylation does not do that; the dearomatizing edit does.
+        if all(
+            atom in diff.needs_carbonyl and atom in diff.loses_aromaticity
+            for atom in oxygen_sites
+        ):
             return False
 
     if effect.get("dearomatizes"):
@@ -475,7 +536,7 @@ def _site_could_help(site, info, diff):
     return True
 
 
-def _filters(diff, enabled):
+def _filters(diff, enabled, mol):
     if not enabled:
         return (lambda rule, info: True), (lambda site, info: True)
 
@@ -483,7 +544,7 @@ def _filters(diff, enabled):
         return _pattern_could_help(info, diff)
 
     def filter_sites(site, info):
-        return _site_could_help(site, info, diff)
+        return _site_could_help(site, info, diff, mol)
 
     return filter_rules, filter_sites
 
@@ -523,9 +584,59 @@ def _step(mol, rule_name, site):
 
 
 def _steps_for(mol, info):
-    """Phase-I steps for one accepted edit. Composite rules are not steps."""
+    """Phase-I steps for one accepted edit.
 
+    QuinoneFormation is not itself a step. The hop stands in for the
+    hydroxylations that supply each oxygen and the dehydrogenation that
+    follows them.
+    """
+
+    if info["rule"].name == "QuinoneFormation":
+        return _quinone_phase1(mol, info)
     return (_step(mol, info["rule"].name, info["site"]),)
+
+
+def _bonded(mol, idx, atomic_num):
+    """Neighbor of ``idx`` with this atomic number, if the mol already has one."""
+
+    atom = mol.GetAtomWithIdx(idx)
+    for neighbor in atom.GetNeighbors():
+        if neighbor.GetAtomicNum() == atomic_num:
+            return neighbor.GetIdx()
+    return None
+
+
+def _quinone_phase1(mol, info):
+    """Hydroxylations that supply missing oxygens, then one dehydrogenation.
+
+    An end that already carries oxygen keeps that atom. An end that
+    ``needs`` oxygen becomes a Hydroxylation; the dehydrogenation site
+    points at the oxygen that step would add. No ``end_maps`` field is
+    required: the partner atom is the neighbor already on ``mol``.
+    """
+
+    ends = tuple(info.get("ends") or ())
+    end_atoms = tuple(info.get("end_atoms") or ())
+    hydroxylations = []
+    dh_refs = []
+    for end, atom in zip(ends, end_atoms):
+        partner = end.get("partner") or ""
+        adds_oxygen = "O" in (end.get("needs") or "") or (
+            "O" in (end.get("adds") or "") and partner != "O"
+        )
+        if adds_oxygen:
+            step = Step("Hydroxylation", [_atom_ref(mol, atom)])
+            hydroxylations.append(step)
+            origin = next(iter(step.site)).origin
+            dh_refs.append(AtomRef(added_by=("Hydroxylation", frozenset({origin}))))
+            continue
+        atomic_num = {"O": 8, "N": 7, "C": 6, "S": 16}.get(partner)
+        hetero = _bonded(mol, atom, atomic_num) if atomic_num else None
+        if hetero is not None:
+            dh_refs.append(_atom_ref(mol, hetero))
+    if not dh_refs:
+        return (_step(mol, "Dehydrogenation", info["site"]),)
+    return tuple(hydroxylations) + (Step("Dehydrogenation", dh_refs),)
 
 
 def _deps(steps):
@@ -557,7 +668,10 @@ def _deps(steps):
 def default_ruleset():
     """The poc catalog as one rule. Phase I is the ``Deps`` search yields."""
 
-    return RuleSet((Dealkylation, Hydroxylation, Dehydrogenation), name="Poc")
+    return RuleSet(
+        (Dealkylation, QuinoneFormation, Hydroxylation, Dehydrogenation),
+        name="Poc",
+    )
 
 
 def _pieces(raw):
@@ -662,7 +776,7 @@ def find_path(
 
         diff = atom_diff(walk.mol, target_mol)
         parent_cost = diff.cost()
-        filter_rules, filter_sites = _filters(diff, use_filters)
+        filter_rules, filter_sites = _filters(diff, use_filters, walk.mol)
         # Cleavage children run first. The set still passes each pattern to
         # the filters; this only picks an order.
         order_key = None

@@ -1,5 +1,6 @@
 """Proof-of-concept find_path. Earlier cases stay; later increments append."""
 
+import pytest
 from rdkit import Chem
 
 from xenosite.forest.step_plan import Deps
@@ -142,3 +143,153 @@ def test_benzene_to_quinone_is_two_hydroxylations_then_dehydrogenation():
     off_hits = list(find_path("c1ccccc1", quinone, counters=off, use_filters=False))
     assert off_hits, _billed(off)
     assert on.billed < off.billed, "on %s; off %s" % (_billed(on), _billed(off))
+
+
+def test_phenol_to_quinone_plan_has_no_quinone_formation_step():
+    quinone = "O=C1C=CC(=O)C=C1"
+    counters = PathCounters()
+    hits = list(find_path("Oc1ccccc1", quinone, counters=counters))
+    message = _billed(counters)
+    assert hits, message
+    names = [step.rule for step in hits[0].plan.children]
+    assert "QuinoneFormation" not in names, message
+    assert names.count("Hydroxylation") == 1, message
+    assert names.count("Dehydrogenation") == 1, message
+    hydroxyl = names.index("Hydroxylation")
+    dehydrogenation = names.index("Dehydrogenation")
+    assert (hydroxyl, dehydrogenation) in set(hits[0].plan.precedes), message
+    assert hits[0].smiles == canon_smiles(quinone), message
+
+
+def test_butylbenzene_to_quinone_and_chain_alcohol_bills_those_sites():
+    reactant = "c1ccc(CCCC)cc1"
+    target = "OCCCCc1cc(=O)ccc1=O"
+    counters = PathCounters()
+    hits = list(find_path(reactant, target, counters=counters))
+    message = _billed(counters)
+    assert hits, message
+    names = [step.rule for step in hits[0].plan.children]
+    assert "QuinoneFormation" not in names, message
+    assert "Hydroxylation" in names, message
+    assert "Dehydrogenation" in names, message
+    assert hits[0].smiles == canon_smiles(target), message
+    # Chain oxygenation plus one ring dearomatization, not every ring carbon.
+    assert counters.mol_edits <= 4, message
+    assert counters.sites_skipped > counters.mol_edits, message
+
+
+def _ruleset(*names):
+    import xenosite.refactor_poc.rules as poc
+
+    missing = [name for name in names if not hasattr(poc, name)]
+    if missing:
+        pytest.skip("not ported yet: %s" % ", ".join(missing))
+    return RuleSet(tuple(getattr(poc, name) for name in names), name="Poc")
+
+
+def _old_site_applies(reactant, target, *, ruleset=None, depth=None, ceiling=40):
+    """Old guided search's ``site_applies``. Not the budget this search must beat."""
+
+    from xenosite.forest import PathSearchCounters
+    from xenosite.forest import find_path as old_find_path
+
+    counters = PathSearchCounters()
+    kwargs = {"max_paths": 1, "max_expansions": ceiling, "counters": counters}
+    if ruleset is not None:
+        kwargs["ruleset"] = ruleset
+    if depth is not None:
+        kwargs["depth"] = depth
+    list(old_find_path(reactant, target, **kwargs))
+    return counters.site_applies
+
+
+def test_tba_mol_edits_within_old_expansion_budget():
+    """Terbinafine to the enyne aldehyde. Ceiling is the old ``max_expansions``."""
+
+    reactant = "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12"
+    target = "CC(C)(C)C#CC=CC=O"
+    ceiling = 40
+    old = _old_site_applies(reactant, target, depth=2, ceiling=ceiling)
+    counters = PathCounters()
+    hits = list(
+        find_path(
+            reactant,
+            target,
+            ruleset=_ruleset("Dealkylation"),
+            counters=counters,
+            max_nodes=ceiling,
+        )
+    )
+    message = "%s; old site_applies=%s" % (_billed(counters), old)
+    assert hits, message
+    assert hits[0].smiles == canon_smiles(target), message
+    assert counters.mol_edits <= ceiling, message
+
+
+def test_acetate_to_catechol_mol_edits_within_budget():
+    reactant = "CC(=O)Oc1ccc(OC)cc1"
+    target = "Oc1ccc(O)cc1"
+    ceiling = 80
+    old = _old_site_applies(
+        reactant, target, ruleset="PhaseOneRS", depth=3, ceiling=ceiling
+    )
+    counters = PathCounters()
+    hits = list(
+        find_path(
+            reactant,
+            target,
+            ruleset=_ruleset("Hydrolysis", "Dealkylation"),
+            counters=counters,
+            max_nodes=ceiling,
+        )
+    )
+    message = "%s; old site_applies=%s" % (_billed(counters), old)
+    assert hits, message
+    assert hits[0].smiles == canon_smiles(target), message
+    assert counters.mol_edits <= ceiling, message
+
+
+def test_impossible_targets_stay_under_the_old_ceiling():
+    cases = [
+        ("c1ccccc1O", "C", 40),
+        ("c1cccc2ccccc12", "C", 40),
+        ("c1ccccc1", "FC(F)(F)F", 40),
+        ("c1ccccc1", "[Fe]", 50),
+    ]
+    for reactant, target, ceiling in cases:
+        counters = PathCounters()
+        hits = list(
+            find_path(reactant, target, counters=counters, max_nodes=ceiling)
+        )
+        message = "%s → %s %s" % (reactant, target, _billed(counters))
+        assert not hits, message
+        assert counters.mol_edits <= ceiling, message
+
+
+def test_ndealkylation_hard_pairs_when_the_class_exists():
+    """Macrocycle and dialdehyde. Skipped until the catalog ports the class."""
+
+    ruleset = _ruleset("NDealkylation")
+    cases = [
+        ("C1CCCCCCNC2CCCC(CC2)NCCCC1", "NC1CCCC(=O)CC1", 120),
+        ("CN(C)Cc1ccc(CN(C)CC)cc1", "O=Cc1ccc(C=O)cc1", 80),
+        (
+            "CN(C)Cc1ccc(CN(C)Cc2ccc(C(C)(C)C)cc2)cc1",
+            "O=Cc1ccc(C=O)cc1",
+            35,
+        ),
+    ]
+    for reactant, target, ceiling in cases:
+        counters = PathCounters()
+        hits = list(
+            find_path(
+                reactant,
+                target,
+                ruleset=ruleset,
+                counters=counters,
+                max_nodes=ceiling,
+            )
+        )
+        message = "%s → %s %s" % (reactant, target, _billed(counters))
+        assert hits, message
+        assert counters.mol_edits <= ceiling, message
