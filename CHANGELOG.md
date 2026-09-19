@@ -10,6 +10,13 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.6.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.1) - 2026-09-19
+
+### Fixed
+
+- ``metabolize`` leaves the passed mol's bonds alone. SMARTS kekulize and resonance bond-path search run on a copy. Atom maps and tags are still written on the input.
+
+
 ## [0.6.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.0) - 2026-09-19
 
 ### Changed
