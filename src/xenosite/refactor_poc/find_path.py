@@ -284,6 +284,7 @@ def _mapping_score(reactant, target, r_match, t_match):
 
 
 def _best_mapping(reactant, target):
+    # why not uniquify to reduce combinatorial explosion?
     reactant_hits = mcs_matches(reactant, target).embeddings[:24]
     target_hits = mcs_target_matches(reactant, target).embeddings[:24]
     if not reactant_hits or not target_hits:
@@ -738,6 +739,7 @@ def find_path(
 
         diff = atom_diff(walk.mol, target_mol)
         parent_cost = diff.cost()
+        # See HEURISTICS.md before changing what these filters are allowed to see.
         filter_rules, filter_sites = _filters(diff, use_filters, walk.mol)
         # Cleavage children run first. The set still passes each pattern to
         # the filters; this only picks an order.

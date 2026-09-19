@@ -4,6 +4,7 @@
 - refactor_poc PhaseOne omits forest rules with no class in rules.py yet: NDealkylation, Tautomerization, AzoSplitting, BenzodioxoleReduction, NitroaromaticReduction, ThiopheneSulfurOxidation, conjugations
 - Hydrogenation conjugated path-flips (old pair-path bond swap) are not in refactor_poc; SMARTS cover C#C and C=C only
 - refactor_poc: recover phase I steps from `_forest` traces (rule objects are already stored)
+- refactor_poc search: consult `src/xenosite/refactor_poc/HEURISTICS.md` before changing find_path or explaining a miss
 - Guided `and_cleave_plan` SMARTS: optional per-SMARTS flags naming atoms made dirty on match, so match-before/after deps are less leaky (fewer false precedes; less rely on apply-replay)
 - Rank ``PathOutcome`` hits by likelihood via ``xenosite-predict`` using cleavage-side bags (without enumerating side reactions) — not this pass
 - Guided-search heuristics from fuzz cases that hit ``max_expansions`` / miss under budget
