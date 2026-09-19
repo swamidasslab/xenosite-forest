@@ -351,7 +351,7 @@ def forest_trace(reactant, product, rule, site):
     if "atom_trace" not in parent_forest:
         install_forest(reactant)
 
-    trace = forest["parent_atom_trace"] = copy.deepcopy(parent_forest["atom_trace"])
+    trace = copy.deepcopy(parent_forest["atom_trace"])
 
     depth = trace["depth"] = trace["depth"] + 1
 

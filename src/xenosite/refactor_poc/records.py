@@ -60,5 +60,4 @@ class Forest(TypedDict, total=False):
 
     structure: Structure
     atom_trace: dict[str, Any]
-    parent_atom_trace: dict[str, Any]
     is_terminal_product: bool
