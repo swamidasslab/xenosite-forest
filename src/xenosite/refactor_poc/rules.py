@@ -8,10 +8,12 @@ import copy
 
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
+    Bond,
     BondType,
     ForestMol,
     ForestTracingMol,
     Mol,
+    RWMol,
     aromatic_systems,
     cannonicalize_order,
     conjugated_systems,
@@ -77,7 +79,7 @@ class ReactionRule:
 
     is_terminal_rule = False
 
-    def _clear_atom_maps(self, mol):
+    def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
             atom.SetAtomMapNum(0)
         return mol
@@ -111,7 +113,7 @@ class ReactionRule:
         if sites_on is not None:
             self.sites_on = sites_on
 
-    def __call__(self, mol, **kwargs):
+    def __call__(self, mol: Mol, **kwargs):
         yield from self.metabolize(mol, **kwargs)
 
     def __iter__(self):
@@ -119,12 +121,12 @@ class ReactionRule:
 
     def metabolize(
         self,
-        mol,
+        mol: Mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
         unique_csmi=True,
         **kwargs,
-    ) -> Generator[tuple, None, None]:
+    ) -> Generator[tuple[Mol, dict[str, Any]], None, None]:
         """Apply this rule and yield ``(product, info)`` pairs.
 
         This is the method callers use. It keeps the invariants below.
@@ -207,14 +209,14 @@ class ReactionRule:
 
                 yield p, i
 
-    def _top_site(self, site, mol):
+    def _top_site(self, site, mol: Mol):
         te = topol_equiv(mol)
         if type(site) == int:
             return te[site]
         else:
             return frozenset(int(te[s]) for s in site)
 
-    def is_terminal_product(self, mol) -> bool:
+    def is_terminal_product(self, mol: Mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search."""
 
         forest = ensure_forest(mol)._forest
@@ -225,7 +227,7 @@ class ReactionRule:
 
     def metabolites(
         self,
-        mol,
+        mol: Mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
         **kwargs,
@@ -294,7 +296,7 @@ def _rule_name(rule):
     return getattr(rule, "name", type(rule).__name__)
 
 
-def _work_copy(mol):
+def _work_copy(mol: Mol) -> Mol:
     """A mol the rule may stamp. The caller's object is left alone."""
 
     return copy_mol(mol)
@@ -394,7 +396,7 @@ def _trace_info(info):
     return kept
 
 
-def forest_trace(reactant, product, info, executed=None):
+def forest_trace(reactant: Mol, product: Mol, info, executed=None):
     """Record one transform on the product's atom trace.
 
     A new atom's ``added_by`` is an id such as ``R1``. The site, the rule
@@ -631,7 +633,7 @@ def must(info, key, value=True):
     )
 
 
-def _when_matches(mol, mapped, when):
+def _when_matches(mol: Mol, mapped, when):
     idx = mapped.get(when.get("map"))
     if idx is None:
         return False
@@ -643,7 +645,7 @@ def _when_matches(mol, mapped, when):
     return True
 
 
-def resolve_effect(mol, mapped, info):
+def resolve_effect(mol: Mol, mapped, info):
     """Narrow ``info`` to the one effect this match actually is.
 
     Uses the caller's mol, not a kekulé copy: aromatic flags must still be set.
@@ -747,7 +749,7 @@ def _site_indexes(mapped, pattern):
     return frozenset(idxs)
 
 
-def react_at(rule, smarts, mol, mapped, counters=None):
+def react_at(rule, smarts, mol: Mol, mapped, counters=None) -> list[Mol]:
     """Run ``smarts`` on one match. One call is one ``mol_edits``."""
 
     _bump(counters, "mol_edits")
@@ -794,10 +796,10 @@ class SmartsReactionRule(ReactionRule):
 
     def metabolites(
         self,
-        mol,
+        mol: Mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
-        context_mol=None,
+        context_mol: Mol | None = None,
         **kwargs,
     ):
         """Same contract as :meth:`ReactionRule.metabolites`.
@@ -867,7 +869,7 @@ class SmartsReactionRule(ReactionRule):
         """Converts SMARTS reactions to RDKit reactions."""
         return reaction_from_smarts(smarts)
 
-    def _lift_forest_labels(self, reactant, product):
+    def _lift_forest_labels(self, reactant: Mol, product: Mol) -> Mol:
         """Carry the forest labels from the reactant to the product."""
 
         for a in product.GetAtoms():
@@ -879,7 +881,7 @@ class SmartsReactionRule(ReactionRule):
 
         return product
 
-    def _get_product_mappings(self, product):
+    def _get_product_mappings(self, product: Mol):
         mapno2idx = {}
         reactant2idx = {}
         for a in product.GetAtoms():
@@ -927,7 +929,7 @@ def _bond_key(i, j):
     return (i, j) if i < j else (j, i)
 
 
-def _current_bond_map(mol):
+def _current_bond_map(mol: Mol):
     bonds = {}
     for bond in mol.GetBonds():
         i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
@@ -935,7 +937,7 @@ def _current_bond_map(mol):
     return bonds
 
 
-def _connected_components(mol, atoms):
+def _connected_components(mol: Mol, atoms):
     atoms = set(atoms)
     seen = set()
     systems = []
@@ -959,7 +961,7 @@ def _connected_components(mol, atoms):
     return systems
 
 
-def system_neighbors(mol, system):
+def system_neighbors(mol: Mol, system):
     system = set(system)
     neighbors = {i: [] for i in system}
     for i in system:
@@ -1050,7 +1052,7 @@ def _kekule_forms(mol: Mol) -> tuple[Mol, ...]:
     return tuple(forms)
 
 
-def _incident_orders(mol: Mol, ranks, mapped) -> tuple:
+def _incident_orders(mol: Mol, ranks: dict[int, int], mapped) -> tuple:
     """Bond orders touching the matched atoms, in rank space.
 
     Two Kekulé forms of the same site differ here. Two equivalent carbons
@@ -1069,7 +1071,7 @@ def _incident_orders(mol: Mol, ranks, mapped) -> tuple:
     return tuple(sorted(bonds))
 
 
-def overlay_kekule(mol, bond_map):
+def overlay_kekule(mol: Mol, bond_map) -> RWMol:
     """Copy ``mol`` and set kekulé bond orders. Atom indexes stay put."""
 
     rw = rw_copy(mol)
@@ -1085,7 +1087,7 @@ def overlay_kekule(mol, bond_map):
     return rw
 
 
-def adjust_hydrogens(mol, idx, change):
+def adjust_hydrogens(mol: Mol, idx, change):
     atom = mol.GetAtomWithIdx(idx)
     try:
         implicit = atom.GetNumImplicitHs()
@@ -1099,7 +1101,7 @@ def adjust_hydrogens(mol, idx, change):
         atom.SetNumExplicitHs(updated)
 
 
-def swap_bonds_along_path(mol, atoms):
+def swap_bonds_along_path(mol: Mol, atoms):
     """Flip single and double bonds along ``atoms``. Adjust H at the ends."""
 
     bond = None
@@ -1118,7 +1120,7 @@ def swap_bonds_along_path(mol, atoms):
     return True
 
 
-def _correct_end_hydrogens(mol, idx, bond):
+def _correct_end_hydrogens(mol: Mol, idx, bond: Bond):
     if bond.GetBondType() == BondType.SINGLE:
         adjust_hydrogens(mol, idx, 1)
     elif bond.GetBondType() == BondType.DOUBLE:
@@ -1129,7 +1131,7 @@ def _same_rings(rings, i, j):
     return rings.get(i, ()) == rings.get(j, ())
 
 
-def edit_single_to_double(rw, mapped, info, rings):
+def edit_single_to_double(rw: RWMol, mapped, info, rings):
     a, b = mapped.get(1), mapped.get(2)
     if a is None or b is None:
         return False
@@ -1142,7 +1144,7 @@ def edit_single_to_double(rw, mapped, info, rings):
     return True
 
 
-def edit_add_carbonyl_o(rw, mapped, info, rings):
+def edit_add_carbonyl_o(rw: RWMol, mapped, info, rings):
     carbon = mapped.get(1)
     if carbon is None:
         return False
@@ -1151,7 +1153,7 @@ def edit_add_carbonyl_o(rw, mapped, info, rings):
     return True
 
 
-def edit_replace_halogen(rw, mapped, info, rings):
+def edit_replace_halogen(rw: RWMol, mapped, info, rings):
     carbon, halogen = mapped.get(1), mapped.get(2)
     if carbon is None or halogen is None:
         return False
@@ -1165,14 +1167,14 @@ def edit_replace_halogen(rw, mapped, info, rings):
     return True
 
 
-def edit_iminium(rw, mapped, info, rings):
+def edit_iminium(rw: RWMol, mapped, info, rings):
     if not edit_single_to_double(rw, mapped, {}, rings):
         return False
     rw.GetAtomWithIdx(mapped[2]).SetFormalCharge(1)
     return True
 
 
-def edit_dealkylate(rw, mapped, info, rings):
+def edit_dealkylate(rw: RWMol, mapped, info, rings):
     hetero, alkyl = mapped.get(2), mapped.get(3)
     if hetero is None or alkyl is None:
         return False
@@ -1343,10 +1345,10 @@ class ResonancePairRule(ResonanceRule):
 
     def metabolites(
         self,
-        mol,
+        mol: Mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
-        context_mol=None,
+        context_mol: Mol | None = None,
         **kwargs,
     ):
         """Same contract as :meth:`ReactionRule.metabolites`.
@@ -1367,7 +1369,7 @@ class ResonancePairRule(ResonanceRule):
             mol, filter_rules, filter_sites, counters=kwargs.get("counters")
         )
 
-    def pair_metabolites(self, mol, filter_rules, filter_sites, counters=None):
+    def pair_metabolites(self, mol: Mol, filter_rules, filter_sites, counters=None):
         """Endpoint loop.
 
         ``filter_rules`` drops endpoint patterns before they are matched.
