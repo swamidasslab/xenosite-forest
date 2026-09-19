@@ -1,5 +1,6 @@
 # TODO
 
+- SMARTS: least-common atoms first; isotope atom first when a tag is used
 - Tautomer matching (TautomerQuery versus a Tautomerization rule) is deferred; it is out of this phase because it is not needed for Phase I + quinone formation + conjugation
 - refactor_poc PhaseOne omits Tautomerization, Sulfation, Glucuronidation, and Glutathionation
 - Hydrogenation conjugated path-flips (old pair-path bond swap) are not in refactor_poc; SMARTS cover C#C and C=C only
