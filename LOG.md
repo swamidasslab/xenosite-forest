@@ -1,5 +1,10 @@
 # Lab log
 
+## 2026-09-19
+
+- refactor_poc rules: `ResonanceRule` / `ResonancePairRule` live in `rules.py` (no AtomTracker). Hydroxylation, then Dehydrogenation, then QuinoneFormation share them. `PatternInfo.possibilities` lists each SMARTS branch; `resolve_effect` narrows that from the matched atoms; `span` is a bare value when every branch agrees and a tuple when it does not.
+- Hydroxylation `[#6h2:1]>>[*:1]O` adds OH and removes one H. The `>>[*:1]=O` / `removes: HH` form was wrong.
+
 ## 2026-09-18
 
 - AtomTracker.tags → ``mol._forest["atom_trace"]``; stable ``atomLabel`` per heavy atom (stamped once); ``copy_mol`` / ``carry_forest`` preserve forest across RDKit copies; ``install_product_forest`` records ``atom_refs`` from metabolize (shared with Step.apply). Resonance not shared onto reaction products. Profile (`tests/test_atom_trace_profile.py -n0 -s`): **before** wall=0.638s literal_eval_cum=0.139s deepcopy_cum=0.131s tags_cum=0.280s → **after** wall=0.358s literal_eval_cum=0 deepcopy_cum=0 tags_cum=0.006s (benzene PhaseOneRS depth-1→2, products=165).
