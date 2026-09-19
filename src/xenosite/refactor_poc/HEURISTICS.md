@@ -13,7 +13,7 @@ A rule may later carry data that it is less likely, and a filter may read that. 
 
 ## Correctness, not yet done
 
-- Expand every full-size match of the target onto the start. `_best_mapping` in `find_path.py` keeps one embedding. Two placements (bis-benzyl to benzaldehyde, naphthyl-benzyl to naphthaldehyde) must both be searched. The union of those matches is not one conserved core, and the smaller leftover match is not the only one kept.
+- Expand every full-size match of the target onto the start. `_best_mapping` in `find_path.py` keeps one embedding. Two placements (bis-benzyl to benzaldehyde, naphthyl-benzyl to naphthaldehyde) must both be searched. The union of those matches is not one conserved core, and the smaller leftover match is not the only one kept. Tests that go green when this is fixed: `test_multi_mcs_union_would_prune_both_benzyls` and `test_smaller_secondary_embedding_alone_misses_naphthaldehyde` in `tests/refactor_poc/test_ported.py`.
 - Do not drop a child only because `atom_diff` cost is not strictly lower. The `closer` check in `find_path` refuses a sideways step. Some real routes do not move the score down on every hop.
 - Filters must see the molecule under consideration, not only the diff. Today `filter_rules` and `filter_sites` are built from `atom_diff` (`find_path.py`, the call beside `parent_cost`). The current mol has information the diff does not: what the last transform already changed, which atoms are new, what the formula is now. The smallest fix is to pass that mol into the filter call. Do not add a one-off `if rule is Dealkylation` instead.
 - Do not walk a step plan that is the same steps in another order. Once a `Deps` has been yielded, a later walk that is only a reordering of those steps is not a new path.

@@ -80,8 +80,10 @@ Status: not decided.
 
 `max_expansions` as a public mode and the old depth counters. A billed
 counter stays, as a measurement (`mol_edits + nodes`). Poc `bfs` and `dfs`
-are a separate small API. Adding them is not approval to drop enumeration,
-and it is not a port of the old budget machinery.
+enumerate one ruleset up to a depth cap. They take `filter_rules` and
+`filter_sites`, and they do not use the atom diff or the closer drop.
+Adding them is not approval to drop enumeration, and it is not a port of
+the old budget machinery.
 
 Old tests: `tests/test_classic_path_counters.py`, `tests/test_bfs_fuzz.py`,
 `tests/test_path_outcome_hard.py` (the budget flag, not the metabolite).

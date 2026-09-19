@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+- Easy pairs against the old library, canonical fragment SMILES. Ethane hydroxylation, anisole dealkylation, and quinone formation on benzene and on phenol match. Butylbenzene hydroxylation matches except three carbonyls from the old `[#6h2:1]>>[*:1]=O` pattern; recorded in `src/xenosite/refactor_poc/DIVERGENCES.md`. Aromatic SMARTS run on every kekulé form. A repeated site is the same map roles and the same incident bond orders, so ortho and para both emit. `bfs` / `dfs` enumerate one ruleset with the filters the set already forwards, a depth cap, and no atom diff.
+
+- Local RDKit types for the calls the poc uses, signatures taken from Boost error text, and `rdkitutil` is under pyright. Not a full stub package. No `rdkit-stubs` dependency.
+
+- `PatternInfo.site_map` is one atom-map number or a tuple of them. Pair rules already passed `(1, 2)`. `Structure.mcs_matches` and `Structure.mcs_targets` stay `dict[str, McsResult]`, keyed by the target canonical SMILES. `total` stays false. Pyright on records, rules, find_path, and rulesets: 0 errors. Search and reaction chemistry unchanged.
+
 - Project rule `.cursor/rules/data-not-branches.mdc`: generic algorithms read data. Methide is offered by rule data, limited to one site by `PatternInfo`, and excluded by `filter_sites`. Exceptions need a written reason. A less-likely mark is future filter data. That schema is not chosen, so no field was added.
 
 - Atom trace additions are normalized. A new atom's `added_by` is `R1`, `R2`, ... The site, rule hierarchy (including the ruleset), effect, name, phase1, and depth live once on `atom_trace["additions"]`. `formula` is the current heavy-atom counts plus H and formal charge. `delta_formula[id]` is the change at that transform. `metabolize` works on a copy, so the caller's mol is unchanged. Search changes consult `src/xenosite/refactor_poc/HEURISTICS.md` first.
