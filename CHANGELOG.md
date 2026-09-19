@@ -10,6 +10,17 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.6.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.0) - 2026-09-19
+
+### Changed
+
+- ``phase1=True`` reports sites as 0-based atom indexes. The old ``1.h`` and ``2.3`` labels are gone.
+
+### Fixed
+
+- Guided search tries rules that can dearomatize first when a large matched region is aromatic on the reactant and not on the target. Sites on that system, including atoms bonded to it, are tried first; other sites of those rules are kept and sorted later. Match-boundary sites are expanded before other sites.
+
+
 ## [0.5.3](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.3) - 2026-09-18
 
 ### Fixed
