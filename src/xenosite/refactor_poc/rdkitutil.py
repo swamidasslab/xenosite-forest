@@ -147,13 +147,14 @@ def copy_mol(mol: Any) -> Any:
 
 
 def rw_copy(mol: Any) -> Any:
-    """Editable copy. The source molecule is not edited."""
+    """Editable chemistry copy. The source is not edited.
 
-    out = RWMol(Mol(mol))
-    forest = getattr(mol, "_forest", None)
-    if forest is not None:
-        out._forest = copy.deepcopy(forest)
-    return out
+    ``_forest`` is not carried. This copy is about to be edited, and a
+    copied structure cache would answer questions about the molecule
+    before those edits. :func:`copy_mol` is the copy that keeps the forest.
+    """
+
+    return RWMol(Mol(mol))
 
 
 def reaction_from_smarts(smarts: str) -> Any:

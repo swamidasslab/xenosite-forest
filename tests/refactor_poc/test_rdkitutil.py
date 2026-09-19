@@ -11,6 +11,7 @@ from xenosite.refactor_poc.rdkitutil import (
     mcs_matches,
     molecule_formula,
     resonance_bond_maps,
+    rw_copy,
     sanitized_fragments,
     smarts_matches,
     split_fragments,
@@ -79,6 +80,14 @@ def test_forest_stays_a_dict():
     cloned = copy.deepcopy(forest)
     assert cloned["structure"]["formula"]["counts"]["C"] == 2
     assert cloned["atom_trace"]["depth"] == 0
+
+
+def test_rw_copy_does_not_carry_the_structure_cache():
+    parent = Chem.MolFromSmiles("CCO")
+    get_csmi(parent)
+    child = rw_copy(parent)
+    assert getattr(child, "_forest", None) is None
+    assert get_forest(copy_mol(parent))["structure"]["csmi"] == get_csmi(parent)
 
 
 def test_fragment_split_uses_pieces():
