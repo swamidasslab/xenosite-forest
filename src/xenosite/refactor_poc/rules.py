@@ -479,6 +479,8 @@ _EFFECT_DEFAULTS = {
     "adds": "",
     "removes": "",
     "cleaves": False,
+    "leave_count": None,
+    "breaks_ring": False,
     "dearomatizes": False,
     "methide": False,
     "needs": "",

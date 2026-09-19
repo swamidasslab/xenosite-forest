@@ -37,11 +37,17 @@ class Effect(TypedDict, total=False):
     Declared on a possibility, then filled in from the matched atoms.
     ``symbol``, ``h``, and ``site_aromatic`` are the site atom.
     ``partner`` and ``partner_h`` are the atom the SMARTS OR was ambiguous about.
+    A filter or a later resolver reads ``leave_count`` and ``breaks_ring``.
+    Small-ion cleavage and N-dealkylation are the same ``cleaves`` bit plus
+    different ``leave_count``. Ring opening is ``breaks_ring``, not a separate
+    rule class in the search.
     """
 
     adds: str
     removes: str
     cleaves: bool
+    leave_count: int | None
+    breaks_ring: bool
     dearomatizes: bool
     methide: bool
     needs: str
@@ -157,6 +163,8 @@ class Structure(TypedDict, total=False):
     conjugated_systems: tuple[frozenset[int], ...]
     aromatic_systems: tuple[frozenset[int], ...]
     rings: dict[int, tuple[tuple[int, ...], ...]]
+    mcs_matches: dict[str, McsResult]
+    mcs_targets: dict[str, McsResult]
 
 
 class Forest(TypedDict, total=False):
