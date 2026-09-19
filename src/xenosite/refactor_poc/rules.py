@@ -168,26 +168,9 @@ class ReactionRule:
             products = por.products
             # print("INFO", info, len(products))
             site = info["site"]
-            top_site = self._top_site(site, mol)
 
-            # Topological duplicates of one outcome collapse. A different SMARTS
-            # (rxn_num) or a different heavy-atom effect does not: dealkylation
-            # and sulfur oxidation emit several products from the same atoms.
-            effect = info.get("options") or {}
-            sig = (
-                top_site,
-                info.get("rxn_num"),
-                effect.get("adds"),
-                effect.get("removes"),
-                effect.get("cleaves"),
-                tuple(info["rule"]),
-            )
-
-            if sig in seen:
-                continue
-
-            seen.add(sig)
-
+            # Same canonical SMILES is one outcome. Two sites in one atom
+            # class can still be different molecules (ortho quinone and para).
             for n, p in enumerate(products):
                 sanitize_mol(p)
 
@@ -796,46 +779,52 @@ class SmartsReactionRule(ReactionRule):
         context = mol if context_mol is None else context_mol
         _bump(counters, "rule_expansions")
         seen = set()
+        ranks = topol_equiv(context)
 
-        for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
-            if not filter_rules(self, pattern):
-                continue
+        for work in _kekule_forms(mol):
+            for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
+                if not filter_rules(self, pattern):
+                    continue
 
-            reactant = smarts.split(">>", 1)[0]
-            for mapped in smarts_matches(mol, reactant):
-                site = _site_indexes(mapped, pattern)
-                if not site:
-                    continue
-                effect = resolve_effect(context, mapped, pattern)
-                info = {
-                    "site": site,
-                    "rule": self,
-                    "options": effect,
-                    "rxn_num": rxn_num,
-                }
-                _bump(counters, "sites_considered")
-                if not filter_sites(site, info):
-                    _bump(counters, "sites_skipped")
-                    continue
-                # Same SMARTS on a topological duplicate is one edit. A different
-                # SMARTS can share adds/cleaves and still be a different product
-                # (alcohol vs aldehyde; S-OH vs S-oxide).
-                signature = (
-                    self._top_site(site, mol),
-                    rxn_num,
-                    effect.get("adds"),
-                    effect.get("removes"),
-                    bool(effect.get("cleaves")),
-                    bool(effect.get("dearomatizes")),
-                )
-                if signature in seen:
-                    _bump(counters, "sites_skipped")
-                    continue
-                products = react_at(self, smarts, mol, mapped, counters)
-                if not products:
-                    continue
-                seen.add(signature)
-                yield ProductsOfReaction(info=info, products=products)
+                reactant = smarts.split(">>", 1)[0]
+                for mapped in smarts_matches(work, reactant):
+                    site = _site_indexes(mapped, pattern)
+                    if not site:
+                        continue
+                    effect = resolve_effect(context, mapped, pattern)
+                    info = {
+                        "site": site,
+                        "rule": self,
+                        "options": effect,
+                        "rxn_num": rxn_num,
+                    }
+                    _bump(counters, "sites_considered")
+                    if not filter_sites(site, info):
+                        _bump(counters, "sites_skipped")
+                        continue
+                    # Same map roles and the same incident bond orders are one
+                    # edit. Equivalent carbons share a rank. Another Kekulé
+                    # writing, or swapping which atom is map 1, is not.
+                    signature = (
+                        tuple(
+                            (mapno, ranks[idx])
+                            for mapno, idx in sorted(mapped.items())
+                        ),
+                        _incident_orders(work, ranks, mapped),
+                        rxn_num,
+                        effect.get("adds"),
+                        effect.get("removes"),
+                        bool(effect.get("cleaves")),
+                        bool(effect.get("dearomatizes")),
+                    )
+                    if signature in seen:
+                        _bump(counters, "sites_skipped")
+                        continue
+                    products = react_at(self, smarts, work, mapped, counters)
+                    if not products:
+                        continue
+                    seen.add(signature)
+                    yield ProductsOfReaction(info=info, products=products)
 
     def _smarts2rxns(self, smarts, use_implicit_properties=False, **kwargs):
         """Converts SMARTS reactions to RDKit reactions."""
@@ -995,6 +984,52 @@ def alternating_path(bond_map, start, end, neighbors):
             seen.add(state)
             queue.append((nbr, next_want, nxt))
     return None
+
+
+def _kekule_forms(mol: Mol) -> tuple[Mol, ...]:
+    """Kekulé copies when any atom is aromatic. Indexes stay put.
+
+    One form is not enough: a ring-bond cleavage on the other Kekulé writing
+    is a different product, and it will not sanitize while atoms stay
+    aromatic. A mol that is already kekulé is returned as given. Forest
+    labels are copied so the product can be traced.
+    """
+
+    if not any(atom.GetIsAromatic() for atom in mol.GetAtoms()):
+        return (mol,)
+    maps = resonance_bond_maps(mol)
+    if not maps:
+        return (mol,)
+    forms = []
+    for bond_map in maps:
+        work = overlay_kekule(mol, bond_map).GetMol()
+        for atom in mol.GetAtoms():
+            if not atom.HasProp("forestLabel"):
+                continue
+            work.GetAtomWithIdx(atom.GetIdx()).SetProp(
+                "forestLabel", atom.GetProp("forestLabel")
+            )
+        forms.append(work)
+    return tuple(forms)
+
+
+def _incident_orders(mol: Mol, ranks, mapped) -> tuple:
+    """Bond orders touching the matched atoms, in rank space.
+
+    Two Kekulé forms of the same site differ here. Two equivalent carbons
+    do not, so they stay one edit.
+    """
+
+    idxs = set(mapped.values())
+    bonds = []
+    for bond in mol.GetBonds():
+        i = bond.GetBeginAtomIdx()
+        j = bond.GetEndAtomIdx()
+        if i not in idxs and j not in idxs:
+            continue
+        a, b = sorted((ranks[i], ranks[j]))
+        bonds.append((a, b, bond.GetBondTypeAsDouble()))
+    return tuple(sorted(bonds))
 
 
 def overlay_kekule(mol, bond_map):
