@@ -11,9 +11,17 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 
-from rdkit import Chem
-from rdkit.Chem import GetMolFrags, SanitizeMol, rdFMCS
 
+from xenosite.refactor_poc.rdkitutil import (
+    as_mol,
+    cannonicalize_order,
+    canon_smiles,
+    copy_mol,
+    mcs_matches,
+    mcs_target_matches,
+    sanitize_catch,
+    split_fragments,
+)
 from xenosite.forest.step_plan import AtomRef, Deps, Step
 from xenosite.refactor_poc.rules import (
     Dealkylation,
@@ -21,7 +29,6 @@ from xenosite.refactor_poc.rules import (
     Hydroxylation,
     QuinoneFormation,
     RuleSet,
-    cannonicalize_order,
     forest_trace,
     install_forest,
 )
@@ -146,28 +153,11 @@ class PathOutcome:
 # ---------------------------------------------------------------------------
 
 
-def _as_mol(value):
-    if isinstance(value, str):
-        mol = Chem.MolFromSmiles(value)
-        if mol is None:
-            raise ValueError("could not parse %r" % (value,))
-        return mol
-    return value
-
-
 def _hydrogens(atom):
     try:
         return atom.GetTotalNumHs()
     except RuntimeError:
         return 0
-
-
-def canon_smiles(value):
-    mol = _as_mol(value)
-    copy = Chem.Mol(mol)
-    for atom in copy.GetAtoms():
-        atom.SetAtomMapNum(0)
-    return Chem.MolToSmiles(copy, isomericSmiles=False)
 
 
 class AtomDiff:
@@ -294,32 +284,15 @@ def _mapping_score(reactant, target, r_match, t_match):
 
 
 def _best_mapping(reactant, target):
-    mcs = rdFMCS.FindMCS(
-        [reactant, target],
-        atomCompare=rdFMCS.AtomCompare.CompareElements,
-        bondCompare=rdFMCS.BondCompare.CompareAny,
-        matchValences=False,
-        ringMatchesRingOnly=False,
-        completeRingsOnly=False,
-        timeout=2,
-    )
-    if mcs.numAtoms <= 0 or mcs.canceled:
-        return {}
-    query = Chem.MolFromSmarts(mcs.smartsString)
-    if query is None:
-        return {}
-    r_matches = reactant.GetSubstructMatches(query, uniquify=False)
-    t_matches = target.GetSubstructMatches(query, uniquify=False)
-    if not r_matches or not t_matches:
+    reactant_hits = mcs_matches(reactant, target).embeddings[:24]
+    target_hits = mcs_target_matches(reactant, target).embeddings[:24]
+    if not reactant_hits or not target_hits:
         return {}
 
-    # Symmetric molecules can have dozens of embeddings. Score a bounded set.
-    r_matches = r_matches[:24]
-    t_matches = t_matches[:24]
     best = None
     best_score = None
-    for r_match in r_matches:
-        for t_match in t_matches:
+    for r_match in reactant_hits:
+        for t_match in target_hits:
             score = _mapping_score(reactant, target, r_match, t_match)
             if best_score is None or score > best_score:
                 best_score = score
@@ -335,8 +308,8 @@ def atom_diff(reactant, target):
     that parse, which is stable for a given SMILES.
     """
 
-    reactant = _as_mol(reactant)
-    target = _as_mol(target)
+    reactant = as_mol(reactant)
+    target = as_mol(target)
     mapping = _best_mapping(reactant, target)
     image = set(mapping.values())
 
@@ -674,25 +647,13 @@ def default_ruleset():
     )
 
 
-def _pieces(raw):
-    """One mol, or the fragments of a disconnected reaction product."""
-
-    try:
-        groups = Chem.GetMolFrags(raw)
-    except ValueError:
-        return [raw]
-    if len(groups) <= 1:
-        return [raw]
-    return list(GetMolFrags(raw, asMols=True, sanitizeFrags=False)) or [raw]
-
-
 def _finish(parent, raw_products, info, counters):
     """Sanitize and trace each fragment. Failed sanitizes are dropped."""
 
     finished = []
     for raw in raw_products:
-        for piece in _pieces(raw):
-            if SanitizeMol(piece, catchErrors=True):
+        for piece in split_fragments(raw).pieces:
+            if sanitize_catch(piece):
                 counters.sanitize_dropped += 1
                 continue
             for atom in piece.GetAtoms():
@@ -747,9 +708,10 @@ def find_path(
     test needs ``billed``.
     """
 
-    reactant = _as_mol(reactant)
-    target_mol = _as_mol(target)
-    reactant = Chem.Mol(reactant)
+    reactant = as_mol(reactant)
+    target_mol = as_mol(target)
+    reactant = copy_mol(reactant)
+    reactant._forest = None
     install_forest(reactant)
     target_smiles = canon_smiles(target_mol)
     if ruleset is None:

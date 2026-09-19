@@ -6,78 +6,27 @@ from collections import defaultdict, deque
 import json
 import copy
 
-# Third Party
-from rdkit import Chem, rdBase
-from rdkit.Chem import AllChem
-from rdkit.Chem.AllChem import CanonicalRankAtoms, RenumberAtoms, MolToSmiles
-from rdkit.Chem import GetMolFrags, SanitizeMol
-from rdkit.Chem.rdchem import (
+from xenosite.refactor_poc.rdkitutil import (
     Atom,
     BondType,
-    KEKULE_ALL,
     Mol,
-    ResonanceMolSupplier,
-    RWMol,
+    aromatic_systems,
+    cannonicalize_order,
+    conjugated_systems,
+    get_forest,
+    reaction_from_smarts,
+    resonance_bond_maps,
+    ring_membership,
+    run_reactants,
+    rw_copy,
+    sanitize_mol,
+    sanitized_fragments,
+    smarts_matches,
+    topol_equiv,
 )
+
 from typing import Any, NamedTuple, TypedDict
 from collections.abc import Callable, Generator
-
-
-rdBase.DisableLog("rdApp.*")
-
-
-def get_forest(mol, new_structure=False) -> dict:
-
-    forest = getattr(mol, "_forest", None)
-    if forest is None:
-        forest = {"structure": {}}
-        mol._forest = forest
-
-    if new_structure:
-        forest = copy.deepcopy(forest)
-        del forest["structure"]
-
-    return forest
-
-
-def sanitize_mol(mol):
-    forest = get_forest(mol)
-
-    if "sanitized" in forest["structure"]:
-        return forest["structure"]["sanitized"]
-
-    sanitized = SanitizeMol(Mol(mol), catchErrors=True)
-
-    forest["structure"]["sanitized"] = sanitized
-    return sanitized
-
-
-def topol_equiv(mol):
-    """Get dict mapping atom indexes to topological IDs.
-
-    >>> from rdkit import Chem
-    >>> mol = MolFromSmiles('CCC')
-    >>> AtomTracker.topol_equiv(mol)
-    {0: 0, 1: 2, 2: 0}
-    """
-
-    forest = get_forest(mol)
-
-    if "topol_equiv" in forest["structure"]:
-        return forest["structure"]["topol_equiv"]
-
-    sanitized = Mol(mol)
-    sanitize_mol(sanitized)
-
-    topol_equiv = {
-        a.GetIdx(): i
-        for a, i in zip(
-            mol.GetAtoms(),
-            CanonicalRankAtoms(sanitized, includeChirality=False, breakTies=False),
-        )
-    }
-    forest["structure"]["topol_equiv"] = topol_equiv
-    return topol_equiv
 
 
 def set_terminal_product(mol, value=True):
@@ -289,41 +238,6 @@ def stamp_forest_labels(mol):
         atom.SetProp("forestLabel", tag)
 
     return mol
-
-
-import ast
-
-
-def cannonicalize_order(mol, tracing_reset=True):
-    csmi = MolToSmiles(mol, isomericSmiles=False)
-
-    smiles_order = ast.literal_eval(mol.GetProp("_smilesAtomOutputOrder"))
-
-    renumber_map = [0] * mol.GetNumAtoms()
-    for new_pos, old_idx in enumerate(smiles_order):
-        renumber_map[old_idx] = new_pos
-
-    r = RenumberAtoms(mol, renumber_map)
-
-    forest = get_forest(mol)
-
-    r._forest = copy.deepcopy(forest)
-    r._forest["structure"] = {"csmi": csmi}
-
-    if tracing_reset:
-        reordered_forest_labels(r)
-
-    return r, csmi
-
-
-def get_csmi(mol):
-    forest = get_forest(mol)
-    csmi = forest["structure"].get("csmi", None)
-
-    if not csmi:
-        csmi = MolToSmiles(mol, isomericSmiles=False)
-        forest["structure"]["csmi"] = csmi
-    return csmi
 
 
 def reordered_forest_labels(mol):
@@ -670,18 +584,6 @@ def _isotope_smarts(smarts, mapped):
     return re.sub(r"\[([^\[\]]*):(\d+)\]", repl, smarts)
 
 
-_REACTION_CACHE: dict[str, Any] = {}
-
-
-def _cached_reaction(smarts):
-    rxn = _REACTION_CACHE.get(smarts)
-    if rxn is None:
-        rxn = AllChem.ReactionFromSmarts(smarts)  # pyright: ignore[reportAttributeAccessIssue]
-        rxn._setImplicitPropertiesFlag(False)
-        _REACTION_CACHE[smarts] = rxn
-    return rxn
-
-
 def _site_indexes(mapped, pattern):
     """Atom indexes the pattern calls the site. Defaults to map 1."""
 
@@ -699,12 +601,11 @@ def react_at(rule, smarts, mol, mapped, counters=None):
     """Run ``smarts`` on one match. One call is one ``mol_edits``."""
 
     _bump(counters, "mol_edits")
-    stamped = RWMol(Mol(mol))
+    stamped = rw_copy(mol)
     for mapno, idx in mapped.items():
         stamped.GetAtomWithIdx(idx).SetIsotope(8000 + mapno)
     try:
-        reaction = _cached_reaction(_isotope_smarts(smarts, mapped))
-        product_sets = reaction.RunReactants((stamped,))
+        product_sets = run_reactants(_isotope_smarts(smarts, mapped), stamped)
     except (RuntimeError, ValueError):
         return []
     if not product_sets:
@@ -807,10 +708,7 @@ class SmartsReactionRule(ReactionRule):
 
     def _smarts2rxns(self, smarts, use_implicit_properties=False, **kwargs):
         """Converts SMARTS reactions to RDKit reactions."""
-        rxn = AllChem.ReactionFromSmarts(smarts)  # pyright: ignore[reportAttributeAccessIssue]
-        if not use_implicit_properties:
-            rxn._setImplicitPropertiesFlag(False)
-        return rxn
+        return reaction_from_smarts(smarts)
 
     def _lift_forest_labels(self, reactant, product):
         """Carry the forest labels from the reactant to the product."""
@@ -904,77 +802,6 @@ def _connected_components(mol, atoms):
     return systems
 
 
-def _load_resonance(mol):
-    """Cache kekulé bond maps and conjugated-atom sets on ``_forest['structure']``."""
-
-    structure = get_forest(mol)["structure"]
-    if "resonance_bonds" in structure:
-        return
-
-    base = Mol(mol)
-    maps = []
-    groups = []
-    try:
-        if SanitizeMol(base, catchErrors=True):
-            raise ValueError("unsanitizable")
-        supplier = ResonanceMolSupplier(base, KEKULE_ALL)
-        n_groups = supplier.GetNumConjGrps()
-        grouped = defaultdict(set)
-        for atom in base.GetAtoms():
-            group = supplier.GetAtomConjGrpIdx(atom.GetIdx())
-            if 0 <= group < n_groups:
-                grouped[group].add(atom.GetIdx())
-        groups = [frozenset(v) for v in grouped.values() if len(v) >= 2]
-        seen = set()
-        for res in supplier:
-            if res is None:
-                continue
-            bond_map = _current_bond_map(res)
-            key = tuple(sorted(bond_map.items()))
-            if key in seen:
-                continue
-            seen.add(key)
-            maps.append(bond_map)
-    except (ValueError, RuntimeError):
-        maps = []
-        groups = []
-
-    if not groups:
-        aromatic = {a.GetIdx() for a in mol.GetAromaticAtoms()}
-        groups = _connected_components(mol, aromatic)
-        if not groups:
-            conjugated = set()
-            for bond in base.GetBonds():
-                if bond.GetIsAromatic() or bond.GetBondTypeAsDouble() >= 1.5:
-                    conjugated.add(bond.GetBeginAtomIdx())
-                    conjugated.add(bond.GetEndAtomIdx())
-            groups = _connected_components(base, conjugated)
-
-    if not maps:
-        maps = [_current_bond_map(base)]
-
-    structure["resonance_bonds"] = tuple(maps)
-    structure["conjugated_systems"] = tuple(groups)
-
-
-def resonance_bond_maps(mol):
-    _load_resonance(mol)
-    return get_forest(mol)["structure"]["resonance_bonds"]
-
-
-def conjugated_systems(mol):
-    _load_resonance(mol)
-    return get_forest(mol)["structure"]["conjugated_systems"]
-
-
-def aromatic_systems(mol):
-    structure = get_forest(mol)["structure"]
-    if "aromatic_systems" not in structure:
-        aromatic = {atom.GetIdx() for atom in mol.GetAromaticAtoms()}
-        structure["aromatic_systems"] = tuple(_connected_components(mol, aromatic))
-    return structure["aromatic_systems"]
-
-
 def system_neighbors(mol, system):
     system = set(system)
     neighbors = {i: [] for i in system}
@@ -1042,7 +869,7 @@ def alternating_path(bond_map, start, end, neighbors):
 def overlay_kekule(mol, bond_map):
     """Copy ``mol`` and set kekulé bond orders. Atom indexes stay put."""
 
-    rw = RWMol(Mol(mol))
+    rw = rw_copy(mol)
     for bond in rw.GetBonds():
         i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
         order = bond_map.get(_bond_key(i, j))
@@ -1093,19 +920,6 @@ def _correct_end_hydrogens(mol, idx, bond):
         adjust_hydrogens(mol, idx, 1)
     elif bond.GetBondType() == BondType.DOUBLE:
         adjust_hydrogens(mol, idx, -1)
-
-
-def ring_membership(mol):
-    structure = get_forest(mol)["structure"]
-    if "rings" not in structure:
-        work = Mol(mol)
-        SanitizeMol(work, Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
-        atom_rings = work.GetRingInfo().AtomRings()
-        structure["rings"] = {
-            idx: tuple(ring for ring in atom_rings if idx in ring)
-            for idx in range(work.GetNumAtoms())
-        }
-    return structure["rings"]
 
 
 def _same_rings(rings, i, j):
@@ -1177,38 +991,6 @@ EDITS = {
     "iminium": edit_iminium,
     "dealkylate": edit_dealkylate,
 }
-
-
-def smarts_matches(mol, smarts):
-    cache = get_forest(mol)["structure"].setdefault("smarts_matches", {})
-    if smarts not in cache:
-        query = Chem.MolFromSmarts(smarts)
-        hits = []
-        if query is not None:
-            mapnos = [atom.GetAtomMapNum() for atom in query.GetAtoms()]
-            for match in mol.GetSubstructMatches(query):
-                mapped = {mapno: idx for idx, mapno in zip(match, mapnos) if mapno}
-                if 1 in mapped:
-                    hits.append(mapped)
-        cache[smarts] = tuple(hits)
-    return cache[smarts]
-
-
-def sanitized_fragments(mol, counters=None):
-    """Split, drop the dealkylation leaving group, sanitize. Empty if any frag fails."""
-
-    if isinstance(mol, RWMol):
-        mol = mol.GetMol()
-    frags = list(GetMolFrags(mol, asMols=True, sanitizeFrags=False)) or [mol]
-    out = []
-    for frag in frags:
-        if any(atom.HasProp("dealk-noncarbon") for atom in frag.GetAtoms()):
-            continue
-        if SanitizeMol(frag, catchErrors=True):
-            _bump(counters, "sanitize_dropped")
-            return []
-        out.append(frag)
-    return out
 
 
 def _merge_options(left, right, dearomatizes):
@@ -1321,7 +1103,7 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
                         break
                     if not swap_bonds_along_path(rw, path):
                         continue
-                    products = sanitized_fragments(rw, counters)
+                    products = list(sanitized_fragments(rw, counters).pieces)
                     if not products:
                         continue
                     info = dict(preview)
