@@ -1,17 +1,7 @@
-"""Embeddings the search still scores down to one. See HEURISTICS.md.
-
-An XPASS means that entry is done. Remove the mark in that commit.
-"""
-
-import pytest
+"""Every target placement stays available to the search. See HEURISTICS.md."""
 
 from xenosite.refactor_poc.find_path import atom_diff
 from xenosite.refactor_poc.rdkitutil import as_mol, mcs_matches
-
-_REASON = (
-    "HEURISTICS.md: expand every full-size match of the target onto the "
-    "start, not only _best_mapping"
-)
 
 
 def _rings(mol, embeddings):
@@ -28,8 +18,6 @@ def _rings(mol, embeddings):
     return rings
 
 
-@pytest.mark.regression
-@pytest.mark.xfail(reason=_REASON)
 def test_multi_mcs_union_would_prune_both_benzyls():
     """Two PhCHO placements. One core must not be the union of both rings."""
 
@@ -51,8 +39,6 @@ def test_multi_mcs_union_would_prune_both_benzyls():
         )
 
 
-@pytest.mark.regression
-@pytest.mark.xfail(reason=_REASON)
 def test_smaller_secondary_embedding_alone_misses_naphthaldehyde():
     """The phenyl remainder must not be the only embedding kept."""
 

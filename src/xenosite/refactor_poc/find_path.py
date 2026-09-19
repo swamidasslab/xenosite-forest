@@ -177,7 +177,7 @@ class AtomDiff:
         self,
         reactant: Mol,
         target: Mol,
-        mapping,
+        mapping: dict[int, int],
         needs_oxygen,
         needs_carbonyl,
         needs_alcohol,
@@ -204,6 +204,8 @@ class AtomDiff:
         self.bond_raises = set(bond_raises)
         self.reactant_heavy = reactant.GetNumHeavyAtoms()
         self.target_heavy = target.GetNumHeavyAtoms()
+        self.mappings: tuple[dict[int, int], ...] = (dict(mapping),)
+        self._view_costs: tuple[int, ...] | None = None
 
     @property
     def target_smaller(self):
@@ -236,8 +238,15 @@ class AtomDiff:
         """How much of the reactant still disagrees with the target.
 
         Used only to refuse a child that moved away. Not a ranker.
+        When several placements are open, a step that gets closer on any
+        one of them is not refused.
         """
 
+        if self._view_costs is not None:
+            return min(self._view_costs)
+        return self._field_cost()
+
+    def _field_cost(self):
         h_off = sum(1 for delta in self.h_delta.values() if delta)
         return (
             3 * len(self.cleaved)
@@ -287,37 +296,95 @@ def _mapping_score(reactant: Mol, target: Mol, r_match, t_match):
     return score
 
 
-def _best_mapping(reactant: Mol, target: Mol):
-    # why not uniquify to reduce combinatorial explosion?
-    reactant_hits = mcs_matches(reactant, target).embeddings[:24]
-    target_hits = mcs_target_matches(reactant, target).embeddings[:24]
-    if not reactant_hits or not target_hits:
-        return {}
+def _mappings(reactant: Mol, target: Mol) -> tuple[dict[int, int], ...]:
+    """One alignment per placement. The cache's embeddings are all read.
 
-    best = None
-    best_score = None
-    for r_match in reactant_hits:
-        for t_match in target_hits:
-            score = _mapping_score(reactant, target, r_match, t_match)
-            if best_score is None or score > best_score:
-                best_score = score
-                best = (r_match, t_match)
-    if best is None:
-        return {}
-    r_match, t_match = best
-    return {r: t for r, t in zip(r_match, t_match)}
-
-
-def atom_diff(reactant: Mol | str, target: Mol | str):
-    """Pair reactant atoms with target atoms and record the local change.
-
-    String inputs are parsed with ``MolFromSmiles``. Indexes then refer to
-    that parse, which is stable for a given SMILES.
+    Reorderings of the same reactant atoms are one placement. The winning
+    alignment is the one :func:`_mapping_score` likes. A shorter remainder
+    is paired only with target embeddings of that same length.
     """
 
-    reactant = as_mol(reactant)
-    target = as_mol(target)
-    mapping = _best_mapping(reactant, target)
+    reactant_hits = mcs_matches(reactant, target).embeddings
+    target_hits = mcs_target_matches(reactant, target).embeddings
+    by_size: dict[int, list[tuple[int, ...]]] = {}
+    for hit in target_hits:
+        by_size.setdefault(len(hit), []).append(hit)
+    if not reactant_hits or not by_size:
+        return ()
+
+    best: dict[frozenset[int], tuple[int, dict[int, int]]] = {}
+    for r_match in reactant_hits:
+        mates = by_size.get(len(r_match))
+        if not mates:
+            continue
+        key = frozenset(r_match)
+        for t_match in mates:
+            score = _mapping_score(reactant, target, r_match, t_match)
+            held = best.get(key)
+            aligned = {r: t for r, t in zip(r_match, t_match)}
+            if held is None or score > held[0]:
+                best[key] = (score, aligned)
+    ranked = sorted(best.values(), key=lambda item: item[0], reverse=True)
+    return tuple(item[1] for item in ranked)
+
+
+def _merge_views(views: tuple[AtomDiff, ...]) -> AtomDiff:
+    """One diff whose filters can see every placement.
+
+    ``mapping`` stays the best-scoring alignment. ``cost`` is the minimum
+    across placements, so a step that helps a second ring is not refused
+    for failing to help the first.
+    """
+
+    primary = views[0]
+    primary._view_costs = tuple(view._field_cost() for view in views)
+    primary.mappings = tuple(dict(view.mapping) for view in views)
+    if len(views) == 1:
+        return primary
+    primary.needs_oxygen = frozenset().union(*(view.needs_oxygen for view in views))
+    primary.needs_carbonyl = frozenset().union(
+        *(view.needs_carbonyl for view in views)
+    )
+    primary.needs_alcohol = frozenset().union(*(view.needs_alcohol for view in views))
+    primary.cleaved = frozenset().union(*(view.cleaved for view in views))
+    bonds: set[frozenset[int]] = set()
+    raises: set[frozenset[int]] = set()
+    for view in views:
+        bonds.update(view.cleavage_bonds)
+        raises.update(view.bond_raises)
+    primary.cleavage_bonds = bonds
+    primary.bond_raises = raises
+    primary.loses_aromaticity = frozenset().union(
+        *(view.loses_aromaticity for view in views)
+    )
+    h_delta: dict[int, int] = {}
+    for view in views:
+        for atom, delta in view.h_delta.items():
+            held = h_delta.get(atom)
+            if held is None or delta < held:
+                h_delta[atom] = delta
+    primary.h_delta = h_delta
+    return primary
+
+
+def atom_diff(reactant: Mol | str, target: Mol | str) -> AtomDiff:
+    """Pair reactant atoms with target atoms and record the local change.
+
+    Every cached placement is kept on ``mappings``. ``mapping`` is the
+    best-scoring one. String inputs are parsed with ``MolFromSmiles``.
+    Indexes then refer to that parse, which is stable for a given SMILES.
+    """
+
+    reactant_mol = as_mol(reactant)
+    target_mol = as_mol(target)
+    mappings = _mappings(reactant_mol, target_mol) or ({},)
+    views = tuple(
+        _diff_for(reactant_mol, target_mol, mapping) for mapping in mappings
+    )
+    return _merge_views(views)
+
+
+def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
     image = set(mapping.values())
 
     needs_oxygen = set()

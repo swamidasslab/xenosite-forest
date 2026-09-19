@@ -756,12 +756,94 @@ def split_fragments(raw: Mol) -> FragmentSplit:
     return FragmentSplit(pieces=tuple(frags))
 
 
-def mcs_matches(reactant: Mol, target: Mol) -> McsResult:
-    """Every full-size embedding of ``target`` on ``reactant``, not only the best.
+def _without_atoms(mol: Mol, drop: set[int]) -> tuple[NoForestMol, dict[int, int]]:
+    """Copy with ``drop`` removed. The map sends each new index to the old one."""
 
-    The reactant structure holds the NamedTuple, keyed by the target's
-    canonical SMILES. A later search can read every embedding. This function
-    does not score them.
+    survivors = [index for index in range(mol.GetNumAtoms()) if index not in drop]
+    new_to_old = {new: old for new, old in enumerate(survivors)}
+    editable = RWMol(Mol(mol))
+    for index in sorted(drop, reverse=True):
+        editable.RemoveAtom(index)
+    remainder = editable.GetMol()
+    SanitizeMol(remainder, catchErrors=True)
+    return remainder, new_to_old
+
+
+def _remember(
+    hits: tuple[tuple[int, ...], ...],
+    into: list[tuple[int, ...]],
+    seen: set[tuple[int, ...]],
+) -> None:
+    for hit in hits:
+        if hit in seen:
+            continue
+        seen.add(hit)
+        into.append(hit)
+
+
+def _placements(
+    reactant: Mol, target: Mol
+) -> tuple[tuple[tuple[int, ...], ...], tuple[tuple[int, ...], ...]]:
+    """Full-size embeddings, then smaller matches on the uncovered remainder.
+
+    A later round deletes atoms a previous embedding already used and runs
+    the same MCS again, so a smaller leftover is not truncated away.
+    Orientations of one atom set stay; this does not pick a winner.
+    """
+
+    reactant_hits: list[tuple[int, ...]] = []
+    target_hits: list[tuple[int, ...]] = []
+    reactant_seen: set[tuple[int, ...]] = set()
+    target_seen: set[tuple[int, ...]] = set()
+    placed: set[frozenset[int]] = set()
+
+    def absorb(piece: Mol, index_of: dict[int, int]) -> bool:
+        query = _mcs_query(piece, target)
+        if query is None or query.GetNumAtoms() < 2:
+            return False
+        raw = _full_matches(piece, query)
+        if not raw or not _full_matches(target, query):
+            return False
+        pending: list[tuple[int, ...]] = []
+        fresh: set[frozenset[int]] = set()
+        for hit in raw:
+            orig = tuple(index_of[index] for index in hit)
+            atoms = frozenset(orig)
+            if len(atoms) < 2 or orig in reactant_seen:
+                continue
+            if atoms in placed and atoms not in fresh:
+                continue
+            pending.append(orig)
+            fresh.add(atoms)
+        if not fresh:
+            return False
+        _remember(tuple(pending), reactant_hits, reactant_seen)
+        _remember(_full_matches(target, query), target_hits, target_seen)
+        placed.update(fresh)
+        return True
+
+    identity = {index: index for index in range(reactant.GetNumAtoms())}
+    absorb(reactant, identity)
+    covered = {index for hit in reactant_hits for index in hit}
+    for _round in range(3):
+        if len(covered) >= reactant.GetNumAtoms() - 1:
+            break
+        remainder, new_to_old = _without_atoms(reactant, covered)
+        if remainder.GetNumHeavyAtoms() < 2:
+            break
+        if not absorb(remainder, new_to_old):
+            break
+        covered = {index for hit in reactant_hits for index in hit}
+    return tuple(reactant_hits), tuple(target_hits)
+
+
+def mcs_matches(reactant: Mol, target: Mol) -> McsResult:
+    """Every placement of ``target`` on ``reactant``, not only the best.
+
+    The first round is every full-size embedding. Later rounds match the
+    uncovered remainder, so a smaller placement is not truncated away. The
+    reactant structure holds both sides, keyed by the target's canonical
+    SMILES. This function does not score them.
     """
 
     structure = _structure(reactant)
@@ -772,10 +854,10 @@ def mcs_matches(reactant: Mol, target: Mol) -> McsResult:
     if cached is not None:
         return cached
 
-    query = _mcs_query(reactant, target)
-    found = McsResult(embeddings=_full_matches(reactant, query))
+    reactant_hits, target_hits = _placements(reactant, target)
+    found = McsResult(embeddings=reactant_hits)
     cache[key] = found
-    targets[key] = McsResult(embeddings=_full_matches(target, query))
+    targets[key] = McsResult(embeddings=target_hits)
     return found
 
 
