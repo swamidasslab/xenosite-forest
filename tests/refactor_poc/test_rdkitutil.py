@@ -1,6 +1,7 @@
 """Cache identity for the RDKit door. Callers read NamedTuple attributes."""
 
 import copy
+from typing import TYPE_CHECKING
 
 from rdkit import Chem
 
@@ -17,6 +18,33 @@ from xenosite.refactor_poc.rdkitutil import (
     split_fragments,
     topol_equiv,
 )
+
+if TYPE_CHECKING:
+    from xenosite.refactor_poc.rdkit_api import (
+        ForestMol,
+        ForestNoTracingMol,
+        ForestTracingMol,
+        NoForestMol,
+        NoTracingMol,
+    )
+
+    def _needs_no_trace(mol: NoTracingMol) -> None:
+        """A missing trace, whether or not a forest is present."""
+
+    def _needs_forest(mol: ForestMol) -> None:
+        """A forest, whether or not its trace is initialized."""
+
+    def _subclass_relationships(
+        bare: NoForestMol,
+        untraced: ForestNoTracingMol,
+        traced: ForestTracingMol,
+    ) -> None:
+        """No-forest is no-trace. Forest-without-trace is both. Traced is a forest."""
+
+        _needs_no_trace(bare)
+        _needs_no_trace(untraced)
+        _needs_forest(untraced)
+        _needs_forest(traced)
 
 
 def test_cached_answers_are_the_same_object():
