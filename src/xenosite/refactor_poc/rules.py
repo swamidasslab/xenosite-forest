@@ -13,6 +13,7 @@ from xenosite.refactor_poc.rdkitutil import (
     aromatic_systems,
     cannonicalize_order,
     conjugated_systems,
+    copy_mol,
     get_forest,
     molecule_formula,
     reaction_from_smarts,
@@ -39,12 +40,24 @@ def set_terminal_product(mol, value=True):
 
 
 class ProductsOfReaction(NamedTuple):
+    """One edit from :meth:`ReactionRule.metabolites`, before tracing.
+
+    ``info`` describes the edit. ``products`` are the mols it made.
+    :meth:`ReactionRule.metabolize` turns each of those mols into a
+    ``(product, info)`` pair and is what callers should use.
+    """
+
     info: dict[str, Any]
     products: list[Mol]
 
 
 class ReactionRule:
-    """Template for all rules."""
+    """A reaction, and the contract every reaction keeps.
+
+    Call :meth:`metabolize`. Subclasses implement :meth:`metabolites` only.
+    The invariants below are the library's. A new rule does not restate them
+    and does not bypass them.
+    """
 
     is_terminal_rule = False
 
@@ -95,8 +108,46 @@ class ReactionRule:
         filter_sites=lambda site, info: True,
         unique_csmi=True,
         **kwargs,
-    ) -> Generator[ProductsOfReaction, None, None]:
+    ) -> Generator[tuple, None, None]:
+        """Apply this rule and yield ``(product, info)`` pairs.
+
+        This is the method callers use. It keeps the invariants below.
+        :meth:`metabolites` supplies the chemistry and must not try to.
+
+        The mol that was passed in:
+
+        - Its atoms, bonds, charges, hydrogens, and atom-map numbers are
+          unchanged.
+        - If it has no ``_forest`` trace, one is installed and left there.
+        - If it already has a trace, that trace's depth is not changed.
+
+        Every product:
+
+        - Is a sanitized mol with its own ``_forest``.
+        - Has ``atom_trace["depth"]`` one greater than the parent.
+        - Has ``atom_trace["formula"]`` equal to the atom counts and formal
+          charge of that product, hydrogens included.
+        - Records each new transform once, as ``R1``, ``R2``, and so on.
+          A new atom's ``added_by`` is that id. The site, the rule
+          hierarchy, the resolved effect, the name, ``phase1``, and the
+          depth of the site's index frame live under
+          ``atom_trace["additions"][id]``. The change in formula lives
+          under ``atom_trace["delta_formula"][id]``.
+        - Carries ``info["csmi"]``, the canonical SMILES of that product.
+          The same SMILES is not yielded twice.
+
+        ``filter_rules(rule, pattern_info)`` sees the pattern before a
+        match. ``filter_sites(site, info)`` sees the resolved effect
+        before an edit. Either may refuse. A refusal edits nothing.
+        """
         assert mol is not None
+        # The caller's chemistry is not edited. A mol with no trace gets one,
+        # at its current depth, so products can sit one step below it.
+        if getattr(mol, "_forest", None) is None or "atom_trace" not in mol._forest:
+            install_forest(mol)
+        parent_depth = mol._forest["atom_trace"]["depth"]
+        # Matching, map clearing, and forest stamps happen on a copy.
+        mol = _work_copy(mol)
         install_forest(mol)
 
         if self.is_terminal_product(mol):
@@ -182,10 +233,31 @@ class ReactionRule:
         filter_sites=lambda site, info: True,
         **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
-        """Should return a tuple of lists. The first element will be the site, the second element
-        will be a list of metabolites. Any rule that could cause molecule fragmention should
-        separate the fragments within the outputted list of metabolites. One way to do this is to
-        return clean(product), which will separate all fragments and sanitize each one.
+        """Yield one :class:`ProductsOfReaction` per edit. Subclasses override this.
+
+        Do not override :meth:`metabolize`. It is what keeps the caller-facing
+        invariants: the input chemistry is unchanged, the parent gains a
+        ``_forest`` if it lacked one, and every product is one depth below
+        that parent with a single ``additions`` record per transform.
+
+        Each yielded item:
+
+        - ``info["site"]`` is the atom or atom pair this edit is about.
+        - ``info["rule"]`` is this rule. A containing ruleset is not
+          substituted for it.
+        - ``info["options"]`` is the one resolved effect at that site.
+        - ``products`` is a list of mols. A cleavage puts each fragment in
+          that list. It does not return one mol that is several pieces.
+
+        ``filter_rules(rule, pattern_info)`` is called before a match and
+        can see the pattern's ``span``. False means that pattern is skipped.
+        ``filter_sites(site, info)`` is called after the effect is resolved
+        and before any edit. False means that site is skipped.
+
+        This method must not edit the mol it is given. ``metabolize`` has
+        already handed it a copy. It must not attach ``_forest`` to the
+        caller's mol, and it must not set product depth. ``metabolize``
+        does both after this method returns.
         """
         raise NotImplementedError
 
@@ -223,6 +295,12 @@ def _rule_name(rule):
     if isinstance(rule, str):
         return rule
     return getattr(rule, "name", type(rule).__name__)
+
+
+def _work_copy(mol):
+    """A mol the rule may stamp. The caller's object is left alone."""
+
+    return copy_mol(mol)
 
 
 def install_forest(mol):
@@ -694,15 +772,16 @@ class SmartsReactionRule(ReactionRule):
         context_mol=None,
         **kwargs,
     ):
-        """Run this rule's SMARTS reactions.
+        """Same contract as :meth:`ReactionRule.metabolites`.
 
-        ``context_mol`` is the unsubstituted parent when ``mol`` is a kekulé
-        copy. Resolution reads aromatic flags from it.
-
-        ``counters``, when passed, records one ``rule_expansions`` per call,
-        one ``sites_considered`` per match, ``sites_skipped`` when a filter
-        or a topological duplicate refuses the site, and one ``mol_edits``
-        inside :func:`react_at`.
+        ``filter_rules`` sees this rule and the pattern, including ``span``,
+        before SMARTS runs. ``filter_sites`` sees the resolved effect in
+        ``info["options"]`` before ``RunReactants``. ``context_mol`` is the
+        unsubstituted parent when ``mol`` is a kekulé copy. Aromatic flags
+        are read from it. ``counters``, when passed, records one
+        ``rule_expansions`` per call, one ``sites_considered`` per match,
+        ``sites_skipped`` when a filter or a topological duplicate refuses
+        the site, and one ``mol_edits`` inside :func:`react_at`.
         """
 
         counters = kwargs.get("counters")
@@ -1173,6 +1252,11 @@ class ResonanceRule(SmartsReactionRule):
         context_mol=None,
         **kwargs,
     ):
+        """Same contract as :meth:`SmartsReactionRule.metabolites`.
+
+        The SMARTS is tried on every kekulé bond map. Those maps are not
+        the caller's mol. ``context_mol`` keeps the original aromatic flags.
+        """
         if not self.rxns:
             return
         context = mol if context_mol is None else context_mol
@@ -1209,6 +1293,12 @@ class ResonancePairRule(ResonanceRule):
         filter_sites=lambda site, info: True,
         **kwargs,
     ):
+        """Same contract as :meth:`ReactionRule.metabolites`.
+
+        ``filter_rules`` runs before any pair is built. ``filter_sites``
+        sees the merged effect and can refuse the pair before a kekulé
+        form is overlaid.
+        """
         yield from ResonanceRule.metabolites(
             self,
             mol,
