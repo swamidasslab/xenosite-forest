@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 if TYPE_CHECKING:
     # rules.py imports Effect, PatternInfo, and When from this module.
+    from xenosite.refactor_poc.rdkit_api import Mol
     from xenosite.refactor_poc.rules import ReactionRule
 
 # One atom, a pair of atoms, or a set of those pairs.
@@ -150,10 +151,40 @@ class AtomTrace(TypedDict, total=False):
     next_transform: int
 
 
+class KekuleParents(TypedDict, total=False):
+    """Partial kekulé parents. Helpers fill this dict. A rule stores it.
+
+    One live mol per distinct assignment of one conjugated system. Other
+    systems on that mol stay aromatic. ``orders`` is the bond orders written
+    on that parent, same index as ``parents``. ``systems`` maps the system's
+    atoms to those indexes. ``by_order`` maps ``(bond, order)`` to the parent
+    index that has that bond order.
+    """
+
+    parents: list[Mol]
+    orders: list[dict[tuple[int, int], float]]
+    systems: dict[frozenset[int], tuple[int, ...]]
+    by_order: dict[tuple[tuple[int, int], float], int]
+
+
+class EndParents(NamedTuple):
+    """Kekulé parents for two atoms.
+
+    ``same_system`` is true when both atoms are in one conjugated system.
+    ``parents`` is then that system's assignments. When they are not,
+    ``parents`` is each system's assignments, not a product of every system.
+    """
+
+    parents: tuple[Mol, ...]
+    same_system: bool
+
+
 class Structure(TypedDict, total=False):
-    """Cache of plain data. ``total`` is false because each key is filled in later.
+    """Cache filled in later. ``total`` is false because each key is filled in later.
 
     ``mcs_matches`` and ``mcs_targets`` are keyed by the target canonical SMILES.
+    ``kekule_parents`` is the dict :class:`KekuleParents` helpers fill. The
+    helpers do not touch ``_forest``. The rule stores the dict on the forest.
     """
 
     sanitized: int
@@ -163,6 +194,7 @@ class Structure(TypedDict, total=False):
     formula: Formula
     smarts_matches: dict[str, tuple[dict[int, int], ...]]
     resonance_bonds: tuple[dict[tuple[int, int], float], ...]
+    kekule_parents: KekuleParents
     conjugated_systems: tuple[frozenset[int], ...]
     aromatic_systems: tuple[frozenset[int], ...]
     rings: dict[int, tuple[tuple[int, ...], ...]]

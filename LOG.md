@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- Kekulé parents: match once with `=,:`; one parent per assignment of the conjugated system that contains the hit; other systems stay aromatic. Helpers take a dict and do not touch `_forest`; the rule stores that dict.
+
 - NDealkylation is the nitrogen rows of dealkylation. A methyl is `leave_count` 1 because that carbon is the whole leaving piece; a larger alkyl stays `None`. `breaks_ring` is set from the cleaved bond whenever the effect already cleaves, including Dealkylation, not from a rule-name branch. Trimethylamine fragment SMILES match the old library. The macrocycle and both dialdehyde searches find their targets.
 
 - Easy pairs against the old library, canonical fragment SMILES. Ethane hydroxylation, anisole dealkylation, and quinone formation on benzene and on phenol match. Butylbenzene hydroxylation matches except three carbonyls from the old `[#6h2:1]>>[*:1]=O` pattern; recorded in `src/xenosite/refactor_poc/DIVERGENCES.md`. Aromatic SMARTS run on every kekulé form. A repeated site is the same map roles and the same incident bond orders, so ortho and para both emit. `bfs` / `dfs` enumerate one ruleset with the filters the set already forwards, a depth cap, and no atom diff.

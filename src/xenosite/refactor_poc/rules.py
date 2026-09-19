@@ -14,8 +14,11 @@ from xenosite.refactor_poc.rdkitutil import (
     cannonicalize_order,
     conjugated_systems,
     copy_mol,
+    ensure_kekule_parents,
     get_forest,
     molecule_formula,
+    parent_for_bond,
+    parents_for_ends,
     reaction_from_smarts,
     resonance_bond_maps,
     ring_membership,
@@ -29,7 +32,7 @@ from xenosite.refactor_poc.rdkitutil import (
 
 from typing import Any, NamedTuple, cast
 
-from xenosite.refactor_poc.records import Effect, PatternInfo, When
+from xenosite.refactor_poc.records import Effect, KekuleParents, PatternInfo, When
 from collections.abc import Callable, Generator
 
 
@@ -1185,21 +1188,11 @@ def _site_atoms(mapped, info):
     return mapped[key]
 
 
-def _paths_for_pair(bond_maps, start, end, neighbors):
-    found = []
-    for bond_map in bond_maps:
-        path = alternating_path(bond_map, start, end, neighbors)
-        if path:
-            found.append((bond_map, path))
-    found.sort(key=lambda item: len(item[1]))
-    return found
-
-
 def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
     """Shared ResonancePairRule loop.
 
     ``filter_rules`` drops endpoint patterns before they are matched.
-    ``filter_sites`` drops a pair before any kekulé overlay or bond edit.
+    ``filter_sites`` drops a pair before a cached parent is copied.
     """
 
     _bump(counters, "rule_expansions")
@@ -1224,8 +1217,8 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
     if len(hits) < 2:
         return
 
-    bond_maps = None
     rings = None
+    cache: KekuleParents | None = None
     for system in systems:
         anchors = [atom for atom in hits if atom in system]
         neighbors = system_neighbors(mol, system)
@@ -1261,9 +1254,17 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
                 combos.append((map1, info1, map2, info2, preview))
             if not combos:
                 continue
-            if bond_maps is None:
-                bond_maps = resonance_bond_maps(mol)
-            paths = _paths_for_pair(bond_maps, start, end, neighbors)
+            if cache is None:
+                cache = _kekule_cache(mol)
+            ends = parents_for_ends(mol, start, end, cache)
+            paths = []
+            for parent in ends.parents:
+                path = alternating_path(
+                    _current_bond_map(parent), start, end, neighbors
+                )
+                if path:
+                    paths.append((parent, path))
+            paths.sort(key=lambda item: len(item[1]))
             if not paths:
                 continue
             for map1, info1, map2, info2, preview in combos:
@@ -1272,9 +1273,9 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
                 ):
                     rings = ring_membership(mol)
                 ring_table = rings or {}
-                for bond_map, path in paths:
+                for parent, path in paths:
                     _bump(counters, "mol_edits")
-                    rw = overlay_kekule(mol, bond_map)
+                    rw = rw_copy(parent)
                     edit1 = EDITS.get(info1.get("edit", ""))
                     edit2 = EDITS.get(info2.get("edit", ""))
                     if edit1 is None or edit2 is None:
@@ -1294,40 +1295,124 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
                     break
 
 
-class ResonanceRule(SmartsReactionRule):
-    """Run this rule's SMARTS on each kekulé form.
+def _kekule_cache(mol: Mol) -> KekuleParents:
+    """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
-    Epoxidation is the rule this exists for: a double bond moves between
-    kekulé forms, so the SMARTS has to see each of them. The forms are bond
-    maps in ``_forest['structure']``, not copies kept on the class.
+    forest = get_forest(mol)
+    if "structure" not in forest:
+        raise KeyError("structure")
+    structure = forest["structure"]
+    cache = structure.get("kekule_parents")
+    if cache is None:
+        fresh: KekuleParents = {
+            "parents": [],
+            "orders": [],
+            "systems": {},
+            "by_order": {},
+        }
+        structure["kekule_parents"] = fresh
+        return fresh
+    return cache
+
+
+def _reactant_parent(mol: Mol, mapped: dict[int, int], cache: KekuleParents) -> Mol | None:
+    """Kekulé parent whose bond orders match an aromatic hit. Else ``mol``."""
+
+    left = mapped.get(1)
+    right = mapped.get(2)
+    if left is None or right is None:
+        return mol
+    bond = mol.GetBondBetweenAtoms(left, right)
+    if bond is None:
+        return mol
+    begin = mol.GetAtomWithIdx(bond.GetBeginAtomIdx())
+    end = mol.GetAtomWithIdx(bond.GetEndAtomIdx())
+    if bond.GetIsAromatic():
+        order = 2.0
+    elif begin.GetIsAromatic() or end.GetIsAromatic():
+        order = bond.GetBondTypeAsDouble()
+    else:
+        return mol
+    ensure_kekule_parents(mol, left, right, cache)
+    return parent_for_bond(cache, left, right, order)
+
+
+class ResonanceRule(SmartsReactionRule):
+    """Match once on the aromatic parent, then react on a cached kekulé parent.
+
+    The pattern's ``=,:`` bond matches aromatic bonds. One parent is cached
+    per assignment of the conjugated system that contains the match. Other
+    systems stay aromatic. The dict is stored on the molecule's forest.
+    The helpers that fill it do not read ``_forest``.
     """
 
     def metabolites(
         self,
-        mol,
+        mol: Mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
-        context_mol=None,
+        context_mol: Mol | None = None,
         **kwargs,
     ):
         """Same contract as :meth:`SmartsReactionRule.metabolites`.
 
-        The SMARTS is tried on every kekulé bond map. Those maps are not
-        the caller's mol. ``context_mol`` keeps the original aromatic flags.
+        SMARTS runs once, on this mol. A hit picks the cached parent by bond
+        order. The reaction runs on that copy. ``context_mol`` keeps the
+        original aromatic flags for :func:`resolve_effect`.
         """
+
         if not self.rxns:
             return
+        counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
-        for bond_map in resonance_bond_maps(mol):
-            form = overlay_kekule(mol, bond_map).GetMol()
-            yield from SmartsReactionRule.metabolites(
-                self,
-                form,
-                filter_rules=filter_rules,
-                filter_sites=filter_sites,
-                context_mol=context,
-                **kwargs,
-            )
+        _bump(counters, "rule_expansions")
+        cache = _kekule_cache(mol)
+        seen = set()
+        ranks = topol_equiv(context)
+
+        for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
+            if not filter_rules(self, pattern):
+                continue
+            reactant = smarts.split(">>", 1)[0]
+            for mapped in smarts_matches(mol, reactant):
+                site = _site_indexes(mapped, pattern)
+                if not site:
+                    continue
+                effect = resolve_effect(context, mapped, pattern)
+                info = {
+                    "site": site,
+                    "rule": self,
+                    "options": effect,
+                    "rxn_num": rxn_num,
+                }
+                _bump(counters, "sites_considered")
+                if not filter_sites(site, info):
+                    _bump(counters, "sites_skipped")
+                    continue
+                work = _reactant_parent(mol, mapped, cache)
+                if work is None:
+                    _bump(counters, "sites_skipped")
+                    continue
+                signature = (
+                    tuple(
+                        (mapno, ranks[idx])
+                        for mapno, idx in sorted(mapped.items())
+                    ),
+                    _incident_orders(work, ranks, mapped),
+                    rxn_num,
+                    effect.get("adds"),
+                    effect.get("removes"),
+                    bool(effect.get("cleaves")),
+                    bool(effect.get("dearomatizes")),
+                )
+                if signature in seen:
+                    _bump(counters, "sites_skipped")
+                    continue
+                products = react_at(self, smarts, work, mapped, counters)
+                if not products:
+                    continue
+                seen.add(signature)
+                yield ProductsOfReaction(info=info, products=products)
 
 
 class ResonancePairRule(ResonanceRule):
@@ -1926,8 +2011,9 @@ class Dehydration(SmartsReactionRule):
 
 
 class Hydrogenation(ResonanceRule):
-    """Reduces C#C to C=C and C=C to C-C. Kekulé forms are searched.
+    """Reduces C#C to C=C and C=C to C-C.
 
+    The double-bond pattern is ``=,:``, so an aromatic bond matches once.
     Heavy-atom formula is unchanged (``adds`` is ``HH``).
     """
 
@@ -1939,7 +2025,7 @@ class Hydrogenation(ResonanceRule):
             describe(adds="HH", partner="C"),
         ),
         (
-            "[#6:1]=[#6:2]>>[*:1]-[*:2]",
+            "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
             describe(adds="HH", partner="C"),
         ),
     )
@@ -2070,13 +2156,17 @@ class SulfurReduction(SmartsReactionRule):
 
 
 class Epoxidation(ResonanceRule):
-    """Adds an epoxide across a C=C or C=N bond. Kekulé forms are searched."""
+    """Adds an epoxide across a C=C or C=N bond.
+
+    The reactant bond is ``=,:``, so an aromatic bond matches on the parent.
+    The reaction runs on the cached kekulé parent for that bond.
+    """
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
-            "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1",
+            "[#6:1]=,:[#6,#7:2]>>[*:1]1-[*:2][O]1",
             describe(
                 *branches(
                     ({"map": 2, "z": 6}, {"map": 2, "z": 7}),

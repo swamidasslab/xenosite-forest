@@ -8,6 +8,10 @@ The key is one string. Process-wide data, such as parsed SMARTS reactions,
 stays a module dict. Do not cache a result on a molecule this function
 then edits. Edits belong on a copy from :func:`copy_mol` or :func:`rw_copy`.
 
+:func:`ensure_kekule_parents`, :func:`parent_for_bond`, and
+:func:`parents_for_ends` take a dict and do not read or write ``mol._forest``.
+The rule that calls them stores that dict.
+
 ``Formula`` is a dict. Callers use keys. :class:`~xenosite.refactor_poc.records.McsResult`
 and :class:`~xenosite.refactor_poc.records.FragmentSplit` are NamedTuples.
 Callers use attributes.
@@ -28,7 +32,7 @@ import ast
 import copy
 from collections import defaultdict, deque
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, NamedTuple
 
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
@@ -55,9 +59,11 @@ from xenosite.refactor_poc.rdkit_api import (
 )
 
 from xenosite.refactor_poc.records import (
+    EndParents,
     Forest,
     Formula,
     FragmentSplit,
+    KekuleParents,
     McsResult,
     Structure,
 )
@@ -389,6 +395,243 @@ def aromatic_systems(mol: Mol) -> tuple[frozenset[int], ...]:
         aromatic = {atom.GetIdx() for atom in mol.GetAromaticAtoms()}
         structure["aromatic_systems"] = tuple(_connected_components(mol, aromatic))
     return structure["aromatic_systems"]
+
+
+def _pi_center(mol: Mol, index: int) -> bool:
+    atom = mol.GetAtomWithIdx(index)
+    if atom.GetIsAromatic():
+        return True
+    for bond in atom.GetBonds():
+        if bond.GetIsAromatic() or bond.GetBondType() in (BondType.DOUBLE, BondType.TRIPLE):
+            return True
+    return False
+
+
+def _conjugated_bond(mol: Mol, bond: Bond) -> bool:
+    """True when the bond belongs to one conjugated system.
+
+    Aromatic bonds cross only inside a ring, so a biaryl linker does not
+    join two rings. A single bond crosses only from carbon to N, O, or S
+    on a pi center. Fused aromatic bonds stay in one system.
+    """
+
+    order = bond.GetBondType()
+    if order in (BondType.DOUBLE, BondType.TRIPLE):
+        return True
+    if bond.GetIsAromatic() and bond.IsInRing():
+        return True
+    if order != BondType.SINGLE:
+        return False
+    left = bond.GetBeginAtomIdx()
+    right = bond.GetEndAtomIdx()
+    elements = {
+        mol.GetAtomWithIdx(left).GetAtomicNum(),
+        mol.GetAtomWithIdx(right).GetAtomicNum(),
+    }
+    if 6 not in elements or not (elements & {7, 8, 16}):
+        return False
+    return _pi_center(mol, left) or _pi_center(mol, right)
+
+
+def _conjugated_component(
+    mol: Mol, start: int
+) -> tuple[frozenset[int], frozenset[tuple[int, int]]]:
+    atoms = {start}
+    bonds: set[tuple[int, int]] = set()
+    stack = [start]
+    while stack:
+        index = stack.pop()
+        for bond in mol.GetAtomWithIdx(index).GetBonds():
+            if not _conjugated_bond(mol, bond):
+                continue
+            other = bond.GetOtherAtomIdx(index)
+            bonds.add(_bond_key(index, other))
+            if other not in atoms:
+                atoms.add(other)
+                stack.append(other)
+    return frozenset(atoms), frozenset(bonds)
+
+
+def _kekule_slots(
+    cache: KekuleParents,
+) -> tuple[
+    list[Mol],
+    list[dict[tuple[int, int], float]],
+    dict[frozenset[int], tuple[int, ...]],
+    dict[tuple[tuple[int, int], float], int],
+]:
+    parents = cache.get("parents")
+    orders = cache.get("orders")
+    systems = cache.get("systems")
+    by_order = cache.get("by_order")
+    if parents is None:
+        parents = []
+        cache["parents"] = parents
+    if orders is None:
+        orders = []
+        cache["orders"] = orders
+    if systems is None:
+        systems = {}
+        cache["systems"] = systems
+    if by_order is None:
+        by_order = {}
+        cache["by_order"] = by_order
+    return parents, orders, systems, by_order
+
+
+def _write_assignment(
+    mol: Mol,
+    atoms: frozenset[int],
+    bonds: frozenset[tuple[int, int]],
+    seed: tuple[int, int],
+) -> tuple[Mol, dict[tuple[int, int], float]] | None:
+    """One kekulé assignment of ``atoms``. Other bonds stay as they were."""
+
+    if seed[0] not in atoms or seed[1] not in atoms:
+        return None
+    adj: dict[int, list[int]] = {atom: [] for atom in atoms}
+    for left, right in bonds:
+        adj[left].append(right)
+        adj[right].append(left)
+    for nbrs in adj.values():
+        nbrs.sort()
+    carbons = sorted(atom for atom in atoms if mol.GetAtomWithIdx(atom).GetAtomicNum() == 6)
+    doubles: dict[int, int] = {seed[0]: seed[1], seed[1]: seed[0]}
+
+    def place(idx: int) -> bool:
+        if idx == len(carbons):
+            return True
+        carbon = carbons[idx]
+        if carbon in doubles:
+            return place(idx + 1)
+        for nbr in adj[carbon]:
+            if nbr in doubles:
+                continue
+            doubles[carbon] = nbr
+            doubles[nbr] = carbon
+            if place(idx + 1):
+                return True
+            del doubles[carbon]
+            del doubles[nbr]
+        return False
+
+    if not place(0):
+        return None
+    rw = RWMol(Mol(mol))
+    written: dict[tuple[int, int], float] = {}
+    for left, right in bonds:
+        bond = rw.GetBondBetweenAtoms(left, right)
+        if bond is None:
+            continue
+        is_double = doubles.get(left) == right
+        bond.SetBondType(BondType.DOUBLE if is_double else BondType.SINGLE)
+        bond.SetIsAromatic(False)
+        written[_bond_key(left, right)] = 2.0 if is_double else 1.0
+    for atom in atoms:
+        rw.GetAtomWithIdx(atom).SetIsAromatic(False)
+    return rw.GetMol(), written
+
+
+def ensure_kekule_parents(
+    mol: Mol,
+    left: int,
+    right: int,
+    cache: KekuleParents,
+) -> tuple[int, ...]:
+    """One parent per assignment of the system that contains ``(left, right)``.
+
+    Other conjugated systems stay aromatic. Writes ``cache``. Does not read
+    or write ``mol._forest``. Returns the parent indexes of that system.
+    """
+
+    parents, orders, systems, by_order = _kekule_slots(cache)
+    atoms, bonds = _conjugated_component(mol, left)
+    seed = _bond_key(left, right)
+    if seed not in bonds and mol.GetBondBetweenAtoms(left, right) is not None:
+        bonds = frozenset((*bonds, seed))
+        if right not in atoms:
+            atoms = frozenset((*atoms, right))
+    held = systems.get(atoms)
+    if held is not None:
+        return held
+    indexes: list[int] = []
+    seen: set[tuple[tuple[tuple[int, int], float], ...]] = set()
+    for bond in sorted(bonds):
+        assigned = _write_assignment(mol, atoms, bonds, bond)
+        if assigned is None:
+            continue
+        parent, bond_orders = assigned
+        signature = tuple(sorted(bond_orders.items()))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        index = len(parents)
+        parents.append(parent)
+        orders.append(bond_orders)
+        indexes.append(index)
+        for key, order in bond_orders.items():
+            slot = (key, order)
+            if slot not in by_order:
+                by_order[slot] = index
+    found = tuple(indexes)
+    systems[atoms] = found
+    return found
+
+
+def parent_for_bond(
+    cache: KekuleParents, left: int, right: int, order: float = 2.0
+) -> Mol | None:
+    """The cached parent in which ``(left, right)`` has ``order``.
+
+    Does not search. Does not read or write ``mol._forest``.
+    """
+
+    by_order = cache.get("by_order")
+    parents = cache.get("parents")
+    if by_order is None or parents is None:
+        return None
+    index = by_order.get((_bond_key(left, right), order))
+    if index is None:
+        return None
+    return parents[index]
+
+
+def _ensure_atoms(mol: Mol, atom: int, cache: KekuleParents) -> frozenset[int]:
+    atoms, bonds = _conjugated_component(mol, atom)
+    _parents, _orders, systems, _by_order = _kekule_slots(cache)
+    if atoms in systems:
+        return atoms
+    if not bonds:
+        systems[atoms] = ()
+        return atoms
+    left, right = min(bonds)
+    ensure_kekule_parents(mol, left, right, cache)
+    return atoms
+
+
+def parents_for_ends(mol: Mol, start: int, end: int, cache: KekuleParents) -> EndParents:
+    """Parents covering ``start`` and ``end``.
+
+    Same conjugated system: that system's assignments. Different systems:
+    each system's assignments, not a product of every system. Does not read
+    or write ``mol._forest``.
+    """
+
+    start_atoms = _ensure_atoms(mol, start, cache)
+    end_atoms = _ensure_atoms(mol, end, cache)
+    _parents, _orders, systems, _by_order = _kekule_slots(cache)
+    parents = cache.get("parents") or []
+    if start_atoms == end_atoms:
+        indexes = systems.get(start_atoms, ())
+        return EndParents(
+            parents=tuple(parents[index] for index in indexes),
+            same_system=True,
+        )
+    indexes = systems.get(start_atoms, ()) + systems.get(end_atoms, ())
+    return EndParents(
+        parents=tuple(parents[index] for index in indexes),
+        same_system=False,
+    )
 
 
 def ring_membership(mol: Mol) -> dict[int, tuple[tuple[int, ...], ...]]:
