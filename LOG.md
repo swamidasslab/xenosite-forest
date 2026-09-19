@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- Project rule `.cursor/rules/data-not-branches.mdc`: generic algorithms read data. Methide is offered by rule data, limited to one site by `PatternInfo`, and excluded by `filter_sites`. Exceptions need a written reason. A less-likely mark is future filter data. That schema is not chosen, so no field was added.
+
 - QuinoneFormation is not a step. The plan is a Hydroxylation for each end that still needs oxygen, then one Dehydrogenation. An end that already has O/N uses that neighbor; no `end_maps` field. Bare hydroxylation is refused when every oxygen-needing site atom needs a carbonyl and loses aromaticity. An alkyl (methide) partner runs only when that exocyclic C-C bond is higher in the target.
 - Cleavage filter keeps the bridge between a mapped atom and a leaving atom. Bonds inside the leaving group are not sites. Terbinafine → `CC(C)(C)C#CC=CC=O`: new `mol_edits=3` (old `site_applies=0`, ceiling 40). Acetate → catechol: `mol_edits=12` (old `site_applies=0`, ceiling 80). Phenol/naphthalene → methane and benzene → CF4 miss under 40 edits. Benzene → `[Fe]` is `mol_edits=0`. NDealkylation hard pairs (macrocycle 120, dialdehyde 80/35) skipped; that class is not in the catalog yet.
 - Adversarial read of `find_path.py` only: no second search and no `guided_path` ranker to cut. The loose "site touches any leaving atom" check was the extra edits; the bridge test replaced it.
