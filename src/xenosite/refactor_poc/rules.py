@@ -1070,6 +1070,7 @@ def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
                     "options": merge_effects(end1, end2, both_aromatic),
                     "ends": (end1, end2),
                     "end_atoms": (site_a, site_b),
+                    "end_maps": (map1, map2),
                     "path_ends": frozenset((start, end)),
                 }
                 _bump(counters, "sites_considered")
