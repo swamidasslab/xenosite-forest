@@ -1583,6 +1583,10 @@ class QueryMol(object):
                     search(mol, end, path=path + [idx])
 
         if alternate_bonds:
+            # Alternating single/double paths need a Kekulé view. Search a
+            # copy so the caller's bonding and resonance cache stay put.
+            # Atom indexes match the original, which is all the path returns.
+            mol = Mol(mol)
             SanitizeMol(mol, SanitizeFlags.SANITIZE_CLEANUP)
             try:
                 Kekulize(mol, clearAromaticFlags=True)
@@ -2271,11 +2275,8 @@ class ReactionRule(AtomTracker):
 
         seen = []
         skipped = []
-        # SMARTS kekulize edits bonding in place. Run it on a copy so the
-        # caller's mol keeps its aromatic flags and resonance cache.
-        rxn_mol = copy_mol(mol)
         products_iter = self.metabolites(
-            rxn_mol,
+            mol,
             format_output_site=format_output_site,
             do_not_tag_atoms=do_not_tag_atoms,
             strict=strict,
@@ -2829,34 +2830,35 @@ class SmartsReactionRule(ReactionRule):
         return out
 
     def metabolites(self, mol, kekulize=True, toward_target=None, **kwargs):
-        """By default, mol will be kekulized.
+        """Run this rule's SMARTS reactions.
 
-        ``toward_target``: optional product mol; reaction SMARTS whose
-        :meth:`smarts_compatible` is False are skipped (formula hints).
-
-        Kekulize edits ``mol`` in place and drops its resonance cache.
+        ``kekulize=True`` (the default) kekulizes a copy. The caller's mol is
+        not edited and keeps its resonance cache. ``toward_target`` skips
+        SMARTS whose formula hints cannot reach that product.
         """
+        work = mol
         if kekulize:
-            self._kekulize(mol)
+            work = copy_mol(mol)
+            self._kekulize(work)
 
-        self._remove_props(mol)
-        self._clear_atom_maps(mol)
-        refresh_mol(mol)
+        self._remove_props(work)
+        self._clear_atom_maps(work)
+        refresh_mol(work)
 
         for rxn_num, rxn in enumerate(self.rxns):
             if toward_target is not None and not self.smarts_compatible(
-                rxn_num, mol, toward_target
+                rxn_num, work, toward_target
             ):
                 continue
-            self._clear_atom_maps(mol)
+            self._clear_atom_maps(work)
             try:
-                reactant_products = rxn.RunReactants((mol,))
+                reactant_products = rxn.RunReactants((work,))
             except RuntimeError:
                 _log.debug(
                     "Skipping %s rxn %d on unsanitizable reactant %s",
                     self.name,
                     rxn_num,
-                    _mol_smiles(mol),
+                    _mol_smiles(work),
                 )
                 continue
 

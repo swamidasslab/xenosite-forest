@@ -17,7 +17,7 @@ from xenosite.forest.base import (
     _resonance_cache_disabled,
     _set_resonance_cache_enabled,
 )
-from xenosite.forest.rules import Dehydrogenation, Hydrogenation
+from xenosite.forest.rules import Dehydrogenation, Hydrogenation, Tautomerization
 from xenosite.forest.utils import refresh_mol, unmapped_smiles
 
 APAP = "CC(=O)Nc1ccc(O)cc1"
@@ -101,12 +101,10 @@ def test_phaseone_products_match_cache_on_off(name, smiles):
 # ---------------------------------------------------------------------------
 
 
-def test_resfrags_recomputes_after_smarts_kekulize(monkeypatch):
-    """A mode is not recomputed on every consumer.
+def test_resfrags_reuses_caller_cache_across_full(monkeypatch):
+    """SMARTS kekulize and resonance search no longer drop the caller's cache.
 
-    ``metabolize`` kekulizes a copy, so the caller's cache is not the one
-    dropped. ``standardize`` copies do not share that cache either. Still
-    below the uncached count.
+    Later rules reuse it. The uncached walk still visits every system.
     """
     calls = {"n": 0}
     orig = Resonate._resfrags
@@ -118,7 +116,7 @@ def test_resfrags_recomputes_after_smarts_kekulize(monkeypatch):
     monkeypatch.setattr(Resonate, "_resfrags", counting_resfrags)
 
     list(rulesets.load_ruleset("Full").metabolites(Mol(MolFromSmiles(APAP))))
-    assert calls["n"] == 6
+    assert calls["n"] == 3
 
     calls["n"] = 0
     with _resonance_cache_disabled():
@@ -201,20 +199,22 @@ def test_install_product_forest_clears_resonance():
     assert "resonance" not in product._forest
 
 
-def test_smarts_metabolites_kekulize_clears_caller_resonance():
-    """Low-level ``metabolites`` still kekulizes its argument.
+def test_smarts_metabolites_does_not_kekulize_caller():
+    """``SmartsReactionRule.metabolites`` kekulizes a copy, not the caller.
 
-    ``metabolize`` must not. See ``test_metabolize_does_not_kekulize_caller``.
+    ``RuleSet.metabolites`` reaches this through ``ReactionRule.metabolize``.
     """
     from xenosite.forest.rules import Hydroxylation
 
     mol = Mol(MolFromSmiles("c1ccccc1"))
     cache = _resonance_cache(mol)
-    assert mol._forest["resonance"] is cache
+    before = MolToSmiles(mol)
     assert mol.GetBondWithIdx(0).GetIsAromatic()
-    list(Hydroxylation().metabolites(mol))
-    assert not mol.GetBondWithIdx(0).GetIsAromatic()
-    assert "resonance" not in mol._forest
+    hits = list(Hydroxylation().metabolites(mol))
+    assert hits
+    assert MolToSmiles(mol) == before
+    assert mol.GetBondWithIdx(0).GetIsAromatic()
+    assert mol._forest.get("resonance") is cache
 
 
 def test_metabolize_does_not_kekulize_caller():
@@ -234,15 +234,33 @@ def test_metabolize_does_not_kekulize_caller():
     tagged = Mol(MolFromSmiles("c1ccccc1"))
     list(Hydroxylation().metabolize(tagged))
     assert tagged.GetBondWithIdx(0).GetIsAromatic()
+    # Maps and tags on the input are part of metabolize. Bonding is not.
+    assert any(atom.GetAtomMapNum() for atom in tagged.GetAtoms())
 
 
-def test_full_metabolize_leaves_substrate_resonance():
+@pytest.mark.parametrize("rule_cls", [Hydrogenation, Tautomerization])
+def test_resonance_metabolize_does_not_rewrite_caller_bonds(rule_cls):
+    """Pair-path search kekulizes a copy. The passed mol keeps its bonding."""
     mol = Mol(MolFromSmiles(APAP))
     cache = _resonance_cache(mol)
     aromatic = [a.GetIsAromatic() for a in mol.GetAtoms()]
     before = unmapped_smiles(mol)
-    list(rulesets.load_ruleset("Full").metabolites(mol))
-    # Tagging may stamp map numbers. Bonding and the resonance cache stay.
+    hits = list(rule_cls().metabolize(mol))
+    assert hits
+    assert unmapped_smiles(mol) == before
+    assert [a.GetIsAromatic() for a in mol.GetAtoms()] == aromatic
+    assert mol._forest.get("resonance") is cache
+    assert any(atom.GetAtomMapNum() for atom in mol.GetAtoms())
+
+
+def test_ruleset_metabolites_does_not_kekulize_caller():
+    """Full.metabolites → metabolize, including hydrogenation and tautomerization."""
+    mol = Mol(MolFromSmiles(APAP))
+    cache = _resonance_cache(mol)
+    aromatic = [a.GetIsAromatic() for a in mol.GetAtoms()]
+    before = unmapped_smiles(mol)
+    hits = list(rulesets.load_ruleset("Full").metabolites(mol))
+    assert hits
     assert unmapped_smiles(mol) == before
     assert [a.GetIsAromatic() for a in mol.GetAtoms()] == aromatic
     assert mol._forest.get("resonance") is cache
