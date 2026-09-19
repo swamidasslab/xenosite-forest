@@ -1188,113 +1188,6 @@ def _site_atoms(mapped, info):
     return mapped[key]
 
 
-def pair_metabolites(rule, mol, filter_rules, filter_sites, counters=None):
-    """Shared ResonancePairRule loop.
-
-    ``filter_rules`` drops endpoint patterns before they are matched.
-    ``filter_sites`` drops a pair before a cached parent is copied.
-    """
-
-    _bump(counters, "rule_expansions")
-
-    active = [
-        (smarts, info) for smarts, info in rule.endpoints if filter_rules(rule, info)
-    ]
-    if not active:
-        return
-
-    if rule.systems == "aromatic":
-        systems = aromatic_systems(mol)
-    else:
-        systems = conjugated_systems(mol)
-    if not systems:
-        return
-
-    hits = defaultdict(list)
-    for smarts, info in active:
-        for mapped in smarts_matches(mol, smarts):
-            hits[mapped[1]].append((mapped, info))
-    if len(hits) < 2:
-        return
-
-    rings = None
-    cache: KekuleParents | None = None
-    for system in systems:
-        anchors = [atom for atom in hits if atom in system]
-        neighbors = system_neighbors(mol, system)
-        for start, end in odd_anchor_pairs(anchors, neighbors):
-            combos = []
-            both_aromatic = (
-                mol.GetAtomWithIdx(start).GetIsAromatic()
-                and mol.GetAtomWithIdx(end).GetIsAromatic()
-            )
-            for (map1, info1), (map2, info2) in itertools.product(
-                hits[start], hits[end]
-            ):
-                site_a = _site_atoms(map1, info1)
-                site_b = _site_atoms(map2, info2)
-                if site_a is None or site_b is None or site_a == site_b:
-                    continue
-                site = frozenset((site_a, site_b))
-                end1 = resolve_effect(mol, map1, info1)
-                end2 = resolve_effect(mol, map2, info2)
-                preview = {
-                    "site": site,
-                    "rule": rule,
-                    "options": merge_effects(end1, end2, both_aromatic),
-                    "ends": (end1, end2),
-                    "end_atoms": (site_a, site_b),
-                    "end_maps": (map1, map2),
-                    "path_ends": frozenset((start, end)),
-                }
-                _bump(counters, "sites_considered")
-                if not filter_sites(site, preview):
-                    _bump(counters, "sites_skipped")
-                    continue
-                combos.append((map1, info1, map2, info2, preview))
-            if not combos:
-                continue
-            if cache is None:
-                cache = _kekule_cache(mol)
-            ends = parents_for_ends(mol, start, end, cache)
-            paths = []
-            for parent in ends.parents:
-                path = alternating_path(
-                    _current_bond_map(parent), start, end, neighbors
-                )
-                if path:
-                    paths.append((parent, path))
-            paths.sort(key=lambda item: len(item[1]))
-            if not paths:
-                continue
-            for map1, info1, map2, info2, preview in combos:
-                if rings is None and (
-                    info1.get("skip_same_rings") or info2.get("skip_same_rings")
-                ):
-                    rings = ring_membership(mol)
-                ring_table = rings or {}
-                for parent, path in paths:
-                    _bump(counters, "mol_edits")
-                    rw = rw_copy(parent)
-                    edit1 = EDITS.get(info1.get("edit", ""))
-                    edit2 = EDITS.get(info2.get("edit", ""))
-                    if edit1 is None or edit2 is None:
-                        break
-                    if not edit1(rw, map1, info1, ring_table):
-                        break
-                    if not edit2(rw, map2, info2, ring_table):
-                        break
-                    if not swap_bonds_along_path(rw, path):
-                        continue
-                    products = list(sanitized_fragments(rw, counters).pieces)
-                    if not products:
-                        continue
-                    info = dict(preview)
-                    info["path"] = tuple(path)
-                    yield ProductsOfReaction(info=info, products=products)
-                    break
-
-
 def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
@@ -1451,9 +1344,115 @@ class ResonancePairRule(ResonanceRule):
             context_mol=context_mol,
             **kwargs,
         )
-        yield from pair_metabolites(
-            self, mol, filter_rules, filter_sites, counters=kwargs.get("counters")
+        yield from self.pair_metabolites(
+            mol, filter_rules, filter_sites, counters=kwargs.get("counters")
         )
+
+    def pair_metabolites(self, mol, filter_rules, filter_sites, counters=None):
+        """Endpoint loop.
+
+        ``filter_rules`` drops endpoint patterns before they are matched.
+        ``filter_sites`` drops a pair before a cached parent is copied.
+        """
+
+        _bump(counters, "rule_expansions")
+
+        active = [
+            (smarts, info) for smarts, info in self.endpoints if filter_rules(self, info)
+        ]
+        if not active:
+            return
+
+        if self.systems == "aromatic":
+            systems = aromatic_systems(mol)
+        else:
+            systems = conjugated_systems(mol)
+        if not systems:
+            return
+
+        hits = defaultdict(list)
+        for smarts, info in active:
+            for mapped in smarts_matches(mol, smarts):
+                hits[mapped[1]].append((mapped, info))
+        if len(hits) < 2:
+            return
+
+        rings = None
+        cache: KekuleParents | None = None
+        for system in systems:
+            anchors = [atom for atom in hits if atom in system]
+            neighbors = system_neighbors(mol, system)
+            for start, end in odd_anchor_pairs(anchors, neighbors):
+                combos = []
+                both_aromatic = (
+                    mol.GetAtomWithIdx(start).GetIsAromatic()
+                    and mol.GetAtomWithIdx(end).GetIsAromatic()
+                )
+                for (map1, info1), (map2, info2) in itertools.product(
+                    hits[start], hits[end]
+                ):
+                    site_a = _site_atoms(map1, info1)
+                    site_b = _site_atoms(map2, info2)
+                    if site_a is None or site_b is None or site_a == site_b:
+                        continue
+                    site = frozenset((site_a, site_b))
+                    end1 = resolve_effect(mol, map1, info1)
+                    end2 = resolve_effect(mol, map2, info2)
+                    preview = {
+                        "site": site,
+                        "rule": self,
+                        "options": merge_effects(end1, end2, both_aromatic),
+                        "ends": (end1, end2),
+                        "end_atoms": (site_a, site_b),
+                        "end_maps": (map1, map2),
+                        "path_ends": frozenset((start, end)),
+                    }
+                    _bump(counters, "sites_considered")
+                    if not filter_sites(site, preview):
+                        _bump(counters, "sites_skipped")
+                        continue
+                    combos.append((map1, info1, map2, info2, preview))
+                if not combos:
+                    continue
+                if cache is None:
+                    cache = _kekule_cache(mol)
+                ends = parents_for_ends(mol, start, end, cache)
+                paths = []
+                for parent in ends.parents:
+                    path = alternating_path(
+                        _current_bond_map(parent), start, end, neighbors
+                    )
+                    if path:
+                        paths.append((parent, path))
+                paths.sort(key=lambda item: len(item[1]))
+                if not paths:
+                    continue
+                for map1, info1, map2, info2, preview in combos:
+                    if rings is None and (
+                        info1.get("skip_same_rings") or info2.get("skip_same_rings")
+                    ):
+                        rings = ring_membership(mol)
+                    ring_table = rings or {}
+                    for parent, path in paths:
+                        _bump(counters, "mol_edits")
+                        rw = rw_copy(parent)
+                        edit1 = EDITS.get(info1.get("edit", ""))
+                        edit2 = EDITS.get(info2.get("edit", ""))
+                        if edit1 is None or edit2 is None:
+                            break
+                        if not edit1(rw, map1, info1, ring_table):
+                            break
+                        if not edit2(rw, map2, info2, ring_table):
+                            break
+                        if not swap_bonds_along_path(rw, path):
+                            continue
+                        products = list(sanitized_fragments(rw, counters).pieces)
+                        if not products:
+                            continue
+                        info = dict(preview)
+                        info["path"] = tuple(path)
+                        yield ProductsOfReaction(info=info, products=products)
+                        break
 
 
 class Hydroxylation(SmartsReactionRule):
