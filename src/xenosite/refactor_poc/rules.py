@@ -1759,6 +1759,27 @@ class AzoSplitting(SmartsReactionRule):
     )
 
 
+class BenzodioxoleReduction(SmartsReactionRule):
+    """Cleaves both C-O bonds of the methylene in a 1,3-dioxole.
+
+    That carbon is the whole leaving piece, and the pattern names it, so
+    ``leave_count`` is 1. ``breaks_ring`` is filled from one cleaved bond.
+    Both bonds are in that ring. A filter reads ``leave_count``.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                site_map=(2, 3),
+            ),
+        ),
+    )
+
+
 _HALIDE = (9, 17, 35, 53, 85)
 
 

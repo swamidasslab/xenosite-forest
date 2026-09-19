@@ -8,6 +8,7 @@ reason. These four are not xfail.
 from rdkit import Chem
 
 from xenosite.forest.rules import AzoSplitting as OldAzoSplitting
+from xenosite.forest.rules import BenzodioxoleReduction as OldBenzodioxoleReduction
 from xenosite.forest.rules import Dealkylation as OldDealkylation
 from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
@@ -15,6 +16,7 @@ from xenosite.forest.rules import QuinoneFormation as OldQuinone
 from xenosite.refactor_poc.find_path import bfs
 from xenosite.refactor_poc.rules import (
     AzoSplitting,
+    BenzodioxoleReduction,
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
@@ -159,6 +161,49 @@ def test_filter_skips_ring_nitrogen_and_keeps_open_azo():
     assert "Nc1ccccc1" in products
     assert "C=CC(=CN)N=Nc1ccccc1" not in products
     assert "C=C(C=CN)N=Nc1ccccc1" not in products
+
+
+_BENZODIOXOLE = "c1ccc2c(c1)OCO2"
+
+
+def test_benzodioxole_reduction_matches_old():
+    old = _old(OldBenzodioxoleReduction(), _BENZODIOXOLE)
+    new = _new(BenzodioxoleReduction(), _BENZODIOXOLE)
+    assert "Oc1ccccc1O" in new
+    assert new == old
+
+
+def test_filter_skips_named_methylene():
+    """The skip reads ``leave_count``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        count = info["options"].get("leave_count")
+        if count is not None:
+            refused.append(
+                (
+                    site,
+                    count,
+                    info["options"].get("partner"),
+                    info["options"].get("breaks_ring"),
+                )
+            )
+            return False
+        return True
+
+    products = _new(
+        BenzodioxoleReduction(),
+        _BENZODIOXOLE,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(
+        count == 1 and partner == "O" and ring
+        for _site, count, partner, ring in refused
+    )
+    assert "Oc1ccccc1O" not in products
+    assert "C" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():

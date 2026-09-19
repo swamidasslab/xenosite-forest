@@ -9,6 +9,7 @@ from rdkit import Chem
 
 from xenosite.refactor_poc.rules import (
     AzoSplitting,
+    BenzodioxoleReduction,
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
@@ -78,6 +79,12 @@ def _pattern(rule, smarts):
             AzoSplitting,
             "Nc1ccc(O)c(C(=O)O)c1",
             "[#7:1]=[#7:2]>>[*:1].[*:2]",
+        ),
+        (
+            "c1ccc2c(c1)OCO2",
+            BenzodioxoleReduction,
+            "Oc1ccccc1O",
+            "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
         ),
     ],
 )
