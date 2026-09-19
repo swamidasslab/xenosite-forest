@@ -13,6 +13,7 @@ from xenosite.forest.rules import BenzodioxoleReduction as OldBenzodioxoleReduct
 from xenosite.forest.rules import ConjugationRule as OldConjugationRule
 from xenosite.forest.rules import Dealkylation as OldDealkylation
 from xenosite.forest.rules import Glucuronidation as OldGlucuronidation
+from xenosite.forest.rules import Glutathionation as OldGlutathionation
 from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
 from xenosite.forest.rules import NitroaromaticReduction as OldNitroaromaticReduction
@@ -30,6 +31,7 @@ from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
     Glucuronidation,
+    Glutathionation,
     Hydroxylation,
     NDealkylation,
     NitroaromaticReduction,
@@ -512,6 +514,62 @@ def test_imidate_glucuronide_keeps_the_nitrogen():
     assert "N=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1" in new
     assert old - new == _OLD_IMIDATE_ACID
     assert new - old == set()
+
+
+_STYRENE_OXIDE = "c1ccccc1C1OC1"
+_EPICHLOROHYDRIN = "ClCC1CO1"
+_GSH_ADDS = "CCCCCCCCCCNNNOOOOOOS"
+
+
+def test_styrene_oxide_glutathione_matches_old():
+    """The target contains the glutathione conjugate. Canonical SMILES; order does not matter."""
+
+    old = _old(OldGlutathionation(as_star=False), _STYRENE_OXIDE)
+    new = _new(Glutathionation(as_star=False), _STYRENE_OXIDE)
+    assert "NC(CCC(=O)NC(CSC(CO)c1ccccc1)C(=O)NCC(=O)O)C(=O)O" in new
+    assert all("C(=O)NCC(=O)O" in smiles for smiles in new)
+    assert new == old
+
+
+def test_filter_skips_the_alkyl_chloride_and_keeps_the_epoxide_glutathione():
+    """The skip reads ``partner``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        partner = info["options"].get("partner")
+        if partner == "Cl":
+            refused.append(
+                (
+                    site,
+                    partner,
+                    info["options"].get("symbol"),
+                    info["options"].get("adds"),
+                    info["options"].get("removes"),
+                    info["options"].get("leave_count"),
+                    info["options"].get("cleaves"),
+                )
+            )
+            return False
+        return True
+
+    products = _new(
+        Glutathionation(as_star=False),
+        _EPICHLOROHYDRIN,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(
+        partner == "Cl"
+        and symbol == "C"
+        and added == _GSH_ADDS
+        and removed == "Cl"
+        and leave is None
+        and not cleaved
+        for _site, partner, symbol, added, removed, leave, cleaved in refused
+    )
+    assert "NC(CCC(=O)NC(CSC(CO)CCl)C(=O)NCC(=O)O)C(=O)O" in products
+    assert "NC(CCC(=O)NC(CSCC1CO1)C(=O)NCC(=O)O)C(=O)O" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():

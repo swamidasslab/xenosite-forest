@@ -106,3 +106,13 @@ methide site. A caller who wants none uses `filter_sites`. There is no
 `pathways=("methide",)` flag.
 
 Old tests: `tests/test_dh_methide_pathways.py`.
+
+## Glutathionation thiol opt-out
+
+Status: not decided.
+
+`include_thiol=False` removed the substrate-thiol SMARTS. The pattern stays
+on the rule. A caller who wants no thiol sites uses `filter_sites` and reads
+`symbol`.
+
+Old tests: `tests/test_conjugates.py`.

@@ -15,6 +15,7 @@ from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
     Glucuronidation,
+    Glutathionation,
     Hydroxylation,
     NDealkylation,
     NitroaromaticReduction,
@@ -134,6 +135,13 @@ def _pattern(rule, smarts):
             "O=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1",
             "[#8H1,#8-:1][#6:2](=[#8:3])[#6:4]>>"
             "O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1",
+        ),
+        (
+            "c1ccccc1C1OC1",
+            Glutathionation,
+            "NC(CCC(=O)NC(CSC(CO)c1ccccc1)C(=O)NCC(=O)O)C(=O)O",
+            "[#6H1:1]1[#8:2][#6:3]1>>"
+            "C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
         ),
     ],
 )

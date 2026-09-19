@@ -2514,3 +2514,92 @@ class Glucuronidation(ConjugationRule):
             describe(adds="CCCCCCOOOOOO", site_map=1),
         ),
     )
+
+
+# Glutathione, cysteine sulfur open at ``{attach}``. Heavy atoms only: C10 N3 O6 S.
+_GSH = "C(CC(=O)N[C@@H](CS({attach}))C(=O)NCC(=O)O)[C@@H](C(=O)O)N"
+_GSH_ADDS = "CCCCCCCCCCNNNOOOOOOS"
+
+
+def _gsh(attach: str) -> str:
+    return _GSH.format(attach=attach)
+
+
+class Glutathionation(ConjugationRule):
+    """Adds glutathione to a soft electrophile.
+
+    Calls :class:`ConjugationRule`. The glutathione SMARTS live here. The
+    star collapse stays there. ``as_star=False`` keeps the peptide. A
+    carbon-halogen site names the halogen as ``partner``. A filter reads
+    ``partner``. Ring carbons are separate patterns: one query of the three
+    ring atoms keeps a single embedding.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6H1:1]1[#8:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6H2:1]1[#8:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6:1]([!#1:4])1[#8:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6:1][#9,#17,#35,#53:2]>>" + _gsh("[*:1]"),
+            describe(
+                *branches(
+                    _whens(2, (9, 17, 35, 53)),
+                    site_map=1,
+                    adds=_GSH_ADDS,
+                    removes_partner=True,
+                ),
+                site_map=1,
+            ),
+        ),
+        (
+            "[#16h1:1]>>" + _gsh("[*:1]"),
+            describe(adds=_GSH_ADDS, removes="H", site_map=1),
+        ),
+        (
+            "[#6H2:1]=[#6:2]>>" + _gsh("[*:1]-[*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6H1:1]=[#6:2][#6:3]=[#8,#7:4]>>" + _gsh("[*:1][*:2]=[*:3][*:4]"),
+            describe(
+                *branches(_whens(4, (8, 7)), site_map=1, adds=_GSH_ADDS),
+                site_map=1,
+            ),
+        ),
+        (
+            "[#6;H1,H2:1]=[#8:2]>>" + _gsh("[*:1]([*:2])"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6H1:1]1[#7:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6H2:1]1[#7:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6:1]([!#1:4])1[#7:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#6:1][#8:2]S(=O)(=O)>>" + _gsh("[*:1]"),
+            describe(adds=_GSH_ADDS, site_map=1),
+        ),
+        (
+            "[#7:1]=[#6:2]=[#8,#16:3]>>" + _gsh("[*:2](=[*:3])[*:1]"),
+            describe(
+                *branches(_whens(3, (8, 16)), site_map=1, adds=_GSH_ADDS),
+                site_map=1,
+            ),
+        ),
+    )

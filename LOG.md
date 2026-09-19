@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Glutathionation calls ConjugationRule. Styrene oxide with `as_star` false matches the old library as `NC(CCC(=O)NC(CSC(CO)c1ccccc1)C(=O)NCC(=O)O)C(=O)O`. A filter skips the carbon-chlorine site on epichlorohydrin by reading `partner`. Ring carbons are separate patterns so a second opening is not one embedding of the three ring atoms.
+
+## 2026-09-19
+
 - Glucuronidation calls ConjugationRule. Phenol with `as_star` false matches the old library as `O=C(O)C1OC(Oc2ccccc2)C(O)C(O)C1O`. A filter skips the benzylic alcohol on 4-hydroxybenzyl alcohol by reading `partner_h`. The old acid SMARTS rewrites `=N`, `=P`, and `=S` as oxygen; that product is not that group's glucuronide, recorded in `DIVERGENCES.md`. The carbonyl pattern matches `=[#8]` on an OH or an anion, so a carboxylate still forms the acyl glucuronide.
 
 ## 2026-09-19
