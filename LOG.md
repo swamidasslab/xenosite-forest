@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- Sulfation calls ConjugationRule. Phenol with `as_star` false matches the old library as `O=S(=O)(O)Oc1ccccc1`. A filter skips the benzylic alcohol on 4-hydroxybenzyl alcohol by reading `partner_h`. The old arene-oxide SMARTS writes a methyl sulfone and drops the epoxide oxygen; that product is not a sulfate, recorded in `DIVERGENCES.md`.
+
 - Acetylation calls ConjugationRule. The acetyl SMARTS stay on that class. Phenol with `as_star` false matches the old library as `CC(=O)Oc1ccccc1`. A filter skips the nitrogen on 4-aminophenol by reading `symbol`. On 2-mercaptoethanol both matches still emit the thioacetate; that parent reaction was not changed.
 
 - ConjugationRule collapses the acetyl adduct to a star by default. Those SMARTS stay on this class until Acetylation, Sulfation, Glucuronidation, and Glutathionation are their own classes. A filter reads `symbol`. Star labels are not a mode on every rule.

@@ -58,3 +58,18 @@ The old library kekulizes once. That form is `C1=CC=C2SC=CC2=C1`, so the thiophe
 Dibenzothiophene (`c1ccc2c(c1)sc1ccccc12`): only new `[O-][s+]1c2ccccc2c2ccccc21`.
 
 More correct. Not a problem in the proof of concept. The other Kekulé form is the `C=C-C=C-S` pattern, and the same SMARTS writes the S-oxide that only the proof of concept emits. The old library stops on `C1=CC=C2SC=CC2=C1`, which is not that pattern. Thiophene has no second writing, and both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
+
+## Arene-oxide methyl sulfone
+
+The old second SMARTS deletes the epoxide oxygen and writes `-S(C)(=O)(=O)`. The methyl carbon is not in the reactant. The product is not a sulfate conjugate.
+
+- Reactant: `C1=CC2OC2C=C1`
+- Only old: `CS(=O)(=O)c1ccccc1`
+- Only new: none
+- Shared: none
+
+The same writing on `Clc1ccc(c(c1)Cl)C1=CC2(Cl)OC2C=C1Cl` is only old `CS(=O)(=O)c1cc(Cl)c(-c2ccc(Cl)cc2Cl)cc1Cl`.
+
+`OC1=CC2OC2C=C1` still shares the sulfate `O=S(=O)(O)OC1=CC2OC2C=C1`. Only old there: `CS(=O)(=O)c1ccc(O)cc1`, `CS(=O)(=O)c1cccc(O)c1`.
+
+More correct. Not a problem in the proof of concept. Those strings are methyl sulfones. A sulfate conjugate keeps the oxygen and adds `S(=O)(=O)O`. The epoxide oxygen has no hydrogen, so it is not a sulfate site.

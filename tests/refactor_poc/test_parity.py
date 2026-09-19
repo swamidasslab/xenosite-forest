@@ -16,6 +16,7 @@ from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
 from xenosite.forest.rules import NitroaromaticReduction as OldNitroaromaticReduction
 from xenosite.forest.rules import QuinoneFormation as OldQuinone
+from xenosite.forest.rules import Sulfation as OldSulfation
 from xenosite.forest.rules import (
     ThiopheneSulfurOxidation as OldThiopheneSulfurOxidation,
 )
@@ -31,6 +32,7 @@ from xenosite.refactor_poc.rules import (
     NDealkylation,
     NitroaromaticReduction,
     QuinoneFormation,
+    Sulfation,
     ThiopheneSulfurOxidation,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
@@ -393,6 +395,58 @@ def test_filter_skips_nitrogen_and_keeps_the_phenol_acetyl():
     )
     assert "CC(=O)Oc1ccc(N)cc1" in products
     assert "CC(=O)Nc1ccc(O)cc1" not in products
+
+
+_HYDROXYBENZYL = "OCc1ccc(O)cc1"
+
+
+def test_phenol_sulfate_matches_old():
+    """The target contains the sulfate conjugate. Canonical SMILES; order does not matter."""
+
+    old = _old(OldSulfation(as_star=False), _PHENOL)
+    new = _new(Sulfation(as_star=False), _PHENOL)
+    assert "O=S(=O)(O)Oc1ccccc1" in new
+    assert all("S(=O)(O)" in smiles for smiles in new)
+    assert new == old
+
+
+def test_filter_skips_the_benzylic_alcohol_and_keeps_the_phenol_sulfate():
+    """The skip reads ``partner_h``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        partner_h = info["options"].get("partner_h")
+        if partner_h == 2:
+            refused.append(
+                (
+                    site,
+                    partner_h,
+                    info["options"].get("symbol"),
+                    info["options"].get("adds"),
+                    info["options"].get("leave_count"),
+                    info["options"].get("cleaves"),
+                )
+            )
+            return False
+        return True
+
+    products = _new(
+        Sulfation(as_star=False),
+        _HYDROXYBENZYL,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(
+        count == 2
+        and symbol == "O"
+        and added == "SOOO"
+        and leave is None
+        and not cleaved
+        for _site, count, symbol, added, leave, cleaved in refused
+    )
+    assert "O=S(=O)(O)Oc1ccc(CO)cc1" in products
+    assert "O=S(=O)(O)OCc1ccc(O)cc1" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():

@@ -2442,3 +2442,27 @@ class Acetylation(ConjugationRule):
     Calls :class:`ConjugationRule`. The acetyl SMARTS and the star collapse
     stay there. ``as_star=False`` keeps the acetyl. A filter reads ``symbol``.
     """
+
+
+class Sulfation(ConjugationRule):
+    """Adds a sulfate to an alcohol or a phenol.
+
+    Calls :class:`ConjugationRule`. The sulfate SMARTS live here. The star
+    collapse stays there. ``as_star=False`` keeps the sulfate. The oxygen
+    has one hydrogen. A filter reads ``partner_h``.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6:1][#8H1:2]>>[*:1][*:2]S(=O)(=O)O",
+            describe(
+                *branches(
+                    _whens(1, (6,)),
+                    site_map=2,
+                    adds="SOOO",
+                    removes="H",
+                ),
+                site_map=2,
+            ),
+        ),
+    )

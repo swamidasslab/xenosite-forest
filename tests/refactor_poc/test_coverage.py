@@ -17,6 +17,7 @@ from xenosite.refactor_poc.rules import (
     Hydroxylation,
     NDealkylation,
     NitroaromaticReduction,
+    Sulfation,
     ThiopheneSulfurOxidation,
 )
 
@@ -113,6 +114,12 @@ def _pattern(rule, smarts):
             Acetylation,
             "CC(=O)Oc1ccccc1",
             "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
+        ),
+        (
+            "Oc1ccccc1",
+            Sulfation,
+            "O=S(=O)(O)Oc1ccccc1",
+            "[#6:1][#8H1:2]>>[*:1][*:2]S(=O)(=O)O",
         ),
     ],
 )
