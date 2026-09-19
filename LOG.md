@@ -2,6 +2,7 @@
 
 ## 2026-09-19
 
+- `RuleSet` lives in `refactor_poc/rulesets.py` and is a rule: running the set runs each child, and `filter_rules` / `filter_sites` still see that child's pattern. `PhaseOne` lists the reaction classes that exist in `rules.py`, including `QuinoneFormation`. Forest-only rules (NDealkylation, Tautomerization, AzoSplitting, BenzodioxoleReduction, NitroaromaticReduction, ThiopheneSulfurOxidation, conjugations) are omitted, not invented. `from rules import RuleSet` still resolves.
 - refactor_poc `find_path` calls one `RuleSet`. The set is a rule: running it runs each child, and `filter_rules` / `filter_sites` still see the child pattern. Not a bare list of classes. `phaseone.py` stays dropped.
 - refactor_poc `find_path`: one MCS (element match, `CompareAny` bonds) plus the local change at each atom. Not `PathContext`. `mol_edits` is an accepted-site `RunReactants` or a pair-rule kekulé overlay; a refused site is `sites_skipped`. `billed = mol_edits + nodes`. When the target is smaller, non-cleaving patterns fail `filter_rules`. `Deps` edges come from `added_by`, not SMARTS replay.
 - refactor_poc rules: `ResonanceRule` / `ResonancePairRule` live in `rules.py` (no AtomTracker). Hydroxylation, then Dehydrogenation, then QuinoneFormation share them. `PatternInfo.possibilities` lists each SMARTS branch; `resolve_effect` narrows that from the matched atoms; `span` is a bare value when every branch agrees and a tuple when it does not.

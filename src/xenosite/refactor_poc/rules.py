@@ -238,50 +238,14 @@ class ReactionRule:
         raise NotImplementedError
 
 
-class RuleSet(ReactionRule):
-    """A rule that runs every rule it contains.
+def __getattr__(name):
+    """``RuleSet`` lives in ``rulesets``. Keep ``from .rules import RuleSet`` working."""
 
-    The container is the thing callers execute. ``filter_rules`` and
-    ``filter_sites`` are passed through to each child, so a pattern is
-    still refused on its own ``span`` and its own resolved effect.
-    Nested rulesets are flattened: executing the outer set runs the leaves.
-    """
+    if name == "RuleSet":
+        from .rulesets import RuleSet
 
-    def __init__(self, rules=(), name=None, longname=None):
-        contained = []
-        for rule in rules:
-            if isinstance(rule, type):
-                rule = rule()
-            if isinstance(rule, RuleSet):
-                contained.extend(rule.rules)
-            else:
-                contained.append(rule)
-        self.rules = tuple(contained)
-        if name is None and len(self.rules) == 1:
-            name = self.rules[0].name
-        super().__init__(name=name or "RuleSet", longname=longname)
-
-    def __iter__(self):
-        yield from self.rules
-
-    def metabolites(
-        self,
-        mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
-        order_key=None,
-        **kwargs,
-    ):
-        rules = self.rules
-        if order_key is not None:
-            rules = tuple(sorted(self.rules, key=order_key))
-        for rule in rules:
-            yield from rule.metabolites(
-                mol,
-                filter_rules=filter_rules,
-                filter_sites=filter_sites,
-                **kwargs,
-            )
+        return RuleSet
+    raise AttributeError("module %r has no attribute %r" % (__name__, name))
 
 
 def install_forest(mol):
