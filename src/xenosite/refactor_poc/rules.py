@@ -1636,3 +1636,126 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
     )
+
+
+def _whens(mapno, atomic_nums):
+    """One branch constraint per atomic number, for :func:`branches`."""
+
+    return tuple({"map": mapno, "z": int(z)} for z in atomic_nums)
+
+
+class Dealkylation(SmartsReactionRule):
+    """Cleaves a C-N, C-O, C-S, or C-C bond and oxygenates the carbon side.
+
+    The site is both atoms of the broken bond.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="OO", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="OO", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6H0:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6:1][#6:2]>>(O-[*:1].[*:2])",
+            describe(adds="O", cleaves=True, partner="C", site_map=(1, 2)),
+        ),
+        (
+            "[#6h:1][#6:2]>>(O-[*:1].[*:2])",
+            describe(
+                *branches(
+                    (
+                        {"map": 1, "z": 6, "h": 1},
+                        {"map": 1, "z": 6, "h": 2},
+                        {"map": 1, "z": 6, "h": 3},
+                    ),
+                    adds="O",
+                    cleaves=True,
+                    partner="C",
+                ),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#6h:1][#6:2]>>(O=[*:1].[*:2])",
+            describe(
+                *branches(
+                    (
+                        {"map": 1, "z": 6, "h": 1},
+                        {"map": 1, "z": 6, "h": 2},
+                        {"map": 1, "z": 6, "h": 3},
+                    ),
+                    adds="O",
+                    cleaves=True,
+                    partner="C",
+                ),
+                site_map=(1, 2),
+            ),
+        ),
+        (
+            "[#8H1:3]-[#6:1]-[#7,#8,#16:2]>>([*:3]=[*:1].[*:2])",
+            describe(
+                *branches(_whens(2, (7, 8, 16)), removes="H", cleaves=True),
+                site_map=(1, 2),
+            ),
+        ),
+    )
+

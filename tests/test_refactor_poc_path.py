@@ -100,3 +100,20 @@ def test_butylbenzene_chain_alcohol_skips_ring_sites():
     assert counters.sites_skipped > 0, message
     assert counters.mol_edits == 1, message
     assert counters.mol_edits < counters.sites_considered, message
+
+
+def test_anisole_to_phenol_cleaves_and_keeps_the_methyl_side():
+    counters = PathCounters()
+    hits = list(find_path("COc1ccccc1", "Oc1ccccc1", counters=counters))
+    message = _billed(counters)
+    assert hits, message
+    outcome = hits[0]
+    steps = outcome.plan.children
+    assert len(steps) == 1, message
+    assert steps[0].rule == "Dealkylation", message
+    assert outcome.smiles == canon_smiles("Oc1ccccc1"), message
+    assert outcome.maybe, message
+    side = outcome.maybe.entries[0].side
+    assert outcome.allows(side=side), message
+    # The methyl fragment is not another search node.
+    assert counters.nodes == 2, message

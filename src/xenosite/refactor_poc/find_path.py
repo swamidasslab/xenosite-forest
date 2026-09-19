@@ -16,6 +16,7 @@ from rdkit.Chem import GetMolFrags, SanitizeMol, rdFMCS
 
 from xenosite.forest.step_plan import AtomRef, Deps, Step
 from xenosite.refactor_poc.rules import (
+    Dealkylation,
     Hydroxylation,
     RuleSet,
     cannonicalize_order,
@@ -555,7 +556,7 @@ def _deps(steps):
 def default_ruleset():
     """The poc catalog as one rule. Phase I is the ``Deps`` search yields."""
 
-    return RuleSet((Hydroxylation,), name="Poc")
+    return RuleSet((Dealkylation, Hydroxylation), name="Poc")
 
 
 def _pieces(raw):
