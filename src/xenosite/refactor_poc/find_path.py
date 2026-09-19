@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from typing import Any, cast
 
 
 from xenosite.refactor_poc.rdkitutil import (
@@ -140,7 +141,7 @@ class Maybe:
 class PathOutcome:
     """Required phase-I plan, plus cleavage fragments left on :class:`Maybe`."""
 
-    plan: Deps
+    plan: Any
     maybe: Maybe
     smiles: str
 
@@ -298,6 +299,8 @@ def _best_mapping(reactant, target):
             if best_score is None or score > best_score:
                 best_score = score
                 best = (r_match, t_match)
+    if best is None:
+        return {}
     r_match, t_match = best
     return {r: t for r, t in zip(r_match, t_match)}
 
@@ -523,9 +526,12 @@ def _filters(diff, enabled, mol):
     return filter_rules, filter_sites
 
 
-def _rule_can_cleave(rule):
-    patterns = list(getattr(rule, "smarts", ()) or ())
-    patterns = patterns + list(getattr(rule, "endpoints", ()) or ())
+def _rule_can_cleave(rule: Any) -> bool:
+    patterns: list[tuple[Any, Any]] = []
+    for group in (getattr(rule, "smarts", None), getattr(rule, "endpoints", None)):
+        if not group:
+            continue
+        patterns.extend(group)
     for _smarts, info in patterns:
         if _any_span(info.get("span") or {}, "cleaves", bool, False):
             return True
@@ -569,7 +575,7 @@ def _atom_ref(mol, idx):
 
 
 def _step(mol, rule_name, site):
-    return Step(rule_name, [_atom_ref(mol, idx) for idx in site])
+    return Step(rule_name, frozenset(_atom_ref(mol, idx) for idx in site))
 
 
 def _steps_for(mol, info):
@@ -614,7 +620,7 @@ def _quinone_phase1(mol, info):
             "O" in (end.get("adds") or "") and partner != "O"
         )
         if adds_oxygen:
-            step = Step("Hydroxylation", [_atom_ref(mol, atom)])
+            step = Step("Hydroxylation", frozenset((_atom_ref(mol, atom),)))
             hydroxylations.append(step)
             origin = next(iter(step.site)).origin
             dh_refs.append(AtomRef(added_by=("Hydroxylation", frozenset({origin}))))
@@ -625,7 +631,7 @@ def _quinone_phase1(mol, info):
             dh_refs.append(_atom_ref(mol, hetero))
     if not dh_refs:
         return (_step(mol, "Dehydrogenation", info["site"]),)
-    return tuple(hydroxylations) + (Step("Dehydrogenation", dh_refs),)
+    return tuple(hydroxylations) + (Step("Dehydrogenation", frozenset(dh_refs)),)
 
 
 def _deps(steps):
@@ -646,7 +652,7 @@ def _deps(steps):
                 )
                 if origins == wanted:
                     edges.append((earlier, later))
-    return Deps(steps, edges)
+    return cast(Any, Deps)(steps, edges)
 
 
 # ---------------------------------------------------------------------------
@@ -690,9 +696,11 @@ def _keep_fragment(finished, target):
             cost = -1
         else:
             cost = atom_diff(mol, target).cost()
-        if best is None or cost < best_cost:
+        if best_cost is None or cost < best_cost:
             best = (mol, smiles)
             best_cost = cost
+    if best is None:
+        return None, []
     discarded = [item for item in finished if item[0] is not best[0]]
     return best, discarded
 

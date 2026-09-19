@@ -70,7 +70,7 @@ class PatternInfo(TypedDict, total=False):
     possibilities: tuple[Effect, ...]
     span: dict[str, Any]
     edit: str
-    site_map: int
+    site_map: int | tuple[int, ...]
     skip_same_rings: bool
 
 
@@ -151,7 +151,10 @@ class AtomTrace(TypedDict, total=False):
 
 
 class Structure(TypedDict, total=False):
-    """Cache of plain data. ``total`` is false because each key is filled in later."""
+    """Cache of plain data. ``total`` is false because each key is filled in later.
+
+    ``mcs_matches`` and ``mcs_targets`` are keyed by the target canonical SMILES.
+    """
 
     sanitized: int
     topol_equiv: dict[int, int]

@@ -27,7 +27,7 @@ from xenosite.refactor_poc.rdkitutil import (
     topol_equiv,
 )
 
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 from xenosite.refactor_poc.records import Effect, PatternInfo, When
 from collections.abc import Callable, Generator
@@ -220,7 +220,7 @@ class ReactionRule:
     def is_terminal_product(self, mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search."""
 
-        forest = get_forest(mol)
+        forest = cast(dict[str, Any], get_forest(mol))
         if "is_terminal_product" in forest["structure"]:
             return forest["structure"]["is_terminal_product"]
 
@@ -338,7 +338,7 @@ def install_forest(mol):
 
 
 def stamp_forest_labels(mol):
-    forest = get_forest(mol)
+    forest = cast(dict[str, Any], get_forest(mol))
     if "atom_trace" not in forest:
         install_forest(mol)
 
@@ -351,7 +351,7 @@ def stamp_forest_labels(mol):
 
 
 def reordered_forest_labels(mol):
-    forest = get_forest(mol)
+    forest = cast(dict[str, Any], get_forest(mol))
     # if "atom_trace" not in forest:
     #     install_forest(mol)
 
@@ -400,7 +400,7 @@ def forest_trace(reactant, product, info, executed=None):
     site = info.get("site")
     stamp_forest_labels(reactant)
     forest = get_forest(product, new_structure=True)
-    parent_forest = get_forest(reactant)
+    parent_forest = cast(dict[str, Any], get_forest(reactant))
 
     if "atom_trace" not in parent_forest:
         install_forest(reactant)
@@ -550,7 +550,13 @@ def branches(whens, site_map=1, removes_partner=False, **effect):
     return tuple(out)
 
 
-def describe(*possibilities, edit=None, site_map=1, skip_same_rings=False, **single):
+def describe(
+    *possibilities,
+    edit=None,
+    site_map: int | tuple[int, ...] = 1,
+    skip_same_rings=False,
+    **single,
+) -> PatternInfo:
     """Build a :class:`PatternInfo`.
 
     One outcome: ``describe(adds="O", removes="H")``.
@@ -577,7 +583,7 @@ def describe(*possibilities, edit=None, site_map=1, skip_same_rings=False, **sin
         info["edit"] = edit
     if skip_same_rings:
         info["skip_same_rings"] = True
-    return info
+    return cast(PatternInfo, info)
 
 
 def may(info, key, value=True):
@@ -755,7 +761,7 @@ class SmartsReactionRule(ReactionRule):
 
     smarts: tuple[tuple[str, PatternInfo], ...] = ()
 
-    rxns: list[tuple[Any, dict[str, Any]]]
+    rxns: list[tuple[str, Any, PatternInfo]]
 
     def __init__(self, *args, **kwargs):
 
@@ -969,7 +975,7 @@ def alternating_path(bond_map, start, end, neighbors):
 
     if start == end or start not in neighbors or end not in neighbors:
         return None
-    queue = deque([(start, 2.0, (start,))])
+    queue: deque[tuple[Any, float, tuple[Any, ...]]] = deque([(start, 2.0, (start,))])
     seen = {(start, 2)}
     while queue:
         node, want, path = queue.popleft()
@@ -1293,6 +1299,7 @@ class ResonancePairRule(ResonanceRule):
         mol,
         filter_rules=lambda rule, info: True,
         filter_sites=lambda site, info: True,
+        context_mol=None,
         **kwargs,
     ):
         """Same contract as :meth:`ReactionRule.metabolites`.
@@ -1306,6 +1313,7 @@ class ResonancePairRule(ResonanceRule):
             mol,
             filter_rules=filter_rules,
             filter_sites=filter_sites,
+            context_mol=context_mol,
             **kwargs,
         )
         yield from pair_metabolites(
