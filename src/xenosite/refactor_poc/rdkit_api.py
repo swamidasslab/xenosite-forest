@@ -239,6 +239,11 @@ if TYPE_CHECKING:
         doRandom: bool = False,
         ignoreAtomMapNumbers: bool = False,
     ) -> str: ...
+    def MolToSmarts(
+        mol: Mol,
+        isomericSmiles: bool = True,
+        rootedAtAtom: int = -1,
+    ) -> str: ...
     def ReactionFromSmarts(
         SMARTS: str,
         replacements: dict[str, str] | None = None,
@@ -274,6 +279,7 @@ else:
     DisableLog = rdBase.DisableLog
     MolFromSmiles = Chem.MolFromSmiles
     MolFromSmarts = Chem.MolFromSmarts
+    MolToSmarts = Chem.MolToSmarts
     SanitizeFlags = Chem.SanitizeFlags
     # Typing-only states. Runtime molecules stay RDKit's Mol; these names
     # exist so annotations can be imported. They are not a shared forest.

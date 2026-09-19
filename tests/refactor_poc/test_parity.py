@@ -401,6 +401,44 @@ def test_filter_skips_nitrogen_and_keeps_the_phenol_acetyl():
     assert "CC(=O)Nc1ccc(O)cc1" not in products
 
 
+def _acetates_by_site(smiles):
+    mol = Chem.MolFromSmiles(smiles)
+    found = {}
+    for product, info in Acetylation(as_star=False).metabolize(mol):
+        site = info["site"]
+        assert isinstance(site, frozenset) and len(site) == 1
+        found[next(iter(site))] = next(iter(_fragments([product])))
+    return mol, found
+
+
+def test_pinned_acetate_is_the_stamped_atom():
+    """The primary alcohol and the nitrogen each get their own acetate.
+
+    The site names the atom. The first ``RunReactants`` product does not.
+    """
+
+    mol, found = _acetates_by_site("OCCN")
+    nitrogen = next(atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 7)
+    alcohol = next(atom.GetIdx() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
+    assert found[nitrogen] == _canon("CC(=O)NCCO")
+    assert found[alcohol] == _canon("CC(=O)OCCN")
+
+    mol, found = _acetates_by_site("CC(O)CO")
+    primary = None
+    secondary = None
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != 8:
+            continue
+        carbon = next(iter(atom.GetNeighbors()))
+        if carbon.GetTotalNumHs() == 2:
+            primary = atom.GetIdx()
+        elif carbon.GetTotalNumHs() == 1:
+            secondary = atom.GetIdx()
+    assert primary is not None and secondary is not None
+    assert found[primary] == _canon("CC(=O)OCC(C)O")
+    assert found[secondary] == _canon("CC(=O)OC(C)CO")
+
+
 _HYDROXYBENZYL = "OCc1ccc(O)cc1"
 
 

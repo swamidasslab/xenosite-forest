@@ -72,6 +72,10 @@ class PatternInfo(TypedDict, total=False):
     span: dict[str, Any]
     edit: str
     site_map: int | tuple[int, ...]
+    # Map numbers that receive an isotope label. More than one map can be
+    # pinned. The label applies to the whole atom query, and those atoms
+    # are written first so the match cannot land on a different atom.
+    pin: tuple[int, ...]
     skip_same_rings: bool
 
 

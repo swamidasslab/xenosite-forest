@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 import json
 import copy
 
+from xenosite.refactor_poc.rdkit_api import MolFromSmarts, MolToSmarts, RenumberAtoms
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
     Bond,
@@ -561,6 +562,7 @@ def describe(
     *possibilities,
     edit=None,
     site_map: int | tuple[int, ...] = 1,
+    pin: tuple[int, ...] | None = None,
     skip_same_rings=False,
     **single,
 ) -> PatternInfo:
@@ -588,6 +590,8 @@ def describe(
     }
     if edit is not None:
         info["edit"] = edit
+    if pin:
+        info["pin"] = tuple(pin)
     if skip_same_rings:
         info["skip_same_rings"] = True
     return cast(PatternInfo, info)
@@ -716,24 +720,57 @@ def _bump(counters, name, amount=1):
     setattr(counters, name, getattr(counters, name) + amount)
 
 
-def _isotope_smarts(smarts, mapped):
-    """Restrict a SMARTS reaction to one match.
+def _isotope_smarts(smarts: str, pin: tuple[int, ...]) -> str:
+    """Restrict a SMARTS reaction to the pinned maps.
 
     The matched atoms are stamped with isotope ``8000 + map number``. The
-    query requires that isotope, so a site ``filter_sites`` refused is never
-    passed to ``RunReactants``.
+    isotope is applied to the whole atom query, so an OR list does not keep
+    the label on only its first alternative. Those atoms are written first:
+    ``SubstructMatch`` starts at query atom 0 and does not reorder.
     """
 
     import re
 
+    wanted = set(pin)
+
     def repl(match):
         mapno = int(match.group(2))
-        if mapno not in mapped:
+        if mapno not in wanted:
             return match.group(0)
         isotope = 8000 + mapno
-        return "[" + str(isotope) + match.group(1) + ":" + match.group(2) + "]"
+        return "[" + match.group(1) + "&" + str(isotope) + "*:" + match.group(2) + "]"
 
-    return re.sub(r"\[([^\[\]]*):(\d+)\]", repl, smarts)
+    rewritten = re.sub(r"\[([^\[\]]*):(\d+)\]", repl, smarts)
+    return _isotope_atoms_first(rewritten, wanted)
+
+
+def _isotope_atoms_first(smarts: str, pin: set[int]) -> str:
+    """Put each isotope-bearing reactant atom before the others."""
+
+    if ">>" not in smarts or not pin:
+        return smarts
+    reactant, product = smarts.split(">>", 1)
+    query = MolFromSmarts(reactant)
+    if query is None:
+        return smarts
+    pinned = [
+        idx
+        for _mapno, idx in sorted(
+            (atom.GetAtomMapNum(), atom.GetIdx())
+            for atom in query.GetAtoms()
+            if atom.GetAtomMapNum() in pin
+        )
+    ]
+    if not pinned:
+        return smarts
+    rest = [idx for idx in range(query.GetNumAtoms()) if idx not in set(pinned)]
+    order = pinned + rest
+    if order == list(range(query.GetNumAtoms())):
+        return smarts
+    rewritten = MolToSmarts(RenumberAtoms(query, order))
+    if MolFromSmarts(rewritten) is None:
+        return smarts
+    return rewritten + ">>" + product
 
 
 def _site_indexes(mapped, pattern):
@@ -749,15 +786,33 @@ def _site_indexes(mapped, pattern):
     return frozenset(idxs)
 
 
-def react_at(rule, smarts, mol: Mol, mapped, counters=None) -> list[Mol]:
-    """Run ``smarts`` on one match. One call is one ``mol_edits``."""
+def react_at(
+    rule,
+    smarts: str,
+    mol: Mol,
+    mapped,
+    counters=None,
+    pin: tuple[int, ...] | None = None,
+) -> list[Mol]:
+    """Run ``smarts`` on one match. One call is one ``mol_edits``.
+
+    ``pin`` is the pattern's map numbers. Each of those atoms is stamped.
+    Absent ``pin`` stamps every mapped atom, which is the same list.
+    """
 
     _bump(counters, "mol_edits")
+    chosen = tuple(
+        mapno
+        for mapno in (pin if pin is not None else tuple(mapped))
+        if mapno in mapped
+    )
+    if not chosen:
+        chosen = tuple(mapped)
     stamped = rw_copy(mol)
-    for mapno, idx in mapped.items():
-        stamped.GetAtomWithIdx(idx).SetIsotope(8000 + mapno)
+    for mapno in chosen:
+        stamped.GetAtomWithIdx(mapped[mapno]).SetIsotope(8000 + mapno)
     try:
-        product_sets = run_reactants(_isotope_smarts(smarts, mapped), stamped)
+        product_sets = run_reactants(_isotope_smarts(smarts, chosen), stamped)
     except (RuntimeError, ValueError):
         return []
     if not product_sets:
@@ -859,7 +914,9 @@ class SmartsReactionRule(ReactionRule):
                     if signature in seen:
                         _bump(counters, "sites_skipped")
                         continue
-                    products = react_at(self, smarts, work, mapped, counters)
+                    products = react_at(
+                        self, smarts, work, mapped, counters, pattern.get("pin")
+                    )
                     if not products:
                         continue
                     seen.add(signature)
@@ -1322,7 +1379,9 @@ class ResonanceRule(SmartsReactionRule):
                 if signature in seen:
                     _bump(counters, "sites_skipped")
                     continue
-                products = react_at(self, smarts, work, mapped, counters)
+                products = react_at(
+                    self, smarts, work, mapped, counters, pattern.get("pin")
+                )
                 if not products:
                     continue
                 seen.add(signature)
@@ -2403,6 +2462,7 @@ class ConjugationRule(SmartsReactionRule):
             "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
             describe(
                 *branches(_whens(1, (7, 8, 16)), adds="CCO", removes="H"),
+                pin=(1,),
             ),
         ),
     )
