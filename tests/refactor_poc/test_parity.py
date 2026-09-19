@@ -7,12 +7,14 @@ reason. These four are not xfail.
 
 from rdkit import Chem
 
+from xenosite.forest.rules import AzoSplitting as OldAzoSplitting
 from xenosite.forest.rules import Dealkylation as OldDealkylation
 from xenosite.forest.rules import Hydroxylation as OldHydroxylation
 from xenosite.forest.rules import NDealkylation as OldNDealkylation
 from xenosite.forest.rules import QuinoneFormation as OldQuinone
 from xenosite.refactor_poc.find_path import bfs
 from xenosite.refactor_poc.rules import (
+    AzoSplitting,
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
@@ -123,6 +125,40 @@ def test_filter_skips_named_methyl_and_keeps_open_alkyl():
     assert all(count == 1 and partner == "N" for _site, count, partner in refused)
     assert "CC=O" in products
     assert "C=O" not in products
+
+
+_OLSALAZINE = "OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O"
+_AZO_PYRIDAZINE = "c1ccc(N=Nc2ccnnc2)cc1"
+
+
+def test_olsalazine_azo_splitting_matches_old():
+    old = _old(OldAzoSplitting(), _OLSALAZINE)
+    new = _new(AzoSplitting(), _OLSALAZINE)
+    assert "Nc1ccc(O)c(C(=O)O)c1" in new
+    assert new == old
+
+
+def test_filter_skips_ring_nitrogen_and_keeps_open_azo():
+    """The skip reads ``breaks_ring``. It does not ask which rule this is."""
+
+    refused = []
+
+    def filter_sites(site, info):
+        if info["options"].get("breaks_ring"):
+            refused.append((site, info["options"].get("partner")))
+            return False
+        return True
+
+    products = _new(
+        AzoSplitting(),
+        _AZO_PYRIDAZINE,
+        filter_sites=filter_sites,
+    )
+    assert refused
+    assert all(partner == "N" for _site, partner in refused)
+    assert "Nc1ccccc1" in products
+    assert "C=CC(=CN)N=Nc1ccccc1" not in products
+    assert "C=C(C=CN)N=Nc1ccccc1" not in products
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():

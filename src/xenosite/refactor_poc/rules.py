@@ -1743,6 +1743,22 @@ class NDealkylation(SmartsReactionRule):
     )
 
 
+class AzoSplitting(SmartsReactionRule):
+    """Splits an N=N bond. Both fragments stay.
+
+    The pattern names both nitrogens and no leaving piece, so ``leave_count``
+    stays None. ``breaks_ring`` is filled from the cleaved bond. A ring N=N
+    and an open azo are the same pattern; a filter reads ``breaks_ring``.
+    """
+
+    smarts: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#7:1]=[#7:2]>>[*:1].[*:2]",
+            describe(cleaves=True, partner="N", site_map=(1, 2)),
+        ),
+    )
+
+
 _HALIDE = (9, 17, 35, 53, 85)
 
 

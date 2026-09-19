@@ -8,6 +8,7 @@ import pytest
 from rdkit import Chem
 
 from xenosite.refactor_poc.rules import (
+    AzoSplitting,
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
@@ -71,6 +72,12 @@ def _pattern(rule, smarts):
             NDealkylation,
             "CNC",
             "[#6H3:1][#7:2]>>([*:2].[*:1]=O)",
+        ),
+        (
+            "OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O",
+            AzoSplitting,
+            "Nc1ccc(O)c(C(=O)O)c1",
+            "[#7:1]=[#7:2]>>[*:1].[*:2]",
         ),
     ],
 )

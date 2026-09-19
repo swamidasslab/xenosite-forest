@@ -17,3 +17,14 @@ one H. The `>>[*:1]=O` products are not metabolites.
 - Shared: `CC(O)CCc1ccccc1`, `CCC(O)Cc1ccccc1`, `CCCC(O)c1ccccc1`, `CCCCc1ccc(O)cc1`, `CCCCc1cccc(O)c1`, `CCCCc1ccccc1O`, `OCCCCc1ccccc1`
 
 Ethane (`CC`) does not hit that carbonyl. Both libraries yield `CCO` only.
+
+## Azo splitting of pyridazine
+
+The old library kekulizes once. That form of pyridazine has an N-N single bond, so the split does not run. Every Kekulé form is searched here, and the N=N writing matches. RDKit's `[#7:1]=[#7:2]>>[*:1].[*:2]` then drops one nitrogen. `C=CC=CN` is not a metabolite: pyridazine is C4H4N2.
+
+- Reactant: `c1ccnnc1`
+- Only old: none
+- Only new: `C=CC=CN`
+- Shared: none
+
+The same SMARTS on `c1ccc(N=Nc2ccnnc2)cc1` is what both libraries emit, including the ring-opened fragments. Those sets match.
