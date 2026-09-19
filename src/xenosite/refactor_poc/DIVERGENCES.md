@@ -24,7 +24,7 @@ More correct. Not a problem in the proof of concept. The three old-only strings 
 
 ## Azo splitting of pyridazine
 
-The old library kekulizes once. That form of pyridazine has an N-N single bond, so the split does not run. Every Kekulé form is searched here, and the N=N writing matches. RDKit's `[#7:1]=[#7:2]>>[*:1].[*:2]` then drops one nitrogen. `C=CC=CN` is not a metabolite: pyridazine is C4H4N2.
+The old library kekulizes once. That form of pyridazine has an N-N single bond, so the split does not run. Every Kekulé form is searched here, and the N=N writing matches. RDKit's `[#7:1]=[#7:2]>>[*:1].[*:2]` then drops one nitrogen. `C=CC=CN` is not a metabolite: pyridazine is C4H4N2. Both Kekulé forms parse, and neither atom is charged, so the dropped nitrogen is the reaction, not a charge left on the wrong atom.
 
 - Reactant: `c1ccnnc1`
 - Only old: none
@@ -33,18 +33,18 @@ The old library kekulizes once. That form of pyridazine has an N-N single bond, 
 
 The same SMARTS on `c1ccc(N=Nc2ccnnc2)cc1` is what both libraries emit, including the ring-opened fragments. Those sets match.
 
-Problem. The proof of concept is less correct on pyridazine. `C=CC=CN` is not a metabolite: the SMARTS drops one nitrogen, and the rule says both fragments stay. The old library emits nothing only because its one Kekulé form has an N-N single bond. The phenylazo-pyridazine sets already match, so the bad product is this ring writing.
+Problem. The proof of concept is less correct on pyridazine. `C=CC=CN` is not a metabolite: the SMARTS drops one nitrogen, and the rule says both fragments stay. The old library emits nothing only because its one Kekulé form has an N-N single bond. The phenylazo-pyridazine sets already match, so the bad product is this ring writing. Moving formal charge with the bond flip does not change it.
 
 ## Nitro reduction of 1,4-dinitrobenzene
 
-Kekulé copies rewrite one nitro as `[N+](=[O-])O` before the reaction. The oxygen then has valence 2. Nitrobenzene has no second nitro, and its fragments match.
+A Kekulé copy used to rewrite one nitro as `[N+](=[O-])O` and leave the charge on the oxygen that had become double-bonded. That oxygen has valence 2, so the SMILES did not parse. The charge now follows the bond order. Both libraries yield the nitroso, and the leaving oxygen.
 
 - Reactant: `O=[N+]([O-])c1ccc([N+](=O)[O-])cc1`
-- Only old: `O=Nc1ccc([N+](=O)[O-])cc1`
-- Only new: `O=NC1=CC=C([N+](=[O-])O)C=C1` (does not parse)
-- Shared: `O`
+- Only old: none
+- Only new: none
+- Shared: `O=Nc1ccc([N+](=O)[O-])cc1`, `O`
 
-Problem. The proof of concept is less correct. The rule cleaves one N-O and leaves the nitroso, and the old-only SMILES is that nitroso with the second nitro still `[N+](=O)[O-]`. The new-only SMILES does not parse, because a Kekulé copy rewrote that nitro as `[N+](=[O-])O` and the oxygen has valence 2. Nitrobenzene has no second nitro, and its fragments match.
+Not a problem. The nitroso is the metabolite the rule describes, and it parses. Nitrobenzene was already that pair.
 
 ## Thiophene S-oxidation of benzothiophene
 

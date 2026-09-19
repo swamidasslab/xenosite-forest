@@ -532,6 +532,50 @@ def _kekule_slots(
     return parents, orders, systems, by_order
 
 
+def _bond_order_sums(mol: Mol) -> dict[int, float]:
+    return {
+        atom.GetIdx(): sum(bond.GetBondTypeAsDouble() for bond in atom.GetBonds())
+        for atom in mol.GetAtoms()
+    }
+
+
+def move_charge_with_bonds(mol: Mol, before: dict[int, float]) -> None:
+    """Move formal charge when a bond-order flip would leave it behind.
+
+    The oxygen whose bond order rose by one loses a negative charge. The
+    oxygen whose bond order fell gains it. A neutral carbon keeps charge 0
+    and moves hydrogen instead, because that hydrogen has to travel with
+    the bond.
+    """
+
+    for atom in mol.GetAtoms():
+        old = before.get(atom.GetIdx())
+        if old is None:
+            continue
+        new = sum(bond.GetBondTypeAsDouble() for bond in atom.GetBonds())
+        delta = int(round(new - old))
+        if delta == 0:
+            continue
+        if atom.GetAtomicNum() == 6 and atom.GetFormalCharge() == 0:
+            _shift_hydrogens(atom, -delta)
+        else:
+            atom.SetFormalCharge(atom.GetFormalCharge() + delta)
+
+
+def _shift_hydrogens(atom: Atom, change: int) -> None:
+    try:
+        implicit = atom.GetNumImplicitHs()
+    except RuntimeError:
+        atom.UpdatePropertyCache(strict=False)
+        implicit = atom.GetNumImplicitHs()
+    total = atom.GetNumExplicitHs() + implicit
+    updated = total + change
+    if updated < 0:
+        return
+    atom.SetNoImplicit(True)
+    atom.SetNumExplicitHs(updated)
+
+
 def _write_assignment(
     mol: Mol,
     atoms: frozenset[int],
@@ -570,6 +614,7 @@ def _write_assignment(
 
     if not place(0):
         return None
+    before = _bond_order_sums(mol)
     rw = RWMol(Mol(mol))
     written: dict[tuple[int, int], float] = {}
     for left, right in bonds:
@@ -582,6 +627,7 @@ def _write_assignment(
         written[_bond_key(left, right)] = 2.0 if is_double else 1.0
     for atom in atoms:
         rw.GetAtomWithIdx(atom).SetIsAromatic(False)
+    move_charge_with_bonds(rw, before)
     return rw.GetMol(), written
 
 

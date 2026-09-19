@@ -22,6 +22,7 @@ from xenosite.refactor_poc.rdkitutil import (
     ensure_forest,
     ensure_kekule_parents,
     molecule_formula,
+    move_charge_with_bonds,
     parent_for_bond,
     parents_for_ends,
     reaction_from_smarts,
@@ -1129,8 +1130,16 @@ def _incident_orders(mol: Mol, ranks: dict[int, int], mapped) -> tuple:
 
 
 def overlay_kekule(mol: Mol, bond_map) -> RWMol:
-    """Copy ``mol`` and set kekulé bond orders. Atom indexes stay put."""
+    """Copy ``mol`` and set kekulé bond orders. Atom indexes stay put.
 
+    Bond orders move without their charge unless that charge is put back.
+    A neutral carbon moves hydrogen instead.
+    """
+
+    before = {
+        atom.GetIdx(): sum(bond.GetBondTypeAsDouble() for bond in atom.GetBonds())
+        for atom in mol.GetAtoms()
+    }
     rw = rw_copy(mol)
     for bond in rw.GetBonds():
         i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
@@ -1141,6 +1150,7 @@ def overlay_kekule(mol: Mol, bond_map) -> RWMol:
         bond.SetIsAromatic(False)
     for atom in rw.GetAtoms():
         atom.SetIsAromatic(False)
+    move_charge_with_bonds(rw, before)
     return rw
 
 
