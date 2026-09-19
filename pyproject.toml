@@ -59,6 +59,7 @@ dev = [
     "tqdm>=4.66.0",
     "hypothesis>=6.168.0",
     "towncrier>=24.0",
+    "pyright>=1.1.414",
 ]
 
 [tool.towncrier]
@@ -151,3 +152,11 @@ omit = ["*/_version.py"]
 [tool.coverage.report]
 skip_empty = true
 show_missing = true
+
+[tool.pyright]
+include = ["src/xenosite/refactor_poc/records.py"]
+exclude = [
+    "src/xenosite/refactor_poc/rdkitutil.py",
+    "src/xenosite/refactor_poc/phaseone.py",
+    "src/xenosite/forest",
+]
