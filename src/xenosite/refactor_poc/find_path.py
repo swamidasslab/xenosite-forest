@@ -816,3 +816,106 @@ def find_path(
 
             steps = walk.steps + _steps_for(walk.mol, por.info)
             queue.append(_Walk(child, steps, sides, opens))
+
+
+@dataclass
+class _Expand:
+    mol: Mol
+    depth: int
+    info: dict[str, Any] | None = None
+
+
+def _keep_rule(rule, info) -> bool:
+    return True
+
+
+def _keep_site(site, info) -> bool:
+    return True
+
+
+def _enumerate(
+    reactant: Mol | str,
+    ruleset,
+    *,
+    filter_rules,
+    filter_sites,
+    depth: int,
+    pop,
+    lifo: bool,
+):
+    """Metabolites of one ruleset, up to ``depth``. No atom diff, no closer drop.
+
+    ``pop`` is the frontier. A stack (``lifo``) expands the newest child
+    before the rest of that generation, so a depth-2 sample does not have
+    to finish the depth-1 frontier. A queue does not. Filters are the same
+    callbacks the set forwards to each child, and they run on the mol
+    being expanded.
+    """
+
+    if ruleset is None:
+        ruleset = default_ruleset()
+    start = as_mol(reactant)
+    frontier: deque[_Expand] = deque([_Expand(start, 0)])
+    seen = {canon_smiles(start)}
+    while frontier:
+        node = pop(frontier)
+        if node.info is not None:
+            yield node.mol, node.info
+        if node.depth >= depth:
+            continue
+        children: list[_Expand] = []
+        for product, info in ruleset.metabolize(
+            node.mol,
+            filter_rules=filter_rules,
+            filter_sites=filter_sites,
+        ):
+            smiles = info["csmi"]
+            if smiles in seen:
+                continue
+            seen.add(smiles)
+            children.append(_Expand(product, node.depth + 1, info))
+        if lifo:
+            children.reverse()
+        frontier.extend(children)
+
+
+def bfs(
+    reactant: Mol | str,
+    ruleset=None,
+    *,
+    filter_rules=_keep_rule,
+    filter_sites=_keep_site,
+    depth: int = 1,
+):
+    """Breadth-first metabolites. A queue. See :func:`_enumerate`."""
+
+    yield from _enumerate(
+        reactant,
+        ruleset,
+        filter_rules=filter_rules,
+        filter_sites=filter_sites,
+        depth=depth,
+        pop=deque.popleft,
+        lifo=False,
+    )
+
+
+def dfs(
+    reactant: Mol | str,
+    ruleset=None,
+    *,
+    filter_rules=_keep_rule,
+    filter_sites=_keep_site,
+    depth: int = 1,
+):
+    """Depth-first metabolites. A stack. See :func:`_enumerate`."""
+
+    yield from _enumerate(
+        reactant,
+        ruleset,
+        filter_rules=filter_rules,
+        filter_sites=filter_sites,
+        depth=depth,
+        pop=deque.pop,
+        lifo=True,
+    )
