@@ -164,7 +164,8 @@ Same scannable layout — this is **chemistry reachability**, not a timed search
 | live `find_path` | **no path** | ~3.1s | queue empty **95/800** nodes · bill=1601 | — |
 
 Demethylation → 2-naphthol; PhaseOne cannot strip that C2 aryl oxygen to make
-1,4-NQ. Not budget EXH (`nd ≪ max_nodes`).
+1,4-NQ. Not budget EXH (`nd ≪ max_nodes`). Circles mark demethylation SOM
+(`[0, 1]`) only.
 
 **Contrast — reachable isomer:** 1-MeO → 1,4-NQ (~0.07s, 3 steps):
 
