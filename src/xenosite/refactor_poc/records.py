@@ -430,6 +430,9 @@ class EndParents(NamedTuple):
 
 # --- Pair-orbit unique-edit signatures (graph_isomorphism) ---
 #
+# Unique-edit keys, **not** :data:`Site` definitions. Sites name concrete
+# atom/bond indexes; these name isomorphism classes of an *edit*.
+#
 # Core shape: (groups=(ga, gb), pair_group_id).
 # ``pair_group_id`` is a sequential int (``PairGroupId``) from CIP-sorted
 # orbit membership tuples, or ``TRIVIAL_PAIR_GROUP`` when either end is a
@@ -441,9 +444,15 @@ class EndParents(NamedTuple):
 #     ``end_ranks`` is ``()``.
 #   - ``ordered=True``: ends have distinct roles; ``end_ranks`` holds site
 #     topeqiv ranks in canonical ``PatternInfo.name`` order (atom/bond pairs).
-# Bond–atom units stay directed ``(bond, atom)``; a *pair* of those units for
-# ResonancePair unique-edit is :class:`BondAtomPairOrbitSignature` with its
-# own ``ordered`` flag (sorted ends when unordered; name order when ordered).
+#
+# Bond–atom (``unique_orbit="bond_atom"``) is directed ``(bond, atom)``. That
+# direction is **surprising but intentional**: one unit captures both
+# topological site identity (orbit groups) *and* edit direction (bond role
+# vs atom role). Direction is part of the edit's isomorphism class — not a
+# separate Site field. Atom–atom / bond–bond have no type-level direction;
+# same-kind ends use ``swap_group`` ordered/unordered only.
+# A *pair* of bond–atom units (ResonancePair) is
+# :class:`BondAtomPairOrbitSignature` with its own ``ordered`` flag.
 # Constructors: ``unordered_*`` / ``ordered_*`` in ``graph_isomorphism``.
 
 TopoGroupId = NewType("TopoGroupId", int)
@@ -494,9 +503,19 @@ class BondPairOrbitSignature(NamedTuple):
 
 
 class BondAtomOrbitSignature(NamedTuple):
-    """Directed (bond, atom) orbit unit. ``groups`` is (bond_group, atom_group).
+    """Directed (bond, atom) unique-edit key — **not** a :data:`Site`.
 
-    Pair unique-edit for two such ends uses :class:`BondAtomPairOrbitSignature`.
+    ``groups`` is ``(bond_group, atom_group)``. Used when
+    ``unique_orbit="bond_atom"`` (e.g. Dehydrogenation).
+
+    Surprising but correct: this one directed unit captures **both**
+    topological site identity (orbit groups) **and** edit direction (bond
+    role vs atom role). Direction is part of the edit's isomorphism class,
+    not a separate Site field. Contrast atom–atom / bond–bond, where
+    same-kind ends are ordered or unordered via ``swap_group`` with no
+    type-level bond-vs-atom direction.
+
+    Two such ends → :class:`BondAtomPairOrbitSignature`.
     """
 
     groups: BondAtomGroupPair
@@ -504,12 +523,20 @@ class BondAtomOrbitSignature(NamedTuple):
 
 
 class BondAtomPairOrbitSignature(NamedTuple):
-    """Two bond_atom ends (ResonancePair unique-edit). ``ordered`` in equality."""
+    """Two :class:`BondAtomOrbitSignature` ends (ResonancePair unique-edit).
+
+    Unique-edit key, not a Site. Each end is already directed bond→atom;
+    ``ordered`` only decides whether the *two ends* are swappable
+    (``swap_group``), not whether bond and atom roles swap.
+    """
 
     ends: tuple[BondAtomOrbitSignature, BondAtomOrbitSignature]
     ordered: Literal[True, False]
 
 
+# Unique-edit orbit identity for one emission. Not a Site; see class docs.
+# Bond–atom members encode direction in the type; same-kind members use
+# ``ordered`` / ``swap_group`` instead.
 PairOrbitSignature: TypeAlias = (
     AtomPairOrbitSignature
     | BondPairOrbitSignature

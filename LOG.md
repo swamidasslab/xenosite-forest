@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Documented bond–atom directed signatures as unique-edit keys (not Sites): one directed unit captures both topological site identity and edit direction (bond vs atom role). Surprising but intentional — direction is part of the edit's isomorphism class. Atom–atom / bond–bond contrast via ``swap_group`` only. Docs: `records.py` (`BondAtomOrbitSignature` / `BondAtomPairOrbitSignature` / `PairOrbitSignature`), HEURISTICS unique-edit bullet, `graph_isomorphism` module + `bond_atom_orbit_key`.
+
+## 2026-09-20
+
 - Pair-orbit unique-edit: ordered vs unordered now **tagged on the type**. `AtomPairOrbitSignature` / `BondPairOrbitSignature` carry `ordered: Literal[True, False]` + `end_ranks` (empty when unordered; name-order ranks when ordered). `BondAtomOrbitSignature` stays one directed (bond, atom) unit; ResonancePair dual ends are `BondAtomPairOrbitSignature(ends, ordered)`. Constructors: `unordered_*` / `ordered_*` / `unordered_bond_atom_pair` / `ordered_bond_atom_pair` in `graph_isomorphism`. Theory helpers (`resolved_swap_group`, `ends_swappable`, `map_rank_key`, `pair_orbit`, `site_signature`, `pair_site_signature`, …) moved out of `rules` — thin call sites pass `unique_orbit` as data. Suites: pair_signatures + dh_bond_atom + graph_isomorphism **46 passed**, 2 skipped; pyright clean on touched modules.
 
 ## 2026-09-20

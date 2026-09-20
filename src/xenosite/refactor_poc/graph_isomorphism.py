@@ -18,9 +18,14 @@ Legacy :func:`site_pair_orbits_nauty` maps ``atom_atom`` / ``bond_bond`` to
 unordered and ``bond_atom`` to the atom_bond family (pairs stored as
 ``(bond, atom)`` for existing unique-edit tables).
 
-Unique-edit pair signature::
+Unique-edit pair signature (not a Site)::
 
     ((ga, gb), pair_group_id)
+
+``bond_atom`` stays directed ``(bond, atom)``: one key captures site orbit
+*and* edit direction (surprising but intentional; see
+:class:`~xenosite.refactor_poc.records.BondAtomOrbitSignature`). Same-kind
+pairs use ``swap_group`` ordered/unordered with no type-level direction.
 
 Ordered vs unordered for ResonancePair unique-edit reads
 :func:`resolved_swap_group` (When → PatternInfo → ``name``). Map-rank
@@ -604,10 +609,11 @@ def bond_pair_orbit_key(
 def bond_atom_orbit_key(
     mol: Mol, bond_idx: int, atom_idx: int
 ) -> BondAtomOrbitSignature:
-    """``BondAtomOrbitSignature`` for a directed (bond, atom) pair.
+    """Directed (bond, atom) unique-edit key — not a Site.
 
-    Used by Dehydrogenation unique-edit (``unique_orbit = \"bond_atom\"``).
-    Pair of ends → :func:`unordered_bond_atom_pair` / :func:`ordered_bond_atom_pair`.
+    Captures orbit identity *and* bond-vs-atom edit direction (intentional).
+    Used by Dehydrogenation (``unique_orbit = \"bond_atom\"``). Two ends →
+    :func:`unordered_bond_atom_pair` / :func:`ordered_bond_atom_pair`.
     """
 
     return cast(
