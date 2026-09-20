@@ -461,6 +461,19 @@ def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
         if delta >= 0.2:
             bond_raises.add(frozenset((i, j)))
 
+    # MCS may keep an exocyclic atom mapped onto a ring atom (PhCH2OH CH2
+    # onto a quinone carbon). The bridge into the ring is still the cut.
+    for r_idx, t_idx in mapping.items():
+        ra = reactant.GetAtomWithIdx(r_idx)
+        ta = target.GetAtomWithIdx(t_idx)
+        if ra.IsInRing() == ta.IsInRing():
+            continue
+        for neighbor in ra.GetNeighbors():
+            n_idx = neighbor.GetIdx()
+            if ra.IsInRing() == neighbor.IsInRing():
+                continue
+            cleavage_bonds.add(frozenset((r_idx, n_idx)))
+
     n_extra = sum(
         1
         for atom in target.GetAtoms()
@@ -793,6 +806,7 @@ def find_path(
 
             order_key = _cleavage_first
 
+        hits_from_here = 0
         for por in ruleset.metabolites(
             walk.mol,
             filter_rules=filter_rules,
@@ -807,13 +821,11 @@ def find_path(
             if kept is None:
                 continue
             child, child_smiles = kept
-            closer = (
-                child_smiles == target_smiles
-                or atom_diff(child, target_mol).cost() < parent_cost
-            )
+            target_hit = child_smiles == target_smiles
+            closer = target_hit or atom_diff(child, target_mol).cost() < parent_cost
             if not closer:
                 continue
-            if child_smiles in seen and child_smiles != target_smiles:
+            if child_smiles in seen and not target_hit:
                 continue
             seen.add(child_smiles)
 
@@ -837,7 +849,15 @@ def find_path(
                 sides = walk.sides
 
             steps = walk.steps + _steps_for(walk.mol, por.info)
-            queue.append(_Walk(child, steps, sides, opens))
+            child_walk = _Walk(child, steps, sides, opens)
+            # A hit at this depth goes next; stop editing once enough are queued.
+            if target_hit:
+                queue.appendleft(child_walk)
+                hits_from_here += 1
+                if found + hits_from_here >= max_paths:
+                    break
+            else:
+                queue.append(child_walk)
 
 
 @dataclass

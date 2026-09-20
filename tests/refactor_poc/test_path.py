@@ -325,3 +325,60 @@ def test_ndealkylation_hard_pairs_when_the_class_exists():
         message = "%s → %s %s" % (reactant, target, _billed(counters))
         assert hits, message
         assert counters.mol_edits <= ceiling, message
+
+
+def test_phch2oh_to_quinone_via_benzylic_dealkylation():
+    """MCS may map CH2 onto a quinone carbon; the ring bridge is still a cut."""
+
+    from xenosite.refactor_poc.rulesets import PhaseOne
+
+    reactant = "OCc1ccccc1"
+    target = "O=C1C=CC(=O)C=C1"
+    diff = atom_diff(reactant, target)
+    assert diff.site_is_cleavage({1, 2}), diff.cleavage_bonds
+
+    counters = PathCounters()
+    hits = list(
+        find_path(
+            reactant,
+            target,
+            ruleset=PhaseOne,
+            counters=counters,
+            max_nodes=80,
+        )
+    )
+    assert hits, _billed(counters)
+    assert counters.mol_edits <= 40, _billed(counters)
+    names = [step.rule for step in hits[0].plan.children]
+    assert "Dealkylation" in names
+
+
+def test_hard_multi_oxidation_quinones_that_forest_struggled_on():
+    """Large / multi-oxidation quinones: poc finds a path under a node ceiling.
+
+    Forest PhaseOneQF exhausts budget on 4-methoxyphenol → hydroxyquinone
+    (see tests/test_find_path_phase1_plan_fuzz.py xfail). Orthocarbonate and
+    naphthalene→1,4-NQ are the other multi-oxidation anchors.
+    """
+
+    from xenosite.refactor_poc.rulesets import PhaseOne
+
+    cases = [
+        ("COc1ccc(O)cc1", "O=C1C=C(O)C(=O)C(O)=C1", 200),
+        ("COc1ccc(O)cc1", "O=C1C=CC(OC(O)O)=CC1=O", 80),
+        ("c1ccc2ccccc2c1", "O=C1C=CC(=O)c2ccccc12", 40),
+    ]
+    for reactant, target, ceiling in cases:
+        counters = PathCounters()
+        hits = list(
+            find_path(
+                reactant,
+                target,
+                ruleset=PhaseOne,
+                counters=counters,
+                max_nodes=ceiling,
+            )
+        )
+        message = "%s → %s %s" % (reactant, target, _billed(counters))
+        assert hits, message
+        assert counters.nodes <= ceiling, message
