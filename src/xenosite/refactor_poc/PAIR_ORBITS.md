@@ -127,8 +127,10 @@ process override ``set_canonical_emitted_sites(True)``, or env
 
 Lex-smallest concrete member of each nauty orbit
 (``LexicalOrbitRepresentatives`` on forest ``cache``); relative to current
-RDKit indexing. Four kinds: atom–atom, bond–bond, directed bond–atom, pair of
-bond–atom sites (ordered vs unordered as for unique-edit).
+RDKit indexing. Kinds: **singleton atom**, atom–atom, bond–bond, directed
+bond–atom, pair of bond–atom sites (ordered vs unordered as for unique-edit).
+One-atom unique-edit remaps onto the lex-smallest atom in its automorphism
+orbit the same way pairs do.
 
 ### Contract (do not invert)
 
@@ -154,7 +156,8 @@ bond–atom sites (ordered vs unordered as for unique-edit).
 Escape hatch for callers that need discovery: read ``discovered_site`` when
 present. Tests: ``test_canonical_emitted_sites.py`` (includes
 parent-cache-after-clear).
-Profile (same find_path cases as forest_copy): ~+7% wall when on.
+Profile (same find_path cases as forest_copy): ~+3.7% wall when on
+(after parent-cache + singleton atom; was ~+7% pre-parent-cache).
 
 Status: approved (opt-in emission policy; HEURISTICS).
 

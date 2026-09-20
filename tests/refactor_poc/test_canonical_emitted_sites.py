@@ -21,7 +21,7 @@ from xenosite.refactor_poc.graph_isomorphism import (
     set_canonical_emitted_sites,
 )
 from xenosite.refactor_poc.rdkitutil import MolFromSmiles
-from xenosite.refactor_poc.rules import Dehydrogenation, QuinoneFormation
+from xenosite.refactor_poc.rules import Dehydrogenation, Hydroxylation, QuinoneFormation
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("pynauty") is None,
@@ -88,6 +88,28 @@ def test_canonicalize_smarts_match_maps_non_lex_to_rep():
     emit_mapped, emit_site = out
     assert sorted(emit_site) == sorted(rep)
     assert sorted(emit_mapped.values()) == sorted(rep)
+
+
+def test_canonicalize_smarts_match_singleton_atom_to_lex_rep():
+    """One-atom sites remap onto the lex-smallest atom in the orbit."""
+
+    mol = _mol("c1ccccc1")
+    tables = ensure_lexical_orbit_representatives(mol)
+    assert tables is not None
+    # Benzene carbons share one orbit; lex rep is the min index.
+    members = [a for a, rep in tables.atom.items() if rep == tables.atom[0]]
+    assert len(members) == 6
+    lex = min(members)
+    non = max(members)
+    assert non != lex
+    mapped = {1: non}
+    out = canonicalize_smarts_match(
+        mol, mapped, frozenset({non}), unique_orbit="atom_atom"
+    )
+    assert out is not None
+    emit_mapped, emit_site = out
+    assert emit_site == frozenset({lex})
+    assert emit_mapped[1] == lex
 
 
 def test_default_off_no_discovered_site():
@@ -164,6 +186,50 @@ def test_opt_in_does_not_double_emit_hq():
     on = list(Dehydrogenation().metabolize(mol, canonical_emitted_sites=True))
     assert len(on) == len(off)
     assert {p.xf.csmi for p, _ in on} == {p.xf.csmi for p, _ in off}
+
+
+def test_opt_in_singleton_emits_lex_atom_with_discovered_site():
+    """Hydroxylation on benzene: filter non-lex → emit lex atom + discovered_site."""
+
+    mol = _mol("c1ccccc1")
+    tables = ensure_lexical_orbit_representatives(mol)
+    assert tables is not None
+    lex = min(a for a, rep in tables.atom.items() if rep == tables.atom[0])
+
+    filtered: list[frozenset[int]] = []
+
+    def only_non_lex(_mol, site, _info):
+        fs = _as_fs(site)
+        filtered.append(fs)
+        if len(fs) != 1:
+            return True
+        atom = next(iter(fs))
+        return atom != lex
+
+    products = list(
+        Hydroxylation().metabolize(
+            mol,
+            filter_sites=only_non_lex,
+            canonical_emitted_sites=True,
+        )
+    )
+    assert products
+    assert filtered
+    remapped = 0
+    for prod, info in products:
+        site_fs = _as_fs(info["site"])
+        assert site_fs == frozenset({lex})
+        if "discovered_site" not in info:
+            continue
+        remapped += 1
+        disc_fs = _as_fs(info["discovered_site"])
+        assert disc_fs != site_fs
+        assert disc_fs in filtered
+        tid = prod._forest["atom_trace"]["transforms"][-1]
+        addition = prod._forest["atom_trace"]["additions"][tid]
+        assert _as_fs(addition["site"]) == site_fs
+        assert _as_fs(addition["discovered_site"]) == disc_fs
+    assert remapped >= 1
 
 
 def test_lex_reps_read_from_parent_after_product_cache_clear():
