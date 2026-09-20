@@ -36,8 +36,9 @@ def _smiles_set(reactant: str, ruleset=PhaseOne) -> set[str]:
     out: set[str] = set()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        for product, _info in ruleset.metabolize(mol):
-            out.add(product.xf.csmi)
+        for products, _info in ruleset.metabolize(mol):
+            for product in products:
+                out.add(product.xf.csmi)
     return out
 
 
@@ -67,7 +68,7 @@ def test_apap_napqi_quinone():
 
 def test_styrene_vinyl_epoxide():
     mol = MolFromSmiles(STYRENE)
-    smis = {p.xf.csmi for p, _ in Epoxidation().metabolize(mol)}
+    smis = {p.xf.csmi for _pl, _ in Epoxidation().metabolize(mol) for p in _pl}
     assert STYRENE_VINYL_EPOXIDE in smis
 
 
@@ -79,7 +80,7 @@ def test_aspirin_products_round_trip():
 
 def test_quinone_formation_benzene_ortho_and_para():
     mol = MolFromSmiles("c1ccccc1")
-    smis = {p.xf.csmi for p, _ in QuinoneFormation().metabolize(mol)}
+    smis = {p.xf.csmi for _pl, _ in QuinoneFormation().metabolize(mol) for p in _pl}
     assert "O=C1C=CC=CC1=O" in smis
     assert "O=C1C=CC(=O)C=C1" in smis
 

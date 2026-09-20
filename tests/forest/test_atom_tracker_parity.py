@@ -61,8 +61,8 @@ def test_hydroxylation_product_depths_and_added_atom_parity():
     assert forest_parent is not None and live_parent is not None
 
     forest_rows = list(ForestHydroxylation().metabolize(forest_parent))
-    live_product, _info = next(LiveHydroxylation().metabolize(live_parent))
-
+    products, _info = next(LiveHydroxylation().metabolize(live_parent))
+    live_product = products[0]
     # Forest metabolize yields ((rule, site), [mols], ...).
     forest_product = None
     for item in forest_rows:

@@ -127,17 +127,19 @@ def test_metabolize_uses_of_products_and_xf_csmi():
     reactant = Chem.MolFromSmiles("CCO").xf.tracing._stamp()
     products = list(Hydroxylation().metabolize(reactant))
     assert products
-    product, info = products[0]
+    product_list, info = products[0]
+    product = product_list[0]
     assert product.xf.tracing.active
     assert product.xf.tracing.depth == 1
-    assert info["csmi"] == product.xf.csmi
+    assert info["csmi"] == frozenset({product.xf.csmi})
 
 
 def test_conjugation_products_are_terminal_and_not_reexpanded():
     phenol = Chem.MolFromSmiles("c1ccccc1O").xf.tracing._stamp()
     products = list(Acetylation(as_star=True).metabolize(phenol))
     assert products
-    for product, _info in products:
-        assert product.xf.is_terminal
-        assert list(Acetylation(as_star=True).metabolize(product)) == []
-        assert list(Hydroxylation().metabolize(product)) == []
+    for product_list, _info in products:
+        for product in product_list:
+            assert product.xf.is_terminal
+            assert list(Acetylation(as_star=True).metabolize(product)) == []
+            assert list(Hydroxylation().metabolize(product)) == []

@@ -21,10 +21,10 @@ def _site_has_nitrogen(mol: Mol, site) -> bool:
 
 def _sites_and_products(rule, mol: Mol):
     out = []
-    for product, info in rule.metabolize(mol):
+    for products, info in rule.metabolize(mol):
         site = info["site"]
         site_fs = frozenset((site,) if isinstance(site, int) else site)
-        out.append((site_fs, frozenset({canon(product)})))
+        out.append((site_fs, frozenset(canon(p) for p in products)))
     return out
 
 

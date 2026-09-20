@@ -84,8 +84,8 @@ PhaseOneQF = RuleSet(
 
 def metabolize(
     mol: Mol, **kwargs: Any
-) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
-    """Run :data:`PhaseOne`. Yields ``(product, info)``."""
+) -> Generator[tuple[list[TracingMol], ProductInfo], None, None]:
+    """Run :data:`PhaseOne`. Yields ``(products, info)``."""
 
     yield from PhaseOne.metabolize(mol, **kwargs)
 

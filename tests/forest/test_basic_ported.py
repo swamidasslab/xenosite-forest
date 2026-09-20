@@ -75,7 +75,7 @@ def test_propane_dehydrogenation_followed_by_epoxidation():
 
 def test_hydroxyl_should_not_be_dealkylated():
     mol = MolFromSmiles("CCO")
-    sites = [info["site"] for _product, info in Dealkylation().metabolize(mol)]
+    sites = [info["site"] for _products, info in Dealkylation().metabolize(mol)]
     assert frozenset([1, 2]) not in sites
 
 
@@ -120,8 +120,9 @@ def test_epoxide_opening1_fail():
 
 def _dealk_sanitize(reactant: str) -> None:
     mol = MolFromSmiles(reactant)
-    for _product, _info in Dealkylation().metabolize(mol):
-        SanitizeMol(_product)
+    for products, _info in Dealkylation().metabolize(mol):
+        for product in products:
+            SanitizeMol(product)
 
 
 def test_matt_problem1():
@@ -133,7 +134,7 @@ def test_matt_problem2():
 
 def test_matt_problem4():
     rmol = MolFromSmiles(nevirapine)
-    for _product, info in Dealkylation().metabolize(rmol):
+    for _products, info in Dealkylation().metabolize(rmol):
         site = info["site"]
         if isinstance(site, int):
             continue
@@ -146,17 +147,17 @@ def test_matt_problem4():
 
 
 def test_unique_metabolites():
-    """``unique_csmi`` key is ``(rule, PatternInfo.name|SMARTS, csmi)``.
+    """``unique_csmi`` key is ``(rule, PatternInfo.name|SMARTS, emission frozenset)``.
 
     Not forest's site+product cross-collapse: two patterns may share a site
-    when their products differ; the same product must not repeat under one
+    when their products differ; the same emission must not repeat under one
     pattern token.
     """
 
-    seen: set[tuple[str, str | None, str]] = set()
+    seen: set[tuple[str, str | None, frozenset[str]]] = set()
     rmol = MolFromSmiles(nevirapine)
-    for product, info in Dealkylation().metabolize(rmol):
-        key = _unique_csmi_key(info, product.xf.csmi)
+    for products, info in Dealkylation().metabolize(rmol):
+        key = _unique_csmi_key(info, frozenset(p.xf.csmi for p in products))
         assert key not in seen
         seen.add(key)
     assert seen
@@ -166,9 +167,9 @@ def test_hydroxylation_partitions_h_count():
     """``h`` / ``h2`` do not both emit the same alcohol (ethane → one ``CCO``)."""
 
     products = list(Hydroxylation().metabolize(MolFromSmiles("CC")))
-    assert [p.xf.csmi for p, _ in products] == ["CCO"]
+    assert [p.xf.csmi for pl, _ in products for p in pl] == ["CCO"]
     assert products[0][1]["pattern"].get("name") == "h2"
 
     aryl = list(Hydroxylation().metabolize(MolFromSmiles("c1ccccc1")))
-    assert {p.xf.csmi for p, _ in aryl} == {"Oc1ccccc1"}
+    assert {p.xf.csmi for pl, _ in aryl for p in pl} == {"Oc1ccccc1"}
     assert all(info["pattern"].get("name") == "h" for _, info in aryl)

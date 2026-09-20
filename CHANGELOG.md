@@ -20,9 +20,10 @@ Previous forest (0.6.x API): archive directory
 
 - Metabolic Forest lives in ``xenosite.forest``. Design notes under
   ``docs/forest/``.
-- **Breaking:** ``metabolize`` yields ``(product, info)`` (one mol per
-  yield), not ``(site, list[Mol])``. Non-cleavage edits used to be a
-  one-element list. See the migration guide.
+- **Breaking:** ``metabolize`` yields ``(products, info)`` where
+  ``products`` is always a ``list[Mol]`` (one element for non-cleavage;
+  siblings for cleavage). ``info["csmi"]`` is the emission frozenset.
+  See the migration guide.
 - Reaction SMIRKS surfaces use ``Smirks`` / ``SmirksReactionRule`` naming
   (match-only SMARTS stay ``Smarts``).
 - Rules declare ``site_kind`` (``atom`` / ``bond`` / ``directed_bond`` /

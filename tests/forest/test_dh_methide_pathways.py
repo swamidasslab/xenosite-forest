@@ -50,15 +50,17 @@ def test_filter_sites_refuses_methide():
 
     assert canon(_O_QM) not in {
         p.xf.csmi
-        for p, _info in Dehydrogenation().metabolize(
+        for products, _info in Dehydrogenation().metabolize(
             MolFromSmiles("Oc1ccccc1C"), filter_sites=_no_methide
         )
+        for p in products
     }
     assert canon(_O_QM) not in {
         p.xf.csmi
-        for p, _info in QuinoneFormation().metabolize(
+        for products, _info in QuinoneFormation().metabolize(
             MolFromSmiles("Cc1ccccc1"), filter_sites=_no_methide
         )
+        for p in products
     }
 
 
@@ -67,14 +69,15 @@ def test_at_most_one_methide_end():
 
     assert product_smiles(Dehydrogenation(), "Cc1ccccc1C") == set()
 
-    for product, info in QuinoneFormation().metabolize(MolFromSmiles("Cc1ccccc1C")):
+    for products, info in QuinoneFormation().metabolize(MolFromSmiles("Cc1ccccc1C")):
         opts = info.get("options") or {}
         ends = info.get("ends") or ()
         n_methide = sum(1 for end in ends if end.get("methide"))
-        assert n_methide <= 1, product.xf.csmi
+        assert n_methide <= 1, info["csmi"]
         if opts.get("methide"):
-            assert n_methide == 1, product.xf.csmi
-        assert product.xf.csmi != canon("C=c1ccccc1=C")
+            assert n_methide == 1, info["csmi"]
+        for product in products:
+            assert product.xf.csmi != canon("C=c1ccccc1=C")
 
 
 def test_find_path_o_cresol_to_o_qm_via_dehydrogenation():

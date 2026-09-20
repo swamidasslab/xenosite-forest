@@ -89,7 +89,8 @@ def _old(rule, smiles):
 def _new(rule, smiles, **kwargs):
     return _fragments(
         product
-        for product, _info in rule.metabolize(Chem.MolFromSmiles(smiles), **kwargs)
+        for products, _info in rule.metabolize(Chem.MolFromSmiles(smiles), **kwargs)
+        for product in products
     )
 
 
@@ -414,10 +415,10 @@ def test_filter_skips_nitrogen_and_keeps_the_phenol_acetyl():
 def _acetates_by_site(smiles):
     mol = Chem.MolFromSmiles(smiles)
     found = {}
-    for product, info in Acetylation(as_star=False).metabolize(mol):
+    for products, info in Acetylation(as_star=False).metabolize(mol):
         site = info["site"]
         assert isinstance(site, frozenset) and len(site) == 1
-        found[next(iter(site))] = next(iter(_fragments([product])))
+        found[next(iter(site))] = next(iter(_fragments(products)))
     return mol, found
 
 
@@ -622,7 +623,7 @@ def test_filter_skips_the_alkyl_chloride_and_keeps_the_epoxide_glutathione():
 
 def test_cleaved_ring_bond_sets_breaks_ring():
     flags = set()
-    for _product, info in NDealkylation().metabolize(Chem.MolFromSmiles("CN1CCCCC1")):
+    for _products, info in NDealkylation().metabolize(Chem.MolFromSmiles("CN1CCCCC1")):
         options = info["options"]
         assert isinstance(options, dict)
         flags.add((options.get("leave_count"), options.get("breaks_ring")))
@@ -640,6 +641,6 @@ def test_benzene_and_phenol_quinone_match_old():
         assert new == old, smiles
         assert _canon(_QUINONE) in new
         enumerated = set()
-        for _mol, info in bfs(smiles, steps, depth=depth):
-            enumerated |= _fragments([info["csmi"]])
+        for mol, _info in bfs(smiles, steps, depth=depth):
+            enumerated |= _fragments([mol])
         assert _canon(_QUINONE) in enumerated

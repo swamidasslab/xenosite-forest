@@ -127,7 +127,8 @@ def test_conjugation_is_terminal():
 
     a = Acetylation()
     mol = MolFromSmiles("CCO")
-    product, _info = next(a.metabolize(mol))
+    products, _info = next(a.metabolize(mol))
+    product = products[0]
     assert a.is_terminal_product(product)
     assert product.xf.is_terminal
     assert list(a.metabolize(product)) == []

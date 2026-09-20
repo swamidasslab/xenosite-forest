@@ -79,12 +79,12 @@ from xenosite.forest.rulesets import PhaseOne
 
 mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
 
-# Single rule — yields (product, info); see docs/forest/MIGRATING_0.7.md
-for product, info in rules.QuinoneFormation().metabolize(mol):
-    print(info["site"], info["csmi"])
+# Single rule — yields (products, info); see docs/forest/MIGRATING_0.7.md
+for products, info in rules.QuinoneFormation().metabolize(mol):
+    print(info["site"], info["csmi"], [p.xf.csmi for p in products])
 
 # Ruleset (same yield shape)
-for product, info in PhaseOne().metabolize(mol):
+for products, info in PhaseOne().metabolize(mol):
     print(info["rule"].name, info["site"], info["csmi"])
 ```
 
@@ -129,12 +129,12 @@ from rdkit import Chem
 from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
-for product, info in rules.QuinoneFormation().metabolize(mol):
+for products, info in rules.QuinoneFormation().metabolize(mol):
     print(info["site"], info["csmi"])
 ```
 
-`info["site"]` is atom indexes (typically a `frozenset`). Cleavage yields one
-`(product, info)` per fragment.
+`info["site"]` is atom indexes (typically a `frozenset`). Cleavage yields sibling
+mols in one `products` list; `info["csmi"]` is their frozenset.
 
 ## Conjugation (Phase II)
 
@@ -147,14 +147,17 @@ from xenosite.forest import rules
 mol = Chem.MolFromSmiles("c1ccccc1O")
 
 # Default: bare star
-product, info = next(rules.Glucuronidation().metabolize(mol))
+products, info = next(rules.Glucuronidation().metabolize(mol))
+product = products[0]
 Chem.MolToSmiles(product)  # '*Oc1ccccc1'
 
 # CXSMILES label on the dummy (when using mol_to_cxsmiles helpers)
-product, info = next(rules.Glucuronidation(star_label="GlcA").metabolize(mol))
+products, info = next(rules.Glucuronidation(star_label="GlcA").metabolize(mol))
+product = products[0]
 
 # Full glucuronide
-product, info = next(rules.Glucuronidation(as_star=False).metabolize(mol))
+products, info = next(rules.Glucuronidation(as_star=False).metabolize(mol))
+product = products[0]
 ```
 
 | Option | Meaning |
@@ -199,12 +202,14 @@ from rdkit import Chem
 from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("CCO")
-product, info = next(rules.Hydroxylation().metabolize(mol))
+products, info = next(rules.Hydroxylation().metabolize(mol))
+product = products[0]
 print(info["csmi"], product.xf.csmi)
 ```
 
 Prefer `mol.xf` for maps, formula, and atom_trace. See
-[`MIGRATING_0.7.md`](forest/MIGRATING_0.7.md).
+[`XF.md`](forest/XF.md) (accessor API) and
+[`MIGRATING_0.7.md`](forest/MIGRATING_0.7.md) (0.6 → 0.7).
 
 ## Search a pathway
 

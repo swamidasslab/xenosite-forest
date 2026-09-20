@@ -36,13 +36,14 @@ def _fragments(rule, smiles, pattern):
     def filter_rules(mol, rule, info):
         return info is pattern
 
-    for product, _info in rule.metabolize(
+    for products, _info in rule.metabolize(
         Chem.MolFromSmiles(smiles), filter_rules=filter_rules
     ):
-        parsed = Chem.MolFromSmiles(Chem.MolToSmiles(product))
-        assert parsed is not None
-        for piece in Chem.GetMolFrags(parsed, asMols=True, sanitizeFrags=True):
-            found.add(Chem.MolToSmiles(piece, canonical=True, isomericSmiles=False))
+        for product in products:
+            parsed = Chem.MolFromSmiles(Chem.MolToSmiles(product))
+            assert parsed is not None
+            for piece in Chem.GetMolFrags(parsed, asMols=True, sanitizeFrags=True):
+                found.add(Chem.MolToSmiles(piece, canonical=True, isomericSmiles=False))
     return found
 
 

@@ -18,10 +18,10 @@ from xenosite.forest.rulesets import RuleSet
 
 def _addition(ruleset, smiles, leaf):
     mol = Chem.MolFromSmiles(smiles)
-    for product, _info in ruleset.metabolize(
+    for products, _info in ruleset.metabolize(
         mol, filter_rules=lambda mol, rule, info: type(rule) is leaf
     ):
-        return product._forest["atom_trace"]["additions"]["R1"]
+        return products[0]._forest["atom_trace"]["additions"]["R1"]
     raise AssertionError(leaf)
 
 
@@ -34,10 +34,10 @@ def test_phaseone_is_the_catalog_ruleset():
 
 def test_metabolize_calls_phaseone():
     mol = Chem.MolFromSmiles("CC")
-    direct = {info["csmi"] for _product, info in PhaseOne.metabolize(mol)}
-    wrapped = {info["csmi"] for _product, info in metabolize(mol)}
+    direct = {info["csmi"] for _products, info in PhaseOne.metabolize(mol)}
+    wrapped = {info["csmi"] for _products, info in metabolize(mol)}
     assert wrapped == direct
-    assert "CCO" in wrapped
+    assert frozenset({"CCO"}) in wrapped
 
 
 def test_hydroxylation_label_is_the_chain_init_names():

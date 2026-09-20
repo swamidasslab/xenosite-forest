@@ -190,7 +190,11 @@ def test_bfs_smoke_on_small_substrates(canonical_emitted_sites: bool):
 
 def test_dehydrogenation_on_star_acetyl_is_terminal():
     parent = Chem.MolFromSmiles("CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21")
-    acetyl = next(product for product, _info in Acetylation().metabolize(parent))
+    acetyl = next(
+        product
+        for products, _info in Acetylation().metabolize(parent)
+        for product in products
+    )
     assert any(atom.GetSymbol() == "*" for atom in acetyl.GetAtoms())
     children = list(Dehydrogenation().metabolize(acetyl))
     # Terminal conjugates are not expanded, including by dehydrogenation.
@@ -201,7 +205,8 @@ def test_dehydrogenation_on_star_acetyl_is_terminal():
 
 def test_bfs_does_not_expand_a_terminal():
     phenol = Chem.MolFromSmiles("Oc1ccccc1")
-    acetyl, _info = next(Acetylation().metabolize(phenol))
+    products, _info = next(Acetylation().metabolize(phenol))
+    acetyl = products[0]
     rules = RuleSet([Acetylation, Hydroxylation, Dehydrogenation], name="Mix")
     assert list(bfs(acetyl, rules, depth=2)) == []
     assert list(dfs(acetyl, rules, depth=2)) == []

@@ -14,7 +14,7 @@ def _oxygens(smiles):
 
 def test_depth_one_hydroxylation_of_ethane_is_ethanol():
     ruleset = RuleSet((Hydroxylation,), name="Forest")
-    smiles = {info["csmi"] for _mol, info in bfs("CC", ruleset, depth=1)}
+    smiles = {mol.xf.csmi for mol, _info in bfs("CC", ruleset, depth=1)}
     assert smiles == {"CCO"}
 
 
@@ -22,14 +22,14 @@ def test_dfs_reaches_depth_two_before_the_frontier_is_done():
     ruleset = RuleSet((Hydroxylation,), name="Forest")
     reactant = "c1ccc(CCCC)cc1"
     dfs_oxygen = []
-    for _mol, info in dfs(reactant, ruleset, depth=2):
-        dfs_oxygen.append(_oxygens(info["csmi"]))
+    for mol, _info in dfs(reactant, ruleset, depth=2):
+        dfs_oxygen.append(_oxygens(mol.xf.csmi))
         if len(dfs_oxygen) == 2:
             break
     assert dfs_oxygen == [1, 2]
 
     bfs_oxygen = [
-        _oxygens(info["csmi"]) for _mol, info in bfs(reactant, ruleset, depth=2)
+        _oxygens(mol.xf.csmi) for mol, _info in bfs(reactant, ruleset, depth=2)
     ]
     first_diol = bfs_oxygen.index(2)
     assert first_diol > 1
@@ -51,8 +51,8 @@ def test_filter_sites_keeps_the_chain_alcohol_and_drops_the_ring():
 
     ruleset = RuleSet((Hydroxylation,), name="Forest")
     smiles = {
-        _canon(info["csmi"])
-        for _mol, info in bfs(
+        _canon(mol.xf.csmi)
+        for mol, _info in bfs(
             reactant, ruleset, filter_sites=filter_sites, depth=1
         )
     }

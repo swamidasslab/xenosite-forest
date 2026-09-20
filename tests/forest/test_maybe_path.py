@@ -200,14 +200,20 @@ def test_hydrolysis_metabolize_bifurcates_epoxide_does_not():
     mol = Chem.MolFromSmiles("c1ccccc1C(=O)OC(C)(C)C")
     hyd = list(Hydrolysis().metabolize(mol))
     assert hyd
-    # Bifurcation: acid and alcohol are separate yields (unique_csmi).
-    csmi = {p.xf.csmi for p, _ in hyd}
-    assert canon_smiles("O=C(O)c1ccccc1") in csmi
-    assert canon_smiles("CC(C)(C)O") in csmi
+    # Bifurcation: acid and alcohol are sibling mols in one emission list.
+    assert any(
+        {
+            canon_smiles("O=C(O)c1ccccc1"),
+            canon_smiles("CC(C)(C)O"),
+        }
+        <= {p.xf.csmi for p in products}
+        for products, _ in hyd
+    )
 
     mol_e = Chem.MolFromSmiles("c1ccccc1C1OC1")
     eo = list(EpoxideOpening().metabolize(mol_e))
     assert eo
     # Single parent-sized product per site — not a discarded sibling bag.
-    for product, _info in eo:
-        assert product.GetNumHeavyAtoms() >= mol_e.GetNumHeavyAtoms() - 1
+    for products, _info in eo:
+        assert len(products) == 1
+        assert products[0].GetNumHeavyAtoms() >= mol_e.GetNumHeavyAtoms() - 1

@@ -37,10 +37,11 @@ def _assert_parent_and_products(parent, products, parent_depth):
     trace = parent._forest["atom_trace"]
     assert trace["depth"] == parent_depth
     assert "formula" in trace
-    for product, _info in products:
-        child = product._forest["atom_trace"]
-        assert child["depth"] == parent_depth + 1
-        assert child["formula"] == product.xf.formula
+    for product_list, _info in products:
+        for product in product_list:
+            child = product._forest["atom_trace"]
+            assert child["depth"] == parent_depth + 1
+            assert child["formula"] == product.xf.formula
 
 
 def _assert_untouched(rule, smiles):
@@ -80,7 +81,8 @@ def test_existing_parent_forest_is_kept():
 def test_ruleset_does_not_edit_its_input():
     ruleset = RuleSet((Hydroxylation, Dealkylation), name="Forest")
     products = _assert_untouched(ruleset, "CC")
-    product, info = products[0]
+    product_list, info = products[0]
+    product = product_list[0]
     trace = product._forest["atom_trace"]
     added = [
         by

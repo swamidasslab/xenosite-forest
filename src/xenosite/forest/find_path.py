@@ -1114,17 +1114,18 @@ def _enumerate(
         if node.depth >= depth:
             continue
         children: list[_Expand] = []
-        for product, info in ruleset.metabolize(
+        for products, info in ruleset.metabolize(
             node.mol,
             filter_rules=filter_rules,
             filter_sites=filter_sites,
             **kwargs,
         ):
-            smiles = product.xf.csmi
-            if smiles in seen:
-                continue
-            seen.add(smiles)
-            children.append(_Expand(product, node.depth + 1, info))
+            for product in products:
+                smiles = product.xf.csmi
+                if smiles in seen:
+                    continue
+                seen.add(smiles)
+                children.append(_Expand(product, node.depth + 1, info))
         if lifo:
             children.reverse()
         frontier.extend(children)

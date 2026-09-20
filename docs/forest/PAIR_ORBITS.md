@@ -32,9 +32,9 @@ Two layers (do not conflate — HEURISTICS):
    embeddings of the *same* edit share one key before `RunReactants`.
 2. **Product csmi** — **check** (emission frozenset of fragment CSMIs + site
    ranks → `SiteDeduplicationWarning` on unique-edit miss; no drop) vs **yield**
-   (`unique_csmi`: drop duplicate `(rule, pattern, csmi)` fragments). RuleSet
-   forces child yield off; parent yield across different child rules logs
-   INFO (kept/dropped rule + shared CSMI), not a Warning.
+   (`unique_csmi`: drop duplicate `(rule, pattern, emission frozenset)`
+   emissions). RuleSet forces child yield off; parent yield across different
+   child rules logs INFO (kept/dropped rule + shared CSMI), not a Warning.
 
 Pair orbits refine (1) when atom ranks alone are not enough. Classic negative:
 benzene meta vs para share ranks but not atom–atom orbits

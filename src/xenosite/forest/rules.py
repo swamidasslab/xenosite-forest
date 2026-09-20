@@ -84,26 +84,26 @@ from xenosite.forest.records import (
 
 
 class _LazyProductInfo(dict):
-    """Product ``info`` view. ``csmi`` is ``product.xf.csmi``.
+    """Product ``info`` view. ``csmi`` is the emission frozenset of fragment CSMIs.
 
-    The hot path does not compute SMILES. Dedup, export, and ``info["csmi"]``
-    read ``mol.xf.csmi``, which caches on ``structure["csmi"]``.
+    The hot path does not compute SMILES until ``info["csmi"]`` / yield dedup
+    reads each ``mol.xf.csmi`` (cached on ``structure["csmi"]``).
     """
 
-    __slots__ = ("_mol",)
+    __slots__ = ("_mols",)
 
-    def __init__(self, data: dict[str, object], mol: ForestMol):
+    def __init__(self, data: dict[str, object], mols: Sequence[ForestMol]):
         super().__init__(data)
-        self._mol = mol
+        self._mols = list(mols)
 
     def __getitem__(self, key: str) -> object:
         if key == "csmi":
-            return self._mol.xf.csmi
+            return frozenset(m.xf.csmi for m in self._mols)
         return super().__getitem__(key)
 
     def get(self, key, default=None):  # type: ignore[override]
         if key == "csmi":
-            return self._mol.xf.csmi
+            return frozenset(m.xf.csmi for m in self._mols)
         return super().get(key, default)
 
     def __contains__(self, key: object) -> bool:
@@ -136,8 +136,8 @@ class ProductsOfReaction(NamedTuple):
     """One edit from :meth:`ReactionRule.metabolites`, before tracing.
 
     ``info`` describes the edit. ``products`` are the mols it made.
-    :meth:`ReactionRule.metabolize` turns each of those mols into a
-    ``(product, info)`` pair and is what callers should use.
+    :meth:`ReactionRule.metabolize` yields ``(list[TracingMol], info)`` —
+    one list per emission (siblings stay together for cleavage).
     """
 
     info: SiteInfo
@@ -229,7 +229,7 @@ class ReactionRule:
 
     def __call__(
         self, mol: Mol, **kwargs: Any
-    ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
+    ) -> Generator[tuple[list[TracingMol], ProductInfo], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
     def __iter__(self) -> Iterator[ReactionRule]:
@@ -242,11 +242,13 @@ class ReactionRule:
         filter_sites: FilterSites = _accept_all_sites,
         unique_csmi: bool = True,
         **kwargs: Any,
-    ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
-        """Apply this rule and yield ``(product, info)`` pairs.
+    ) -> Generator[tuple[list[TracingMol], ProductInfo], None, None]:
+        """Apply this rule and yield ``(products, info)`` pairs.
 
-        This is the method callers use. It keeps the invariants below.
-        :meth:`metabolites` supplies the chemistry and must not try to.
+        ``products`` is always a list: one mol for non-cleavage, all
+        sibling fragments for cleavage. This is the method callers use.
+        It keeps the invariants below. :meth:`metabolites` supplies the
+        chemistry and must not try to.
 
         The mol that was passed in:
 
@@ -255,7 +257,7 @@ class ReactionRule:
         - If it has no ``_forest`` trace, one is installed and left there.
         - If it already has a trace, that trace's depth is not changed.
 
-        Every product:
+        Every product mol in each yielded list:
 
         - Is a sanitized, connected mol with its own ``_forest``.
         - Has ``atom_trace["depth"]`` one greater than the parent.
@@ -267,18 +269,22 @@ class ReactionRule:
           depth of the site's index frame live under
           ``atom_trace["additions"][id]``. The change in formula lives
           under ``atom_trace["delta_formula"][id]``.
-        - Reads ``info["csmi"]`` (or ``product.xf.csmi``)
-          as the canonical SMILES of that product; computed on demand and
-          cached on the product forest. Product CSMI has two roles: **check**
-          (always, while site unique-edit is on) warns ``SiteDeduplicationWarning``
-          when a later emission under the same ``(rule, pattern)`` repeats an
-          earlier emission's frozenset of fragment CSMIs *and* matching site
-          ranks (unique-edit miss); **yield** (only when ``unique_csmi``,
-          default on) drops duplicate ``(rule, pattern, csmi)`` fragments from
-          the stream. Check does not imply drop; ``unique_csmi=False`` still
-          checks but yields every fragment after site unique-edit. Yield keys
-          prefer ``info["pattern"]["name"]``, else the SMARTS string; pair
-          emissions without a pattern use ``None`` for the middle field.
+        - Shares emission ``info["csmi"]``: the frozenset of fragment
+          canonical SMILES for that yield (``product.xf.csmi`` is still
+          each mol's own SMILES). Product CSMI has two roles: **check**
+          (always, while site unique-edit is on) warns
+          ``SiteDeduplicationWarning`` when a later emission under the
+          same ``(rule, pattern)`` repeats an earlier emission's frozenset
+          of fragment CSMIs *and* matching site ranks (unique-edit miss);
+          **yield** (only when ``unique_csmi``, default on) drops duplicate
+          ``(rule, pattern, emission frozenset)`` emissions from the
+          stream. Check does not imply drop; ``unique_csmi=False`` still
+          checks but yields every emission after site unique-edit. Yield
+          keys prefer ``info["pattern"]["name"]``, else the SMARTS string;
+          pair emissions without a pattern use ``None`` for the middle
+          field. Within one cleavage emission, identical sibling CSMIs
+          stay in the list; yield dedup is emission-level only (same
+          frozenset as check).
 
         ``filter_rules(mol, rule, pattern_info)`` sees the pattern before a
         match. ``filter_sites(mol, site, info)`` sees the **discovery** site
@@ -314,9 +320,10 @@ class ReactionRule:
         # Maps must not be present for CanonicalRankAtoms or SMARTS matching.
         self._clear_atom_maps(mol)
 
-        # Yield layer (unique_csmi): (rule, PatternInfo.name | SMARTS, csmi).
-        # Site topology lives only in unique-edit upstream.
-        seen_yield: set[tuple[str, str | None, str]] = set()
+        # Yield layer (unique_csmi): (rule, PatternInfo.name | SMARTS, S).
+        # Site topology lives only in unique-edit upstream. S is the emission
+        # frozenset of fragment CSMIs (same as check).
+        seen_yield: set[tuple[str, str | None, frozenset[str]]] = set()
         # Check layer: keepers are (emission CSMI frozenset, site ranks) under
         # (rule, pattern). Same S + equal ranks → SiteDeduplicationWarning (miss).
         # Check always runs (site unique-edit is on); does not imply drop.
@@ -381,28 +388,20 @@ class ReactionRule:
                 # Quiet unequal-rank iso / leaving-group / cleavage siblings.
                 prior.append((emission_csmi, site_ranks))
 
-            for n, p in enumerate(finished):
+            for p in finished:
                 assert p.xf.tracing.active
 
-                if unique_csmi:
-                    key = _unique_csmi_key(info, fragment_csmis[n])
-                    if key in seen_yield:
-                        continue
-                    seen_yield.add(key)
+            if unique_csmi:
+                key = _unique_csmi_key(info, emission_csmi)
+                if key in seen_yield:
+                    continue
+                seen_yield.add(key)
 
-                i = cast(
-                    ProductInfo,
-                    _LazyProductInfo(
-                        {
-                            **dict(info),
-                            "product_index": n,
-                            "product_count": len(finished),
-                        },
-                        p,
-                    ),
-                )
-
-                yield p, i
+            i = cast(
+                ProductInfo,
+                _LazyProductInfo(dict(info), finished),
+            )
+            yield finished, i
 
     def _top_site(self, site: Site, mol: Mol) -> Site:
         te = mol.xf.topol_equiv
@@ -1657,16 +1656,18 @@ def _pattern_dedup_token(info: SiteInfo) -> str | None:
     return None
 
 
-def _unique_csmi_key(info: SiteInfo, csmi: str) -> tuple[str, str | None, str]:
-    """Product dedup: ``(rule name, PatternInfo.name | SMARTS, csmi)``.
+def _unique_csmi_key(
+    info: SiteInfo, emission_csmi: frozenset[str]
+) -> tuple[str, str | None, frozenset[str]]:
+    """Emission dedup: ``(rule name, PatternInfo.name | SMARTS, CSMI frozenset)``.
 
     No site topology. Middle field is ``None`` when the emission has no pattern
-    (pair sites).
+    (pair sites). The frozenset matches the check-layer emission set.
     """
 
     rule = info["rule"]
     rule_name = getattr(rule, "name", None) or type(rule).__name__
-    return (rule_name, _pattern_dedup_token(info), csmi)
+    return (rule_name, _pattern_dedup_token(info), emission_csmi)
 
 
 def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:

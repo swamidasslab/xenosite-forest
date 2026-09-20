@@ -49,7 +49,8 @@ def test_anisole_directed_bond_keeps_ring_open_regioisomers() -> None:
 
     alcohols = {
         Chem.MolToSmiles(p)
-        for p, info in products
+        for pl, info in products
+        for p in pl
         if (info.get("pattern") or {}).get("name") == "cc_alcohol"
     }
     # HEURISTICS exemplar: undirected ranks would collapse these regioisomers.
@@ -72,7 +73,7 @@ def test_anisole_directed_bond_keeps_ring_open_regioisomers() -> None:
             by_und[bond_rank_key(ranks, site)].add(map_rank_key(ranks, mapped))
     assert any(len(dirs) >= 2 for dirs in by_und.values()), by_und
 
-    for _p, info in products:
+    for _pl, info in products:
         assert isinstance(info["site"], frozenset), info["site"]
         disc = info["discovered_site"]
         assert isinstance(disc, tuple), disc
@@ -86,7 +87,8 @@ def test_anisole_discovered_site_orientation_vs_frozenset_site() -> None:
     products = list(Dealkylation().metabolize(mol))
     alcohol_rows = [
         (Chem.MolToSmiles(p), info["site"], info["discovered_site"])
-        for p, info in products
+        for pl, info in products
+        for p in pl
         if (info.get("pattern") or {}).get("name") == "cc_alcohol"
     ]
     assert alcohol_rows
@@ -117,10 +119,10 @@ def test_ndealkylation_pyridine_frozenset_site_directed_discovered() -> None:
         w for w in caught if issubclass(w.category, SiteDeduplicationWarning)
     ]
     assert not caught, f"unexpected warnings on pyridine NDealk: {caught}"
-    csmi = {Chem.MolToSmiles(p) for p, _info in products}
+    csmi = {Chem.MolToSmiles(p) for pl, _info in products for p in pl}
     assert "N=CC=CC=CO" in csmi
     assert "N=CC=CC=C=O" in csmi
-    for _p, info in products:
+    for _pl, info in products:
         site = info["site"]
         disc = info["discovered_site"]
         assert isinstance(site, frozenset), site

@@ -41,12 +41,12 @@ def test_aromatic_path_hydrogenation_resolves_dearomatizes_true():
     mol = as_mol("c1ccccc1")
     flags = {
         info["options"].get("dearomatizes")
-        for _product, info in Hydrogenation().metabolize(mol)
+        for _products, info in Hydrogenation().metabolize(mol)
         if "ends" in info
     }
     adds = {
         info["options"].get("adds")
-        for _product, info in Hydrogenation().metabolize(mol)
+        for _products, info in Hydrogenation().metabolize(mol)
         if "ends" in info
     }
     assert True in flags
@@ -57,7 +57,7 @@ def test_aliphatic_path_hydrogenation_resolves_dearomatizes_false():
     mol = as_mol("C=CC=C")
     flags = {
         info["options"].get("dearomatizes")
-        for _product, info in Hydrogenation().metabolize(mol)
+        for _products, info in Hydrogenation().metabolize(mol)
         if "ends" in info
     }
     assert flags == {False} or flags == set()

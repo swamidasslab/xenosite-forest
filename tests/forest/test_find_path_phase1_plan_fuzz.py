@@ -40,15 +40,16 @@ def _create_rules():
 def _candidates(mol, rules, seen: set[str], **site_kw):
     out = []
     for rule in rules:
-        for product, _info in rule.metabolize(mol, **site_kw):
-            smi = product.xf.csmi
-            if not smi or "." in smi or smi in seen:
-                continue
-            if product.GetNumHeavyAtoms() < max(4, mol.GetNumHeavyAtoms() // 3):
-                continue
-            out.append(smi)
-            if len(out) >= 8:
-                return out
+        for products, _info in rule.metabolize(mol, **site_kw):
+            for product in products:
+                smi = product.xf.csmi
+                if not smi or "." in smi or smi in seen:
+                    continue
+                if product.GetNumHeavyAtoms() < max(4, mol.GetNumHeavyAtoms() // 3):
+                    continue
+                out.append(smi)
+                if len(out) >= 8:
+                    return out
     return out
 
 

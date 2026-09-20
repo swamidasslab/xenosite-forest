@@ -98,7 +98,8 @@ def test_stamp_is_identity_and_skips_hydrogen():
 def test_hydroxylation_cco_roots_and_added_oxygen():
     # Carbon 0 of CCO gains OH. The new oxygen has no depth-0 root.
     mol = Chem.MolFromSmiles("CCO")
-    product, info = next(Hydroxylation().metabolize(mol))
+    products, info = next(Hydroxylation().metabolize(mol))
+    product = products[0]
     assert info["site"] == frozenset({0})
     tracing = product.xf.tracing
     assert tracing.active
@@ -130,7 +131,8 @@ def test_hydroxylation_cco_roots_and_added_oxygen():
 
 def test_restamp_does_not_rewrite_history():
     mol = Chem.MolFromSmiles("CCO")
-    product, _info = next(Hydroxylation().metabolize(mol))
+    products, _info = next(Hydroxylation().metabolize(mol))
+    product = products[0]
     before = {
         atom.GetIdx(): product.xf.tracing.atom_indices(atom.GetIdx())
         for atom in _heavy(product)
@@ -153,8 +155,8 @@ class _CarbonToOxygen(SmirksReactionRule):
 def test_element_change_keeps_the_root():
     mol = Chem.MolFromSmiles("CCl")
     pieces = []
-    for product, _info in _CarbonToOxygen().metabolize(mol):
-        pieces.append(product)
+    for products, _info in _CarbonToOxygen().metabolize(mol):
+        pieces.extend(products)
     oxygens = [p for p in pieces if p.GetAtomWithIdx(0).GetAtomicNum() == 8]
     assert oxygens
     oxygen = next(
@@ -174,7 +176,8 @@ def _first_product(rule_cls, smiles: str):
     mol = Chem.MolFromSmiles(smiles)
     assert mol is not None, smiles
     try:
-        product, _info = next(rule_cls().metabolize(mol))
+        products, _info = next(rule_cls().metabolize(mol))
+        product = products[0]
     except StopIteration:
         return None
     return product
@@ -215,12 +218,14 @@ def test_two_hydroxylations_keep_original_carbons():
     ethane = Chem.MolFromSmiles("CC")
     ethanol = next(
         product
-        for product, _info in Hydroxylation().metabolize(ethane)
+        for products, _info in Hydroxylation().metabolize(ethane)
+        for product in products
         if product.xf.csmi == "CCO"
     )
     glycol = next(
         product
-        for product, _info in Hydroxylation().metabolize(ethanol)
+        for products, _info in Hydroxylation().metabolize(ethanol)
+        for product in products
         if product.xf.csmi == "OCCO"
     )
     tracing = glycol.xf.tracing

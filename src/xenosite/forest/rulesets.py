@@ -118,12 +118,12 @@ class RuleSet(ReactionRule):
         unique_csmi: bool = True,
         order_key: Callable[[ReactionRule], Any] | None = None,
         **kwargs: Any,
-    ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
+    ) -> Generator[tuple[list[TracingMol], ProductInfo], None, None]:
         """Run each contained rule, then append this set on that product.
 
         The contained rule, including a nested set, has already put itself
-        last on the product. This set is the next rule. The product object
-        is the one that rule yielded.
+        last on the product. This set is the next rule. The product objects
+        are the ones that rule yielded in one emission list.
         """
 
         if mol is None:
@@ -139,35 +139,36 @@ class RuleSet(ReactionRule):
         # nested sets bubble up; leaf check still runs. This set's own yield
         # (caller ``unique_csmi``) is the cross-child CSMI layer — outermost
         # caller setting applies at each RuleSet that was asked to uniquify.
-        # Cross-rule same CSMI → INFO (not SiteDeduplicationWarning).
+        # Cross-rule same emission frozenset → INFO (not SiteDeduplicationWarning).
         # Same rule, different PatternInfo tokens may still both emit.
-        seen_csmi: dict[str, str] = {}
+        seen_csmi: dict[frozenset[str], str] = {}
         for rule in rules:
-            for product, info in rule.metabolize(
+            for products, info in rule.metabolize(
                 mol,
                 filter_rules=filter_rules,
                 filter_sites=filter_sites,
                 **kwargs,
                 unique_csmi=False,
             ):
-                trace = product._forest["atom_trace"]
-                addition = trace["additions"][trace["transforms"][-1]]
-                addition["rules"] = tuple(addition["rules"]) + (self,)
+                for product in products:
+                    trace = product._forest["atom_trace"]
+                    addition = trace["additions"][trace["transforms"][-1]]
+                    addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
-                    product_csmi = product.xf.csmi
+                    emission_csmi = frozenset(p.xf.csmi for p in products)
                     rule_name = _rule_dedup_name(info["rule"])
-                    kept = seen_csmi.get(product_csmi)
+                    kept = seen_csmi.get(emission_csmi)
                     if kept is not None and kept != rule_name:
                         _report_redundant_rules_drop(
                             mol,
                             kept_rule=kept,
                             dropped_info=info,
-                            product_csmi=product_csmi,
+                            product_csmi=",".join(sorted(emission_csmi)),
                         )
                         continue
                     if kept is None:
-                        seen_csmi[product_csmi] = rule_name
-                yield product, info
+                        seen_csmi[emission_csmi] = rule_name
+                yield products, info
 
 
 # Phase I classes that already exist in rules.py. QuinoneFormation is included

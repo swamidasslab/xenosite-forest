@@ -63,4 +63,4 @@ def test_metabolites_continues_after_runreactants_runtime_error(monkeypatch):
     monkeypatch.setattr("xenosite.forest.rules.run_reactants", boom)
     rows = list(rule.metabolize(MolFromSmiles(ETHANE)))
     assert rows, "second SMIRKS should still yield after first RunReactants fails"
-    assert {p.xf.csmi for p, _ in rows} == {"CCO"}
+    assert {p.xf.csmi for _pl, _ in rows for p in _pl} == {"CCO"}

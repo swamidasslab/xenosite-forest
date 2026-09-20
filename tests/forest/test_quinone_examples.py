@@ -46,7 +46,7 @@ def test_nonaromatic_conjugate_is_not_dearomatizing():
     assert mol is not None
     flags = {
         info["options"].get("dearomatizes")
-        for _product, info in QuinoneFormation().metabolize(mol)
+        for _products, info in QuinoneFormation().metabolize(mol)
     }
     assert flags == {False}
 
@@ -56,6 +56,6 @@ def test_aromatic_conjugate_is_dearomatizing():
     assert mol is not None
     flags = {
         info["options"].get("dearomatizes")
-        for _product, info in QuinoneFormation().metabolize(mol)
+        for _products, info in QuinoneFormation().metabolize(mol)
     }
     assert True in flags

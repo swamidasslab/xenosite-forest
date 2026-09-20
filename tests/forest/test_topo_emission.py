@@ -18,7 +18,7 @@ def test_phenol_epoxidation_symmetry_collapse():
     mol = MolFromSmiles("Oc1ccccc1")
     rows = list(Epoxidation().metabolize(mol))
     assert len(rows) == 3
-    assert len({p.xf.csmi for p, _ in rows}) == 3
+    assert len({p.xf.csmi for _pl, _ in rows for p in _pl}) == 3
 
 
 def test_naphthalene_quinone_symmetry_collapse():
@@ -27,7 +27,7 @@ def test_naphthalene_quinone_symmetry_collapse():
     mol = MolFromSmiles("c1ccc2ccccc2c1")
     rows = list(QuinoneFormation().metabolize(mol))
     assert len(rows) < 22
-    assert len(rows) == len({p.xf.csmi for p, _ in rows})
+    assert len(rows) == len({p.xf.csmi for _pl, _ in rows for p in _pl})
 
 
 def test_unique_csmi_never_drops_distinct_smiles():
@@ -41,10 +41,10 @@ def test_unique_csmi_never_drops_distinct_smiles():
     ]:
         mol = MolFromSmiles(smi)
         with_dedup = {
-            p.xf.csmi for p, _ in rule.metabolize(mol, unique_csmi=True)
+            p.xf.csmi for pl, _ in rule.metabolize(mol, unique_csmi=True) for p in pl
         }
         without = {
-            p.xf.csmi for p, _ in rule.metabolize(mol, unique_csmi=False)
+            p.xf.csmi for pl, _ in rule.metabolize(mol, unique_csmi=False) for p in pl
         }
         assert without
         assert with_dedup == without, (

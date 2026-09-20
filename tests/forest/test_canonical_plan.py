@@ -100,10 +100,11 @@ def _identity_reaches(
         return _flat_ints(site) == wanted
 
     hits = {
-        _canon(info["csmi"])
-        for _product, info in apply_rule.metabolize(
+        _canon(p.xf.csmi)
+        for products, info in apply_rule.metabolize(
             as_mol(smiles), filter_sites=filter_sites
         )
+        for p in products
     }
     return _canon(target) in hits
 
@@ -127,9 +128,10 @@ def _composite_reaches(smiles: str, plan: tuple[CanonicalStep, ...], target: str
             continue
         for mid in mids:
             mid_smi = Chem.MolToSmiles(mid)
-            for _product, info in QuinoneFormation().metabolize(as_mol(mid_smi)):
-                if _canon(info["csmi"]) == want:
-                    return True
+            for products, info in QuinoneFormation().metabolize(as_mol(mid_smi)):
+                for p in products:
+                    if _canon(p.xf.csmi) == want:
+                        return True
     return False
 
 
@@ -167,9 +169,12 @@ def test_canonical_plan_reaches_product_quick(rule_cls, smiles):
 
     rule = _make_rule(rule_cls)
     checked = 0
-    for _product, info in rule.metabolize(as_mol(smiles)):
-        plan_reaches_product(rule, smiles, info, info["csmi"])
-        checked += 1
+    for products, info in rule.metabolize(as_mol(smiles)):
+        for product in products:
+            plan_reaches_product(rule, smiles, info, product.xf.csmi)
+            checked += 1
+            if checked >= _PRODUCTS_PER_PAIR:
+                break
         if checked >= _PRODUCTS_PER_PAIR:
             break
 
@@ -181,9 +186,12 @@ def test_canonical_plan_reaches_product_library(rule_cls):
     rule = _make_rule(rule_cls)
     checked = 0
     for smiles in SUBSTRATE_LIBRARY:
-        for _product, info in rule.metabolize(as_mol(smiles)):
-            plan_reaches_product(rule, smiles, info, info["csmi"])
-            checked += 1
+        for products, info in rule.metabolize(as_mol(smiles)):
+            for product in products:
+                plan_reaches_product(rule, smiles, info, product.xf.csmi)
+                checked += 1
+                if checked >= _LIBRARY_PRODUCTS:
+                    break
             if checked >= _LIBRARY_PRODUCTS:
                 break
         if checked >= _LIBRARY_PRODUCTS:
@@ -195,13 +203,14 @@ def test_canonical_plan_reaches_product_library(rule_cls):
 def test_quinone_benzene_plan_is_two_oh_then_dh():
     rule = QuinoneFormation()
     smiles = "c1ccccc1"
-    _product, info = next(rule.metabolize(as_mol(smiles)))
+    products, info = next(rule.metabolize(as_mol(smiles)))
+    _product = products[0]
     plan = rule.canonical_plan(as_mol(smiles), info)
     names = [step.rule for step in plan]
     assert names.count("Hydroxylation") == 2
     assert names[-1] == "Dehydrogenation"
     assert "QuinoneFormation" not in names
-    plan_reaches_product(rule, smiles, info, info["csmi"])
+    plan_reaches_product(rule, smiles, info, _product.xf.csmi)
 
 
 def test_epoxidation_plan_is_identity_same_site():
@@ -209,13 +218,14 @@ def test_epoxidation_plan_is_identity_same_site():
 
     rule = Epoxidation()
     smiles = "C=C"
-    _product, info = next(rule.metabolize(as_mol(smiles)))
+    products, info = next(rule.metabolize(as_mol(smiles)))
+    _product = products[0]
     plan = rule.canonical_plan(as_mol(smiles), info)
     assert len(plan) == 1
     assert plan[0].rule == "Epoxidation"
     assert set(plan[0].site) == set(_flat_ints(info["site"]))
     assert "StableOxygenation" not in [step.rule for step in plan]
-    plan_reaches_product(rule, smiles, info, info["csmi"])
+    plan_reaches_product(rule, smiles, info, _product.xf.csmi)
 
 
 def test_ndealkylation_plan_is_identity_same_site():
@@ -223,13 +233,14 @@ def test_ndealkylation_plan_is_identity_same_site():
 
     rule = NDealkylation()
     smiles = "CCN"
-    _product, info = next(rule.metabolize(as_mol(smiles)))
+    products, info = next(rule.metabolize(as_mol(smiles)))
+    _product = products[0]
     plan = rule.canonical_plan(as_mol(smiles), info)
     assert len(plan) == 1
     assert plan[0].rule == "NDealkylation"
     assert set(plan[0].site) == set(_flat_ints(info["site"]))
     assert "UnstableOxygenation" not in [step.rule for step in plan]
-    plan_reaches_product(rule, smiles, info, info["csmi"])
+    plan_reaches_product(rule, smiles, info, _product.xf.csmi)
 
 
 def test_find_path_asks_rule_hook_not_quinone_name():

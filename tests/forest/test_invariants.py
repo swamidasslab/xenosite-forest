@@ -63,19 +63,24 @@ def test_an_existing_parent_depth_is_not_reset():
     mol._forest["atom_trace"]["depth"] = 4
     products = list(Hydroxylation().metabolize(mol))
     assert mol._forest["atom_trace"]["depth"] == 4
-    assert products[0][0]._forest["atom_trace"]["depth"] == 5
+    assert products[0][0][0]._forest["atom_trace"]["depth"] == 5
 
 
 def test_each_product_is_one_depth_below_its_parent():
     mol, _before, products = _pairs(Hydroxylation(), "CC")
     parent_depth = mol._forest["atom_trace"]["depth"]
-    for product, info in products:
+    for product_list, info in products:
+        assert isinstance(product_list, list)
+        assert len(product_list) == 1
+        product = product_list[0]
         assert isinstance(product, Chem.Mol)
         assert isinstance(info, dict)
         child = product._forest["atom_trace"]
         assert child["depth"] == parent_depth + 1
         assert child["formula"] == product.xf.formula
-        assert info["csmi"] == Chem.MolToSmiles(product, isomericSmiles=False)
+        assert info["csmi"] == frozenset(
+            {Chem.MolToSmiles(product, isomericSmiles=False)}
+        )
         rule = info["rule"]
         assert isinstance(rule, ReactionRule)
         assert rule.name == "Hydroxylation"
@@ -85,7 +90,7 @@ def test_canonical_smiles_are_not_repeated():
     """Emitted ``_unique_csmi_key`` values are unique under RuleSet metabolize.
 
     Per-rule keys still include pattern tokens. RuleSet drops only when a
-    *different* child rule repeats a product CSMI (INFO log, yield drop).
+    *different* child rule repeats an emission frozenset (INFO log, yield drop).
     """
 
     from xenosite.forest.rules import _unique_csmi_key
@@ -93,7 +98,7 @@ def test_canonical_smiles_are_not_repeated():
     _mol, _before, products = _pairs(
         RuleSet((Hydroxylation, Dealkylation), name="Forest"), "CC"
     )
-    keys = [_unique_csmi_key(info, info["csmi"]) for _product, info in products]
+    keys = [_unique_csmi_key(info, info["csmi"]) for _products, info in products]
     assert len(keys) == len(set(keys))
 
 
@@ -102,7 +107,8 @@ def test_a_new_atom_points_at_one_addition_record():
         RuleSet((Hydroxylation,), name="Forest"), "CC"
     )
     parent_formula = mol._forest["atom_trace"]["formula"]
-    product, _info = products[0]
+    product_list, _info = products[0]
+    product = product_list[0]
     trace = product._forest["atom_trace"]
     ids = [
         by
@@ -162,8 +168,8 @@ def test_a_rule_is_itself_when_iterated_and_its_name_has_no_underscore():
     assert rule.name is not None and "_" not in rule.name
     called = list(rule(Chem.MolFromSmiles("CC")))
     direct = list(rule.metabolize(Chem.MolFromSmiles("CC")))
-    assert [info["csmi"] for _product, info in called] == [
-        info["csmi"] for _product, info in direct
+    assert [info["csmi"] for _products, info in called] == [
+        info["csmi"] for _products, info in direct
     ]
 
 

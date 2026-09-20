@@ -23,11 +23,12 @@ def _canon(smiles):
 
 def _products(rule, smiles):
     found = set()
-    for mol, _info in rule.metabolize(Chem.MolFromSmiles(smiles)):
-        text = Chem.MolToSmiles(mol, isomericSmiles=False)
-        parsed = Chem.MolFromSmiles(text)
-        assert parsed is not None, text
-        found.add(Chem.MolToSmiles(parsed, isomericSmiles=False))
+    for mols, _info in rule.metabolize(Chem.MolFromSmiles(smiles)):
+        for mol in mols:
+            text = Chem.MolToSmiles(mol, isomericSmiles=False)
+            parsed = Chem.MolFromSmiles(text)
+            assert parsed is not None, text
+            found.add(Chem.MolToSmiles(parsed, isomericSmiles=False))
     return found
 
 

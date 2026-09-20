@@ -191,7 +191,8 @@ def test_quinone_oxygen_ref_resolves_to_the_atom_hydroxylation_adds():
     mol = Chem.MolFromSmiles("Oc1ccccc1")
     product = next(
         candidate
-        for candidate, info in Hydroxylation().metabolize(mol)
+        for products, info in Hydroxylation().metabolize(mol)
+        for candidate in products
         if origin in info["site"]
     )
     idx = ref.resolve(product)

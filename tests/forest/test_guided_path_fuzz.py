@@ -47,11 +47,12 @@ def _ruleset():
 def _collect(mol, rules, seen: set[str], **site_kw):
     out = []
     for rule in rules:
-        for product, _info in rule.metabolize(mol, **site_kw):
-            smi = product.xf.csmi
-            if not smi or "." in smi or smi in seen:
-                continue
-            out.append((rule, product, smi))
+        for products, _info in rule.metabolize(mol, **site_kw):
+            for product in products:
+                smi = product.xf.csmi
+                if not smi or "." in smi or smi in seen:
+                    continue
+                out.append((rule, product, smi))
     return out
 
 
@@ -202,7 +203,8 @@ def test_max_nodes_stops(canonical_emitted_sites: bool):
 
 def test_terminal_conjugate_is_not_expanded():
     phenol = Chem.MolFromSmiles("Oc1ccccc1")
-    acetyl, _info = next(Acetylation().metabolize(phenol))
+    products, _info = next(Acetylation().metabolize(phenol))
+    acetyl = products[0]
     assert acetyl.xf.is_terminal
     assert list(Hydroxylation().metabolize(acetyl)) == []
     assert list(QuinoneFormation().metabolize(acetyl)) == []

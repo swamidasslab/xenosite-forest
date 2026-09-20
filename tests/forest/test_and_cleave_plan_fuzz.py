@@ -74,15 +74,18 @@ def test_fuzz_dealkylation_hit_or_honest_miss(
     mol = Chem.MolFromSmiles(start)
     assume(mol is not None)
     products = []
-    for product, info in Dealkylation().metabolize(
+    for product_list, info in Dealkylation().metabolize(
         mol, canonical_emitted_sites=canonical_emitted_sites
     ):
-        smi = product.xf.csmi
-        if not smi or "." in smi or smi == mol.xf.csmi:
-            continue
-        if not info["options"].get("cleaves"):
-            continue
-        products.append(smi)
+        for product in product_list:
+            smi = product.xf.csmi
+            if not smi or "." in smi or smi == mol.xf.csmi:
+                continue
+            if not info["options"].get("cleaves"):
+                continue
+            products.append(smi)
+            if len(products) >= 6:
+                break
         if len(products) >= 6:
             break
     assume(products)

@@ -65,7 +65,7 @@ def test_ruleset_redundant_rules_info_names_both_rules(caplog):
             warnings.simplefilter("error", SiteDeduplicationWarning)
             products = list(ruleset.metabolize(mol))
 
-    assert [p.xf.csmi for p, _ in products] == ["CCO"]
+    assert [p.xf.csmi for pl, _ in products for p in pl] == ["CCO"]
     assert {type(info["rule"]).__name__ for _, info in products} == {"OverlapOhA"}
     assert not caught
 

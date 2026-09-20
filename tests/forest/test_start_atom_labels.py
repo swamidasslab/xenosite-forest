@@ -42,7 +42,8 @@ def test_stamp_keeps_input_atom_labels():
 def test_metabolize_preserves_start_atom_labels():
     mol = Chem.MolFromSmiles("CCO")
     _set_start_labels(mol, {0: "alpha", 1: "beta", 2: "oxy"})
-    product, info = next(Hydroxylation().metabolize(mol))
+    products, info = next(Hydroxylation().metabolize(mol))
+    product = products[0]
     assert info["site"] == frozenset({0})
     preserved = _labels_by_root(product)
     assert preserved == {0: "alpha", 1: "beta", 2: "oxy"}

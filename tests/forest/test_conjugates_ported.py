@@ -100,7 +100,8 @@ def _has_products(rule, smi: str) -> bool:
 
 def test_glucuronidation_defaults_to_bare_star():
     mol = MolFromSmiles(PHENOL)
-    product, _info = next(Glucuronidation().metabolize(mol))
+    products, _info = next(Glucuronidation().metabolize(mol))
+    product = products[0]
     smi = _smiles(product)
     assert "*" in smi
     assert "O=C(O)C1OC" not in smi
@@ -109,7 +110,8 @@ def test_glucuronidation_defaults_to_bare_star():
 
 def test_glucuronidation_full_structure_opt_in():
     mol = MolFromSmiles(PHENOL)
-    product, _info = next(Glucuronidation(as_star=False).metabolize(mol))
+    products, _info = next(Glucuronidation(as_star=False).metabolize(mol))
+    product = products[0]
     smi = _smiles(product)
     assert "*" not in smi
     assert "O=C(O)" in smi
@@ -117,7 +119,8 @@ def test_glucuronidation_full_structure_opt_in():
 
 def test_glucuronidation_star_label_glca():
     mol = MolFromSmiles(PHENOL)
-    product, _info = next(Glucuronidation(star_label="GlcA").metabolize(mol))
+    products, _info = next(Glucuronidation(star_label="GlcA").metabolize(mol))
+    product = products[0]
     cx = mol_to_cxsmiles(product)
     assert cx is not None
     assert cx.split()[0] == "*Oc1ccccc1"
@@ -140,7 +143,8 @@ def test_electrophiles_match_gsh(smi):
 
 def test_glutathionation_defaults_to_star_not_peptide():
     mol = MolFromSmiles(STYRENE_OXIDE)
-    product, _info = next(Glutathionation().metabolize(mol))
+    products, _info = next(Glutathionation().metabolize(mol))
+    product = products[0]
     smi = _smiles(product)
     assert "*" in smi
     assert "NC(CCC(=O)N" not in smi
@@ -150,7 +154,8 @@ def test_glutathionation_defaults_to_star_not_peptide():
 def test_glutathionation_star_labels(label):
     rule = Glutathionation(star_label=label)
     mol = MolFromSmiles(STYRENE_OXIDE)
-    product, _info = next(rule.metabolize(mol))
+    products, _info = next(rule.metabolize(mol))
+    product = products[0]
     cx = mol_to_cxsmiles(product)
     assert cx is not None
     assert "*" in cx.split()[0]

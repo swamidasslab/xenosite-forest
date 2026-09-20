@@ -33,21 +33,23 @@ def canon(smiles_or_mol: Mol | str | None) -> str:
 def product_smiles(rule, reactant: str) -> set[str]:
     """Canonical SMILES of every product mol a rule emits from ``reactant``.
 
-    Production yields one connected mol per piece. A SMILES round-trip
-    matches historical aromatic canons; it does not split dotted products.
+    Production yields a list of connected mols per emission. A SMILES
+    round-trip matches historical aromatic canons; it does not split dotted
+    products.
     """
 
     mol = MolFromSmiles(reactant)
     assert mol is not None, reactant
     RemoveStereochemistry(mol)
     found: set[str] = set()
-    for product, _info in rule.metabolize(mol):
-        text = MolToSmiles(product)
-        assert "." not in text, text
-        parsed = MolFromSmiles(text)
-        if parsed is None:
-            continue
-        found.add(canon(parsed))
+    for products, _info in rule.metabolize(mol):
+        for product in products:
+            text = MolToSmiles(product)
+            assert "." not in text, text
+            parsed = MolFromSmiles(text)
+            if parsed is None:
+                continue
+            found.add(canon(parsed))
     return found
 
 

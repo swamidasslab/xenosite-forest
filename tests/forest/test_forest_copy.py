@@ -13,7 +13,8 @@ from xenosite.forest.rules import Hydroxylation
 
 def test_forest_copy_shares_rules_by_id():
     mol = Chem.MolFromSmiles("CCO")
-    product, _info = next(Hydroxylation().metabolize(mol))
+    products, _info = next(Hydroxylation().metabolize(mol))
+    product = products[0]
     forest = product._forest
     addition = next(iter(forest["atom_trace"]["additions"].values()))
     rule = addition["rules"][0]
@@ -63,7 +64,8 @@ def test_forest_copy_cache_dropped_vs_kept():
 
 def test_forest_copy_shares_pattern_info_identity():
     mol = Chem.MolFromSmiles("CCO")
-    product, info = next(Hydroxylation().metabolize(mol))
+    products, info = next(Hydroxylation().metabolize(mol))
+    product = products[0]
     pattern = info["pattern"]
     addition = next(iter(product._forest["atom_trace"]["additions"].values()))
     assert addition["pattern"] is pattern

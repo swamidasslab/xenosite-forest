@@ -109,7 +109,7 @@ def test_canonicalize_smarts_match_singleton_atom_to_lex_rep():
 
 def test_default_off_no_discovered_site():
     mol = _mol("Oc1ccc(O)cc1")
-    for _prod, info in Dehydrogenation().metabolize(mol):
+    for _products, info in Dehydrogenation().metabolize(mol):
         assert "discovered_site" not in info
 
 
@@ -150,7 +150,7 @@ def test_opt_in_emits_lex_site_with_discovered_escape_hatch():
     assert filtered
 
     remapped = 0
-    for prod, info in products:
+    for product_list, info in products:
         site_fs = _as_fs(info["site"])
         if "discovered_site" not in info:
             continue
@@ -166,6 +166,7 @@ def test_opt_in_emits_lex_site_with_discovered_escape_hatch():
             ordered=False,
         ) == (a, b)
         # Trace mirrors SiteInfo.
+        prod = product_list[0]
         tid = prod._forest["atom_trace"]["transforms"][-1]
         addition = prod._forest["atom_trace"]["additions"][tid]
         assert "discovered_site" in addition
@@ -180,7 +181,7 @@ def test_opt_in_does_not_double_emit_hq():
     off = list(Dehydrogenation().metabolize(mol, canonical_emitted_sites=False))
     on = list(Dehydrogenation().metabolize(mol, canonical_emitted_sites=True))
     assert len(on) == len(off)
-    assert {p.xf.csmi for p, _ in on} == {p.xf.csmi for p, _ in off}
+    assert {p.xf.csmi for _pl, _ in on for p in _pl} == {p.xf.csmi for _pl, _ in off for p in _pl}
 
 
 def test_opt_in_singleton_emits_lex_atom_with_discovered_site():
@@ -211,7 +212,7 @@ def test_opt_in_singleton_emits_lex_atom_with_discovered_site():
     assert products
     assert filtered
     remapped = 0
-    for prod, info in products:
+    for product_list, info in products:
         site_fs = _as_fs(info["site"])
         assert site_fs == frozenset({lex})
         if "discovered_site" not in info:
@@ -220,6 +221,7 @@ def test_opt_in_singleton_emits_lex_atom_with_discovered_site():
         disc_fs = _as_fs(info["discovered_site"])
         assert disc_fs != site_fs
         assert disc_fs in filtered
+        prod = product_list[0]
         tid = prod._forest["atom_trace"]["transforms"][-1]
         addition = prod._forest["atom_trace"]["additions"][tid]
         assert _as_fs(addition["site"]) == site_fs
@@ -289,16 +291,17 @@ def test_canonical_emission_after_of_products_still_sets_discovered_site():
             canonical_emitted_sites=True,
         )
     )
-    remapped = [info for _p, info in products if "discovered_site" in info]
+    remapped = [info for _pl, info in products if "discovered_site" in info]
     assert remapped
-    for _p, info in products:
+    for product_list, info in products:
         if "discovered_site" not in info:
             continue
         # Product cache was cleared; addition still records the split.
-        tid = _p._forest["atom_trace"]["transforms"][-1]
-        addition = _p._forest["atom_trace"]["additions"][tid]
+        prod = product_list[0]
+        tid = prod._forest["atom_trace"]["transforms"][-1]
+        addition = prod._forest["atom_trace"]["additions"][tid]
         assert "discovered_site" in addition
-        assert _p._forest.get("cache", {}).get("lexical_orbit_representatives") is None
+        assert prod._forest.get("cache", {}).get("lexical_orbit_representatives") is None
 
 
 @given(canonical_emitted_sites=st.booleans())

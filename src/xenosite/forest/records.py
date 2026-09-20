@@ -295,19 +295,19 @@ SiteInfo: TypeAlias = SmirksSiteInfo | PairSiteInfo
 
 
 class SmirksProductInfo(SmirksSiteInfo):
-    """``SiteInfo`` after :meth:`ReactionRule.metabolize` adds product fields."""
+    """``SiteInfo`` after :meth:`ReactionRule.metabolize` adds product fields.
 
-    product_index: int
-    product_count: int
-    csmi: str
+    ``csmi`` is the emission frozenset of fragment canonical SMILES (one
+    element for non-cleavage; siblings share one frozenset for cleavage).
+    """
+
+    csmi: frozenset[str]
 
 
 class PairProductInfo(PairSiteInfo):
     """Pair ``SiteInfo`` after metabolize adds product fields."""
 
-    product_index: int
-    product_count: int
-    csmi: str
+    csmi: frozenset[str]
 
 
 ProductInfo: TypeAlias = SmirksProductInfo | PairProductInfo

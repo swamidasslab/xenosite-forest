@@ -43,7 +43,7 @@ _CORPUS = (
 def test_benzene_quinone_plan_ends_in_dehydrogenation(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("c1ccccc1")
     plans = []
-    for _product, info in QuinoneFormation().metabolize(
+    for _products, info in QuinoneFormation().metabolize(
         mol, canonical_emitted_sites=canonical_emitted_sites
     ):
         steps = QuinoneFormation().canonical_plan(mol, info)
@@ -61,11 +61,12 @@ def test_benzene_quinone_plan_ends_in_dehydrogenation(canonical_emitted_sites: b
 @settings(max_examples=_fuzz_examples(4), deadline=10_000, derandomize=True)
 def test_epoxidation_plan_is_one_step(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("C=C")
-    product, info = next(
+    products, info = next(
         Epoxidation().metabolize(
             mol, canonical_emitted_sites=canonical_emitted_sites
         )
     )
+    product = products[0]
     steps = Epoxidation().canonical_plan(mol, info)
     assert [step.rule for step in steps] == ["Epoxidation"]
     assert "." not in product.xf.csmi
@@ -75,11 +76,12 @@ def test_epoxidation_plan_is_one_step(canonical_emitted_sites: bool):
 @settings(max_examples=_fuzz_examples(4), deadline=10_000, derandomize=True)
 def test_ndealkylation_plan_is_one_step(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("CCN")
-    product, info = next(
+    products, info = next(
         NDealkylation().metabolize(
             mol, canonical_emitted_sites=canonical_emitted_sites
         )
     )
+    product = products[0]
     steps = NDealkylation().canonical_plan(mol, info)
     assert [step.rule for step in steps] == ["NDealkylation"]
     assert "." not in product.xf.csmi
@@ -98,7 +100,7 @@ def test_fuzz_quinone_plans_end_in_dehydrogenation(
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     seen = 0
-    for _product, info in QuinoneFormation().metabolize(
+    for products, info in QuinoneFormation().metabolize(
         mol, canonical_emitted_sites=canonical_emitted_sites
     ):
         steps = QuinoneFormation().canonical_plan(mol, info)
@@ -106,7 +108,7 @@ def test_fuzz_quinone_plans_end_in_dehydrogenation(
             continue
         seen += 1
         assert steps[-1].rule == "Dehydrogenation"
-        assert "." not in _product.xf.csmi
+        assert all("." not in p.xf.csmi for p in products)
         if seen >= 4:
             return
     assume(seen)
