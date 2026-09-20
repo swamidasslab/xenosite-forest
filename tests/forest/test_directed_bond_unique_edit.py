@@ -3,6 +3,10 @@
 ``site_kind="directed_bond"`` keys unique-edit by ordered MapRankKey
 (map 1 = oxygenated carbon). Undirected ``bond_rank_key`` would merge
 anisole ring-open regioisomers that yield different products.
+
+Public ``info["site"]`` is a frozenset; orientation is on
+``info["discovered_site"]`` (ordered tuple). Unique-edit is unaffected
+(yield-only presentation).
 """
 
 from __future__ import annotations
@@ -36,11 +40,12 @@ def test_anisole_directed_bond_keeps_ring_open_regioisomers() -> None:
     ranks = mol.xf.topol_equiv
     rule = Dealkylation()
     with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", CsmiDedupWarning)
+        warnings.simplefilter("always")
         products = list(rule.metabolize(mol))
     assert not [
         w for w in caught if issubclass(w.category, CsmiDedupWarning)
     ], "anisole Dealkylation should not CSMI-drop under directed_bond"
+    assert not caught, f"unexpected warnings on default anisole Dealk: {caught}"
 
     alcohols = {
         Chem.MolToSmiles(p)
@@ -56,33 +61,73 @@ def test_anisole_directed_bond_keeps_ring_open_regioisomers() -> None:
         "C=C(C=CC=CO)OC",
     }
 
-    # Same undirected bond ends, two directed MapRankKeys (map 1↔2).
+    # Same undirected bond ends, two directed MapRankKeys (map 1↔2) at match.
     by_und: dict[tuple[int, ...], set[tuple]] = defaultdict(set)
     for smarts, _rxn, pattern in rule.rxns:
         if pattern.get("name") != "cc_alcohol":
             continue
         reactant = smarts.split(">>", 1)[0]
         for mapped in mol.xf.smarts_matches(reactant):
-            site = _site_indexes(mapped, pattern)
+            site = _site_indexes(mapped, pattern, site_kind=rule.site_kind)
             by_und[bond_rank_key(ranks, site)].add(map_rank_key(ranks, mapped))
     assert any(len(dirs) >= 2 for dirs in by_und.values()), by_und
 
+    for _p, info in products:
+        assert isinstance(info["site"], frozenset), info["site"]
+        disc = info["discovered_site"]
+        assert isinstance(disc, tuple), disc
+        assert frozenset(disc) == info["site"]
 
-def test_ndealkylation_pyridine_ring_open_and_no_csmi() -> None:
-    """Aromatic C–N matches need ResonanceRule parenting (same as Dealkylation)."""
+
+def test_anisole_discovered_site_orientation_vs_frozenset_site() -> None:
+    """Products keep frozenset site; discovered_site carries map order."""
+
+    mol = MolFromSmiles("COc1ccccc1")
+    products = list(Dealkylation().metabolize(mol))
+    alcohol_rows = [
+        (Chem.MolToSmiles(p), info["site"], info["discovered_site"])
+        for p, info in products
+        if (info.get("pattern") or {}).get("name") == "cc_alcohol"
+    ]
+    assert alcohol_rows
+    assert all(isinstance(site, frozenset) for _s, site, _d in alcohol_rows)
+    assert all(isinstance(disc, tuple) for _s, _site, disc in alcohol_rows)
+
+    # Distinct products (regioisomers) — directed unique-edit preserved.
+    smiles = {s for s, _site, _d in alcohol_rows}
+    assert len(smiles) >= 5
+
+    # discovered_site tuples are ordered; at least one is not sorted
+    # (map 1 ≠ lower index) or we still see map1=carbon chemistry via atoms.
+    for _smi, site, disc in alcohol_rows:
+        assert frozenset(disc) == site
+        a0, a1 = disc
+        # map 1 = oxygenated carbon for cc_alcohol
+        assert mol.GetAtomWithIdx(a0).GetAtomicNum() == 6
+
+
+def test_ndealkylation_pyridine_frozenset_site_directed_discovered() -> None:
+    """Aromatic C–N: frozenset site; discovered_site (C, N) ordered."""
 
     mol = MolFromSmiles("c1ccncc1")
     with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", CsmiDedupWarning)
+        warnings.simplefilter("always")
         products = list(NDealkylation().metabolize(mol))
     assert not [
         w for w in caught if issubclass(w.category, CsmiDedupWarning)
     ]
+    assert not caught, f"unexpected warnings on pyridine NDealk: {caught}"
     csmi = {Chem.MolToSmiles(p) for p, _info in products}
     assert "N=CC=CC=CO" in csmi
     assert "N=CC=CC=C=O" in csmi
     for _p, info in products:
         site = info["site"]
-        assert isinstance(site, tuple), site
-        assert len(site) == 2
+        disc = info["discovered_site"]
+        assert isinstance(site, frozenset), site
+        assert isinstance(disc, tuple), disc
+        assert len(site) == 2 and len(disc) == 2
+        assert frozenset(disc) == site
         assert any(mol.GetAtomWithIdx(i).GetAtomicNum() == 7 for i in site)
+        # map 1 = oxygenated carbon, map 2 = nitrogen
+        assert mol.GetAtomWithIdx(disc[0]).GetAtomicNum() == 6
+        assert mol.GetAtomWithIdx(disc[1]).GetAtomicNum() == 7

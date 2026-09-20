@@ -230,6 +230,12 @@ class _SiteInfoCore(TypedDict):
     orbit representative — **not** necessarily what ``filter_sites`` saw.
     When remapping ran, ``discovered_site`` holds the pre-canonical discovery
     indexes (escape hatch for callers that need discovery).
+
+    For ``site_kind="directed_bond"``, public ``site`` is always a frozenset
+    and ``discovered_site`` is always the ordered map-order tuple (orientation;
+    same ``Site`` union). With ``canonical_emitted_sites``, ``site`` is the
+    frozenset of the lex representative and ``discovered_site`` remains the
+    directed discovery tuple.
     """
 
     site: Site

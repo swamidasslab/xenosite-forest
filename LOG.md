@@ -2,6 +2,8 @@
 
 ## 2026-09-20
 
+- **`directed_bond` public site = frozenset; orientation on `discovered_site`.** No `directed_sites` kwarg / no extra field. Unique-edit still keys directed `MapRankKey` before yield. With `canonical_emitted_sites`, `site` is frozenset(lex) and `discovered_site` stays the directed discovery tuple. Trace preserves tuple order for `discovered_site`. Docs: HEURISTICS / PAIR_ORBITS §5b / records. Tests: `test_directed_bond_unique_edit.py`, `test_site_kind.py`. **No merge / no tag.**
+
 - **`directed_bond` emits ordered tuple.** `_site_indexes(..., site_kind=)` returns `tuple` in `site_map` order for `directed_bond` (Dealkylation / NDealkylation / Benzodioxole / Nitroaromatic); undirected `bond` stays `frozenset`. Meta-test asserts container type. Canonical remap preserves tuple vs frozenset. TODO: rerun H2H + update PERFORMANCE.md after CSMI/`site_kind` stabilize (WAE not quiet yet). **No merge / no tag.**
 
 - **NDealkylation → ResonanceRule + directed_bond check.** Unique-edit for `directed_bond` uses ordered `map_rank_key` (vs undirected `bond_rank_key` for `bond`). Anisole Dealkylation: undirected would merge 3 orientation pairs with distinct products (`C=CC(=CC=CO)OC` vs `C=CC=C(C=CO)OC`, …); directed keeps them; true same-orientation duplicates collapse; 0 CSMI on anisole/TMA/aniline ND probes. NDealkylation SMARTS are the N rows of Dealkylation (`site_map=(1,2)`, `partner=N`, methyl `leave_count=1`) — OK. Gap: plain `SmartsReactionRule` matched pyridine methine C–N but emitted 0 (no Kekulé parent); archive ND had ring-open. Reparented to `ResonanceRule` like Dealkylation. Tests: `test_directed_bond_unique_edit.py`, pyridine parity. **No merge / no tag.**

@@ -83,9 +83,10 @@ Site shape is class data on ``ReactionRule``
 (``site_kind: Literal["atom", "bond", "directed_bond", "atom_pair"]``), not
 ``Generic[SiteT]`` — shared emit path + heterogeneous RuleSets erase a type
 param; pyright cannot enforce frozenset cardinality. ``"bond"`` is undirected
-SMARTS bond Sites (Epoxidation, frozenset); ``"directed_bond"`` emits an
-ordered atom-index tuple and keeps ordered map ranks
-(Dealkylation); ``"atom_pair"`` is ResonancePair ends only.
+SMARTS bond Sites (Epoxidation, frozenset); ``"directed_bond"`` unique-edit
+keeps ordered map ranks (Dealkylation) while public ``info["site"]`` is a
+frozenset and ``discovered_site`` holds the ordered map-order tuple;
+``"atom_pair"`` is ResonancePair ends only.
 
 ## 4. Types
 
@@ -149,6 +150,17 @@ tests (topo, guided gold, path hard, unique-edit) is a **future option** only
 if stable lex sites prove helpful — not done yet.
 
 Status: approved (opt-in emission policy; HEURISTICS).
+
+## 5b. Directed-bond public sites
+
+``directed_bond`` rules (Dealkylation, NDealkylation, …) always yield
+``info["site"]`` as a **frozenset** (API stays unordered-site shaped).
+Orientation is on ``info["discovered_site"]`` as the ordered map-order
+tuple (same ``Site`` union — no extra field). With
+``canonical_emitted_sites``, ``site`` is the frozenset of the lex
+representative and ``discovered_site`` remains the directed discovery
+tuple. Unique-edit ``seen`` always keys on the internal directed signature
+before presentation.
 
 ---
 

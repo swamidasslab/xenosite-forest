@@ -167,8 +167,9 @@ class ReactionRule:
     # Emitted Site shape. Class data — not Generic[SiteT] (heterogeneous
     # RuleSets erase the param; pyright cannot enforce container size).
     # ``"atom"`` singleton frozenset; ``"bond"`` undirected frozenset;
-    # ``"directed_bond"`` ordered tuple (map order); ``"atom_pair"``
-    # ResonancePair ends only (frozenset).
+    # ``"directed_bond"``: unique-edit uses map-order tuple; public ``site``
+    # is frozenset and ``discovered_site`` is the ordered tuple (same Site
+    # union). ``"atom_pair"`` ResonancePair ends only (frozenset).
     site_kind: RuleSiteKind = "atom"
     # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
     # TODO: expand so examples cover all patterns/whens on this rule.
@@ -283,6 +284,14 @@ class ReactionRule:
         ``discovered_site`` holds the pre-canonical indexes when they differ.
         Filters must not assume ``info["site"]`` equals discovery — use
         ``discovered_site`` when present. See docs/forest/PAIR_ORBITS.md / HEURISTICS.
+
+        For ``site_kind="directed_bond"``, public ``info["site"]`` is always a
+        frozenset (API stays unordered-site shaped). Orientation lives on
+        ``info["discovered_site"]`` as the ordered map-order tuple (same
+        ``Site`` union — no extra field). With ``canonical_emitted_sites``,
+        ``site`` is the frozenset of the lex representative and
+        ``discovered_site`` remains the directed discovery tuple. Unique-edit
+        keys directed ``MapRankKey`` before presentation.
         """
         if mol is None:
             raise ValueError("mol is required")
@@ -530,6 +539,12 @@ def _as_site(value: Site | None) -> Site:
 
 
 def _site_tuple(site: Site) -> Site:
+    """Normalize a site for undirected trace bookkeeping (sorted ends).
+
+    Do **not** use for ``discovered_site`` on ``directed_bond`` — that field
+    keeps map order. Callers that need order preserved should copy the tuple.
+    """
+
     if isinstance(site, int):
         return (site,)
     if isinstance(site, tuple):
@@ -549,6 +564,7 @@ def _trace_info(info: SiteInfo) -> TraceInfo:
         "rule": _rule_name(info["rule"]),
     }
     if "discovered_site" in info:
+        # Preserve tuple order (directed_bond orientation).
         kept["discovered_site"] = info["discovered_site"]
     if "rxn_num" in info:
         kept["rxn_num"] = info["rxn_num"]
@@ -692,7 +708,11 @@ def _apply_forest_trace(
         "pattern": pattern,
     }
     if "discovered_site" in info:
-        addition["discovered_site"] = _site_tuple(info["discovered_site"])
+        # Preserve map order for directed_bond (do not sort via _site_tuple).
+        disc = info["discovered_site"]
+        addition["discovered_site"] = (
+            disc if isinstance(disc, tuple) else _site_tuple(disc)
+        )
     trace["additions"][transform_id] = addition
     trace["transforms"].append(transform_id)
 
@@ -1094,8 +1114,10 @@ def _site_indexes(
     """Atom indexes the pattern calls the site. Defaults to map 1.
 
     ``directed_bond`` keeps ``site_map`` order as a tuple (map 1 first when
-    that is the chemically distinct end). Other kinds emit a frozenset
-    (undirected ``bond`` / singleton ``atom``).
+    that is the chemically distinct end) for unique-edit. Public yield
+    coerces via :func:`_present_site_info` (frozenset ``site`` + ordered
+    ``discovered_site``). Other kinds are already a frozenset (undirected
+    ``bond`` / singleton ``atom``).
     """
 
     key = pattern.get("site_map", 1)
@@ -1110,6 +1132,42 @@ def _site_indexes(
     if site_kind == "directed_bond":
         return idxs
     return frozenset(idxs)
+
+
+def _present_site_info(
+    info: SmartsSiteInfo,
+    emit_site: Site,
+    discovery: Site,
+    *,
+    site_kind: RuleSiteKind,
+) -> SmartsSiteInfo:
+    """Yield-only presentation of ``site`` / ``discovered_site``.
+
+    Unique-edit ``seen`` must already have keyed on ``discovery`` (directed
+    tuple + ``MapRankKey`` for ``directed_bond``).
+
+    For ``directed_bond``:
+    - ``site`` = ``frozenset(emit_site)`` (lex-canonical when
+      ``canonical_emitted_sites`` remapped ``emit_site``)
+    - ``discovered_site`` = ordered discovery tuple (orientation; always set)
+
+    For other kinds, leave canonical ``discovered_site`` semantics unchanged
+    (only when remap already set it on ``info``); ensure ``site`` is
+    ``emit_site``.
+    """
+
+    if site_kind == "directed_bond" and isinstance(discovery, tuple):
+        public_emit = (
+            frozenset(emit_site) if isinstance(emit_site, tuple) else emit_site
+        )
+        return {
+            **info,
+            "site": public_emit,
+            "discovered_site": discovery,
+        }
+    if info.get("site") is emit_site:
+        return info
+    return {**info, "site": emit_site}
 
 
 def react_at(
@@ -1279,7 +1337,16 @@ class SmartsReactionRule(ReactionRule):
                 )
                 if not products:
                     continue
+                # Unique-edit ``seen`` already keyed on directed signature.
+                # Presentation: frozenset site; directed_bond orientation on
+                # discovered_site (ordered tuple).
                 seen.add(signature)
+                info = _present_site_info(
+                    info,
+                    emit_site,
+                    site,
+                    site_kind=self.site_kind,
+                )
                 yield ProductsOfReaction(info=info, products=products)
 
     def _smarts2rxns(
@@ -1988,7 +2055,16 @@ class ResonanceRule(SmartsReactionRule):
                 )
                 if not products:
                     continue
+                # Unique-edit ``seen`` already keyed on directed signature.
+                # Presentation: frozenset site; directed_bond orientation on
+                # discovered_site (ordered tuple).
                 seen.add(signature)
+                info = _present_site_info(
+                    info,
+                    emit_site,
+                    site,
+                    site_kind=self.site_kind,
+                )
                 yield ProductsOfReaction(info=info, products=products)
 
 
@@ -2572,11 +2648,13 @@ def _whens(mapno: int, atomic_nums: Sequence[int]) -> tuple[When, ...]:
 class Dealkylation(ResonanceRule):
     """Cleaves a C-N, C-O, C-S, or C-C bond and oxygenates the carbon side.
 
-    The site is both atoms of the broken bond as an ordered tuple
-    (map 1 = oxygenated carbon, map 2 = heteroatom partner). Aromatic hits
-    react on the Kekulé parent where that bond is single (SMARTS-implied
-    order). ``site_kind="directed_bond"``: unique-edit keeps directed
-    MapRankKey because map 1 is chemically distinct.
+    Internally the site is both atoms of the broken bond as an ordered tuple
+    (map 1 = oxygenated carbon, map 2 = heteroatom partner) for unique-edit.
+    Public ``info["site"]`` is a frozenset; orientation is on
+    ``info["discovered_site"]`` (ordered tuple). Aromatic hits react on the
+    Kekulé parent where that bond is single (SMARTS-implied order).
+    ``site_kind="directed_bond"``: unique-edit keeps directed MapRankKey
+    because map 1 is chemically distinct.
     """
     sites_on = "bonds"
     site_kind: RuleSiteKind = "directed_bond"
@@ -2741,8 +2819,9 @@ class NDealkylation(ResonanceRule):
 
     Aromatic C–N hits (e.g. pyridine ring-open) match on the aromatic parent
     and react on the Kekulé parent where that bond is single — same parenting
-    as :class:`Dealkylation`. ``site_kind="directed_bond"``: emitted site is
-    an ordered ``(carbon, nitrogen)`` tuple (map 1 = oxygenated carbon).
+    as :class:`Dealkylation`. ``site_kind="directed_bond"``: unique-edit uses
+    ordered ``(carbon, nitrogen)`` (map 1 = oxygenated carbon); public ``site``
+    is a frozenset and ``discovered_site`` holds that ordered tuple.
 
     Forest ``phase1_steps`` is a degenerate singleton naming this rule; the
     default :meth:`canonical_plan` matches that (not UnstableOxygenation).

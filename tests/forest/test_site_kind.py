@@ -7,7 +7,8 @@ patterns/whens — see TODO.md.
 Taxonomy:
 - ``atom`` — singleton frozenset
 - ``bond`` — undirected bond frozenset (sorted site ranks in unique-edit)
-- ``directed_bond`` — ordered tuple of atom indexes (map order)
+- ``directed_bond`` — public frozenset ``site``; ordered tuple on
+  ``discovered_site`` (unique-edit uses map-order MapRankKey)
 - ``atom_pair`` — ResonancePair ends only (frozenset)
 """
 
@@ -90,15 +91,17 @@ def test_site_kind_matches_emitted_sites(rule_cls: type[ReactionRule]) -> None:
                 f"{rule_cls.__name__} site_kind={kind!r} but "
                 f"{smiles!r} emitted site={site!r} (len {len(site)})"
             )
+            assert isinstance(site, frozenset), (
+                f"{rule_cls.__name__} site_kind={kind!r} must emit frozenset "
+                f"site, got {type(site).__name__}: {site!r}"
+            )
             if kind == "directed_bond":
-                assert isinstance(site, tuple), (
-                    f"{rule_cls.__name__} directed_bond must emit tuple, "
-                    f"got {type(site).__name__}: {site!r}"
+                disc = por.info.get("discovered_site")
+                assert isinstance(disc, tuple), (
+                    f"{rule_cls.__name__} directed_bond must set "
+                    f"discovered_site tuple, got {disc!r}"
                 )
-            else:
-                assert isinstance(site, frozenset), (
-                    f"{rule_cls.__name__} site_kind={kind!r} must emit frozenset, "
-                    f"got {type(site).__name__}: {site!r}"
-                )
+                assert len(disc) == 2
+                assert frozenset(disc) == site
             saw_any = True
     assert saw_any
