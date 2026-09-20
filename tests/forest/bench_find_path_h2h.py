@@ -1,23 +1,18 @@
 #!/usr/bin/env python3
-"""Head-to-head find_path: archived forest (PhaseOneQF) vs live forest (PhaseOne).
+"""Three-way path-search H2H: archive BFS, archive DFS, live find_path.
 
-Same reactants/targets. Reports work counters that exist on both sides plus
-side-specific billed units, with labels that say what each number means.
+Archive (read-only ``xenosite._archive_forest``):
+  classic ``bfs`` / ``dfs`` metabolite enumeration (PhaseOneQF), single-reactant
+  mode. Cost bound only at the harness: stop after ``MAX_MOLS`` yielded
+  metabolites (``max_paths=MAX_MOLS`` + consumer break). DFS passes
+  ``all_paths=True`` so an empty endpoint set does not trip the archive's
+  early-return quirk. No archive source edits.
 
-Comparable columns (both sides expose these):
-  mol_edits   — accepted reaction applies / kekulé overlays
-  rule_exp    — frontier rule expansions (metabolize / enumerate calls)
-  nodes       — poc: queue pops; forest: nodes_enqueued
-  wall_s      — wall time
+Live (``xenosite.forest``):
+  ``find_path`` with PhaseOne and its native ``max_nodes`` budget.
 
-Side-specific (not the same unit — do not equate):
-  forest billed = linearizations_applied + site_applies
-    (guided PhaseOneQF often has site_applies=0; linearizations are the work)
-  poc billed    = mol_edits + nodes
-
-Rulesets (closest Phase I + QF pair; neither default includes conjugation):
-  forest: PhaseOneQF  (find_path default)
-  poc:    PhaseOne    (rulesets.PhaseOne; includes QuinoneFormation)
+Cases emphasize mid-size / multi-edit targets where ordering blow-up makes
+BFS/DFS miss under ``MAX_MOLS`` while live find_path returns a long plan fast.
 
 Re-run:
   uv run python tests/forest/bench_find_path_h2h.py
@@ -25,6 +20,7 @@ Re-run:
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import time
 import warnings
@@ -33,332 +29,315 @@ from pathlib import Path
 
 from rdkit import Chem
 
-from xenosite._archive_forest import PathSearchCounters
-from xenosite._archive_forest.guided_path import find_path as forest_find_path
+from xenosite._archive_forest.bfs import bfs as archive_bfs
+from xenosite._archive_forest.bfs import dfs as archive_dfs
 from xenosite._archive_forest.utils import canon_smi
 from xenosite.forest.find_path import PathCounters
-from xenosite.forest.find_path import find_path as poc_find_path
+from xenosite.forest.find_path import find_path as live_find_path
 from xenosite.forest.rdkitutil import canon_smiles
 from xenosite.forest.rulesets import PhaseOne
 
 warnings.filterwarnings("ignore", category=UserWarning, module="xenosite._archive_forest")
 
 ROOT = Path(__file__).resolve().parents[2]
-ART_OUT = ROOT / "artifacts" / "bench_find_path_h2h_post_swap.out"
-ART_LIVE = ROOT / "artifacts" / "bench_find_path_h2h_post_swap.live.log"
+ART_OUT = ROOT / "artifacts" / "bench_find_path_h2h_3way.out"
+ART_LIVE = ROOT / "artifacts" / "bench_find_path_h2h_3way.live.log"
 
-# Shared ceilings: high enough for hard cases; not a contest target.
-FOREST_MAX_EXPANSIONS = 200
-POC_MAX_NODES = 800
-MAX_PATHS = 1
+# Shared archive yield cap. Large enough that a short path can appear; small
+# enough that multi-edit ordering blow-up hits the cap instead of hanging.
+MAX_MOLS = 200
+ARCHIVE_DEPTH = 4
+LIVE_MAX_NODES = 800
+MAX_PATHS_LIVE = 1
 
+# Mid-size / multi-edit stories (not toy 2–4 atom cases).
 CASES: list[tuple[str, str, str]] = [
-    # label, reactant, target
-    ("anisole→phenol", "COc1ccccc1", "Oc1ccccc1"),
-    ("benzene→quinone", "c1ccccc1", "O=C1C=CC(=O)C=C1"),
-    ("phenol→quinone", "Oc1ccccc1", "O=C1C=CC(=O)C=C1"),
-    ("butylbenzene→ω-OH", "c1ccc(CCCC)cc1", "OCCCCc1ccccc1"),
+    # eugenol → allyl-quinone (4-step plan; BFS/DFS cap)
     (
-        "TBA→enyne aldehyde",
-        "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12",
-        "CC(C)(C)C#CC=CC=O",
+        "eugenol→allyl-quinone",
+        "COc1ccc(CC=C)cc1O",
+        "O=C1C=CC(=O)C(CC=C)=C1",
     ),
-    ("acetate→catechol", "CC(=O)Oc1ccc(OC)cc1", "Oc1ccc(O)cc1"),
-    ("PhCH2OH→quinone", "OCc1ccccc1", "O=C1C=CC(=O)C=C1"),
-    # Forest flaky / high-budget under PhaseOneQF; poc should solve.
+    # 3,4-dimethoxyphenethylamine → catechol (2 unordered dealkylations)
+    (
+        "dimethoxy-PEA→catechol",
+        "COc1ccc(CCN)cc1OC",
+        "NCCc1ccc(O)c(O)c1",
+    ),
+    # 4-methoxyphenol → hydroxyquinone (4 concurrent edits)
     (
         "MeOPhOH→hydroxyquinone",
         "COc1ccc(O)cc1",
         "O=C1C=C(O)C(=O)C(O)=C1",
     ),
+    # TBA (22 heavy atoms): frontier fills MAX_MOLS before the cleavage product
     (
-        "MeOPhOH→orthocarbonate Q",
-        "COc1ccc(O)cc1",
-        "O=C1C=CC(OC(O)O)=CC1=O",
+        "TBA→enyne aldehyde",
+        "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12",
+        "CC(C)(C)C#CC=CC=O",
     ),
-    ("naphthalene→1,4-NQ", "c1ccc2ccccc2c1", "O=C1C=CC(=O)c2ccccc12"),
+    # 2-methoxynaphthalene → 1,2-NQ (reachable 3-step plan).
+    # Contrast: 2-MeO → 1,4-NQ has no PhaseOne path (see PERFORMANCE.md).
+    (
+        "2-MeO-naph→1,2-NQ",
+        "COc1ccc2ccccc2c1",
+        "O=C1C(=O)c2ccccc2C=C1",
+    ),
 ]
 
 
 @dataclass
-class SideResult:
+class ArchiveResult:
     hit: bool
+    valid: bool
     product: str | None
     seconds: float
-    work: dict
-    valid: bool  # hit and product canonically equals target
+    path_len: int | None
+    mols_yielded: int
+    capped: bool
 
 
-def _forest_product(outcome) -> str | None:
-    if not outcome.smiles:
-        return None
-    last = outcome.smiles[-1]
-    return canon_smi(last) if last else None
+@dataclass
+class LiveResult:
+    hit: bool
+    valid: bool
+    product: str | None
+    seconds: float
+    path_len: int | None
+    plan_str: str | None
+    nodes: int
+    mol_edits: int
+    rule_expansions: int
+    billed: int
+    budget: int
+    budget_exhausted: bool
 
 
-def _valid_product(product: str | None, target_c: str) -> bool:
-    """Correctness gate: a hit counts only when the product is the target."""
-
-    return product is not None and product == target_c
-
-
-def run_forest(reactant: str, target: str, target_c: str) -> SideResult:
-    counters = PathSearchCounters()
-    t0 = time.perf_counter()
-    hits = list(
-        forest_find_path(
-            reactant,
-            target,
-            ruleset="PhaseOneQF",
-            max_paths=MAX_PATHS,
-            max_expansions=FOREST_MAX_EXPANSIONS,
-            counters=counters,
+def _git_sha() -> str:
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=ROOT,
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
         )
+    except Exception:
+        return "unknown"
+
+
+def run_archive(search_fn, reactant: str, target_c: str) -> ArchiveResult:
+    """Enumerate metabolites; stop at target hit or MAX_MOLS yields."""
+
+    t0 = time.perf_counter()
+    n = 0
+    product: str | None = None
+    path_len: int | None = None
+    valid = False
+
+    kwargs: dict = dict(
+        ruleset="PhaseOneQF",
+        depth=ARCHIVE_DEPTH,
+        max_paths=MAX_MOLS,
+        phase1=True,
     )
-    elapsed = time.perf_counter() - t0
-    product = _forest_product(hits[0]) if hits else None
-    hit = bool(hits)
-    return SideResult(
-        hit=hit,
-        product=product,
-        seconds=elapsed,
-        work={
-            "mol_edits": counters.mol_edits,
-            "rule_expansions": counters.rule_expansions,
-            "nodes": counters.nodes_enqueued,
-            "linearizations": counters.linearizations_applied,
-            "site_applies": counters.site_applies,
-            "billed": counters.billed(),
-            "budget_exhausted": counters.budget_exhausted,
-        },
-        valid=_valid_product(product, target_c) if hit else False,
+    # Archive DFS early-returns when the endpoint set is empty unless all_paths.
+    if search_fn is archive_dfs:
+        kwargs["all_paths"] = True
+
+    for _smi, sites, mols in search_fn([reactant], **kwargs):
+        n += 1
+        prod = canon_smi(mols[-1]) if mols else None
+        product = prod
+        if prod == target_c:
+            valid = True
+            path_len = len(sites) if sites is not None else None
+            break
+        if n >= MAX_MOLS:
+            break
+
+    capped = (not valid) and n >= MAX_MOLS
+    return ArchiveResult(
+        hit=valid,
+        valid=valid,
+        product=product if valid else None,
+        seconds=time.perf_counter() - t0,
+        path_len=path_len,
+        mols_yielded=n,
+        capped=capped,
     )
 
 
-def run_poc(reactant: str, target: str, target_c: str) -> SideResult:
+def run_live(reactant: str, target: str, target_c: str) -> LiveResult:
     counters = PathCounters()
     t0 = time.perf_counter()
     hits = list(
-        poc_find_path(
+        live_find_path(
             reactant,
             target,
             ruleset=PhaseOne,
             counters=counters,
-            max_paths=MAX_PATHS,
-            max_nodes=POC_MAX_NODES,
+            max_paths=MAX_PATHS_LIVE,
+            max_nodes=LIVE_MAX_NODES,
         )
     )
     elapsed = time.perf_counter() - t0
-    product = hits[0].smiles if hits else None
-    if product is not None:
-        product = canon_smiles(product)
-    hit = bool(hits)
-    return SideResult(
-        hit=hit,
+    product = None
+    path_len = None
+    plan_str = None
+    if hits:
+        product = canon_smiles(hits[0].smiles)
+        plan = hits[0].plan
+        plan_str = str(plan)
+        steps = getattr(plan, "steps", None)
+        path_len = len(steps) if steps is not None else None
+    valid = product == target_c if product is not None else False
+    nodes = int(counters.nodes)
+    exhausted = (not valid) and nodes >= LIVE_MAX_NODES
+    return LiveResult(
+        hit=bool(hits),
+        valid=valid,
         product=product,
         seconds=elapsed,
-        work={
-            "mol_edits": counters.mol_edits,
-            "rule_expansions": counters.rule_expansions,
-            "nodes": counters.nodes,
-            "sites_considered": counters.sites_considered,
-            "sites_skipped": counters.sites_skipped,
-            "billed": counters.billed,
-        },
-        valid=_valid_product(product, target_c) if hit else False,
+        path_len=path_len if valid else None,
+        plan_str=plan_str if valid else None,
+        nodes=nodes,
+        mol_edits=int(counters.mol_edits),
+        rule_expansions=int(counters.rule_expansions),
+        billed=int(counters.billed),
+        budget=LIVE_MAX_NODES,
+        budget_exhausted=exhausted,
     )
 
 
-def _gate(fr: SideResult, pr: SideResult) -> str:
-    """Classify correctness for speed celebration.
-
-    both_ok       — both hit with product == target (speed comparable)
-    poc_only_ok   — poc valid; forest miss/EXH/invalid (poc win, note separately)
-    forest_only_ok — forest valid; poc miss/invalid (poc regression)
-    invalid_hit   — a side claimed hit but product != target
-    both_miss     — neither found a valid path
-    """
-
-    if fr.valid and pr.valid:
-        return "both_ok"
-    if pr.valid and not fr.valid:
-        return "poc_only_ok"
-    if fr.valid and not pr.valid:
-        return "forest_only_ok"
-    if (fr.hit and not fr.valid) or (pr.hit and not pr.valid):
-        return "invalid_hit"
-    return "both_miss"
+def _fmt_archive(label: str, r: ArchiveResult) -> str:
+    if r.valid:
+        status = f"ok hops={r.path_len}"
+    elif r.capped:
+        status = "CAP"
+    else:
+        status = "miss"
+    return f"{label} {r.seconds:.3f}s  {status}  mols={r.mols_yielded}/{MAX_MOLS}"
 
 
-def _fmt_side(label: str, r: SideResult) -> str:
-    """Print comparable counters first; side billed after."""
-
-    if label == "forest":
-        return (
-            "ed=%s re=%s nd=%s  bill(lin+sa)=%s (L=%s sa=%s)  %.3fs%s"
-            % (
-                r.work["mol_edits"],
-                r.work["rule_expansions"],
-                r.work["nodes"],
-                r.work["billed"],
-                r.work["linearizations"],
-                r.work["site_applies"],
-                r.seconds,
-                " EXH" if r.work.get("budget_exhausted") else "",
-            )
-        )
-    return "ed=%s re=%s nd=%s  bill(ed+nd)=%s  %.3fs" % (
-        r.work["mol_edits"],
-        r.work["rule_expansions"],
-        r.work["nodes"],
-        r.work["billed"],
-        r.seconds,
+def _fmt_live(r: LiveResult) -> str:
+    if r.valid:
+        status = f"ok steps={r.path_len}"
+    elif r.budget_exhausted:
+        status = "EXH"
+    elif r.hit:
+        status = "INVALID"
+    else:
+        status = "miss"
+    return (
+        f"live {r.seconds:.3f}s  {status}  "
+        f"nodes={r.nodes}/{r.budget}  ed={r.mol_edits}  "
+        f"re={r.rule_expansions}  bill={r.billed}"
     )
-
-
-def _forest_idle(r: SideResult) -> bool:
-    """True only when forest did no billed work (not merely site_applies==0)."""
-    return int(r.work.get("billed", 0) or 0) == 0 and int(
-        r.work.get("mol_edits", 0) or 0
-    ) == 0
 
 
 def main() -> int:
     ART_OUT.parent.mkdir(parents=True, exist_ok=True)
-    live = ART_LIVE.open("w")
+    live_f = ART_LIVE.open("w")
     lines: list[str] = []
+    sha = _git_sha()
 
     def log(msg: str = "") -> None:
         print(msg, flush=True)
-        live.write(msg + "\n")
-        live.flush()
+        live_f.write(msg + "\n")
+        live_f.flush()
         lines.append(msg)
 
-    want = canon_smiles
-    log("find_path H2H  forest=PhaseOneQF  poc=PhaseOne  (after xf)")
+    log(f"find_path H2H 3-way  sha={sha}")
     log(
-        "ceilings: forest max_expansions=%s  poc max_nodes=%s  max_paths=%s"
-        % (FOREST_MAX_EXPANSIONS, POC_MAX_NODES, MAX_PATHS)
+        f"archive: PhaseOneQF bfs/dfs enum  depth={ARCHIVE_DEPTH}  "
+        f"MAX_MOLS={MAX_MOLS} (harness yield cap)"
     )
     log(
-        "comparable: mol_edits (ed) / rule_expansions (re) / nodes (nd) / wall_s"
+        f"live:    PhaseOne find_path  max_nodes={LIVE_MAX_NODES}  "
+        f"max_paths={MAX_PATHS_LIVE}"
     )
-    log(
-        "billed units differ: forest=lin+site_applies; poc=mol_edits+nodes"
-    )
-    log(
-        "correctness gate: valid = hit AND product canonically equals target"
-    )
+    log("archive path length = reaction hops on the metabolite walk")
+    log("live path length    = len(plan.steps) on PathOutcome")
     log(f"live log: {ART_LIVE}")
     log()
-    rows = []
+
+    rows: list[tuple[str, str, ArchiveResult, ArchiveResult, LiveResult]] = []
     for i, (label, reactant, target) in enumerate(CASES, 1):
-        target_c = want(Chem.MolFromSmiles(target))
-        log("[%s/%s] %s ..." % (i, len(CASES), label))
-        log("  forest...")
-        fr = run_forest(reactant, target, target_c)
-        log(
-            "    %s hit=%s valid=%s product=%s"
-            % (_fmt_side("forest", fr), fr.hit, fr.valid, fr.product)
-        )
-        if _forest_idle(fr) and not fr.hit:
-            log("    WARN: forest idle (billed=0, no hit)")
-        log("  poc...")
-        pr = run_poc(reactant, target, target_c)
-        log(
-            "    %s hit=%s valid=%s product=%s"
-            % (_fmt_side("poc", pr), pr.hit, pr.valid, pr.product)
-        )
-
-        gate = _gate(fr, pr)
-        match = fr.valid and pr.valid and fr.product == pr.product == target_c
-        rows.append((label, reactant, target_c, fr, pr, match, gate))
-        log("  gate=%s  match=%s  target=%s" % (gate, match, target_c))
+        target_c = canon_smiles(Chem.MolFromSmiles(target))
+        ha = Chem.MolFromSmiles(reactant).GetNumHeavyAtoms()
+        log(f"[{i}/{len(CASES)}] {label}  (reactant heavy atoms={ha}) ...")
+        log(f"  reactant={reactant}")
+        log(f"  product ={target}")
+        log("  archive bfs...")
+        br = run_archive(archive_bfs, reactant, target_c)
+        log(f"    {_fmt_archive('bfs', br)}")
+        log("  archive dfs...")
+        dr = run_archive(archive_dfs, reactant, target_c)
+        log(f"    {_fmt_archive('dfs', dr)}")
+        log("  live find_path...")
+        lr = run_live(reactant, target, target_c)
+        log(f"    {_fmt_live(lr)}")
+        if lr.plan_str:
+            log(f"    plan={lr.plan_str}")
+        log(f"  target={target_c}")
         log()
+        rows.append((label, target_c, br, dr, lr))
 
-    log("=" * 140)
+    log("=" * 110)
     log(
-        "%-24s  %-12s  %8s  %8s  %-55s  %-40s"
-        % ("case", "gate", "forest_s", "poc_s", "forest ed/re/nd", "poc ed/re/nd")
+        f"{'case':26}  {'bfs_s':>7}  {'dfs_s':>7}  {'live_s':>7}  "
+        f"{'bfs':^16}  {'dfs':^16}  {'live':^24}"
     )
-    log("-" * 140)
-    forest_total = poc_total = 0.0
-    both_ok_f = both_ok_p = 0.0
-    n_both_ok = n_poc_only = n_forest_only = n_invalid = n_miss = 0
-    for label, _r, _target_c, fr, pr, match, gate in rows:
-        forest_total += fr.seconds
-        poc_total += pr.seconds
-        if gate == "both_ok":
-            n_both_ok += 1
-            both_ok_f += fr.seconds
-            both_ok_p += pr.seconds
-        elif gate == "poc_only_ok":
-            n_poc_only += 1
-        elif gate == "forest_only_ok":
-            n_forest_only += 1
-        elif gate == "invalid_hit":
-            n_invalid += 1
-        else:
-            n_miss += 1
-        fcell = "ed=%s re=%s nd=%s b=%s(L=%s sa=%s)%s%s" % (
-            fr.work["mol_edits"],
-            fr.work["rule_expansions"],
-            fr.work["nodes"],
-            fr.work["billed"],
-            fr.work["linearizations"],
-            fr.work["site_applies"],
-            " EXH" if fr.work.get("budget_exhausted") else "",
-            " miss" if not fr.hit else ("" if fr.valid else " INVALID"),
-        )
-        pcell = "ed=%s re=%s nd=%s b=%s%s" % (
-            pr.work["mol_edits"],
-            pr.work["rule_expansions"],
-            pr.work["nodes"],
-            pr.work["billed"],
-            " miss" if not pr.hit else ("" if pr.valid else " INVALID"),
-        )
+    log("-" * 110)
+
+    tot_b = tot_d = tot_l = 0.0
+    for label, _t, br, dr, lr in rows:
+        tot_b += br.seconds
+        tot_d += dr.seconds
+        tot_l += lr.seconds
+
+        def ac(r: ArchiveResult) -> str:
+            if r.valid:
+                return f"ok hops={r.path_len} n={r.mols_yielded}"
+            if r.capped:
+                return f"CAP n={r.mols_yielded}"
+            return "miss"
+
+        def lc(r: LiveResult) -> str:
+            if r.valid:
+                return f"ok steps={r.path_len} nd={r.nodes}"
+            if r.budget_exhausted:
+                return f"EXH nd={r.nodes}"
+            return f"miss nd={r.nodes}"
+
         log(
-            "%-24s  %-12s  %8.3f  %8.3f  %-55s  %-40s"
-            % (label, gate, fr.seconds, pr.seconds, fcell, pcell)
+            f"{label:26}  {br.seconds:7.3f}  {dr.seconds:7.3f}  {lr.seconds:7.3f}  "
+            f"{ac(br):^16}  {ac(dr):^16}  {lc(lr):^24}"
         )
-    log("=" * 140)
+
+    log("=" * 110)
     log()
-    log("Totals: forest=%.3fs  poc=%.3fs  (all cases)" % (forest_total, poc_total))
-    if n_both_ok:
-        speedup = both_ok_f / both_ok_p if both_ok_p > 0 else float("inf")
-        log(
-            "Speed (both_ok only, n=%s): forest=%.3fs  poc=%.3fs  ratio=%.2fx"
-            % (n_both_ok, both_ok_f, both_ok_p, speedup)
-        )
-    log(
-        "Gates: both_ok=%s  poc_only_ok=%s  forest_only_ok=%s  "
-        "invalid_hit=%s  both_miss=%s"
-        % (n_both_ok, n_poc_only, n_forest_only, n_invalid, n_miss)
-    )
+    log(f"Totals wall: bfs={tot_b:.3f}s  dfs={tot_d:.3f}s  live={tot_l:.3f}s")
+    n_b = sum(1 for _, _, br, _, _ in rows if br.valid)
+    n_d = sum(1 for _, _, _, dr, _ in rows if dr.valid)
+    n_l = sum(1 for _, _, _, _, lr in rows if lr.valid)
+    log(f"Valid hits: bfs={n_b}/{len(rows)}  dfs={n_d}/{len(rows)}  live={n_l}/{len(rows)}")
     log()
     log("Metric definitions:")
-    log("  mol_edits (ed)     both: accepted reaction apply / overlay")
-    log("  rule_expansions    both: frontier rule metabolize/enumerate")
-    log("  nodes (nd)         poc queue pops; forest nodes_enqueued")
-    log("  forest billed      linearizations_applied + site_applies")
-    log("                     (sa often 0 on guided; lin is the real work)")
-    log("  poc billed         mol_edits + nodes")
+    log(f"  MAX_MOLS={MAX_MOLS}        archive metabolite yield cap (harness)")
+    log(f"  ARCHIVE_DEPTH={ARCHIVE_DEPTH}     classic hop ceiling")
+    log(f"  LIVE_MAX_NODES={LIVE_MAX_NODES}   live find_path node budget")
+    log("  CAP                  archive hit MAX_MOLS without seeing the target")
+    log("  EXH                  live nodes reached max_nodes without a valid hit")
     log("  Conjugation is not in PhaseOneQF / PhaseOne.")
-    log(
-        "  Speed celebration only on both_ok; poc_only_ok noted separately "
-        "(forest EXH/miss)."
-    )
-    idle = [label for label, _r, _t, fr, _pr, _m, _g in rows if _forest_idle(fr)]
-    if idle:
-        log("  IDLE forest cases (invalid for H2H): %s" % ", ".join(idle))
+
     body = "\n".join(lines) + "\n"
     ART_OUT.write_text(body)
     log(f"wrote {ART_OUT}")
-    live.close()
-    if n_forest_only or n_invalid:
-        return 1
-    if idle:
-        return 2
+    live_f.close()
     return 0
 
 
