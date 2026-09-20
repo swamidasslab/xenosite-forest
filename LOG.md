@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Moving formal charge, and hydrogen on a neutral carbon, with a kekulé bond flip repairs 1,4-dinitrobenzene: the second nitro parses as `O=Nc1ccc([N+](=O)[O-])cc1` plus `O`. Pyridazine still yields `C=CC=CN`. Both Kekulé forms parse and neither nitrogen is charged, so the dropped atom is the reaction, not a charge left on the wrong atom.
+
+## 2026-09-19
+
 - Forest states are classes on the local RDKit mol. `NoTracingMol` means `atom_trace` is absent and does not say whether `_forest` exists. `NoForestMol` is a `NoTracingMol` with `_forest` none, because a missing forest has no trace. `ForestNoTracingMol` is both `NoTracingMol` and `ForestMol`. `ForestTracingMol` is a `ForestMol` only. Constructors that do not copy `_forest` return `NoForestMol`. `ensure_forest` and `ensure_tracing` install in place and do not reset depth.
 
 ## 2026-09-19
