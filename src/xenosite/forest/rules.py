@@ -2715,13 +2715,18 @@ def _ndealk(
     )
 
 
-class NDealkylation(SmartsReactionRule):
+class NDealkylation(ResonanceRule):
     """Cleaves a carbon-nitrogen bond and oxygenates the carbon side.
 
     These are the nitrogen rows of dealkylation. A methyl carbon is the whole
     leaving piece (``leave_count`` 1). Any larger alkyl still carries atoms
     the pattern does not name, so ``leave_count`` is None. ``breaks_ring`` is
     filled from the cleaved bond, not stored as a second class.
+
+    Aromatic C–N hits (e.g. pyridine ring-open) match on the aromatic parent
+    and react on the Kekulé parent where that bond is single — same parenting
+    as :class:`Dealkylation`. ``site_kind="directed_bond"``: map 1 is the
+    carbon that receives oxygen.
 
     Forest ``phase1_steps`` is a degenerate singleton naming this rule; the
     default :meth:`canonical_plan` matches that (not UnstableOxygenation).
@@ -2730,7 +2735,7 @@ class NDealkylation(SmartsReactionRule):
     """
     sites_on = "bonds"
     site_kind: RuleSiteKind = "directed_bond"
-    _example_substrates: tuple[str, ...] = ('CCN', 'CN(C)C')
+    _example_substrates: tuple[str, ...] = ("CCN", "CN(C)C", "c1ccncc1")
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (

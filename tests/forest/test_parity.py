@@ -122,6 +122,16 @@ def test_trimethylamine_ndealkylation_matches_old():
     assert new == old
 
 
+def test_pyridine_ndealkylation_ring_open_matches_old():
+    """Aromatic C–N needs ResonanceRule parenting; SMARTS alone matched but did not react."""
+
+    old = _old(OldNDealkylation(), "c1ccncc1")
+    new = _new(NDealkylation(), "c1ccncc1")
+    assert new == old
+    assert "N=CC=CC=CO" in new
+    assert "N=CC=CC=C=O" in new
+
+
 def test_filter_skips_named_methyl_and_keeps_open_alkyl():
     """The skip reads ``leave_count``. It does not ask which rule this is."""
 

@@ -63,7 +63,7 @@ More correct. Not a problem in live forest. ResonanceRule picks the Kekulé pare
 
 Status: documented (shipped on PR #15)
 
-Plain `SmartsReactionRule.metabolites` no longer fans out over `_kekule_forms(mol)`. Matching and unique-edit run on the input (usually aromatic) mol. Rules that need a specific Kekulé bond order for `RunReactants` are `ResonanceRule` subclasses: aromatic-matching SMARTS (`=,:` / `-,:`), then `_reactant_parent` selects the assignment whose maps 1–2 match the SMARTS-implied order (`_smarts_mapped_bond_order`). Unique-edit `incident_orders` stay on the aromatic parent so Kekulé 1.0↔2.0 flips do not split equivalent sites (phenol Hydroxylation: 0 CSMI). Reparented: Dealkylation, AzoSplitting, ThiopheneSulfurOxidation, NitrogenReduction (hydroxylamine). Antipattern note: HEURISTICS (not approved to revive).
+Plain `SmartsReactionRule.metabolites` no longer fans out over `_kekule_forms(mol)`. Matching and unique-edit run on the input (usually aromatic) mol. Rules that need a specific Kekulé bond order for `RunReactants` are `ResonanceRule` subclasses: aromatic-matching SMARTS (`=,:` / `-,:`), then `_reactant_parent` selects the assignment whose maps 1–2 match the SMARTS-implied order (`_smarts_mapped_bond_order`). Unique-edit `incident_orders` stay on the aromatic parent so Kekulé 1.0↔2.0 flips do not split equivalent sites (phenol Hydroxylation: 0 CSMI). Reparented: Dealkylation, NDealkylation, AzoSplitting, ThiopheneSulfurOxidation, NitrogenReduction (hydroxylamine). Antipattern note: HEURISTICS (not approved to revive).
 
 ## Epoxidation bond site / undirected map ranks
 
