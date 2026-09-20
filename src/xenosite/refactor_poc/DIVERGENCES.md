@@ -130,11 +130,12 @@ More correct. Not a problem in the proof of concept. `*` is not oxygen. The nitr
 
 ## Dephosphorylation of methyl phosphate
 
-Substructure matching uniquifies the query. Maps 1, 4, and 5 are the same oxygen in the SMARTS, so one match is kept. That match cleaves the ester. The old reaction also cleaves a P-OH bond and writes water plus methyl phosphite.
+Substructure matching uniquifies the query. Maps 1, 4, and 5 are the same oxygen class in the old SMARTS, so one match was kept — and RDKit kept a P-OH cleavage (water + methyl phosphite) instead of the ester.
 
-- Reactant: `COP(=O)(O)O`
-- Only old: `CO[PH](=O)O`, `O`
-- Only new: none
-- Shared: `CO`, `O=[PH](O)O`
+The pattern now requires map 1 to be carbon-bound (`[#8;$([#8][#6]):1]`), so uniquify cannot prefer P-OH.
 
-More correct. Not a problem in the proof of concept. Dephosphorylation takes the phosphate off the carbon. `CO[PH](=O)O` still has the methyl on phosphorus. Water is that P-OH cleavage, not the ester. The shared set is methanol and the phosphate fragment.
+- Reactant: `COP(=O)(O)O` / `O=P(O)(O)OC`
+- Only old (unconstrained SMARTS + uniquify): `CO[PH](=O)O`, `O`
+- New / shared: `CO`, `O=[PH](O)O`
+
+More correct. Dephosphorylation takes the phosphate off the carbon.

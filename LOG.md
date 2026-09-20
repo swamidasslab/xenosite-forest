@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+- Harness batch on remaining xfails: basic ports cleared (RuleSet name `DHE` not `DH_E`; depth-1 diol miss via `max_nodes=2`; forest invalid target SMILES asserts `ValueError`, not any-path). Dephosphorylation SMARTS requires carbon-bound O so uniquify cannot keep P-OH water cleavage (`DIVERGENCES.md` updated). Cleared 4 xfails (3 basic + 1 dephos example).
+- Remaining ~105 xfails: quinone historical (~67), rules chemistry (~28), GSH incomplete SOMs (4), phaseone wrong-rule-on-plan / reduction misses (5). Not search-heuristic work.
+
+## 2026-09-19
+
 - Cleavage products were yielded as dotted multi-component mols. Production now follows forest clean order: react → split connected components (`sanitized_fragments` / `carry_forest`) → `forest_trace` per fragment. No dotted yields. Anisole demethylation before: `O=CO.Oc1ccccc1` / `C=O.Oc1…` / `CO.Oc1…`; after: separate `Oc1ccccc1`, `O=CO`, `C=O`, `CO` (plus ring-opened singles).
 - Port harness: `emits_product` asserts single-component canons; `find_phaseone` uses catalog `PhaseOne`. Cleared 37 XPASS xfails (rules/phaseone/basic); remaining xfails are real chemical or wrong-rule-on-plan misses.
 

@@ -1,6 +1,6 @@
 # TODO
 
-- Clear `@pytest.mark.regression` xfails in `tests/refactor_poc/` (rules/quinone/conjugates/phaseone/basic ports) without weakening asserts
+- Clear remaining `@pytest.mark.regression` xfails in `tests/refactor_poc/` (mostly quinone + rules chemistry; GSH SOM gaps; phaseone wrong-rule / reduction misses) without weakening asserts
 - Deferred until testing is mature: tautomer SMARTS matching (match a tautomer of the pattern; if it hits, infer the tautomerization) for more robust matching without a breaking change, new errors, or a major slowdown — not this phase
 - Later: SMARTS least-common atoms first, and the isotope atom first when a tag is used
 - Tautomer matching (TautomerQuery versus a Tautomerization rule) is deferred; it is out of this phase because it is not needed for Phase I + quinone formation + conjugation

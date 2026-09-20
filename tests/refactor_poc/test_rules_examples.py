@@ -32,7 +32,6 @@ _XFAIL_IDS: frozenset[str] = frozenset({
     'dehydration-Reaction7389_11214_Step2',
     'dehydrogenation-Reaction3183_3757_Already_Hydroxylated1_SRT',
     'dehydrogenation-Reaction3183_3757_Already_Hydroxylated2_SRT',
-    'dephosphorylation-Dephosphorylation_SRT1',
     'hydrogenation-BigMolHydrogenation_SRT',
     'hydrogenation-NAPQI_Reduction_SR',
     'hydrogenation-NAPQI_Reduction_SRT',

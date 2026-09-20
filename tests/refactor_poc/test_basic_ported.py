@@ -62,14 +62,13 @@ def test_propane_dehydrogenation_to_propene():
     assert hits
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_propane_dehydrogenation_followed_by_epoxidation():
     hits = list(
         find_path(
             "CCC",
             "C1OC1C",
-            ruleset=RuleSet((Dehydrogenation, Epoxidation), name="DH_E"),
+            # RuleSet names may not contain '_'.
+            ruleset=RuleSet((Dehydrogenation, Epoxidation), name="DHE"),
             max_nodes=200,
         )
     )
@@ -82,37 +81,43 @@ def test_hydroxyl_should_not_be_dealkylated():
     assert frozenset([1, 2]) not in sites
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
-def test_epoxide_opening2():
+def test_epoxide_opening2_rejects_invalid_target():
+    """Forest ``C1=CC=CC1OC1`` does not parse; forest ``find_path`` treated
+    ``end_mol=None`` as any-path. Poc must not soft-pass: invalid SMILES
+    raises, and a depth-1 budget still misses the diol on a valid target.
+    """
+
+    rs = RuleSet((Epoxidation, EpoxideOpening), name="EO")
+    with pytest.raises(ValueError, match="could not parse"):
+        list(find_path("c1ccccc1", "C1=CC=CC1OC1", ruleset=rs, max_nodes=2))
+
     hits = list(
         find_path(
             "c1ccccc1",
-            "C1=CC=CC1OC1",
-            ruleset=RuleSet((Epoxidation, EpoxideOpening), name="EO"),
-            max_nodes=200,
+            "C1=CC=CC(O)C1O",
+            ruleset=rs,
+            max_nodes=2,
+            max_paths=3,
         )
     )
-    assert hits
+    assert hits == []
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_epoxide_opening1_fail():
-    """Depth-1 find_path must not reach the diol from benzene."""
+    """Depth-1 budget must not reach the diol from benzene (forest depth=1)."""
 
     hits = list(
         find_path(
             "c1ccccc1",
             "C1=CC=CC(O)C1O",
             ruleset=RuleSet((Epoxidation, EpoxideOpening), name="EO"),
-            max_nodes=40,
+            # Forest default depth=1. Poc hits the diol by node 3; keep a
+            # one-hop ceiling so the empty-hits assert stays meaningful.
+            max_nodes=2,
             max_paths=3,
         )
     )
-    # Forest depth-default miss: epoxidation alone cannot yield the diol in one hop
-    # under a tight ceiling. Keep the empty-hits assert.
-    assert len(hits) == 0
+    assert hits == []
 
 
 def _dealk_sanitize(reactant: str) -> None:

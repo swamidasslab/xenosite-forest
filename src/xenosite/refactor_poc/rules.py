@@ -2362,13 +2362,19 @@ _HALIDE = (9, 17, 35, 53, 85)
 
 
 class Dephosphorylation(SmartsReactionRule):
-    """Cleaves an O-P bond of a phosphate. The oxygen stays on the organic fragment."""
+    """Cleaves an ester O-P bond of a phosphate. The oxygen stays on the organic fragment.
+
+    Map 1 must be the carbon-bound oxygen. Plain P-OH matches are excluded so
+    RDKit uniquify cannot keep a water / methyl-phosphite cleavage instead of
+    the ester (see DIVERGENCES.md).
+    """
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
-            "[#8:1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]",
+            "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>"
+            "[*:1].[*:2](=[*:3])([*:4])[*:5]",
             describe(*branches(_whens(2, (15,)), cleaves=True)),
         ),
     )
