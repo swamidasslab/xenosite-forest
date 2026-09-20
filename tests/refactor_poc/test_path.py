@@ -6,7 +6,8 @@ from rdkit import Chem
 from xenosite.forest.step_plan import Deps
 from xenosite.refactor_poc.find_path import PathCounters, atom_diff, canon_smiles, find_path
 from xenosite.refactor_poc.records import AtomRef
-from xenosite.refactor_poc.rules import Hydroxylation, ReactionRule, RuleSet
+from xenosite.refactor_poc.rules import Hydroxylation, ReactionRule
+from xenosite.refactor_poc.rulesets import RuleSet
 
 
 def _billed(counters):
@@ -82,7 +83,7 @@ def test_find_path_ethane_to_ethanol_is_one_hydroxylation():
     message = _billed(counters)
     assert hits, message
     outcome = hits[0]
-    assert isinstance(outcome.plan, Deps), message
+    assert isinstance(outcome.plan, Deps), message  # pyright: ignore[reportArgumentType]
     steps = outcome.plan.children
     assert len(steps) == 1, message
     assert steps[0].rule == "Hydroxylation", message
@@ -183,7 +184,9 @@ def test_quinone_oxygen_ref_resolves_to_the_atom_hydroxylation_adds():
     idx = ref.resolve(product)
     atom = product.GetAtomWithIdx(idx)
     assert atom.GetAtomicNum() == 8
-    added = product._forest["atom_trace"]["records"][atom.GetProp("forestLabel")]["added_by"]
+    record = product._forest["atom_trace"]["records"][atom.GetProp("forestLabel")]
+    added = record.get("added_by")
+    assert added is not None
     addition = product._forest["atom_trace"]["additions"][added]
     assert addition["name"] == "Hydroxylation"
     assert origin in addition["site"]
@@ -221,14 +224,15 @@ def _old_site_applies(reactant, target, *, ruleset=None, depth=None, ceiling=40)
     from xenosite.forest import PathSearchCounters
     from xenosite.forest import find_path as old_find_path
 
-    counters = PathSearchCounters()
+    # forest/ is outside pyright; these calls are runtime-only against that API.
+    counters = PathSearchCounters()  # pyright: ignore[reportCallIssue]
     kwargs = {"max_paths": 1, "max_expansions": ceiling, "counters": counters}
     if ruleset is not None:
         kwargs["ruleset"] = ruleset
     if depth is not None:
         kwargs["depth"] = depth
-    list(old_find_path(reactant, target, **kwargs))
-    return counters.site_applies
+    list(old_find_path(reactant, target, **kwargs))  # pyright: ignore[reportCallIssue, reportArgumentType]
+    return counters.site_applies  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_tba_mol_edits_within_old_expansion_budget():

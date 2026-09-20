@@ -9,6 +9,14 @@ Epoxidation and N-dealkylation phase-I look-aheads stay deferred.
 Tautomerization is not in these sets.
 """
 
+from __future__ import annotations
+
+from collections.abc import Generator, Sequence
+
+from xenosite.refactor_poc.rdkit_api import ForestTracingMol, Mol
+from xenosite.refactor_poc.records import Addition, TraceAddition
+from xenosite.refactor_poc.rules import ReactionRule
+
 from . import rules
 from .rulesets import PhaseOne, RuleSet
 
@@ -71,13 +79,15 @@ PhaseOneQF = RuleSet(
 )
 
 
-def metabolize(mol, **kwargs):
+def metabolize(
+    mol: Mol, **kwargs
+) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
     """Run :data:`PhaseOne`. Yields ``(product, info)``."""
 
     yield from PhaseOne.metabolize(mol, **kwargs)
 
 
-def reaction_labels(addition) -> tuple[str, ...]:
+def reaction_labels(addition: Addition | TraceAddition) -> tuple[str, ...]:
     """Initialization name of each named rule on the addition's chain.
 
     ``addition`` is the dict at ``atom_trace["additions"][id]`` or an
@@ -86,10 +96,12 @@ def reaction_labels(addition) -> tuple[str, ...]:
     here. The pattern that fired is on ``addition["pattern"]``, not here.
     """
 
-    chain = getattr(addition, "rules", None)
-    if chain is None:
+    chain: Sequence[ReactionRule]
+    if isinstance(addition, Addition):
+        chain = addition.rules
+    else:
         chain = addition["rules"]
-    labels = []
+    labels: list[str] = []
     for rule in chain:
         name = getattr(rule, "name", None)
         if name:

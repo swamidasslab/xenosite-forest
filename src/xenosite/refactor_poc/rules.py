@@ -6,8 +6,13 @@ from __future__ import annotations
 import copy
 import itertools
 from collections import defaultdict, deque
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from typing import NamedTuple, TypeGuard
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, NamedTuple, TypeGuard
+
+if TYPE_CHECKING:
+    # Static re-export so ``from .rules import RuleSet`` types correctly.
+    # Runtime still goes through ``__getattr__`` to avoid the cycle.
+    from .rulesets import RuleSet as RuleSet
 
 from xenosite.refactor_poc.rdkit_api import (
     ChemicalReaction,
@@ -47,16 +52,13 @@ from xenosite.refactor_poc.rdkitutil import (
     topol_equiv,
 )
 from xenosite.refactor_poc.records import (
-    AtomTrace,
     Effect,
-    Forest,
     Formula,
     InitializedAtomTrace,
     KekuleParents,
     PatternInfo,
     Site,
     TraceAddition,
-    TracingForest,
     When,
 )
 
@@ -152,7 +154,7 @@ class ReactionRule:
     ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
-    def __iter__(self) -> Iterable[ReactionRule]:
+    def __iter__(self) -> Iterator[ReactionRule]:
         return iter([self])
 
     def metabolize(

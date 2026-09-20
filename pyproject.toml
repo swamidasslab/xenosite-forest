@@ -157,23 +157,21 @@ show_missing = true
 
 [tool.pyright]
 include = [
-    "src/xenosite/refactor_poc/rdkit_api.py",
-    "src/xenosite/refactor_poc/rdkitutil.py",
-    "src/xenosite/refactor_poc/records.py",
-    "src/xenosite/refactor_poc/rules.py",
-    "src/xenosite/refactor_poc/rulesets.py",
-    "src/xenosite/refactor_poc/find_path.py",
+    "src/xenosite/refactor_poc",
+    "tests/refactor_poc",
+]
+exclude = [
+    "src/xenosite/refactor_poc/test.ipynb",
 ]
 
-# POC only. Forest stays out. phaseone.py and test.ipynb stay out until the
-# class rewrite; do not lint-fix the old example.
+# POC only. Forest and examples stay out. test.ipynb is not Python source.
 [tool.ruff]
 target-version = "py310"
 line-length = 100
 src = ["src", "tests"]
 extend-exclude = [
     "src/xenosite/forest",
-    "src/xenosite/refactor_poc/phaseone.py",
+    "examples",
     "src/xenosite/refactor_poc/test.ipynb",
 ]
 

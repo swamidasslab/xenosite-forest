@@ -1,7 +1,7 @@
 """Cache identity for the RDKit door. Callers read NamedTuple attributes."""
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from rdkit import Chem
 
@@ -63,9 +63,9 @@ def test_mcs_matches_cache_on_the_reactant():
     second = mcs_matches(reactant, target)
     assert first is second
     assert len(first.embeddings) > 1
-    held = get_forest(ensure_forest(reactant))["structure"]["mcs_matches"][
-        get_csmi(target)
-    ]
+    structure = get_forest(ensure_forest(reactant)).get("structure")
+    assert structure is not None
+    held = (structure.get("mcs_matches") or {})[get_csmi(target)]
     assert held is first
     assert isinstance(held.embeddings, tuple)
 
@@ -77,26 +77,35 @@ def test_a_fresh_mol_does_not_reuse_parent_caches():
 
     product = Chem.Mol(parent)
     fresh = ensure_forest(product)
-    structure = get_forest(fresh)["structure"]
+    structure = get_forest(fresh).get("structure")
+    assert structure is not None
     assert "csmi" not in structure
     assert "resonance_bonds" not in structure
-    assert structure is not get_forest(ensure_forest(parent))["structure"]
+    parent_structure = get_forest(ensure_forest(parent)).get("structure")
+    assert structure is not parent_structure
     assert get_csmi(product) == parent_csmi
     assert resonance_bond_maps(product) is not parent_maps
 
     child = copy_mol(parent)
-    assert get_forest(ensure_forest(child))["structure"]["csmi"] == parent_csmi
+    child_structure = get_forest(ensure_forest(child)).get("structure")
+    assert child_structure is not None
+    assert child_structure.get("csmi") == parent_csmi
 
 
 def test_forest_stays_a_dict():
+    """Forest is a TypedDict schema and still a plain dict at runtime."""
+
     mol = Chem.MolFromSmiles("CC")
     forest = get_forest(ensure_forest(mol))
-    forest["structure"]["csmi"] = "CC"
-    forest["atom_trace"] = {"depth": 0}
-    forest["not_a_schema_key"] = 1
-    assert forest["structure"]["csmi"] == "CC"
-    assert forest["atom_trace"]["depth"] == 0
-    assert forest["not_a_schema_key"] == 1
+    # Intentional non-schema writes: the forest must remain a mutable dict.
+    raw = cast(dict, forest)
+    structure = raw.setdefault("structure", {})
+    structure["csmi"] = "CC"
+    raw["atom_trace"] = {"depth": 0}
+    raw["not_a_schema_key"] = 1
+    assert forest.get("structure", {}).get("csmi") == "CC"
+    assert forest.get("atom_trace", {}).get("depth") == 0
+    assert raw["not_a_schema_key"] == 1
     assert isinstance(forest, dict)
 
     formula = molecule_formula(mol)
@@ -106,8 +115,8 @@ def test_forest_stays_a_dict():
     assert formula is molecule_formula(mol)
 
     cloned = copy.deepcopy(forest)
-    assert cloned["structure"]["formula"]["counts"]["C"] == 2
-    assert cloned["atom_trace"]["depth"] == 0
+    assert cloned.get("structure", {}).get("formula", {}).get("counts", {}).get("C") == 2
+    assert cloned.get("atom_trace", {}).get("depth") == 0
 
 
 def test_rw_copy_does_not_carry_the_structure_cache():
@@ -115,7 +124,9 @@ def test_rw_copy_does_not_carry_the_structure_cache():
     get_csmi(parent)
     child = rw_copy(parent)
     assert getattr(child, "_forest", None) is None
-    assert get_forest(copy_mol(parent))["structure"]["csmi"] == get_csmi(parent)
+    copied = get_forest(copy_mol(parent)).get("structure")
+    assert copied is not None
+    assert copied.get("csmi") == get_csmi(parent)
 
 
 def test_fragment_split_uses_pieces():

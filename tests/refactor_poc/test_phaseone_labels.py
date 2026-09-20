@@ -48,7 +48,9 @@ def test_hydroxylation_label_is_the_chain_init_names():
     assert addition["rules"][-1] is PhaseOne
     assert addition["phase1"] is None
     assert addition["pattern"] is Hydroxylation.smarts[0][1]
-    assert addition["pattern"]["name"] == "h"
+    pattern = addition["pattern"]
+    assert pattern is not None
+    assert pattern.get("name") == "h"
     assert all(not isinstance(rule, dict) for rule in addition["rules"])
 
 

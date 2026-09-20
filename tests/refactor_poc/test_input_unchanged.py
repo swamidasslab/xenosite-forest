@@ -85,9 +85,9 @@ def test_ruleset_does_not_edit_its_input():
     product, info = products[0]
     trace = product._forest["atom_trace"]
     added = [
-        record["added_by"]
+        by
         for record in trace["records"].values()
-        if record.get("added_by")
+        if (by := record.get("added_by"))
     ]
     assert added
     transform_id = added[0]

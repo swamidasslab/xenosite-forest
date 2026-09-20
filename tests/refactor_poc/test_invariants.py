@@ -78,7 +78,9 @@ def test_each_product_is_one_depth_below_its_parent():
         assert child["depth"] == parent_depth + 1
         assert child["formula"] == molecule_formula(product)
         assert info["csmi"] == Chem.MolToSmiles(product, isomericSmiles=False)
-        assert info["rule"].name == "Hydroxylation"
+        rule = info["rule"]
+        assert isinstance(rule, ReactionRule)
+        assert rule.name == "Hydroxylation"
 
 
 def test_canonical_smiles_are_not_repeated():
@@ -97,9 +99,9 @@ def test_a_new_atom_points_at_one_addition_record():
     product, _info = products[0]
     trace = product._forest["atom_trace"]
     ids = [
-        record["added_by"]
+        by
         for record in trace["records"].values()
-        if record.get("added_by")
+        if (by := record.get("added_by"))
     ]
     assert ids
     transform_id = ids[0]
@@ -150,7 +152,7 @@ def test_a_rule_is_itself_when_iterated_and_its_name_has_no_underscore():
     rule = Hydroxylation()
     assert isinstance(rule, ReactionRule)
     assert list(rule) == [rule]
-    assert "_" not in rule.name
+    assert rule.name is not None and "_" not in rule.name
     called = list(rule(Chem.MolFromSmiles("CC")))
     direct = list(rule.metabolize(Chem.MolFromSmiles("CC")))
     assert [info["csmi"] for _product, info in called] == [
@@ -161,4 +163,4 @@ def test_a_rule_is_itself_when_iterated_and_its_name_has_no_underscore():
 def test_a_ruleset_iterates_its_children():
     ruleset = RuleSet((Hydroxylation, Dealkylation), name="Poc")
     assert [type(rule) for rule in ruleset] == [Hydroxylation, Dealkylation]
-    assert "_" not in ruleset.name
+    assert ruleset.name is not None and "_" not in ruleset.name

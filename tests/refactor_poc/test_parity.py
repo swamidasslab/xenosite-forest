@@ -611,12 +611,11 @@ def test_filter_skips_the_alkyl_chloride_and_keeps_the_epoxide_glutathione():
 
 
 def test_cleaved_ring_bond_sets_breaks_ring():
-    flags = {
-        (info["options"].get("leave_count"), info["options"].get("breaks_ring"))
-        for _product, info in NDealkylation().metabolize(
-            Chem.MolFromSmiles("CN1CCCCC1")
-        )
-    }
+    flags = set()
+    for _product, info in NDealkylation().metabolize(Chem.MolFromSmiles("CN1CCCCC1")):
+        options = info["options"]
+        assert isinstance(options, dict)
+        flags.add((options.get("leave_count"), options.get("breaks_ring")))
     assert (1, False) in flags
     assert (None, True) in flags
 

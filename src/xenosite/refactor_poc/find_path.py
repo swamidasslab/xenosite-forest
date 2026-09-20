@@ -29,7 +29,6 @@ from xenosite.refactor_poc.rdkitutil import (
     split_fragments,
 )
 from xenosite.refactor_poc.records import AtomRef, Site, _flat_ints
-from xenosite.refactor_poc.rulesets import RuleSet
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
@@ -39,6 +38,7 @@ from xenosite.refactor_poc.rules import (
     forest_trace,
     install_forest,
 )
+from xenosite.refactor_poc.rulesets import RuleSet
 
 # ---------------------------------------------------------------------------
 # Counters
@@ -603,7 +603,12 @@ def _site_could_help(site: Site, info: dict[str, object], diff: AtomDiff, mol: M
             return False
 
     removes = effect.get("removes") or ""
-    if isinstance(removes, str) and "H" in removes and not _effect_adds_oxygen(effect) and not effect.get("cleaves"):
+    if (
+        isinstance(removes, str)
+        and "H" in removes
+        and not _effect_adds_oxygen(effect)
+        and not effect.get("cleaves")
+    ):
         scope = atoms | set(path_ends)
         loses_h = any(diff.h_delta.get(atom, 0) < 0 for atom in scope)
         if not loses_h and not (scope & set(diff.loses_aromaticity)):

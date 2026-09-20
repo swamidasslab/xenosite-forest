@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Expanded ruff and pyright to every Python module under `src/xenosite/refactor_poc/` and every test under `tests/refactor_poc/`. Still excluding `test.ipynb`, `src/xenosite/forest/`, and `examples/`. Cleared to 0 ruff findings and 0 pyright errors. `ReactionRule.__iter__` / `RuleSet.__iter__` return `Iterator`; `rules.RuleSet` keeps a TYPE_CHECKING re-export beside the runtime `__getattr__`.
+
+## 2026-09-19
+
 - Typing pass on refactor_poc: `mol = ensure_forest(mol)` installs in place and returns the same object as `ForestMol`; `get_forest` only reads a `ForestMol` and returns its `Forest`.
 - Site is indices only (`int | tuple[int, ...] | frozenset[int] | frozenset[frozenset[int]]`). FutureSite mirrors that nesting; the top-level single deferred atom is `AtomRef` only (not bare int). Nested leaves are `int | AtomRef`. `AnySite = Site | FutureSite`. `_flat_ints` takes `Site` only.
 - Focused `pyright: ignore[reportIncompatibleVariableOverride]` kept on `_forest` overrides in `rdkit_api.py`. Pyright on the poc modules listed in `pyproject.toml`: 0 errors.

@@ -10,6 +10,7 @@ from xenosite.refactor_poc.rdkitutil import (
     get_forest,
     parents_for_ends,
 )
+from xenosite.refactor_poc.records import KekuleParents
 from xenosite.refactor_poc.rules import Epoxidation, OxygenReduction
 
 _ANTHRACENE = "c1ccc2cc3ccccc3cc2c1"
@@ -36,7 +37,7 @@ def _products(rule, smiles):
 def _fill(smiles):
     mol = Chem.MolFromSmiles(smiles)
     assert mol is not None
-    cache = {}
+    cache: KekuleParents = {}
     for left, right in mol.GetSubstructMatches(_CC):
         ensure_kekule_parents(mol, left, right, cache)
     return mol, cache
@@ -45,16 +46,17 @@ def _fill(smiles):
 def test_helpers_do_not_touch_forest():
     mol, cache = _fill("c1ccccc1")
     assert getattr(mol, "_forest", None) is None
-    assert len(cache["parents"]) == 2
+    assert len(cache.get("parents") or []) == 2
 
 
 def test_anthracene_is_four_parents_not_sixteen():
     mol, cache = _fill(_ANTHRACENE)
     assert getattr(mol, "_forest", None) is None
-    assert len(cache["parents"]) == 4
+    parents = cache.get("parents") or []
+    assert len(parents) == 4
     assert all(
         not atom.GetIsAromatic()
-        for parent in cache["parents"]
+        for parent in parents
         for atom in parent.GetAtoms()
     )
 
@@ -62,8 +64,9 @@ def test_anthracene_is_four_parents_not_sixteen():
 def test_polyphenyl_is_twelve_parents_not_sixty_four():
     mol, cache = _fill(_POLYPHENYL)
     assert getattr(mol, "_forest", None) is None
-    assert len(cache["parents"]) == 12
-    for parent in cache["parents"]:
+    parents = cache.get("parents") or []
+    assert len(parents) == 12
+    for parent in parents:
         aromatic = sum(atom.GetIsAromatic() for atom in parent.GetAtoms())
         assert aromatic == 30
 
@@ -72,10 +75,17 @@ def test_rule_stores_the_dict_and_deepcopy_keeps_the_mols():
     mol = Chem.MolFromSmiles("c1ccccc1")
     assert mol is not None
     list(Epoxidation().metabolites(mol))
-    cache = get_forest(ensure_forest(mol))["structure"]["kekule_parents"]
-    assert len(cache["parents"]) == 2
+    structure = get_forest(ensure_forest(mol)).get("structure")
+    assert structure is not None
+    cache = structure.get("kekule_parents")
+    assert cache is not None
+    assert len(cache.get("parents") or []) == 2
     copied = copy.deepcopy(get_forest(ensure_forest(mol)))
-    assert len(copied["structure"]["kekule_parents"]["parents"]) == 2
+    copied_structure = copied.get("structure")
+    assert copied_structure is not None
+    copied_cache = copied_structure.get("kekule_parents")
+    assert copied_cache is not None
+    assert len(copied_cache.get("parents") or []) == 2
 
 
 def test_epoxidation_keeps_the_measured_products():
@@ -92,11 +102,11 @@ def test_epoxidation_keeps_the_measured_products():
 
 def test_pair_ends_in_different_systems_are_not_a_product():
     mol, cache = _fill(_POLYPHENYL)
-    systems = list(cache["systems"])
+    systems = list(cache.get("systems") or {})
     assert len(systems) == 6
     start = next(iter(systems[0]))
     end = next(iter(systems[1]))
     ends = parents_for_ends(mol, start, end, cache)
     assert ends.same_system is False
     assert len(ends.parents) == 4
-    assert len(cache["parents"]) == 12
+    assert len(cache.get("parents") or []) == 12

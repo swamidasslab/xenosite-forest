@@ -26,7 +26,7 @@ def test_ruleset_appends_itself_after_the_leaf_on_the_same_molecule():
             emitted.append(product)
             yield product, info
 
-    leaf.metabolize = record
+    leaf.metabolize = record  # pyright: ignore[reportAttributeAccessIssue]
     product, _info = next(ruleset.metabolize(Chem.MolFromSmiles("CC")))
 
     assert product is emitted[0]
@@ -60,7 +60,9 @@ def test_nested_phaseone_ruleset_keeps_the_inner_set_on_the_chain():
 
     assert reaction_labels(addition) == ("Hydroxylation", "SO")
     assert addition["pattern"] is Hydroxylation.smarts[0][1]
-    assert addition["pattern"]["name"] == "h"
+    pattern = addition["pattern"]
+    assert pattern is not None
+    assert pattern.get("name") == "h"
     assert addition["pattern"] not in rules
 
 

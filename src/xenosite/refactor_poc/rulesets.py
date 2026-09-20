@@ -7,7 +7,7 @@ filter refuses is not run. A pattern it accepts is.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Generator
+from collections.abc import Generator, Iterator
 
 from xenosite.refactor_poc.rdkit_api import ForestTracingMol
 from xenosite.refactor_poc.rdkitutil import Mol
@@ -75,7 +75,7 @@ class RuleSet(ReactionRule):
         else:
             self.longname = longname
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[ReactionRule]:
         yield from self.rules
 
     def metabolites(
