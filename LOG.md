@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Agent briefing `src/xenosite/refactor_poc/PAIR_ORBITS.md`: problem, swap_group ordered/unordered, directed bond–atom (not a Site), nauty emit + flip, types, three assessment checks (HQ collapse, phenol C–O+O ≠ C–O+C, ethane either C), code map, TRIVIAL / atom_bond ordered≡unordered caveats. Excerpted from HEAD; no code change.
+
+## 2026-09-20
+
 - Documented bond–atom directed signatures as unique-edit keys (not Sites): one directed unit captures both topological site identity and edit direction (bond vs atom role). Surprising but intentional — direction is part of the edit's isomorphism class. Atom–atom / bond–bond contrast via ``swap_group`` only. Docs: `records.py` (`BondAtomOrbitSignature` / `BondAtomPairOrbitSignature` / `PairOrbitSignature`), HEURISTICS unique-edit bullet, `graph_isomorphism` module + `bond_atom_orbit_key`.
 
 ## 2026-09-20
