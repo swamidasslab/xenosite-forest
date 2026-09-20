@@ -4,6 +4,9 @@ No RDKit crash, no dotted product, traces present. Port of the hard
 ``tests/test_bfs_fuzz.py`` corpus (PhaseOne; poc has no Full / star-expand).
 DFS samples depth-2 without draining a BFS frontier on drug-sized mols.
 A star acetyl is terminal here, so dehydrogenation does not expand it.
+
+``canonical_emitted_sites`` is drawn with Hypothesis ``st.booleans()`` and
+passed as kwargs on ``bfs`` / ``dfs`` (no env / custom flip helpers).
 """
 
 from __future__ import annotations
@@ -91,12 +94,17 @@ def poc_smiles(draw):
     return draw(_generated_smiles())
 
 
-def _sample_dfs_depth2(smiles: str):
+def _sample_dfs_depth2(smiles: str, *, canonical_emitted_sites: bool):
     """DFS reaches depth-2 without draining a BFS frontier (forest bfs fuzz)."""
 
     out = []
     depth2 = 0
-    for product, _info in dfs(smiles, PhaseOne, depth=2):
+    for product, _info in dfs(
+        smiles,
+        PhaseOne,
+        depth=2,
+        canonical_emitted_sites=canonical_emitted_sites,
+    ):
         out.append(product)
         if product.xf.tracing.depth is not None and product.xf.tracing.depth >= 2:
             depth2 += 1
@@ -105,18 +113,22 @@ def _sample_dfs_depth2(smiles: str):
     return out
 
 
-@given(smiles=poc_smiles())
+@given(smiles=poc_smiles(), canonical_emitted_sites=st.booleans())
 @settings(
     max_examples=16,
     deadline=20_000,
     derandomize=True,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
-def test_fuzz_dfs_depth2_is_connected_and_traced(smiles: str):
+def test_fuzz_dfs_depth2_is_connected_and_traced(
+    smiles: str, canonical_emitted_sites: bool
+):
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
-    products = _sample_dfs_depth2(smiles)
+    products = _sample_dfs_depth2(
+        smiles, canonical_emitted_sites=canonical_emitted_sites
+    )
     # Tiny substrates may have no PhaseOne child; a miss is empty, not a crash.
     for product in products:
         assert "." not in product.xf.csmi
@@ -124,12 +136,19 @@ def test_fuzz_dfs_depth2_is_connected_and_traced(smiles: str):
         assert product.xf.tracing.depth >= 1
 
 
-def test_issue3_dfs_reaches_depth2():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=20_000, derandomize=True)
+def test_issue3_dfs_reaches_depth2(canonical_emitted_sites: bool):
     """Issue #3 parent: DFS under PhaseOne reaches a depth-2 metabolite."""
 
     parent = "CCC(=O)NCC[C@@H]1CCC2=CC=C3OCCC3=C21"
     depth2 = 0
-    for product, info in dfs(parent, PhaseOne, depth=2):
+    for product, info in dfs(
+        parent,
+        PhaseOne,
+        depth=2,
+        canonical_emitted_sites=canonical_emitted_sites,
+    ):
         if info is not None and product.xf.tracing.depth >= 2:
             depth2 += 1
             assert "." not in product.xf.csmi
@@ -138,12 +157,19 @@ def test_issue3_dfs_reaches_depth2():
     assert depth2 >= 1
 
 
-def test_bfs_smoke_on_small_substrates():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=20_000, derandomize=True)
+def test_bfs_smoke_on_small_substrates(canonical_emitted_sites: bool):
     """BFS still enumerates connected, traced products on tiny mols."""
 
     for smiles in ("CCO", "c1ccccc1", "CCN"):
         products = []
-        for product, _info in bfs(smiles, PhaseOne, depth=1):
+        for product, _info in bfs(
+            smiles,
+            PhaseOne,
+            depth=1,
+            canonical_emitted_sites=canonical_emitted_sites,
+        ):
             products.append(product)
             if len(products) >= 5:
                 break

@@ -3,6 +3,8 @@
 ``And`` / ``Or`` trees and plan JSON are not the poc surface. The check is
 the elementary plan the rule reports: quinone ends in dehydrogenation after
 the preps that supply oxygen; epoxidation and N-dealkylation are themselves.
+
+``canonical_emitted_sites`` is drawn with Hypothesis ``st.booleans()``.
 """
 
 from __future__ import annotations
@@ -27,10 +29,14 @@ _CORPUS = (
 )
 
 
-def test_benzene_quinone_plan_ends_in_dehydrogenation():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=20_000, derandomize=True)
+def test_benzene_quinone_plan_ends_in_dehydrogenation(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("c1ccccc1")
     plans = []
-    for _product, info in QuinoneFormation().metabolize(mol):
+    for _product, info in QuinoneFormation().metabolize(
+        mol, canonical_emitted_sites=canonical_emitted_sites
+    ):
         steps = QuinoneFormation().canonical_plan(mol, info)
         if steps:
             plans.append(steps)
@@ -42,34 +48,50 @@ def test_benzene_quinone_plan_ends_in_dehydrogenation():
         assert any(step.rule == "Hydroxylation" for step in steps[:-1])
 
 
-def test_epoxidation_plan_is_one_step():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=10_000, derandomize=True)
+def test_epoxidation_plan_is_one_step(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("C=C")
-    product, info = next(Epoxidation().metabolize(mol))
+    product, info = next(
+        Epoxidation().metabolize(
+            mol, canonical_emitted_sites=canonical_emitted_sites
+        )
+    )
     steps = Epoxidation().canonical_plan(mol, info)
     assert [step.rule for step in steps] == ["Epoxidation"]
     assert "." not in product.xf.csmi
 
 
-def test_ndealkylation_plan_is_one_step():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=10_000, derandomize=True)
+def test_ndealkylation_plan_is_one_step(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("CCN")
-    product, info = next(NDealkylation().metabolize(mol))
+    product, info = next(
+        NDealkylation().metabolize(
+            mol, canonical_emitted_sites=canonical_emitted_sites
+        )
+    )
     steps = NDealkylation().canonical_plan(mol, info)
     assert [step.rule for step in steps] == ["NDealkylation"]
     assert "." not in product.xf.csmi
 
 
-@given(smiles=st.sampled_from(_CORPUS))
+@given(smiles=st.sampled_from(_CORPUS), canonical_emitted_sites=st.booleans())
 @settings(
     max_examples=6,
     deadline=20_000,
     derandomize=True,
     suppress_health_check=[HealthCheck.too_slow],
 )
-def test_fuzz_quinone_plans_end_in_dehydrogenation(smiles: str):
+def test_fuzz_quinone_plans_end_in_dehydrogenation(
+    smiles: str, canonical_emitted_sites: bool
+):
     mol = Chem.MolFromSmiles(smiles)
     assume(mol is not None)
     seen = 0
-    for _product, info in QuinoneFormation().metabolize(mol):
+    for _product, info in QuinoneFormation().metabolize(
+        mol, canonical_emitted_sites=canonical_emitted_sites
+    ):
         steps = QuinoneFormation().canonical_plan(mol, info)
         if not steps:
             continue

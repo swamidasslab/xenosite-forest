@@ -121,9 +121,10 @@ Legacy three-mode tables flip cross-kind to `(bond, atom)` for unique-edit.
 
 ## 5. Opt-in canonical emitted sites
 
-Default **off**. Enable via kwargs ``metabolize(..., canonical_emitted_sites=True)``,
-process override ``set_canonical_emitted_sites(True)``, or env
-``XENOSITE_CANONICAL_EMITTED_SITES`` ∈ ``{1,true,yes,on}``.
+Default **off**. Enable only via explicit kwargs
+``metabolize(..., canonical_emitted_sites=True)`` (also
+``find_path`` / ``bfs`` / ``dfs``, which splat down to metabolites).
+No env or process-wide toggle.
 
 Lex-smallest concrete member of each nauty orbit
 (``LexicalOrbitRepresentatives`` on forest ``cache``); relative to current
@@ -157,6 +158,12 @@ Escape hatch for callers that need discovery: read ``discovered_site`` when
 present. Tests: ``test_canonical_emitted_sites.py`` (includes
 parent-cache-after-clear).
 Profile (same find_path cases as forest_copy): OFF 3.862s / ON 4.007s ≈ **+3.7%** wall (commit 6f13ca9).
+
+POC fuzz draws ``canonical_emitted_sites`` with Hypothesis ``st.booleans()`` /
+``data.draw`` and passes the kwarg through ``find_path`` / ``bfs`` / ``dfs`` /
+``metabolize``. Default stays off. Hardcoding ``True`` on individual flaky
+tests (topo, guided gold, path hard, unique-edit) is a **future option** only
+if stable lex sites prove helpful — not done yet.
 
 Status: approved (opt-in emission policy; HEURISTICS).
 

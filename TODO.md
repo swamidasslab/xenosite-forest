@@ -1,5 +1,6 @@
 # TODO
 
+- Later (optional): hardcode `canonical_emitted_sites=True` on flaky POC tests (topo / guided gold / path hard / unique-edit) if lex site identity helps — fuzz already draws the flip via Hypothesis
 - PatternInfo coverage gaps: product-side SMARTS parse; `pin` maps present in reactant; `skip_same_rings` / `edit` checked beyond presence; `breaks_ring` and `partner`/`partner_h` filled by `resolve_effect` (not only declared survival)
 - `find_path_to_MS1`: condensed StepPlan-like form of reactions + possible sites to reach an MS1 m/z (z/charge) within tolerance; isotope-aware; all in-tolerance resolutions; alongside PhaseOne + conjugation, rules for common MS changes and MS-relevant input adjustments (e.g. C12→C14, add H+)
 - After MS1 is solid/tested: `find_path_to_MS2` same idea plus MS2 fragmentation rules to develop

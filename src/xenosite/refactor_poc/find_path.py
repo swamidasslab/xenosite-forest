@@ -922,6 +922,7 @@ def find_path(
     use_filters: bool = True,
     max_paths: int = 1,
     max_nodes: int = 800,
+    **kwargs: Any,
 ) -> Iterator[PathOutcome]:
     """Yield phase-I plans that turn ``reactant`` into ``target``.
 
@@ -929,7 +930,9 @@ def find_path(
     come from :func:`atom_diff` and are applied to each child pattern; the
     set does not hide them. Pass ``use_filters=False`` to bill the same pair
     with every site edited. ``counters`` is optional; pass one in when the
-    test needs ``billed``.
+    test needs ``billed``. Extra ``kwargs`` (e.g. ``canonical_emitted_sites``)
+    forward to each ``ruleset.metabolites`` call. Opt-in is kwargs-only
+    (no env / process toggle); see PAIR_ORBITS.md §5.
     """
 
     if reactant is None or target is None:
@@ -990,6 +993,7 @@ def find_path(
             filter_sites=filter_sites,
             counters=counters,
             order_key=order_key,
+            **kwargs,
         ):
             finished = _finish(walk.mol, por.products, por.info, counters)
             if not finished:
@@ -1062,6 +1066,7 @@ def _enumerate(
     depth: int,
     pop: Callable[[deque[_Expand]], _Expand],
     lifo: bool,
+    **kwargs: Any,
 ) -> Iterator[tuple[Mol, ProductInfo]]:
     """Metabolites of one ruleset, up to ``depth``. No atom diff, no closer drop.
 
@@ -1069,7 +1074,7 @@ def _enumerate(
     before the rest of that generation, so a depth-2 sample does not have
     to finish the depth-1 frontier. A queue does not. Filters are the same
     callbacks the set forwards to each child, and they run on the mol
-    being expanded.
+    being expanded. Extra ``kwargs`` forward to each ``metabolize`` call.
     """
 
     if ruleset is None:
@@ -1089,6 +1094,7 @@ def _enumerate(
             node.mol,
             filter_rules=filter_rules,
             filter_sites=filter_sites,
+            **kwargs,
         ):
             smiles = product.xf.csmi
             if smiles in seen:
@@ -1107,8 +1113,12 @@ def bfs(
     filter_rules: FilterRules = _keep_rule,
     filter_sites: FilterSites = _keep_site,
     depth: int = 1,
+    **kwargs: Any,
 ) -> Iterator[tuple[Mol, ProductInfo]]:
-    """Breadth-first metabolites. A queue. See :func:`_enumerate`."""
+    """Breadth-first metabolites. A queue. See :func:`_enumerate`.
+
+    Extra ``kwargs`` (e.g. ``canonical_emitted_sites``) forward to metabolize.
+    """
 
     yield from _enumerate(
         reactant,
@@ -1118,6 +1128,7 @@ def bfs(
         depth=depth,
         pop=deque.popleft,
         lifo=False,
+        **kwargs,
     )
 
 
@@ -1128,8 +1139,12 @@ def dfs(
     filter_rules: FilterRules = _keep_rule,
     filter_sites: FilterSites = _keep_site,
     depth: int = 1,
+    **kwargs: Any,
 ) -> Iterator[tuple[Mol, ProductInfo]]:
-    """Depth-first metabolites. A stack. See :func:`_enumerate`."""
+    """Depth-first metabolites. A stack. See :func:`_enumerate`.
+
+    Extra ``kwargs`` (e.g. ``canonical_emitted_sites``) forward to metabolize.
+    """
 
     yield from _enumerate(
         reactant,
@@ -1139,4 +1154,5 @@ def dfs(
         depth=depth,
         pop=deque.pop,
         lifo=True,
+        **kwargs,
     )

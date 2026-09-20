@@ -3,6 +3,9 @@
 Invariants, not a recipe replay: a hit's product is the target and is one
 component; a miss is an empty result, not an exception. Terminal conjugates
 are not expanded.
+
+``canonical_emitted_sites`` is drawn with Hypothesis ``st.booleans()`` and
+passed as kwargs on metabolize / find_path (no env / custom flip helpers).
 """
 
 from __future__ import annotations
@@ -32,10 +35,10 @@ def _ruleset():
     return RuleSet(_rules(), name="FuzzPhase1")
 
 
-def _collect(mol, rules, seen: set[str]):
+def _collect(mol, rules, seen: set[str], **site_kw):
     out = []
     for rule in rules:
-        for product, _info in rule.metabolize(mol):
+        for product, _info in rule.metabolize(mol, **site_kw):
             smi = product.xf.csmi
             if not smi or "." in smi or smi in seen:
                 continue
@@ -43,14 +46,15 @@ def _collect(mol, rules, seen: set[str]):
     return out
 
 
-def _walk(draw, start: str, rules, n_steps: int):
+def _walk(draw, start: str, rules, n_steps: int, *, canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles(start)
     assume(mol is not None)
     assume(mol.GetNumHeavyAtoms() <= _MAX_HEAVY)
     path = [mol.xf.csmi]
     current = mol
+    site_kw = {"canonical_emitted_sites": canonical_emitted_sites}
     for _step in range(n_steps):
-        candidates = _collect(current, rules, set(path))
+        candidates = _collect(current, rules, set(path), **site_kw)
         assume(candidates)
         candidates.sort(key=lambda item: item[1].GetNumHeavyAtoms())
         pool = candidates[:8]
@@ -61,7 +65,9 @@ def _walk(draw, start: str, rules, n_steps: int):
     return path[0], path[-1]
 
 
-def _search(reactant: str, target: str, *, max_nodes: int):
+def _search(
+    reactant: str, target: str, *, max_nodes: int, canonical_emitted_sites: bool
+):
     counters = PathCounters()
     hits = list(
         find_path(
@@ -71,6 +77,7 @@ def _search(reactant: str, target: str, *, max_nodes: int):
             counters=counters,
             max_nodes=max_nodes,
             max_paths=1,
+            canonical_emitted_sites=canonical_emitted_sites,
         )
     )
     return hits, counters
@@ -84,47 +91,90 @@ def _assert_hit_or_miss(hits, target: str):
     assert hits[0].smiles == target
 
 
-@given(start=st.sampled_from(_CORPUS), data=st.data())
+@given(
+    start=st.sampled_from(_CORPUS),
+    data=st.data(),
+    canonical_emitted_sites=st.booleans(),
+)
 @settings(
     max_examples=6,
     deadline=20_000,
     derandomize=True,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
-def test_fuzz_depth1_hit_matches_target(start: str, data):
-    reactant, target = _walk(data.draw, start, _rules(), 1)
+def test_fuzz_depth1_hit_matches_target(
+    start: str, data, canonical_emitted_sites: bool
+):
+    reactant, target = _walk(
+        data.draw,
+        start,
+        _rules(),
+        1,
+        canonical_emitted_sites=canonical_emitted_sites,
+    )
     assume(reactant != target)
-    hits, counters = _search(reactant, target, max_nodes=80)
+    hits, counters = _search(
+        reactant,
+        target,
+        max_nodes=80,
+        canonical_emitted_sites=canonical_emitted_sites,
+    )
     assert counters.nodes <= 80
     # A one-step phase-I product is in the ruleset. A miss is a search bug.
     assert hits, (reactant, target, counters.nodes)
     _assert_hit_or_miss(hits, target)
 
 
-@given(start=st.sampled_from(_CORPUS), data=st.data())
+@given(
+    start=st.sampled_from(_CORPUS),
+    data=st.data(),
+    canonical_emitted_sites=st.booleans(),
+)
 @settings(
     max_examples=4,
     deadline=20_000,
     derandomize=True,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
-def test_fuzz_depth2_hit_or_honest_miss(start: str, data):
-    reactant, target = _walk(data.draw, start, _rules(), 2)
+def test_fuzz_depth2_hit_or_honest_miss(
+    start: str, data, canonical_emitted_sites: bool
+):
+    reactant, target = _walk(
+        data.draw,
+        start,
+        _rules(),
+        2,
+        canonical_emitted_sites=canonical_emitted_sites,
+    )
     assume(reactant != target)
-    hits, counters = _search(reactant, target, max_nodes=120)
+    hits, counters = _search(
+        reactant,
+        target,
+        max_nodes=120,
+        canonical_emitted_sites=canonical_emitted_sites,
+    )
     assert counters.nodes <= 120
     _assert_hit_or_miss(hits, target)
 
 
-def test_walk_candidates_skip_the_current_molecule():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=10_000, derandomize=True)
+def test_walk_candidates_skip_the_current_molecule(canonical_emitted_sites: bool):
     mol = Chem.MolFromSmiles("CCO")
     seen = {mol.xf.csmi}
-    for _rule, _product, smi in _collect(mol, _rules(), seen):
+    for _rule, _product, smi in _collect(
+        mol,
+        _rules(),
+        seen,
+        canonical_emitted_sites=canonical_emitted_sites,
+    ):
         assert smi not in seen
         assert "." not in smi
 
 
-def test_max_nodes_stops():
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=10_000, derandomize=True)
+def test_max_nodes_stops(canonical_emitted_sites: bool):
     counters = PathCounters()
     hits = list(
         find_path(
@@ -134,6 +184,7 @@ def test_max_nodes_stops():
             counters=counters,
             max_nodes=3,
             max_paths=1,
+            canonical_emitted_sites=canonical_emitted_sites,
         )
     )
     assert counters.nodes <= 3

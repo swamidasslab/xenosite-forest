@@ -12,13 +12,11 @@ from __future__ import annotations
 
 import cProfile
 import io
-import os
 import pstats
 import time
 from pathlib import Path
 
 from xenosite.refactor_poc.find_path import PathCounters, find_path
-from xenosite.refactor_poc.graph_isomorphism import set_canonical_emitted_sites
 from xenosite.refactor_poc.rulesets import PhaseOne
 
 CASES: list[tuple[str, str, str]] = [
@@ -50,44 +48,31 @@ def _log(msg: str) -> None:
 
 
 def run_batch(*, canonical: bool) -> tuple[float, list[tuple[str, bool, float, PathCounters]]]:
-    set_canonical_emitted_sites(canonical)
-    # Also set env so nested metabolize kwargs resolution stays consistent
-    # when callers do not pass the flag (find_path → RuleSet.metabolize).
-    key = "XENOSITE_CANONICAL_EMITTED_SITES"
-    old = os.environ.get(key)
-    if canonical:
-        os.environ[key] = "1"
-    else:
-        os.environ.pop(key, None)
+    """Run cases with explicit ``canonical_emitted_sites`` on ``find_path``."""
+
     rows: list[tuple[str, bool, float, PathCounters]] = []
     t0 = time.perf_counter()
-    try:
-        for label, reactant, target in CASES:
-            counters = PathCounters()
-            c0 = time.perf_counter()
-            hits = list(
-                find_path(
-                    reactant,
-                    target,
-                    ruleset=PhaseOne,
-                    counters=counters,
-                    max_paths=MAX_PATHS,
-                    max_nodes=POC_MAX_NODES,
-                )
+    for label, reactant, target in CASES:
+        counters = PathCounters()
+        c0 = time.perf_counter()
+        hits = list(
+            find_path(
+                reactant,
+                target,
+                ruleset=PhaseOne,
+                counters=counters,
+                max_paths=MAX_PATHS,
+                max_nodes=POC_MAX_NODES,
+                canonical_emitted_sites=canonical,
             )
-            elapsed = time.perf_counter() - c0
-            rows.append((label, bool(hits), elapsed, counters))
-            _log(
-                f"  [{'ON' if canonical else 'OFF'}] {label}: "
-                f"hit={bool(hits)} wall={elapsed:.3f}s "
-                f"expansions={counters.rule_expansions} edits={counters.mol_edits}"
-            )
-    finally:
-        set_canonical_emitted_sites(None)
-        if old is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = old
+        )
+        elapsed = time.perf_counter() - c0
+        rows.append((label, bool(hits), elapsed, counters))
+        _log(
+            f"  [{'ON' if canonical else 'OFF'}] {label}: "
+            f"hit={bool(hits)} wall={elapsed:.3f}s "
+            f"expansions={counters.rule_expansions} edits={counters.mol_edits}"
+        )
     return time.perf_counter() - t0, rows
 
 

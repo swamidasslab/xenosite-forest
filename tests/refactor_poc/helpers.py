@@ -57,8 +57,18 @@ def emits_product(rule, reactant: str, product: str) -> bool:
     return canon(product) in product_smiles(rule, reactant)
 
 
-def find_phaseone(reactant: str, product: str, *, max_nodes: int = 200, max_paths: int = 3):
-    """``find_path`` over catalog ``PhaseOne``, not the tiny default Poc set."""
+def find_phaseone(
+    reactant: str,
+    product: str,
+    *,
+    max_nodes: int = 200,
+    max_paths: int = 3,
+    **kwargs: object,
+):
+    """``find_path`` over catalog ``PhaseOne``, not the tiny default Poc set.
+
+    Extra ``kwargs`` (e.g. ``canonical_emitted_sites``) forward to ``find_path``.
+    """
 
     return list(
         find_path(
@@ -67,5 +77,6 @@ def find_phaseone(reactant: str, product: str, *, max_nodes: int = 200, max_path
             ruleset=PhaseOne,
             max_nodes=max_nodes,
             max_paths=max_paths,
+            **kwargs,
         )
     )

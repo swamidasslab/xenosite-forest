@@ -109,7 +109,7 @@ def test_impossible_targets_abort_without_draining_budget():
                 ruleset=PhaseOne,
                 max_nodes=200,
                 counters=counters,
-            )
+                )
         )
         assert not hits, "unexpected path %s → %s: %s" % (reactant, target, hits)
         # Empty frontier, not a node-cap stop.

@@ -131,7 +131,6 @@ _CACHE_SMILES = "site_pair_orbits_smiles"
 _CACHE_BA_PAIR = "bond_atom_pair_orbits_nauty"
 _CACHE_LEX_REPS = "lexical_orbit_representatives"
 _ENV_BACKEND = "XENOSITE_PAIR_ORBIT_BACKEND"
-_ENV_CANONICAL_SITES = "XENOSITE_CANONICAL_EMITTED_SITES"
 _MEMBERSHIP_BASE = 4
 # Documented trivial pair_group when either end is a singleton topeqiv group,
 # or when backend is ``none`` for multi–multi (cheap path; no isotope tables).
@@ -151,8 +150,6 @@ BondAtomPairOrbitTables: TypeAlias = dict[
 
 # Process-wide override. ``None`` → env var → auto (nauty if importable else none).
 _backend_override: PairOrbitBackend | None = None
-# Opt-in canonical emitted sites. ``None`` → env var → False (current behavior).
-_canonical_emitted_sites_override: bool | None = None
 
 SitePairOrbitGroups = dict[OrbitFamily, list[list[tuple[int, int]]]]
 
@@ -197,33 +194,15 @@ def set_pair_orbit_backend(backend: PairOrbitBackend | None) -> None:
     _backend_override = backend
 
 
-def get_canonical_emitted_sites() -> bool:
-    """Opt-in lex-orbit site emission. Default False (current discovery order).
+def canonical_emitted_sites_requested(kwargs: Mapping[str, object]) -> bool:
+    """Opt-in lex-orbit site emission from explicit kwargs only.
 
-    Override via :func:`set_canonical_emitted_sites`, else env
-    ``XENOSITE_CANONICAL_EMITTED_SITES`` ∈ ``{1,true,yes,on}``, else False.
-    Per-call ``metabolize(..., canonical_emitted_sites=...)`` wins.
+    Default off. Pass ``canonical_emitted_sites=True`` on ``metabolize`` /
+    ``metabolites`` / ``find_path`` / ``bfs`` / ``dfs`` (search splats down).
+    No env or process-wide toggle.
     """
 
-    if _canonical_emitted_sites_override is not None:
-        return _canonical_emitted_sites_override
-    env = os.environ.get(_ENV_CANONICAL_SITES, "").strip().lower()
-    return env in ("1", "true", "yes", "on")
-
-
-def set_canonical_emitted_sites(enabled: bool | None) -> None:
-    """Process-wide opt-in, or ``None`` to clear (env / default resume)."""
-
-    global _canonical_emitted_sites_override
-    _canonical_emitted_sites_override = enabled
-
-
-def canonical_emitted_sites_requested(kwargs: Mapping[str, object]) -> bool:
-    """Resolve opt-in: explicit kwargs key, else :func:`get_canonical_emitted_sites`."""
-
-    if "canonical_emitted_sites" in kwargs:
-        return bool(kwargs["canonical_emitted_sites"])
-    return get_canonical_emitted_sites()
+    return bool(kwargs.get("canonical_emitted_sites", False))
 
 
 # --- CIP sort keys (canonical ordering of orbit groups) ---

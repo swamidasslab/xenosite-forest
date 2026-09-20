@@ -2,6 +2,11 @@
 
 ## 2026-09-20
 
+- `find_path` / `bfs` / `dfs` splat `**kwargs` to metabolites/metabolize (e.g. `canonical_emitted_sites`). POC fuzz draws the flag with Hypothesis `st.booleans()` / `data.draw` and passes explicit kwargs — no env, no custom flip helpers. Flaky suites stay default-off; hardcoding `True` there is a future option only (PAIR_ORBITS §5, TODO).
+- Dropped `XENOSITE_CANONICAL_EMITTED_SITES` and `set_canonical_emitted_sites` / process override. Opt-in is explicit kwargs only. Docs: PAIR_ORBITS §5, HEURISTICS.
+
+## 2026-09-20
+
 - Singleton atom lex-orbit emission: one-atom unique-edit remaps to lex-smallest atom in the automorphism orbit (`LexicalOrbitRepresentatives.atom`; `canonicalize_smarts_match` no longer skips `len(site)==1`). Bond–atom directed singleton path unchanged. Docs: PAIR_ORBITS §5, HEURISTICS.
 - Re-profile after parent-cache (`eee738f`) + singleton: same harness. OFF wall **3.862s**, ON **4.007s**, Δ **+0.145s (+3.7%)** (was +7.2% before parent-cache). Artifacts: `artifacts/canonical_emitted_sites_profile.{out,pstats,live.log}` (untracked).
 

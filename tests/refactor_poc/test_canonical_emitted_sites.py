@@ -10,6 +10,8 @@ from __future__ import annotations
 import importlib.util
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from xenosite.refactor_poc.graph_isomorphism import (
     all_site_pair_orbits_nauty,
@@ -18,8 +20,8 @@ from xenosite.refactor_poc.graph_isomorphism import (
     ensure_lexical_orbit_representatives,
     lexical_orbit_representatives,
     normalize_orbit_candidate,
-    set_canonical_emitted_sites,
 )
+from xenosite.refactor_poc.find_path import bfs, find_path
 from xenosite.refactor_poc.rdkitutil import MolFromSmiles
 from xenosite.refactor_poc.rules import Dehydrogenation, Hydroxylation, QuinoneFormation
 
@@ -41,13 +43,6 @@ def _as_fs(site) -> frozenset[int]:
     if isinstance(site, int):
         return frozenset({site})
     return frozenset(site)
-
-
-@pytest.fixture(autouse=True)
-def _clear_canonical_override():
-    set_canonical_emitted_sites(None)
-    yield
-    set_canonical_emitted_sites(None)
 
 
 def test_lexical_rep_stable_under_member_order():
@@ -304,4 +299,58 @@ def test_canonical_emission_after_of_products_still_sets_discovered_site():
         addition = _p._forest["atom_trace"]["additions"][tid]
         assert "discovered_site" in addition
         assert _p._forest.get("cache", {}).get("lexical_orbit_representatives") is None
+
+
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=20_000, derandomize=True)
+def test_bfs_forwards_canonical_emitted_sites(canonical_emitted_sites: bool):
+    """``bfs`` splat: Hypothesis draws the flag; remapping only when True."""
+
+    mol = _mol("c1ccccc1")
+    tables = ensure_lexical_orbit_representatives(mol)
+    assert tables is not None
+    lex = min(a for a, rep in tables.atom.items() if rep == tables.atom[0])
+
+    def only_non_lex(_mol, site, _info):
+        fs = _as_fs(site)
+        if len(fs) != 1:
+            return True
+        return next(iter(fs)) != lex
+
+    products = list(
+        bfs(
+            mol,
+            Hydroxylation(),
+            depth=1,
+            filter_sites=only_non_lex,
+            canonical_emitted_sites=canonical_emitted_sites,
+        )
+    )
+    assert products
+    remapped = [(p, info) for p, info in products if "discovered_site" in info]
+    if canonical_emitted_sites:
+        assert remapped
+        for _p, info in remapped:
+            assert _as_fs(info["site"]) == frozenset({lex})
+    else:
+        assert remapped == []
+
+
+@given(canonical_emitted_sites=st.booleans())
+@settings(max_examples=4, deadline=20_000, derandomize=True)
+def test_find_path_forwards_canonical_emitted_sites(canonical_emitted_sites: bool):
+    """``find_path`` splat: Hypothesis draws the flag; either mode finds phenol."""
+
+    hits = list(
+        find_path(
+            "c1ccccc1",
+            "Oc1ccccc1",
+            ruleset=Hydroxylation(),
+            max_paths=1,
+            max_nodes=50,
+            canonical_emitted_sites=canonical_emitted_sites,
+        )
+    )
+    assert hits
+    assert hits[0].smiles == "Oc1ccccc1"
 
