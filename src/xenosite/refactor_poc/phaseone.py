@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Generator, Sequence
 
 from xenosite.refactor_poc.rdkit_api import ForestTracingMol, Mol
-from xenosite.refactor_poc.records import Addition, TraceAddition
+from xenosite.refactor_poc.records import Addition, ProductInfo, TraceAddition
 from xenosite.refactor_poc.rules import ReactionRule
 
 from . import rules
@@ -81,7 +81,7 @@ PhaseOneQF = RuleSet(
 
 def metabolize(
     mol: Mol, **kwargs
-) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
+) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
     """Run :data:`PhaseOne`. Yields ``(product, info)``."""
 
     yield from PhaseOne.metabolize(mol, **kwargs)

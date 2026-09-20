@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
     # rules.py imports Effect, PatternInfo, SiteInfo, and When from this module.
@@ -136,18 +136,55 @@ class Effect(TypedDict, total=False):
     when: When
 
 
+# Span values: certain → bare; disagreeing possibilities → tuple.
+_StrSpan: TypeAlias = str | tuple[str, ...]
+_BoolSpan: TypeAlias = bool | tuple[bool, ...]
+_IntSpan: TypeAlias = int | tuple[int, ...]
+_LeaveSpan: TypeAlias = int | None | tuple[int | None, ...]
+
+
+class _SpanCore(TypedDict):
+    """Effect fields :func:`~xenosite.refactor_poc.rules._span` always writes.
+
+    Every possibility from :func:`~xenosite.refactor_poc.rules.describe` carries
+    these keys, so the collapsed span does too. A certain value stays bare;
+    disagreeing branches become a tuple of the distinct values.
+    """
+
+    adds: _StrSpan
+    removes: _StrSpan
+    cleaves: _BoolSpan
+    leave_count: _LeaveSpan
+    breaks_ring: _BoolSpan
+    dearomatizes: _BoolSpan
+    methide: _BoolSpan
+    needs: _StrSpan
+
+
+class Span(_SpanCore, total=False):
+    """Collapsed effect fields across a pattern's possibilities.
+
+    Closed: only named keys. Optional keys appear when a possibility set them.
+    """
+
+    partner: _StrSpan
+    partner_h: _IntSpan
+    symbol: _StrSpan
+    h: _IntSpan
+    site_aromatic: _BoolSpan
+
+
 class PatternInfo(TypedDict, total=False):
     """What a SMARTS pattern can do, before and after a match.
 
-    ``span`` stays an open dict. It is the collapsed effect fields, and a
-    value may be a bare result or a tuple of the branches that disagree.
-    Naming that as one TypedDict would hide the disagreement.
-    ``name`` distinguishes this pattern from the others on the same rule.
+    ``span`` is the collapsed effect fields. A value may be bare or a tuple of
+    the branches that disagree. ``name`` distinguishes this pattern from the
+    others on the same rule.
     """
 
     name: str
     possibilities: tuple[Effect, ...]
-    span: dict[str, object]
+    span: Span
     edit: str
     site_map: int | tuple[int, ...]
     # Map numbers that receive an isotope label. More than one map can be
@@ -186,15 +223,68 @@ class PairSiteInfo(_SiteInfoCore):
 SiteInfo: TypeAlias = SmartsSiteInfo | PairSiteInfo
 
 
+class SmartsProductInfo(SmartsSiteInfo):
+    """``SiteInfo`` after :meth:`ReactionRule.metabolize` adds product fields."""
+
+    product_index: int
+    product_count: int
+    csmi: str
+
+
+class PairProductInfo(PairSiteInfo):
+    """Pair ``SiteInfo`` after metabolize adds product fields."""
+
+    product_index: int
+    product_count: int
+    csmi: str
+
+
+ProductInfo: TypeAlias = SmartsProductInfo | PairProductInfo
+
+
+class TraceInfo(TypedDict, total=False):
+    """Pattern snapshot on ``TraceAddition.info``.
+
+    Rule objects become names. ``options`` and ``pattern`` are dropped; the
+    resolved effect and pattern live on sibling TraceAddition fields.
+    Closed: only named keys. All optional so a stub Addition may omit them.
+    """
+
+    site: Site
+    rule: str | None
+    rule_chain: tuple[str | None, ...]
+    rxn_num: int
+    ends: tuple[Effect, Effect]
+    end_atoms: tuple[int, int]
+    end_maps: tuple[dict[int, int], dict[int, int]]
+    path_ends: frozenset[int]
+
+
+SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms"]
+
+# Keyword values :func:`~xenosite.refactor_poc.rules.describe` / ``branches`` accept.
+EffectField: TypeAlias = str | bool | int | When | None
+
+
+class EditCounters(Protocol):
+    """Duck-typed int fields :func:`_bump` may increment during edits."""
+
+    mol_edits: int
+    rule_expansions: int
+    sites_considered: int
+    sites_skipped: int
+    sanitize_dropped: int
+
+
 class Addition(NamedTuple):
     """One transform, when a function returns it. Callers use attributes."""
 
     site: Site
     rules: tuple[ReactionRule, ...]
-    info: dict[str, object]
+    info: TraceInfo
     effect: Effect
     name: str | None
-    phase1: object | None
+    phase1: None
     depth: int
     pattern: PatternInfo | None = None
 
@@ -228,19 +318,19 @@ class TraceAddition(TypedDict):
     """The dict stored at ``atom_trace["additions"][id]``.
 
     Same fields as :class:`Addition`. Stored as a dict because the trace
-    writes it that way. ``info`` stays open: it is the pattern snapshot
-    with rule objects replaced by names, and ``options`` dropped.
-    ``pattern`` is the :class:`PatternInfo` that fired, the same object
-    the rule holds. It is not a rule and is not on ``rules``.
-    ``phase1`` is reserved. Its schema is not decided.
+    writes it that way. ``info`` is the pattern snapshot with rule objects
+    replaced by names, and ``options`` dropped. ``pattern`` is the
+    :class:`PatternInfo` that fired, the same object the rule holds. It is
+    not a rule and is not on ``rules``. ``phase1`` is reserved; only ``None``
+    until its schema is decided.
     """
 
     site: Site
     rules: tuple[ReactionRule, ...]
-    info: dict[str, object]
+    info: TraceInfo
     effect: Effect
     name: str | None
-    phase1: object | None
+    phase1: None
     depth: int
     pattern: PatternInfo | None
 

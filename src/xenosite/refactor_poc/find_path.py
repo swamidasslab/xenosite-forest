@@ -11,10 +11,10 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import NamedTuple
 
 from xenosite.forest.step_plan import AtomRef as AddedRef
-from xenosite.forest.step_plan import Deps, Step, StepPlan
+from xenosite.forest.step_plan import StepPlan
+from xenosite.refactor_poc.canonical_plan import CanonicalStep, as_deps
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
     Mol,
@@ -22,18 +22,18 @@ from xenosite.refactor_poc.rdkitutil import (
     cannonicalize_order,
     canon_smiles,
     copy_mol,
-    is_tracing,
     mcs_matches,
     mcs_target_matches,
     sanitize_catch,
     split_fragments,
 )
-from xenosite.refactor_poc.records import AtomRef, Site, SiteInfo, _flat_ints
+from xenosite.refactor_poc.records import AtomRef, PatternInfo, ProductInfo, Site, SiteInfo, Span, _flat_ints
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
     QuinoneFormation,
+    ReactionRule,
     _as_site,
     forest_trace,
     install_forest,
@@ -488,20 +488,20 @@ def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
 # ---------------------------------------------------------------------------
 
 
-def _span_values(span, key, default):
+def _span_values(span: Span, key: str, default):
     if key not in span:
         return (default,)
-    value = span[key]
+    value = span[key]  # type: ignore[literal-required]
     if isinstance(value, tuple):
         return value
     return (value,)
 
 
-def _any_span(span, key, pred, default):
+def _any_span(span: Span, key: str, pred, default):
     return any(pred(value) for value in _span_values(span, key, default))
 
 
-def _all_span(span, key, pred, default):
+def _all_span(span: Span, key: str, pred, default):
     values = _span_values(span, key, default)
     return bool(values) and all(pred(value) for value in values)
 
@@ -510,10 +510,19 @@ def _effect_adds_oxygen(effect):
     return "O" in (effect.get("adds") or "") or "O" in (effect.get("needs") or "")
 
 
-def _pattern_could_help(info, diff):
+def _pattern_could_help(info: PatternInfo, diff):
     """``filter_rules`` sees ``span`` before any match."""
 
-    span = info.get("span") or {}
+    span: Span = info.get("span") or {
+        "adds": "",
+        "removes": "",
+        "cleaves": False,
+        "leave_count": None,
+        "breaks_ring": False,
+        "dearomatizes": False,
+        "methide": False,
+        "needs": "",
+    }
     can_cleave = _any_span(span, "cleaves", bool, False)
     # The kept piece is smaller. A non-cleaving pattern cannot get there,
     # and editing the intact parent is the cost this filter exists to avoid.
@@ -621,15 +630,15 @@ def _filters(diff, enabled, mol: Mol):
     return filter_rules, filter_sites
 
 
-def _rule_can_cleave(rule: object) -> bool:
-    patterns: list[tuple[str, dict[str, object]]] = []
+def _rule_can_cleave(rule: ReactionRule) -> bool:
+    patterns: list[tuple[str, PatternInfo]] = []
     for group in (getattr(rule, "smarts", None), getattr(rule, "endpoints", None)):
         if not group:
             continue
         patterns.extend(group)
     for _smarts, info in patterns:
-        span = info.get("span") or {}
-        if not isinstance(span, dict):
+        span = info.get("span")
+        if span is None:
             continue
         if _any_span(span, "cleaves", bool, False):
             return True
@@ -641,186 +650,14 @@ def _rule_can_cleave(rule: object) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _atom_ref(mol: Mol, idx):
-    """Origin index, or ``added_by`` when this atom was created by a step.
+def _steps_for(mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
+    """Canonical elementary steps for one accepted edit.
 
-    ``added_by`` on the record is a transform id (``R1``). The rule name and
-    site are on ``atom_trace["additions"]``.
+    Always asks the rule. Ordinary rules report themselves; composite hops
+    (quinone) expand. Search does not branch on the rule name.
     """
 
-    atom = mol.GetAtomWithIdx(idx)
-    if not is_tracing(mol) or not atom.HasProp("forestLabel"):
-        return idx
-    trace = mol._forest["atom_trace"]
-    record = trace["records"].get(atom.GetProp("forestLabel"))
-    if record is None:
-        return idx
-    added = record.get("added_by")
-    if not added:
-        return idx
-    if isinstance(added, str):
-        detail = trace["additions"].get(added)
-        if detail is None:
-            return idx
-    else:
-        detail = added
-    name = detail.get("name")
-    if name is None:
-        rule = detail.get("rule")
-        name = rule if isinstance(rule, str) else getattr(rule, "name", None)
-    site = detail.get("site") or ()
-    if isinstance(site, int):
-        site = (site,)
-    if name is None:
-        return idx
-    return AddedRef(added_by=(name, frozenset(site)))
-
-
-class _PlanStep(NamedTuple):
-    """One phase-I step before it is handed to :class:`Deps`.
-
-    ``site`` is a flat tuple of atom notes for that step: a known index,
-    a forest :class:`AddedRef`, or a records :class:`AtomRef` for an atom
-    that does not exist yet. That is not a reaction :class:`FutureSite`.
-    """
-
-    rule: str
-    site: tuple[int | AddedRef | AtomRef, ...]
-
-
-def _step(mol: Mol, rule_name: str, site: Site) -> _PlanStep:
-    if isinstance(site, int):
-        atoms: tuple[int, ...] = (site,)
-    elif isinstance(site, tuple):
-        atoms = site
-    else:
-        atoms = tuple(sorted(_flat_ints(site)))
-    return _PlanStep(rule_name, tuple(_atom_ref(mol, idx) for idx in atoms))
-
-
-def _steps_for(mol: Mol, info: SiteInfo):
-    """Phase-I steps for one accepted edit.
-
-    QuinoneFormation is not itself a step. The hop stands in for the
-    hydroxylations that supply each oxygen and the dehydrogenation that
-    follows them.
-    """
-
-    rule_name = info["rule"].name
-    if rule_name is None:
-        return ()
-    if rule_name == "QuinoneFormation":
-        return _quinone_phase1(mol, info)
-    return (_step(mol, rule_name, info["site"]),)
-
-
-def _bonded(mol: Mol, idx, atomic_num):
-    """Neighbor of ``idx`` with this atomic number, if the mol already has one."""
-
-    atom = mol.GetAtomWithIdx(idx)
-    for neighbor in atom.GetNeighbors():
-        if neighbor.GetAtomicNum() == atomic_num:
-            return neighbor.GetIdx()
-    return None
-
-
-def _quinone_phase1(mol: Mol, info: SiteInfo):
-    """Hydroxylations that supply missing oxygens, then one dehydrogenation.
-
-    An end that already carries oxygen keeps that atom. An end that
-    ``needs`` oxygen becomes a Hydroxylation; the dehydrogenation site
-    points at the oxygen that step would add. No ``end_maps`` field is
-    required: the partner atom is the neighbor already on ``mol``.
-    """
-
-    if "ends" not in info:
-        return (_step(mol, "Dehydrogenation", info["site"]),)
-    ends = info["ends"]
-    end_atoms = info["end_atoms"]
-    hydroxylations = []
-    dh_refs = []
-    for end, atom in zip(ends, end_atoms):
-        partner = end.get("partner") or ""
-        adds_oxygen = "O" in (end.get("needs") or "") or (
-            "O" in (end.get("adds") or "") and partner != "O"
-        )
-        if adds_oxygen:
-            anchor = _atom_ref(mol, atom)
-            hydroxylations.append(_PlanStep("Hydroxylation", (anchor,)))
-            if isinstance(anchor, int):
-                idx, depth = anchor, 0
-            elif anchor.origin is not None:
-                idx, depth = anchor.origin, anchor.depth
-            else:
-                idx, depth = atom, 0
-            dh_refs.append(AtomRef(idx, "O", depth))
-            continue
-        atomic_num = {"O": 8, "N": 7, "C": 6, "S": 16}.get(partner)
-        hetero = _bonded(mol, atom, atomic_num) if atomic_num else None
-        if hetero is not None:
-            dh_refs.append(_atom_ref(mol, hetero))
-    if not dh_refs:
-        return (_step(mol, "Dehydrogenation", info["site"]),)
-    return tuple(hydroxylations) + (_PlanStep("Dehydrogenation", tuple(dh_refs)),)
-
-
-def _anchor(item) -> int | None:
-    if isinstance(item, AtomRef):
-        return item.idx
-    if isinstance(item, int):
-        return item
-    origin = getattr(item, "origin", None)
-    if origin is None:
-        return None
-    return int(origin)
-
-
-def _anchors(step) -> set[int]:
-    return {anchor for anchor in (_anchor(item) for item in step.site) if anchor is not None}
-
-
-def _forest_item(item, steps, later):
-    """Hand :class:`Deps` a forest ref. The rule name is the earlier step's."""
-
-    if not isinstance(item, AtomRef):
-        return item
-    for previous in steps[:later]:
-        if item.idx in _anchors(previous):
-            return AddedRef(added_by=(previous.rule, frozenset({item.idx})))
-    return item.idx
-
-
-def _deps(steps: Sequence[_PlanStep]) -> StepPlan:
-    """A later step depends on an earlier one when its site names an atom that step added.
-
-    An :class:`AtomRef` is that note: its ``idx`` is the atom the earlier
-    step changed, and its ``element`` is what had to be added.
-    """
-
-    edges: list[tuple[int, int]] = []
-    forest_steps: list[Step] = []
-    for later, step in enumerate(steps):
-        for item in step.site:
-            if isinstance(item, AtomRef):
-                for earlier, previous in enumerate(steps[:later]):
-                    if item.idx in _anchors(previous):
-                        edges.append((earlier, later))
-                continue
-            added = getattr(item, "added_by", None)
-            if not added:
-                continue
-            rule_name, site = added
-            wanted = frozenset(site)
-            for earlier, previous in enumerate(steps):
-                if previous.rule != rule_name:
-                    continue
-                if _anchors(previous) == wanted:
-                    edges.append((earlier, later))
-        forest_steps.append(
-            Step(step.rule, frozenset(_forest_item(item, steps, later) for item in step.site))
-        )
-    # Deps is wrapped by @unstable; pyright does not treat the constructor as Deps/StepPlan.
-    return Deps(tuple(forest_steps), edges)  # pyright: ignore[reportReturnType, reportCallIssue]
+    return info["rule"].canonical_plan(mol, info)
 
 
 # ---------------------------------------------------------------------------
@@ -876,12 +713,12 @@ def _keep_fragment(finished, target: Mol):
 @dataclass
 class _Walk:
     mol: Mol
-    steps: tuple[_PlanStep, ...]
+    steps: tuple[CanonicalStep, ...]
     sides: tuple[CleavageSide, ...]
     opens: tuple[frozenset[int], ...]
 
 
-def _cleavage_site(value: object) -> frozenset[int]:
+def _cleavage_site(value: Site) -> frozenset[int]:
     """Known-index site as a frozenset for cleavage bookkeeping."""
 
     site = _as_site(value)
@@ -935,7 +772,7 @@ def find_path(
         here = canon_smiles(walk.mol)
         if here == target_smiles:
             yield PathOutcome(
-                plan=_deps(walk.steps),
+                plan=as_deps(walk.steps),
                 maybe=Maybe(walk.sides),
                 smiles=here,
             )
@@ -1007,7 +844,7 @@ def find_path(
 class _Expand:
     mol: Mol
     depth: int
-    info: dict[str, object] | None = None
+    info: ProductInfo | None = None
 
 
 def _keep_rule(rule, info) -> bool:

@@ -11,6 +11,7 @@ from collections.abc import Generator, Iterator
 
 from xenosite.refactor_poc.rdkit_api import ForestTracingMol
 from xenosite.refactor_poc.rdkitutil import Mol
+from xenosite.refactor_poc.records import ProductInfo
 
 from .rules import (
     Dealkylation,
@@ -105,7 +106,7 @@ class RuleSet(ReactionRule):
         unique_csmi: bool = True,
         order_key=None,
         **kwargs,
-    ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
+    ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
         """Run each contained rule, then append this set on that product.
 
         The contained rule, including a nested set, has already put itself

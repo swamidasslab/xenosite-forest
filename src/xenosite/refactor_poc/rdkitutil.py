@@ -64,6 +64,7 @@ from xenosite.refactor_poc.rdkit_api import (
     SanitizeMol,
 )
 from xenosite.refactor_poc.records import (
+    EditCounters,
     EndParents,
     Forest,
     Formula,
@@ -816,7 +817,7 @@ def smarts_matches(mol: Mol, smarts: str) -> tuple[dict[int, int], ...]:
     return cache[smarts]
 
 
-def _bump(counters: object | None, name: str, amount: int = 1) -> None:
+def _bump(counters: EditCounters | None, name: str, amount: int = 1) -> None:
     if counters is None:
         return
     current = getattr(counters, name)
@@ -841,7 +842,7 @@ def _sanitize_piece(frag: Mol) -> bool:
     return not SanitizeMol(frag, catchErrors=True)
 
 
-def sanitized_fragments(mol: Mol, counters: object | None = None) -> FragmentSplit:
+def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> FragmentSplit:
     """Split, drop the dealkylation leaving group, sanitize.
 
     Empty pieces when any fragment fails. Callers read ``pieces``.

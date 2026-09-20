@@ -118,7 +118,7 @@ def test_labels_read_a_named_addition_the_same_way():
     addition = Addition(
         site=forest_addition["site"],
         rules=forest_addition["rules"],
-        info={},
+        info={},  # pyright: ignore[reportArgumentType]
         effect={},
         name=forest_addition["name"],
         phase1=None,
@@ -134,7 +134,7 @@ def test_unnamed_ruleset_stays_on_the_chain_but_emits_no_label():
     addition = Addition(
         site=(0,),
         rules=(PhaseOne, PhaseOneRS, Hydroxylation()),
-        info={},
+        info={},  # pyright: ignore[reportArgumentType]
         effect={},
         name=None,
         phase1=None,

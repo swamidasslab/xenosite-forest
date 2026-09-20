@@ -199,23 +199,23 @@ if TYPE_CHECKING:
         mol: Mol,
         asMols: Literal[True],
         sanitizeFrags: bool = True,
-        frags: object = None,
-        fragsMolAtomMapping: object = None,
+        frags: list[int] | None = None,
+        fragsMolAtomMapping: list[list[int]] | None = None,
     ) -> tuple[NoForestMol, ...]: ...
     @overload
     def GetMolFrags(
         mol: Mol,
         asMols: Literal[False] = False,
         sanitizeFrags: bool = True,
-        frags: object = None,
-        fragsMolAtomMapping: object = None,
+        frags: list[int] | None = None,
+        fragsMolAtomMapping: list[list[int]] | None = None,
     ) -> tuple[tuple[int, ...], ...]: ...
     def GetMolFrags(
         mol: Mol,
         asMols: bool = False,
         sanitizeFrags: bool = True,
-        frags: object = None,
-        fragsMolAtomMapping: object = None,
+        frags: list[int] | None = None,
+        fragsMolAtomMapping: list[list[int]] | None = None,
     ) -> tuple[NoForestMol, ...] | tuple[tuple[int, ...], ...]:
         raise AssertionError("rdkit_api.GetMolFrags is the real RDKit function at runtime")
     def MolFromSmarts(

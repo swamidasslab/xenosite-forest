@@ -2,6 +2,9 @@
 
 ## 2026-09-19
 
+- Moved composite phase-I plans off `find_path` onto `ReactionRule.canonical_plan` (default identity; `QuinoneFormation` → prep + dehydrogenation via `canonical_plan.py`). Search only calls the hook. Halogen ends read `partner` and emit `OxidativeDehalogenation`. `as_deps` keys `AddedRef` on the full prep site.
+- Parameterized plan-apply checks in `tests/refactor_poc/test_canonical_plan.py` over `QUICK_SUBSTRATES` / `SUBSTRATE_LIBRARY`: identity re-metabolize at the plan site; composite forest `Linearization.apply` on a plain mol. `pytest tests/refactor_poc -q`: 674 passed.
+
 - `FilterSites` second arg is now `SiteInfo = SmartsSiteInfo | PairSiteInfo` (closed, total=True) in `records.py`. Shared core: site, rule, options. SMARTS/resonance adds rxn_num, pattern; pair adds ends, end_atoms, end_maps, path_ends.
 - Dropped unused ad-hoc keys that closed schemas reject: pair `info["path"]`, and `merge_effects` keys `partners` / `aromatic` (never read). Per-end detail stays on `ends`.
 - pyright poc modules: 0 errors. `pytest tests/refactor_poc -q`: 126 passed.

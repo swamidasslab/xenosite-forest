@@ -7,7 +7,7 @@ import copy
 import itertools
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, NamedTuple, TypeGuard
+from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypeGuard, cast
 
 if TYPE_CHECKING:
     # Static re-export so ``from .rules import RuleSet`` types correctly.
@@ -51,28 +51,50 @@ from xenosite.refactor_poc.rdkitutil import (
     smarts_matches,
     topol_equiv,
 )
+from xenosite.refactor_poc.canonical_plan import (
+    CanonicalStep,
+    identity_canonical_plan,
+    quinone_canonical_plan,
+)
 from xenosite.refactor_poc.records import (
+    EditCounters,
     Effect,
+    EffectField,
     Formula,
     InitializedAtomTrace,
     KekuleParents,
     PairSiteInfo,
     PatternInfo,
+    ProductInfo,
     Site,
     SiteInfo,
+    SitesOn,
     SmartsSiteInfo,
+    Span,
     TraceAddition,
+    TraceInfo,
     When,
 )
 
+# Dedup key for one SMARTS site across Kekulé forms / equivalent carbons.
+SiteSignature: TypeAlias = tuple[
+    tuple[tuple[int, int], ...],
+    tuple[tuple[int, int, float], ...],
+    int,
+    str | None,
+    str | None,
+    bool,
+    bool,
+]
 
-def _is_pattern(value: object) -> TypeGuard[PatternInfo]:
+
+def _is_pattern(value: PatternInfo | dict) -> TypeGuard[PatternInfo]:
     """True when ``value`` is the pattern dict a rule stored on the info."""
 
     return isinstance(value, dict)
 
 
-def _copy_when(raw: Mapping[str, object]) -> When:
+def _copy_when(raw: When | Mapping[str, int]) -> When:
     copied: When = {}
     mapno = raw.get("map")
     if isinstance(mapno, int):
@@ -115,7 +137,7 @@ class ReactionRule:
     is_terminal_rule: bool = False
     name: str | None
     longname: str | None
-    sites_on: object | None = None
+    sites_on: SitesOn | None = None
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -125,7 +147,7 @@ class ReactionRule:
     def __init__(
         self,
         name: str | None = None,
-        sites_on: object | None = None,
+        sites_on: SitesOn | None = None,
         longname: str | None = None,
         *args,
         **kwargs,
@@ -152,9 +174,22 @@ class ReactionRule:
         if sites_on is not None:
             self.sites_on = sites_on
 
+    def canonical_plan(self, mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
+        """Elementary steps a search should record for this hop.
+
+        The default is identity: this rule is already canonical, so the plan
+        is one step at ``info["site"]``. Composite look-aheads override (for
+        example quinone → hydroxylation then dehydrogenation).
+        ``Addition.phase1`` is not used; its schema is not decided.
+        """
+
+        if self.name is None:
+            return ()
+        return identity_canonical_plan(self.name, mol, info["site"])
+
     def __call__(
         self, mol: Mol, **kwargs
-    ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
+    ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
     def __iter__(self) -> Iterator[ReactionRule]:
@@ -167,7 +202,7 @@ class ReactionRule:
         filter_sites: FilterSites = lambda site, info: True,
         unique_csmi: bool = True,
         **kwargs,
-    ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
+    ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
         """Apply this rule and yield ``(product, info)`` pairs.
 
         This is the method callers use. It keeps the invariants below.
@@ -251,7 +286,7 @@ class ReactionRule:
                         continue
                     seen.add(csmi)
 
-                i = dict(info)
+                i = cast(ProductInfo, dict(info))
                 i["product_index"] = n
                 i["product_count"] = len(products)
                 i["csmi"] = csmi
@@ -326,7 +361,7 @@ FilterRules = Callable[[ReactionRule, PatternInfo], bool]
 FilterSites = Callable[[Site, SiteInfo], bool]
 
 
-def __getattr__(name: str) -> object:
+def __getattr__(name: str) -> type[ReactionRule]:
     """``RuleSet`` lives in ``rulesets``. Keep ``from .rules import RuleSet`` working."""
 
     if name == "RuleSet":
@@ -353,7 +388,7 @@ def formula_delta(before: Formula, after: Formula) -> Formula:
     }
 
 
-def _rule_name(rule: object) -> str | None:
+def _rule_name(rule: ReactionRule | str | None) -> str | None:
     if rule is None:
         return None
     if isinstance(rule, str):
@@ -443,7 +478,7 @@ def reordered_forest_labels(mol: ForestTracingMol) -> None:
             idx[-1] = i
 
 
-def _as_site(value: object) -> Site:
+def _as_site(value: Site | None) -> Site:
     """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first."""
 
     if isinstance(value, int):
@@ -473,26 +508,24 @@ def _site_tuple(site: Site) -> Site:
     return tuple(sorted(indexes))
 
 
-def _trace_info(info: Mapping[str, object]) -> dict[str, object]:
+def _trace_info(info: SiteInfo) -> TraceInfo:
     """Pattern fields worth keeping, without a second copy of the rule object."""
 
-    kept: dict[str, object] = {}
-    for key, value in info.items():
-        if key == "rule":
-            kept[key] = _rule_name(value)
-        elif key == "rule_chain":
-            if isinstance(value, (tuple, list)):
-                kept[key] = tuple(_rule_name(item) for item in value)
-            else:
-                kept[key] = value
-        elif key in ("options", "pattern"):
-            continue
-        else:
-            kept[key] = value
+    kept: TraceInfo = {
+        "site": info["site"],
+        "rule": _rule_name(info["rule"]),
+    }
+    if "rxn_num" in info:
+        kept["rxn_num"] = info["rxn_num"]
+    if "ends" in info:
+        kept["ends"] = info["ends"]
+        kept["end_atoms"] = info["end_atoms"]
+        kept["end_maps"] = info["end_maps"]
+        kept["path_ends"] = info["path_ends"]
     return kept
 
 
-def _as_effect(value: object) -> Effect:
+def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     """Copy known effect fields from an open dict."""
 
     effect: Effect = {
@@ -555,7 +588,7 @@ def _as_effect(value: object) -> Effect:
 def forest_trace(
     reactant: Mol,
     product: Mol,
-    info: Mapping[str, object],
+    info: SiteInfo,
     executed: ReactionRule | None = None,
 ) -> InitializedAtomTrace:
     """Record one transform on the product's atom trace.
@@ -566,8 +599,8 @@ def forest_trace(
     the site is written in.
     """
 
-    rule = info.get("rule")
-    site = _as_site(info.get("site"))
+    rule = info["rule"]
+    site = _as_site(info["site"])
     parent = stamp_forest_labels(reactant)
     held = ensure_forest(product)
     trace: InitializedAtomTrace = copy.deepcopy(parent._forest["atom_trace"])
@@ -583,21 +616,9 @@ def forest_trace(
     depth = trace["depth"] = trace["depth"] + 1
     frame = depth - 1
     chain: list[ReactionRule] = []
-    rule_chain = info.get("rule_chain") or ()
-    extras: tuple[object, ...]
-    if isinstance(rule_chain, tuple):
-        extras = rule_chain
-    elif isinstance(rule_chain, list):
-        extras = tuple(rule_chain)
-    else:
-        extras = ()
-    for item in extras + ((executed,) if executed is not None else ()):
-        if item is rule or not isinstance(item, ReactionRule):
-            continue
-        if any(item is seen for seen in chain):
-            continue
-        chain.append(item)
-    if isinstance(rule, ReactionRule) and all(rule is not seen for seen in chain):
+    if executed is not None and executed is not rule:
+        chain.append(executed)
+    if all(rule is not seen for seen in chain):
         chain.append(rule)
 
     before = trace.get("formula") or molecule_formula(reactant)
@@ -605,19 +626,18 @@ def forest_trace(
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
     # PatternInfo is stored on info as the same dict the rule holds.
-    raw_pattern = info.get("pattern")
     pattern: PatternInfo | None
-    if isinstance(raw_pattern, dict):
-        pattern = raw_pattern  # pyright: ignore[reportAssignmentType]
+    if "pattern" in info:
+        pattern = info["pattern"]
     else:
         pattern = None
     addition: TraceAddition = {
         "site": _site_tuple(site),
         "rules": tuple(chain),
         "info": _trace_info(info),
-        "effect": _as_effect(info.get("options")),
+        "effect": _as_effect(info["options"]),
         "name": _rule_name(rule),
-        "phase1": info.get("phase1"),
+        "phase1": None,
         "depth": frame,
         "pattern": pattern,
     }
@@ -654,7 +674,7 @@ def forest_trace(
     return trace
 
 
-_EFFECT_DEFAULTS = {
+_EFFECT_DEFAULTS: Effect = {
     "adds": "",
     "removes": "",
     "cleaves": False,
@@ -680,7 +700,7 @@ _SYMBOL = {
 }
 
 
-def _span(possibilities: Sequence[Mapping[str, object]]) -> dict[str, object]:
+def _span(possibilities: Sequence[Effect]) -> Span:
     """Certain values stay bare. Disagreeing values become a tuple."""
 
     keys: list[str] = []
@@ -688,22 +708,22 @@ def _span(possibilities: Sequence[Mapping[str, object]]) -> dict[str, object]:
         for key in possibility:
             if key != "when" and key not in keys:
                 keys.append(key)
-    span: dict[str, object] = {}
+    raw: dict[str, EffectField | tuple[EffectField, ...]] = {}
     for key in keys:
-        values: list[object] = []
+        values: list[EffectField] = []
         for possibility in possibilities:
-            value = possibility.get(key, _EFFECT_DEFAULTS.get(key))
+            value = cast(EffectField, possibility.get(key, _EFFECT_DEFAULTS.get(key)))
             if value not in values:
                 values.append(value)
-        span[key] = values[0] if len(values) == 1 else tuple(values)
-    return span
+        raw[key] = values[0] if len(values) == 1 else tuple(values)
+    return cast(Span, raw)
 
 
 def branches(
     whens: Sequence[When],
     site_map: int = 1,
     removes_partner: bool = False,
-    **effect: object,
+    **effect: EffectField,
 ) -> tuple[Effect, ...]:
     """Copy ``effect`` once per ``when``. The site atom and the OR atom differ.
 
@@ -714,7 +734,7 @@ def branches(
 
     out: list[Effect] = []
     for raw in whens:
-        when = _copy_when(dict(raw))
+        when = _copy_when(raw)
         item = _as_effect(effect)
         item["when"] = when
         symbol = _SYMBOL.get(when.get("z", -1))
@@ -741,7 +761,7 @@ def describe(
     pin: tuple[int, ...] | None = None,
     skip_same_rings: bool = False,
     name: str | None = None,
-    **single: object,
+    **single: EffectField,
 ) -> PatternInfo:
     """Build a :class:`PatternInfo`.
 
@@ -790,7 +810,7 @@ def _assign_pattern_names(patterns: Iterable[PatternInfo]) -> None:
         next_num += 1
 
 
-def may(info: PatternInfo, key: str, value: object = True) -> bool:
+def may(info: PatternInfo, key: str, value: EffectField = True) -> bool:
     """True if any possibility has this outcome.
 
     For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring.
@@ -815,7 +835,7 @@ def may(info: PatternInfo, key: str, value: object = True) -> bool:
     return False
 
 
-def must(info: PatternInfo, key: str, value: object = True) -> bool:
+def must(info: PatternInfo, key: str, value: EffectField = True) -> bool:
     """True if every possibility has this outcome."""
 
     possibilities = info.get("possibilities") or ()
@@ -851,7 +871,7 @@ def resolve_effect(mol: Mol, mapped: Mapping[int, int], info: PatternInfo) -> Ef
     Uses the caller's mol, not a kekulé copy: aromatic flags must still be set.
     """
 
-    possibilities = info.get("possibilities") or (_as_effect(info),)
+    possibilities = info.get("possibilities") or (_as_effect({}),)
     chosen: Effect | None = None
     for possibility in possibilities:
         when = possibility.get("when")
@@ -912,7 +932,7 @@ def merge_effects(
     }
 
 
-def _bump(counters: object | None, name: str, amount: int = 1) -> None:
+def _bump(counters: EditCounters | None, name: str, amount: int = 1) -> None:
     if counters is None:
         return
     current = getattr(counters, name)
@@ -992,7 +1012,7 @@ def react_at(
     smarts: str,
     mol: Mol,
     mapped: Mapping[int, int],
-    counters: object | None = None,
+    counters: EditCounters | None = None,
     pin: tuple[int, ...] | None = None,
 ) -> list[Mol]:
     """Run ``smarts`` on one match. One call is one ``mol_edits``.
@@ -1077,7 +1097,7 @@ class SmartsReactionRule(ReactionRule):
         counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
         _bump(counters, "rule_expansions")
-        seen: set[object] = set()
+        seen: set[SiteSignature] = set()
         ranks = topol_equiv(context)
 
         for work in _kekule_forms(mol):
@@ -1105,7 +1125,7 @@ class SmartsReactionRule(ReactionRule):
                     # Same map roles and the same incident bond orders are one
                     # edit. Equivalent carbons share a rank. Another Kekulé
                     # writing, or swapping which atom is map 1, is not.
-                    signature = (
+                    signature: SiteSignature = (
                         tuple(
                             (mapno, ranks[idx])
                             for mapno, idx in sorted(mapped.items())
@@ -1436,7 +1456,7 @@ def _same_rings(
 def edit_single_to_double(
     rw: RWMol,
     mapped: Mapping[int, int],
-    info: Mapping[str, object],
+    info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
     a, b = mapped.get(1), mapped.get(2)
@@ -1454,7 +1474,7 @@ def edit_single_to_double(
 def edit_add_carbonyl_o(
     rw: RWMol,
     mapped: Mapping[int, int],
-    info: Mapping[str, object],
+    info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
     carbon = mapped.get(1)
@@ -1468,7 +1488,7 @@ def edit_add_carbonyl_o(
 def edit_replace_halogen(
     rw: RWMol,
     mapped: Mapping[int, int],
-    info: Mapping[str, object],
+    info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
     carbon, halogen = mapped.get(1), mapped.get(2)
@@ -1487,7 +1507,7 @@ def edit_replace_halogen(
 def edit_iminium(
     rw: RWMol,
     mapped: Mapping[int, int],
-    info: Mapping[str, object],
+    info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
     if not edit_single_to_double(rw, mapped, {}, rings):
@@ -1499,7 +1519,7 @@ def edit_iminium(
 def edit_keep(
     rw: RWMol,
     mapped: Mapping[int, int],
-    info: Mapping[str, object],
+    info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
     """Leave the endpoint bond alone. The path flip is the reaction."""
@@ -1510,7 +1530,7 @@ def edit_keep(
 def edit_dealkylate(
     rw: RWMol,
     mapped: Mapping[int, int],
-    info: Mapping[str, object],
+    info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
     hetero, alkyl = mapped.get(2), mapped.get(3)
@@ -1533,7 +1553,7 @@ EDITS: dict[
         [
             RWMol,
             Mapping[int, int],
-            Mapping[str, object],
+            PatternInfo,
             Mapping[int, tuple[tuple[int, ...], ...]],
         ],
         bool,
@@ -1633,7 +1653,7 @@ class ResonanceRule(SmartsReactionRule):
         context = mol if context_mol is None else context_mol
         _bump(counters, "rule_expansions")
         cache = _kekule_cache(mol)
-        seen: set[object] = set()
+        seen: set[SiteSignature] = set()
         ranks = topol_equiv(context)
 
         for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
@@ -1660,7 +1680,7 @@ class ResonanceRule(SmartsReactionRule):
                 if work is None:
                     _bump(counters, "sites_skipped")
                     continue
-                signature = (
+                signature: SiteSignature = (
                     tuple(
                         (mapno, ranks[idx])
                         for mapno, idx in sorted(mapped.items())
@@ -1730,7 +1750,7 @@ class ResonancePairRule(ResonanceRule):
         mol: Mol,
         filter_rules: FilterRules,
         filter_sites: FilterSites,
-        counters: object | None = None,
+        counters: EditCounters | None = None,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Endpoint loop.
 
@@ -1966,12 +1986,20 @@ class QuinoneFormation(ResonancePairRule):
     Use that split when a search should hydroxylate only atoms that still
     need oxygen, and dearomatize only the ring.
 
+    :meth:`canonical_plan` reports that elementary split. Metabolize still
+    applies this rule in one hop; the plan is parallel information for search.
+
     The exocyclic single-to-double SMARTS is one pattern with several
     partners (O, N, alkyl C). ``span['partner']`` is that tuple until the
     match; the resolved effect names the partner this site actually has.
     """
 
     systems = "aromatic"
+
+    def canonical_plan(self, mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
+        """Hydroxylations for missing oxygens, then one dehydrogenation."""
+
+        return quinone_canonical_plan(mol, info)
 
     endpoints: tuple[tuple[str, PatternInfo], ...] = (
         (
