@@ -23,6 +23,19 @@ def _billed(counters):
     )
 
 
+def test_find_path_and_metabolize_reject_none():
+    """Invalid parse → None must not soft-pass; typing is Mol in, not Mol | None."""
+
+    with pytest.raises(ValueError, match="required"):
+        list(find_path(None, "CCO"))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="required"):
+        list(find_path("CC", None))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="required"):
+        list(Hydroxylation().metabolize(None))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="required"):
+        list(RuleSet((Hydroxylation,), name="H").metabolize(None))  # type: ignore[arg-type]
+
+
 def test_ruleset_runs_children_and_filters_see_them():
     ruleset = RuleSet((Hydroxylation,), name="Poc")
     assert isinstance(ruleset, ReactionRule)
@@ -382,3 +395,31 @@ def test_hard_multi_oxidation_quinones_that_forest_struggled_on():
         message = "%s → %s %s" % (reactant, target, _billed(counters))
         assert hits, message
         assert counters.nodes <= ceiling, message
+
+
+def test_leave_count_one_refuses_a_larger_leaving_fragment():
+    """``leave_count`` on the effect is the named leaving size; filters read it."""
+
+    from xenosite.refactor_poc.find_path import _leaving_heavy_counts, _site_could_help
+    from xenosite.refactor_poc.rules import NDealkylation
+
+    mol = Chem.MolFromSmiles("CCN(C)C")
+    assert mol is not None
+    # Ethyl vs methyl on the same nitrogen: leave_count 1 keeps only methyl.
+    ethyl = _leaving_heavy_counts(mol, {1, 2})
+    methyl = _leaving_heavy_counts(mol, {2, 3})
+    assert ethyl is not None and min(ethyl) == 2
+    assert methyl is not None and min(methyl) == 1
+
+    diff = atom_diff(mol, "CNC")
+    info = {
+        "site": (1, 2),
+        "rule": NDealkylation(),
+        "options": {"cleaves": True, "leave_count": 1},
+        "rxn_num": 0,
+        "pattern": NDealkylation().smarts[0][1],
+    }
+    assert not _site_could_help((1, 2), info, diff, mol)
+    info_ok = dict(info, site=(2, 3), options={"cleaves": True, "leave_count": 1})
+    assert diff.site_is_cleavage({2, 3})
+    assert _site_could_help((2, 3), info_ok, diff, mol)

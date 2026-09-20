@@ -523,8 +523,23 @@ def _effect_adds_oxygen(effect):
     return "O" in (effect.get("adds") or "") or "O" in (effect.get("needs") or "")
 
 
-def _pattern_could_help(info: PatternInfo, diff):
-    """``filter_rules`` sees ``span`` before any match."""
+def _formula_oxygen(mol: Mol) -> int:
+    """Oxygen count from the live formula when present, else from the atoms."""
+
+    forest = getattr(mol, "_forest", None)
+    if isinstance(forest, dict):
+        trace = forest.get("atom_trace")
+        if isinstance(trace, dict):
+            formula = trace.get("formula")
+            if isinstance(formula, dict):
+                value = formula.get("O", 0)
+                if isinstance(value, int):
+                    return value
+    return sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
+
+
+def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: Mol):
+    """``filter_rules`` sees ``span``, the atom diff, and the current mol."""
 
     span: Span = info.get("span") or {
         "adds": "",
@@ -547,6 +562,15 @@ def _pattern_could_help(info: PatternInfo, diff):
         and not diff.needs_oxygen
     ):
         return False
+    # Live formula can already match the target's oxygen even when a stale
+    # mapping still lists needs_oxygen elsewhere.
+    if (
+        _all_span(span, "adds", lambda value: "O" in (value or ""), "")
+        and not can_cleave
+        and not _any_span(span, "dearomatizes", bool, False)
+    ):
+        if _formula_oxygen(mol) >= _formula_oxygen(diff.target):
+            return False
     if _all_span(span, "cleaves", bool, False) and not diff.has_cleavage:
         return False
     if (
@@ -576,13 +600,50 @@ def _alkyl_bond_raises(mol: Mol, atom_idx, diff):
     return False
 
 
+def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
+    """Heavy-atom sizes of the two sides of a two-atom cleavage site."""
+
+    if len(atoms) != 2:
+        return None
+    left, right = tuple(atoms)
+    if mol.GetBondBetweenAtoms(left, right) is None:
+        return None
+
+    def _side(start: int, blocked: int) -> int:
+        seen = {start}
+        stack = [start]
+        while stack:
+            idx = stack.pop()
+            atom = mol.GetAtomWithIdx(idx)
+            for neighbor in atom.GetNeighbors():
+                n_idx = neighbor.GetIdx()
+                if n_idx == blocked or n_idx in seen:
+                    continue
+                seen.add(n_idx)
+                stack.append(n_idx)
+        return sum(
+            1 for idx in seen if mol.GetAtomWithIdx(idx).GetAtomicNum() > 1
+        )
+
+    return (_side(left, right), _side(right, left))
+
+
 def _site_could_help(site: Site, info: SiteInfo, diff: AtomDiff, mol: Mol) -> bool:
-    """``filter_sites`` sees one resolved effect and the local atom diff."""
+    """``filter_sites`` sees one resolved effect, the mol, and the local atom diff."""
 
     effect = info["options"]
     atoms = _flat_ints(site)
     if effect.get("cleaves"):
-        return diff.site_is_cleavage(atoms)
+        if not diff.site_is_cleavage(atoms):
+            return False
+        # Named leaving size is data on the effect. A methyl pattern does not
+        # keep a site whose smaller fragment is larger than that count.
+        leave_count = effect.get("leave_count")
+        if isinstance(leave_count, int):
+            sides = _leaving_heavy_counts(mol, set(atoms))
+            if sides is not None and min(sides) != leave_count:
+                return False
+        return True
 
     if "ends" in info:
         ends = info["ends"]
@@ -635,7 +696,7 @@ def _filters(diff, enabled, mol: Mol):
         return (lambda rule, info: True), (lambda site, info: True)
 
     def filter_rules(rule, info):
-        return _pattern_could_help(info, diff)
+        return _pattern_could_help(info, diff, mol)
 
     def filter_sites(site, info):
         return _site_could_help(site, info, diff, mol)
@@ -643,19 +704,54 @@ def _filters(diff, enabled, mol: Mol):
     return filter_rules, filter_sites
 
 
-def _rule_can_cleave(rule: ReactionRule) -> bool:
-    patterns: list[tuple[str, PatternInfo]] = []
+def _rule_spans(rule: ReactionRule) -> list[Span]:
+    spans: list[Span] = []
     for group in (getattr(rule, "smarts", None), getattr(rule, "endpoints", None)):
         if not group:
             continue
-        patterns.extend(group)
-    for _smarts, info in patterns:
-        span = info.get("span")
-        if span is None:
-            continue
-        if _any_span(span, "cleaves", bool, False):
-            return True
-    return False
+        for _smarts, info in group:
+            span = info.get("span")
+            if span is not None:
+                spans.append(span)
+    return spans
+
+
+def _rule_can_cleave(rule: ReactionRule) -> bool:
+    return any(_any_span(span, "cleaves", bool, False) for span in _rule_spans(rule))
+
+
+def _rule_can_dearomatize(rule: ReactionRule) -> bool:
+    return any(
+        _any_span(span, "dearomatizes", bool, False) for span in _rule_spans(rule)
+    )
+
+
+def _rule_adds_oxygen(rule: ReactionRule) -> bool:
+    return any(
+        _any_span(span, "adds", lambda value: "O" in (value or ""), "")
+        for span in _rule_spans(rule)
+    )
+
+
+def _order_key_for(diff: AtomDiff):
+    """Sort key for child rules. Lower runs first. Reads span data only."""
+
+    want_cleave = diff.target_smaller or diff.has_cleavage
+    want_dear = bool(diff.loses_aromaticity)
+    want_oxy = bool(diff.needs_oxygen)
+
+    def order_key(rule: ReactionRule):
+        cleave = 0 if _rule_can_cleave(rule) else 1
+        dear = 0 if _rule_can_dearomatize(rule) else 1
+        oxy = 0 if _rule_adds_oxygen(rule) else 1
+        # Cleavage when the target is smaller or a cut is required; then the
+        # dearomatizing / oxygenating patterns the diff still asks for.
+        primary = cleave if want_cleave else 0
+        secondary = dear if want_dear else 0
+        tertiary = oxy if want_oxy else 0
+        return (primary, secondary, tertiary, rule.name or "")
+
+    return order_key
 
 
 # ---------------------------------------------------------------------------
@@ -764,6 +860,8 @@ def find_path(
     test needs ``billed``.
     """
 
+    if reactant is None or target is None:
+        raise ValueError("reactant and target are required")
     reactant = as_mol(reactant)
     target_mol = as_mol(target)
     reactant = copy_mol(reactant)
@@ -796,15 +894,8 @@ def find_path(
         parent_cost = diff.cost()
         # See HEURISTICS.md before changing what these filters are allowed to see.
         filter_rules, filter_sites = _filters(diff, use_filters, walk.mol)
-        # Cleavage children run first. The set still passes each pattern to
-        # the filters; this only picks an order.
-        order_key = None
-        if diff.target_smaller or diff.has_cleavage:
-
-            def _cleavage_first(rule):
-                return (0 if _rule_can_cleave(rule) else 1, rule.name)
-
-            order_key = _cleavage_first
+        # Order reads span data against the diff (cleave / dearomatize / oxygen).
+        order_key = _order_key_for(diff)
 
         hits_from_here = 0
         for por in ruleset.metabolites(

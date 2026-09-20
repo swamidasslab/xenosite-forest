@@ -376,6 +376,8 @@ def as_mol(value: str) -> NoForestMol: ...
 @overload
 def as_mol(value: _MolT) -> _MolT: ...
 def as_mol(value: Mol | str) -> Mol:
+    if value is None:
+        raise ValueError("mol is required")
     if isinstance(value, str):
         return mol_from_smiles(value)
     return value

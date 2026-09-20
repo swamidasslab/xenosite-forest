@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+- `find_path` / `ReactionRule.metabolize` / `RuleSet.metabolize` / `as_mol` raise `ValueError` on `None` (no forest-style any-path soft pass). Test: `test_find_path_and_metabolize_reject_none`.
+- Search heuristics (data-not-branches): `order_key` prefers cleave → dearomatize → oxygen from span+diff; filters see live mol oxygen count; `leave_count` int on cleaving effects prunes wrong-sized fragments. Tried equal-cost sideways and sibling cost-sort — both inflated PhCH2OH/hydroxyQ; recorded not decided / do-not-revive in `HEURISTICS.md`.
+- H2H after: poc 10/10 hit, both 9/10. PhCH2OH ed=22 (was 21); TBA ed=3; hydroxyQ ed=331 (was 319); benzene/phenol/naphthalene quinone `re` dropped to 1 via dearomatize-first order.
+
+## 2026-09-19
+
 - Harness batch on remaining xfails: basic ports cleared (RuleSet name `DHE` not `DH_E`; depth-1 diol miss via `max_nodes=2`; forest invalid target SMILES asserts `ValueError`, not any-path). Dephosphorylation SMARTS requires carbon-bound O so uniquify cannot keep P-OH water cleavage (`DIVERGENCES.md` updated). Cleared 4 xfails (3 basic + 1 dephos example).
 - Remaining ~105 xfails: quinone historical (~67), rules chemistry (~28), GSH incomplete SOMs (4), phaseone wrong-rule-on-plan / reduction misses (5). Not search-heuristic work.
 

@@ -236,7 +236,8 @@ class ReactionRule:
         match. ``filter_sites(site, info)`` sees the resolved effect
         before an edit. Either may refuse. A refusal edits nothing.
         """
-        assert mol is not None
+        if mol is None:
+            raise ValueError("mol is required")
         # The caller's chemistry is not edited. A mol with no trace gets one,
         # at its current depth, so products can sit one step below it.
         mol = ensure_tracing(mol)

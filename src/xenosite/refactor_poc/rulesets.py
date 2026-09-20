@@ -114,6 +114,8 @@ class RuleSet(ReactionRule):
         is the one that rule yielded.
         """
 
+        if mol is None:
+            raise ValueError("mol is required")
         mol = ensure_tracing(mol)
         if self.is_terminal_product(mol):
             return
