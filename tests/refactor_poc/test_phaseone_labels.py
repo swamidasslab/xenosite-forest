@@ -1,4 +1,4 @@
-"""Legacy labels are the class names on the addition's rule chain."""
+"""Legacy labels are the initialization names on the addition's rule chain."""
 
 from rdkit import Chem
 
@@ -40,32 +40,31 @@ def test_metabolize_calls_phaseone():
     assert "CCO" in wrapped
 
 
-def test_hydroxylation_label_is_the_chain_class_names():
+def test_hydroxylation_label_is_the_chain_init_names():
     addition = _addition(PhaseOne, "CC", Hydroxylation)
 
-    assert reaction_labels(addition) == ("Hydroxylation", "RuleSet")
+    assert reaction_labels(addition) == ("Hydroxylation", "PhaseOne")
     assert type(addition["rules"][0]) is Hydroxylation
     assert addition["rules"][-1] is PhaseOne
-    assert reaction_labels(addition) == tuple(
-        type(rule).__name__ for rule in addition["rules"]
-    )
     assert addition["phase1"] is None
+    assert addition["pattern"] is Hydroxylation.smarts[0][1]
+    assert addition["pattern"]["name"] == "h"
+    assert all(not isinstance(rule, dict) for rule in addition["rules"])
 
 
-def test_ruleset_class_name_is_on_the_chain_when_that_set_runs():
+def test_named_ruleset_reports_its_init_name():
     addition = _addition(Dehydrogenation_PhaseOne, "CC", type(Dehydrogenation_PhaseOne.rules[0]))
 
-    assert reaction_labels(addition) == ("Dehydrogenation", "RuleSet")
+    assert reaction_labels(addition) == ("Dehydrogenation", "DH")
     assert type(addition["rules"][0]) is type(Dehydrogenation_PhaseOne.rules[0])
     assert addition["rules"][-1] is Dehydrogenation_PhaseOne
     assert addition["rules"][-1].name == "DH"
-    assert "DH" not in reaction_labels(addition)
 
 
 def test_quinone_label_is_the_rule_on_the_chain():
     addition = _addition(PhaseOne, "c1ccccc1", QuinoneFormation)
 
-    assert reaction_labels(addition) == ("QuinoneFormation", "RuleSet")
+    assert reaction_labels(addition) == ("QuinoneFormation", "PhaseOne")
     assert "Hydroxylation" not in reaction_labels(addition)
     assert "Dehydrogenation" not in reaction_labels(addition)
 
@@ -73,10 +72,10 @@ def test_quinone_label_is_the_rule_on_the_chain():
     assert reaction_labels(alone) == ("QuinoneFormation",)
 
 
-def test_phaseoneqf_chain_includes_the_ruleset_class():
+def test_phaseoneqf_chain_includes_the_ruleset_name():
     addition = _addition(PhaseOneQF, "c1ccccc1", QuinoneFormation)
 
-    assert reaction_labels(addition) == ("QuinoneFormation", "RuleSet")
+    assert reaction_labels(addition) == ("QuinoneFormation", "PhaseOneQF")
     assert type(addition["rules"][0]) is QuinoneFormation
     assert addition["rules"][-1] is PhaseOneQF
     assert [type(rule).__name__ for rule in PhaseOneQF].count("QuinoneFormation") == 1
@@ -85,7 +84,7 @@ def test_phaseoneqf_chain_includes_the_ruleset_class():
 def test_epoxidation_label_is_not_a_look_ahead():
     addition = _addition(PhaseOne, "C=C", Epoxidation)
 
-    assert reaction_labels(addition) == ("Epoxidation", "RuleSet")
+    assert reaction_labels(addition) == ("Epoxidation", "PhaseOne")
 
 
 def _leaf_names(rule):
@@ -122,12 +121,13 @@ def test_labels_read_a_named_addition_the_same_way():
         name=forest_addition["name"],
         phase1=None,
         depth=forest_addition["depth"],
+        pattern=forest_addition.get("pattern"),
     )
 
     assert reaction_labels(addition) == reaction_labels(forest_addition)
 
 
-def test_any_rules_on_the_chain_contribute_their_class_names():
+def test_unnamed_ruleset_stays_on_the_chain_but_emits_no_label():
     addition = Addition(
         site=(0,),
         rules=(PhaseOne, PhaseOneRS, Hydroxylation()),
@@ -138,4 +138,6 @@ def test_any_rules_on_the_chain_contribute_their_class_names():
         depth=0,
     )
 
-    assert reaction_labels(addition) == ("RuleSet", "RuleSet", "Hydroxylation")
+    assert PhaseOne.name == "PhaseOne"
+    assert PhaseOneRS.name is None
+    assert reaction_labels(addition) == ("PhaseOne", "Hydroxylation")

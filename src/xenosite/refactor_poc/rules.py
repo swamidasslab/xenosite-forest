@@ -1,13 +1,20 @@
 """Define specific reaction rules."""
 
+from __future__ import annotations
+
 # Standard Library
 import copy
 import itertools
 from collections import defaultdict, deque
-from collections.abc import Generator
-from typing import Any, NamedTuple, cast
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from typing import NamedTuple
 
-from xenosite.refactor_poc.rdkit_api import MolFromSmarts, MolToSmarts, RenumberAtoms
+from xenosite.refactor_poc.rdkit_api import (
+    ChemicalReaction,
+    MolFromSmarts,
+    MolToSmarts,
+    RenumberAtoms,
+)
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
     Bond,
@@ -22,6 +29,7 @@ from xenosite.refactor_poc.rdkitutil import (
     copy_mol,
     ensure_forest,
     ensure_kekule_parents,
+    is_tracing,
     molecule_formula,
     move_charge_with_bonds,
     parent_for_bond,
@@ -39,12 +47,15 @@ from xenosite.refactor_poc.rdkitutil import (
 )
 from xenosite.refactor_poc.records import (
     AtomTrace,
+    Effect,
     Forest,
     Formula,
     InitializedAtomTrace,
     KekuleParents,
     PatternInfo,
+    Site,
     TraceAddition,
+    When,
 )
 
 
@@ -62,7 +73,7 @@ class ProductsOfReaction(NamedTuple):
     ``(product, info)`` pair and is what callers should use.
     """
 
-    info: dict[str, Any]
+    info: dict[str, object]
     products: list[Mol]
 
 
@@ -74,7 +85,10 @@ class ReactionRule:
     and does not bypass them.
     """
 
-    is_terminal_rule = False
+    is_terminal_rule: bool = False
+    name: str | None
+    longname: str | None
+    sites_on: object | None = None
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -83,12 +97,12 @@ class ReactionRule:
 
     def __init__(
         self,
-        name=None,
-        sites_on=None,
-        longname=None,
-        *args,
-        **kwargs,
-    ):
+        name: str | None = None,
+        sites_on: object | None = None,
+        longname: str | None = None,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
         # super().__init__( *args, **kwargs)
 
         if not name:
@@ -102,7 +116,8 @@ class ReactionRule:
             self.longname = longname
 
         try:
-            assert "_" not in self.name
+            if self.name is not None:
+                assert "_" not in self.name
         except AssertionError as err:
             err.args = ("Cannot have '_' in rule name",)
             raise
@@ -110,20 +125,22 @@ class ReactionRule:
         if sites_on is not None:
             self.sites_on = sites_on
 
-    def __call__(self, mol: Mol, **kwargs):
+    def __call__(
+        self, mol: Mol, **kwargs: object
+    ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable[ReactionRule]:
         return iter([self])
 
     def metabolize(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
-        unique_csmi=True,
-        **kwargs,
-    ) -> Generator[tuple[Mol, dict[str, Any]], None, None]:
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
+        unique_csmi: bool = True,
+        **kwargs: object,
+    ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
         """Apply this rule and yield ``(product, info)`` pairs.
 
         This is the method callers use. It keeps the invariants below.
@@ -168,7 +185,7 @@ class ReactionRule:
         # Maps must not be present for CanonicalRankAtoms or SMARTS matching.
         self._clear_atom_maps(mol)
 
-        seen = set()
+        seen: set[str] = set()
 
         for por in self.metabolites(
             mol,
@@ -190,21 +207,30 @@ class ReactionRule:
 
                 forest_trace(mol, p, info, executed=self)
 
-                p, csmi = cannonicalize_order(p)
+                ordered, csmi = cannonicalize_order(p)
+                assert is_tracing(ordered)
+                # canonicalize deep-copies the forest; keep the rule's
+                # PatternInfo object as the addition's pattern link.
+                pattern = info.get("pattern")
+                if pattern is not None:
+                    tid = ordered._forest["atom_trace"]["transforms"][-1]
+                    ordered._forest["atom_trace"]["additions"][tid]["pattern"] = (
+                        pattern
+                    )
 
                 if unique_csmi:
                     if csmi in seen:
                         continue
                     seen.add(csmi)
 
-                i = info.copy()
+                i = dict(info)
                 i["product_index"] = n
                 i["product_count"] = len(products)
                 i["csmi"] = csmi
 
-                yield p, i
+                yield ordered, i
 
-    def _top_site(self, site, mol: Mol):
+    def _top_site(self, site: object, mol: Mol) -> int | frozenset[int]:
         te = topol_equiv(mol)
         if type(site) is int:
             return te[site]
@@ -223,9 +249,9 @@ class ReactionRule:
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
-        **kwargs,
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
+        **kwargs: object,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Yield one :class:`ProductsOfReaction` per edit. Subclasses override this.
 
@@ -256,7 +282,11 @@ class ReactionRule:
         raise NotImplementedError
 
 
-def __getattr__(name):
+FilterRules = Callable[[ReactionRule, PatternInfo], bool]
+FilterSites = Callable[[object, dict[str, object]], bool]
+
+
+def __getattr__(name: str) -> object:
     """``RuleSet`` lives in ``rulesets``. Keep ``from .rules import RuleSet`` working."""
 
     if name == "RuleSet":
@@ -270,7 +300,7 @@ def formula_delta(before: Formula, after: Formula) -> Formula:
     """Change in atom counts and formal charge from ``before`` to ``after``."""
 
     keys = set(before.get("counts") or {}) | set(after.get("counts") or {})
-    counts = {}
+    counts: dict[str, int] = {}
     for key in keys:
         delta = (after.get("counts") or {}).get(key, 0) - (
             before.get("counts") or {}
@@ -283,7 +313,7 @@ def formula_delta(before: Formula, after: Formula) -> Formula:
     }
 
 
-def _rule_name(rule):
+def _rule_name(rule: object) -> str | None:
     if rule is None:
         return None
     if isinstance(rule, str):
@@ -320,7 +350,7 @@ def ensure_tracing(mol: Mol) -> ForestTracingMol:
             "last_tag": 0,
             "next_transform": 1,
         }
-        forest["atom_trace"] = cast(AtomTrace, trace)
+        forest["atom_trace"] = trace
         for a in held.GetAtoms():
             if a.GetAtomicNum() != 1:
                 i = a.GetIdx()
@@ -329,14 +359,15 @@ def ensure_tracing(mol: Mol) -> ForestTracingMol:
                     "depth": [0],
                 }
                 trace["last_tag"] = i
-    _write_forest_labels(cast(ForestTracingMol, held))
-    return cast(ForestTracingMol, held)
+    assert is_tracing(held)
+    _write_forest_labels(held)
+    return held
 
 
 def install_forest(mol: Mol) -> Forest:
     """Install the forest data structure in the molecule."""
 
-    return cast(Forest, ensure_tracing(mol)._forest)
+    return ensure_tracing(mol)._forest
 
 
 def _write_forest_labels(mol: ForestTracingMol) -> None:
@@ -369,29 +400,99 @@ def reordered_forest_labels(mol: ForestTracingMol) -> None:
             idx[-1] = i
 
 
-def _site_tuple(site):
+def _site_tuple(site: object) -> Site:
     if isinstance(site, int):
         return (site,)
-    return tuple(sorted(site))
+    if isinstance(site, (frozenset, set, list, tuple)):
+        return tuple(sorted(site))
+    raise TypeError(site)
 
 
-def _trace_info(info):
+def _trace_info(info: Mapping[str, object]) -> dict[str, object]:
     """Pattern fields worth keeping, without a second copy of the rule object."""
 
-    kept = {}
+    kept: dict[str, object] = {}
     for key, value in info.items():
         if key == "rule":
             kept[key] = _rule_name(value)
         elif key == "rule_chain":
-            kept[key] = tuple(_rule_name(item) for item in value)
-        elif key == "options":
+            if isinstance(value, (tuple, list)):
+                kept[key] = tuple(_rule_name(item) for item in value)
+            else:
+                kept[key] = value
+        elif key in ("options", "pattern"):
             continue
         else:
             kept[key] = value
     return kept
 
 
-def forest_trace(reactant: Mol, product: Mol, info, executed=None):
+def _as_effect(value: object) -> Effect:
+    """Copy known effect fields from an open dict."""
+
+    effect: Effect = {
+        "adds": "",
+        "removes": "",
+        "cleaves": False,
+        "leave_count": None,
+        "breaks_ring": False,
+        "dearomatizes": False,
+        "methide": False,
+        "needs": "",
+    }
+    if not isinstance(value, dict):
+        return effect
+    adds = value.get("adds")
+    if isinstance(adds, str):
+        effect["adds"] = adds
+    removes = value.get("removes")
+    if isinstance(removes, str):
+        effect["removes"] = removes
+    cleaves = value.get("cleaves")
+    if isinstance(cleaves, bool):
+        effect["cleaves"] = cleaves
+    leave_count = value.get("leave_count")
+    if leave_count is None or isinstance(leave_count, int):
+        effect["leave_count"] = leave_count
+    breaks_ring = value.get("breaks_ring")
+    if isinstance(breaks_ring, bool):
+        effect["breaks_ring"] = breaks_ring
+    dearomatizes = value.get("dearomatizes")
+    if isinstance(dearomatizes, bool):
+        effect["dearomatizes"] = dearomatizes
+    methide = value.get("methide")
+    if isinstance(methide, bool):
+        effect["methide"] = methide
+    needs = value.get("needs")
+    if isinstance(needs, str):
+        effect["needs"] = needs
+    partner = value.get("partner")
+    if isinstance(partner, str):
+        effect["partner"] = partner
+    partner_h = value.get("partner_h")
+    if isinstance(partner_h, int):
+        effect["partner_h"] = partner_h
+    symbol = value.get("symbol")
+    if isinstance(symbol, str):
+        effect["symbol"] = symbol
+    h = value.get("h")
+    if isinstance(h, int):
+        effect["h"] = h
+    site_aromatic = value.get("site_aromatic")
+    if isinstance(site_aromatic, bool):
+        effect["site_aromatic"] = site_aromatic
+    when = value.get("when")
+    if isinstance(when, dict):
+        effect["when"] = when
+    return effect
+
+
+def forest_trace(
+    reactant: Mol,
+    product: Mol,
+    info: Mapping[str, object],
+    executed: ReactionRule | None = None,
+) -> AtomTrace:
     """Record one transform on the product's atom trace.
 
     A new atom's ``added_by`` is an id such as ``R1``. The site, the rule
@@ -403,7 +504,7 @@ def forest_trace(reactant: Mol, product: Mol, info, executed=None):
     rule = info.get("rule")
     site = info.get("site")
     parent = stamp_forest_labels(reactant)
-    product = ensure_forest(product)  #TODO: declare side effects so this isn't a rdkit error?
+    held = ensure_forest(product)
     trace = copy.deepcopy(parent._forest["atom_trace"])
     trace.setdefault("additions", {})
     trace.setdefault("delta_formula", {})
@@ -416,10 +517,16 @@ def forest_trace(reactant: Mol, product: Mol, info, executed=None):
 
     depth = trace["depth"] = trace["depth"] + 1
     frame = depth - 1
-    chain = []
-    for item in tuple(info.get("rule_chain") or ()) + (
-        (executed,) if executed is not None else ()
-    ):
+    chain: list[ReactionRule] = []
+    rule_chain = info.get("rule_chain") or ()
+    extras: tuple[object, ...]
+    if isinstance(rule_chain, tuple):
+        extras = rule_chain
+    elif isinstance(rule_chain, list):
+        extras = tuple(rule_chain)
+    else:
+        extras = ()
+    for item in extras + ((executed,) if executed is not None else ()):
         if item is rule or not isinstance(item, ReactionRule):
             continue
         if any(item is seen for seen in chain):
@@ -429,27 +536,26 @@ def forest_trace(reactant: Mol, product: Mol, info, executed=None):
         chain.append(rule)
 
     before = trace.get("formula") or molecule_formula(reactant)
-    after = molecule_formula(product)
+    after = molecule_formula(held)
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
-    trace["additions"][transform_id] = cast(
-        TraceAddition,
-        {
-            "site": _site_tuple(site),
-            "rules": tuple(chain),
-            "info": _trace_info(info),
-            "effect": dict(info.get("options") or {}),
-            "name": _rule_name(rule),
-            "phase1": info.get("phase1"),
-            "depth": frame,
-        },
-    )
+    addition: TraceAddition = {
+        "site": _site_tuple(site),
+        "rules": tuple(chain),
+        "info": _trace_info(info),
+        "effect": _as_effect(info.get("options")),
+        "name": _rule_name(rule),
+        "phase1": info.get("phase1"),
+        "depth": frame,
+        "pattern": info.get("pattern") if isinstance(info.get("pattern"), dict) else None,
+    }
+    trace["additions"][transform_id] = addition
     trace["transforms"].append(transform_id)
 
     records = trace["records"]
     new_records = {}
 
-    for product_atom in product.GetAtoms():
+    for product_atom in held.GetAtoms():
         product_idx = product_atom.GetIdx()
         if product_atom.HasProp("forestLabel"):
             tag = product_atom.GetProp("forestLabel")
@@ -471,7 +577,7 @@ def forest_trace(reactant: Mol, product: Mol, info, executed=None):
         trace["deletes"][tag] = record
 
     trace["records"] = new_records
-    product._forest["atom_trace"] = cast(AtomTrace, trace)
+    held._forest["atom_trace"] = trace
 
     return trace
 
@@ -502,17 +608,17 @@ _SYMBOL = {
 }
 
 
-def _span(possibilities):
+def _span(possibilities: Sequence[Mapping[str, object]]) -> dict[str, object]:
     """Certain values stay bare. Disagreeing values become a tuple."""
 
-    keys = []
+    keys: list[str] = []
     for possibility in possibilities:
         for key in possibility:
             if key != "when" and key not in keys:
                 keys.append(key)
-    span = {}
+    span: dict[str, object] = {}
     for key in keys:
-        values = []
+        values: list[object] = []
         for possibility in possibilities:
             value = possibility.get(key, _EFFECT_DEFAULTS.get(key))
             if value not in values:
@@ -521,7 +627,12 @@ def _span(possibilities):
     return span
 
 
-def branches(whens, site_map=1, removes_partner=False, **effect):
+def branches(
+    whens: Sequence[When],
+    site_map: int = 1,
+    removes_partner: bool = False,
+    **effect: object,
+) -> tuple[Effect, ...]:
     """Copy ``effect`` once per ``when``. The site atom and the OR atom differ.
 
     A ``when`` on ``site_map`` records ``h`` / ``symbol`` (the site was the
@@ -529,10 +640,10 @@ def branches(whens, site_map=1, removes_partner=False, **effect):
     ``partner_h``.
     """
 
-    out = []
+    out: list[Effect] = []
     for when in whens:
         when = dict(when)
-        item = dict(effect)
+        item = _as_effect(effect)
         item["when"] = when
         symbol = _SYMBOL.get(when.get("z", -1))
         if when.get("map") == site_map:
@@ -552,31 +663,35 @@ def branches(whens, site_map=1, removes_partner=False, **effect):
 
 
 def describe(
-    *possibilities,
-    edit=None,
+    *possibilities: Effect,
+    edit: str | None = None,
     site_map: int | tuple[int, ...] = 1,
     pin: tuple[int, ...] | None = None,
-    skip_same_rings=False,
-    **single,
+    skip_same_rings: bool = False,
+    name: str | None = None,
+    **single: object,
 ) -> PatternInfo:
     """Build a :class:`PatternInfo`.
 
     One outcome: ``describe(adds="O", removes="H")``.
     Several: ``describe(*branches(...), edit="dealkylate")``.
+    ``name`` distinguishes this pattern from the others on the same rule.
     """
 
     if single and possibilities:
         raise TypeError("pass one effect as keywords, or several dicts, not both")
+    normalized: list[Effect]
     if single:
-        possibilities = (single,)
-    if not possibilities:
-        raise TypeError("a pattern needs at least one possibility")
-    normalized = []
-    for possibility in possibilities:
-        effect = dict(_EFFECT_DEFAULTS)
-        effect.update(possibility)
-        normalized.append(effect)
-    info = {
+        normalized = [_as_effect(single)]
+    else:
+        if not possibilities:
+            raise TypeError("a pattern needs at least one possibility")
+        normalized = []
+        for possibility in possibilities:
+            effect = _as_effect(_EFFECT_DEFAULTS)
+            effect.update(possibility)
+            normalized.append(effect)
+    info: PatternInfo = {
         "possibilities": tuple(normalized),
         "span": _span(normalized),
         "site_map": site_map,
@@ -587,10 +702,23 @@ def describe(
         info["pin"] = tuple(pin)
     if skip_same_rings:
         info["skip_same_rings"] = True
-    return cast(PatternInfo, info)
+    if name is not None:
+        info["name"] = name
+    return info
 
 
-def may(info, key, value=True):
+def _assign_pattern_names(patterns: Iterable[PatternInfo]) -> None:
+    """Give each unnamed pattern a numbered name on that pattern object."""
+
+    next_num = 1
+    for pattern in patterns:
+        if pattern.get("name"):
+            continue
+        pattern["name"] = str(next_num)
+        next_num += 1
+
+
+def may(info: PatternInfo, key: str, value: object = True) -> bool:
     """True if any possibility has this outcome.
 
     For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring.
@@ -615,7 +743,7 @@ def may(info, key, value=True):
     return False
 
 
-def must(info, key, value=True):
+def must(info: PatternInfo, key: str, value: object = True) -> bool:
     """True if every possibility has this outcome."""
 
     possibilities = info["possibilities"]
@@ -633,8 +761,8 @@ def must(info, key, value=True):
     )
 
 
-def _when_matches(mol: Mol, mapped, when):
-    idx = mapped.get(when.get("map"))
+def _when_matches(mol: Mol, mapped: Mapping[int, int], when: When) -> bool:
+    idx = mapped.get(when.get("map", -1))
     if idx is None:
         return False
     atom = mol.GetAtomWithIdx(idx)
@@ -645,14 +773,14 @@ def _when_matches(mol: Mol, mapped, when):
     return True
 
 
-def resolve_effect(mol: Mol, mapped, info):
+def resolve_effect(mol: Mol, mapped: Mapping[int, int], info: PatternInfo) -> Effect:
     """Narrow ``info`` to the one effect this match actually is.
 
     Uses the caller's mol, not a kekulé copy: aromatic flags must still be set.
     """
 
-    possibilities = info.get("possibilities") or (info,)
-    chosen = None
+    possibilities = info.get("possibilities") or (_as_effect(info),)
+    chosen: Effect | None = None
     for possibility in possibilities:
         when = possibility.get("when")
         if when is None or _when_matches(mol, mapped, when):
@@ -660,11 +788,11 @@ def resolve_effect(mol: Mol, mapped, info):
             break
     if chosen is None:
         chosen = possibilities[0]
-    effect = dict(_EFFECT_DEFAULTS)
+    effect = _as_effect(_EFFECT_DEFAULTS)
     effect.update(chosen)
     effect.pop("when", None)
     site_map = info.get("site_map", 1)
-    if site_map in mapped:
+    if isinstance(site_map, int) and site_map in mapped:
         atom = mol.GetAtomWithIdx(mapped[site_map])
         effect["symbol"] = atom.GetSymbol()
         effect["h"] = atom.GetTotalNumHs()
@@ -680,7 +808,9 @@ def resolve_effect(mol: Mol, mapped, info):
     return effect
 
 
-def _cleavage_breaks_ring(mol: Mol, mapped, site_map) -> bool:
+def _cleavage_breaks_ring(
+    mol: Mol, mapped: Mapping[int, int], site_map: int | tuple[int, ...]
+) -> bool:
     """True when the two site atoms share a ring, so the cleaved bond is in it."""
 
     if not isinstance(site_map, tuple) or len(site_map) != 2:
@@ -693,7 +823,9 @@ def _cleavage_breaks_ring(mol: Mol, mapped, site_map) -> bool:
     return bool(set(rings.get(left, ())) & set(rings.get(right, ())))
 
 
-def merge_effects(left, right, both_aromatic):
+def merge_effects(
+    left: Effect, right: Effect, both_aromatic: bool
+) -> dict[str, object]:
     """One effect for a pair. Per-end detail stays on ``info["ends"]``."""
 
     needs = (left.get("needs") or "") + (right.get("needs") or "")
@@ -710,10 +842,13 @@ def merge_effects(left, right, both_aromatic):
     }
 
 
-def _bump(counters, name, amount=1):
+def _bump(counters: object | None, name: str, amount: int = 1) -> None:
     if counters is None:
         return
-    setattr(counters, name, getattr(counters, name) + amount)
+    current = getattr(counters, name)
+    if not isinstance(current, int):
+        raise TypeError(name)
+    setattr(counters, name, current + amount)
 
 
 def _isotope_smarts(smarts: str, pin: tuple[int, ...]) -> str:
@@ -769,7 +904,7 @@ def _isotope_atoms_first(smarts: str, pin: set[int]) -> str:
     return rewritten + ">>" + product
 
 
-def _site_indexes(mapped, pattern):
+def _site_indexes(mapped: Mapping[int, int], pattern: PatternInfo) -> frozenset[int]:
     """Atom indexes the pattern calls the site. Defaults to map 1."""
 
     key = pattern.get("site_map", 1)
@@ -783,11 +918,11 @@ def _site_indexes(mapped, pattern):
 
 
 def react_at(
-    rule,
+    rule: SmartsReactionRule,
     smarts: str,
     mol: Mol,
-    mapped,
-    counters=None,
+    mapped: Mapping[int, int],
+    counters: object | None = None,
     pin: tuple[int, ...] | None = None,
 ) -> list[Mol]:
     """Run ``smarts`` on one match. One call is one ``mol_edits``.
@@ -814,7 +949,7 @@ def react_at(
     if not product_sets:
         return []
 
-    products = []
+    products: list[Mol] = []
     for prod in product_sets[0]:
         for atom in prod.GetAtoms():
             if atom.GetIsotope() >= 8000:
@@ -834,9 +969,9 @@ class SmartsReactionRule(ReactionRule):
 
     smarts: tuple[tuple[str, PatternInfo], ...] = ()
 
-    rxns: list[tuple[str, Any, PatternInfo]]
+    rxns: list[tuple[str, ChemicalReaction, PatternInfo]]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: object, **kwargs: object) -> None:
 
         super().__init__(*args, **kwargs)
 
@@ -844,15 +979,19 @@ class SmartsReactionRule(ReactionRule):
             (smarts, self._smarts2rxns(smarts, **kwargs), opt)
             for smarts, opt in self.smarts
         ]
+        patterns = [opt for _smarts, _rxn, opt in self.rxns]
+        endpoints = getattr(self, "endpoints", ()) or ()
+        patterns.extend(opt for _smarts, opt in endpoints)
+        _assign_pattern_names(patterns)
 
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
         context_mol: Mol | None = None,
-        **kwargs,
-    ):
+        **kwargs: object,
+    ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
         ``filter_rules`` sees this rule and the pattern, including ``span``,
@@ -868,7 +1007,7 @@ class SmartsReactionRule(ReactionRule):
         counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
         _bump(counters, "rule_expansions")
-        seen = set()
+        seen: set[object] = set()
         ranks = topol_equiv(context)
 
         for work in _kekule_forms(mol):
@@ -882,11 +1021,12 @@ class SmartsReactionRule(ReactionRule):
                     if not site:
                         continue
                     effect = resolve_effect(context, mapped, pattern)
-                    info = {
+                    info: dict[str, object] = {
                         "site": site,
                         "rule": self,
                         "options": effect,
                         "rxn_num": rxn_num,
+                        "pattern": pattern,
                     }
                     _bump(counters, "sites_considered")
                     if not filter_sites(site, info):
@@ -918,7 +1058,12 @@ class SmartsReactionRule(ReactionRule):
                     seen.add(signature)
                     yield ProductsOfReaction(info=info, products=products)
 
-    def _smarts2rxns(self, smarts, use_implicit_properties=False, **kwargs):
+    def _smarts2rxns(
+        self,
+        smarts: str,
+        use_implicit_properties: bool = False,
+        **kwargs: object,
+    ) -> ChemicalReaction:
         """Converts SMARTS reactions to RDKit reactions."""
         return reaction_from_smarts(smarts)
 
@@ -940,9 +1085,11 @@ class SmartsReactionRule(ReactionRule):
     # reactions are process.
     # TODO: A reaction helper in rdkitutil could apply reactions and return
     # products while maintaining the forest instead of maintaing that logic here.
-    def _get_product_mappings(self, product: Mol):
-        mapno2idx = {}
-        reactant2idx = {}
+    def _get_product_mappings(
+        self, product: Mol
+    ) -> tuple[dict[int, int], dict[int, int]]:
+        mapno2idx: dict[int, int] = {}
+        reactant2idx: dict[int, int] = {}
         for a in product.GetAtoms():
             prod_idx = a.GetIdx()
             react_idx = (
@@ -960,11 +1107,11 @@ class SmartsReactionRule(ReactionRule):
 
         return mapno2idx, reactant2idx
 
-    def _get_site(self, products):
+    def _get_site(self, products: Sequence[Mol]) -> frozenset[int]:
         """Return the sites in product based on the reactant_idx property assigned by
         rxns.RunReactants in self.metabolites."""
 
-        site = set()
+        site: set[int] = set()
         for product in products:
             mapno2idx, _ = self._get_product_mappings(product)
             site = site | set(mapno2idx.values())
@@ -983,26 +1130,26 @@ _BOND = {
 }
 
 
-def _bond_key(i, j):
+def _bond_key(i: int, j: int) -> tuple[int, int]:
     return (i, j) if i < j else (j, i)
 
 
-def _current_bond_map(mol: Mol):
-    bonds = {}
+def _current_bond_map(mol: Mol) -> dict[tuple[int, int], float]:
+    bonds: dict[tuple[int, int], float] = {}
     for bond in mol.GetBonds():
         i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
         bonds[_bond_key(i, j)] = bond.GetBondTypeAsDouble()
     return bonds
 
 
-def _connected_components(mol: Mol, atoms):
+def _connected_components(mol: Mol, atoms: Iterable[int]) -> list[frozenset[int]]:
     atoms = set(atoms)
-    seen = set()
-    systems = []
+    seen: set[int] = set()
+    systems: list[frozenset[int]] = []
     for start in atoms:
         if start in seen:
             continue
-        comp = set()
+        comp: set[int] = set()
         queue = deque([start])
         while queue:
             i = queue.popleft()
@@ -1019,9 +1166,9 @@ def _connected_components(mol: Mol, atoms):
     return systems
 
 
-def system_neighbors(mol: Mol, system):
+def system_neighbors(mol: Mol, system: Iterable[int]) -> dict[int, list[int]]:
     system = set(system)
-    neighbors = {i: [] for i in system}
+    neighbors: dict[int, list[int]] = {i: [] for i in system}
     for i in system:
         for nbr in mol.GetAtomWithIdx(i).GetNeighbors():
             j = nbr.GetIdx()
@@ -1031,7 +1178,9 @@ def system_neighbors(mol: Mol, system):
     return neighbors
 
 
-def odd_anchor_pairs(anchors, neighbors):
+def odd_anchor_pairs(
+    anchors: Sequence[int], neighbors: Mapping[int, Sequence[int]]
+) -> list[tuple[int, int]]:
     """Pairs of anchors separated by an odd number of bonds.
 
     Ortho (1) and para (3) pass. Meta (2) does not. The walk may cross
@@ -1039,7 +1188,7 @@ def odd_anchor_pairs(anchors, neighbors):
     """
 
     anchors = [a for a in anchors if a in neighbors]
-    pairs = []
+    pairs: list[tuple[int, int]] = []
     for i, start in enumerate(anchors):
         dist = {start: 0}
         queue = deque([start])
@@ -1056,12 +1205,17 @@ def odd_anchor_pairs(anchors, neighbors):
     return pairs
 
 
-def alternating_path(bond_map, start, end, neighbors):
+def alternating_path(
+    bond_map: Mapping[tuple[int, int], float],
+    start: int,
+    end: int,
+    neighbors: Mapping[int, Sequence[int]],
+) -> list[int] | None:
     """Shortest path whose first bond is double and whose bonds then alternate."""
 
     if start == end or start not in neighbors or end not in neighbors:
         return None
-    queue: deque[tuple[Any, float, tuple[Any, ...]]] = deque([(start, 2.0, (start,))])
+    queue: deque[tuple[int, float, tuple[int, ...]]] = deque([(start, 2.0, (start,))])
     seen = {(start, 2)}
     while queue:
         node, want, path = queue.popleft()
@@ -1110,7 +1264,9 @@ def _kekule_forms(mol: Mol) -> tuple[Mol, ...]:
     return tuple(forms)
 
 
-def _incident_orders(mol: Mol, ranks: dict[int, int], mapped) -> tuple:
+def _incident_orders(
+    mol: Mol, ranks: dict[int, int], mapped: Mapping[int, int]
+) -> tuple[tuple[int, int, float], ...]:
     """Bond orders touching the matched atoms, in rank space.
 
     Two Kekulé forms of the same site differ here. Two equivalent carbons
@@ -1118,7 +1274,7 @@ def _incident_orders(mol: Mol, ranks: dict[int, int], mapped) -> tuple:
     """
 
     idxs = set(mapped.values())
-    bonds = []
+    bonds: list[tuple[int, int, float]] = []
     for bond in mol.GetBonds():
         i = bond.GetBeginAtomIdx()
         j = bond.GetEndAtomIdx()
@@ -1129,7 +1285,7 @@ def _incident_orders(mol: Mol, ranks: dict[int, int], mapped) -> tuple:
     return tuple(sorted(bonds))
 
 
-def overlay_kekule(mol: Mol, bond_map) -> RWMol:
+def overlay_kekule(mol: Mol, bond_map: Mapping[tuple[int, int], float]) -> RWMol:
     """Copy ``mol`` and set kekulé bond orders. Atom indexes stay put.
 
     Bond orders move without their charge unless that charge is put back.
@@ -1154,7 +1310,7 @@ def overlay_kekule(mol: Mol, bond_map) -> RWMol:
     return rw
 
 
-def adjust_hydrogens(mol: Mol, idx, change):
+def adjust_hydrogens(mol: Mol, idx: int, change: int) -> None:
     atom = mol.GetAtomWithIdx(idx)
     try:
         implicit = atom.GetNumImplicitHs()
@@ -1168,7 +1324,7 @@ def adjust_hydrogens(mol: Mol, idx, change):
         atom.SetNumExplicitHs(updated)
 
 
-def swap_bonds_along_path(mol: Mol, atoms):
+def swap_bonds_along_path(mol: Mol, atoms: Sequence[int]) -> bool:
     """Flip single and double bonds along ``atoms``. Adjust H at the ends.
 
     False when a bond is missing or none of them flipped. A triple bond
@@ -1194,18 +1350,25 @@ def swap_bonds_along_path(mol: Mol, atoms):
     return flipped
 
 
-def _correct_end_hydrogens(mol: Mol, idx, bond: Bond):
+def _correct_end_hydrogens(mol: Mol, idx: int, bond: Bond) -> None:
     if bond.GetBondType() == BondType.SINGLE:
         adjust_hydrogens(mol, idx, 1)
     elif bond.GetBondType() == BondType.DOUBLE:
         adjust_hydrogens(mol, idx, -1)
 
 
-def _same_rings(rings, i, j):
+def _same_rings(
+    rings: Mapping[int, tuple[tuple[int, ...], ...]], i: int, j: int
+) -> bool:
     return rings.get(i, ()) == rings.get(j, ())
 
 
-def edit_single_to_double(rw: RWMol, mapped, info, rings):
+def edit_single_to_double(
+    rw: RWMol,
+    mapped: Mapping[int, int],
+    info: Mapping[str, object],
+    rings: Mapping[int, tuple[tuple[int, ...], ...]],
+) -> bool:
     a, b = mapped.get(1), mapped.get(2)
     if a is None or b is None:
         return False
@@ -1218,7 +1381,12 @@ def edit_single_to_double(rw: RWMol, mapped, info, rings):
     return True
 
 
-def edit_add_carbonyl_o(rw: RWMol, mapped, info, rings):
+def edit_add_carbonyl_o(
+    rw: RWMol,
+    mapped: Mapping[int, int],
+    info: Mapping[str, object],
+    rings: Mapping[int, tuple[tuple[int, ...], ...]],
+) -> bool:
     carbon = mapped.get(1)
     if carbon is None:
         return False
@@ -1227,7 +1395,12 @@ def edit_add_carbonyl_o(rw: RWMol, mapped, info, rings):
     return True
 
 
-def edit_replace_halogen(rw: RWMol, mapped, info, rings):
+def edit_replace_halogen(
+    rw: RWMol,
+    mapped: Mapping[int, int],
+    info: Mapping[str, object],
+    rings: Mapping[int, tuple[tuple[int, ...], ...]],
+) -> bool:
     carbon, halogen = mapped.get(1), mapped.get(2)
     if carbon is None or halogen is None:
         return False
@@ -1241,20 +1414,35 @@ def edit_replace_halogen(rw: RWMol, mapped, info, rings):
     return True
 
 
-def edit_iminium(rw: RWMol, mapped, info, rings):
+def edit_iminium(
+    rw: RWMol,
+    mapped: Mapping[int, int],
+    info: Mapping[str, object],
+    rings: Mapping[int, tuple[tuple[int, ...], ...]],
+) -> bool:
     if not edit_single_to_double(rw, mapped, {}, rings):
         return False
     rw.GetAtomWithIdx(mapped[2]).SetFormalCharge(1)
     return True
 
 
-def edit_keep(rw: RWMol, mapped, info, rings):
+def edit_keep(
+    rw: RWMol,
+    mapped: Mapping[int, int],
+    info: Mapping[str, object],
+    rings: Mapping[int, tuple[tuple[int, ...], ...]],
+) -> bool:
     """Leave the endpoint bond alone. The path flip is the reaction."""
 
     return 1 in mapped
 
 
-def edit_dealkylate(rw: RWMol, mapped, info, rings):
+def edit_dealkylate(
+    rw: RWMol,
+    mapped: Mapping[int, int],
+    info: Mapping[str, object],
+    rings: Mapping[int, tuple[tuple[int, ...], ...]],
+) -> bool:
     hetero, alkyl = mapped.get(2), mapped.get(3)
     if hetero is None or alkyl is None:
         return False
@@ -1269,7 +1457,18 @@ def edit_dealkylate(rw: RWMol, mapped, info, rings):
     return True
 
 
-EDITS = {
+EDITS: dict[
+    str,
+    Callable[
+        [
+            RWMol,
+            Mapping[int, int],
+            Mapping[str, object],
+            Mapping[int, tuple[tuple[int, ...], ...]],
+        ],
+        bool,
+    ],
+] = {
     "single_to_double": edit_single_to_double,
     "add_carbonyl_o": edit_add_carbonyl_o,
     "replace_halogen": edit_replace_halogen,
@@ -1279,13 +1478,15 @@ EDITS = {
 }
 
 
-def _merge_options(left, right, dearomatizes):
+def _merge_options(
+    left: Effect, right: Effect, dearomatizes: bool
+) -> dict[str, object]:
     return merge_effects(left, right, dearomatizes)
 
 
-def _site_atoms(mapped, info):
+def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:
     key = info.get("site_map", 1)
-    if key not in mapped:
+    if not isinstance(key, int) or key not in mapped:
         return None
     return mapped[key]
 
@@ -1344,11 +1545,11 @@ class ResonanceRule(SmartsReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
         context_mol: Mol | None = None,
-        **kwargs,
-    ):
+        **kwargs: object,
+    ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`SmartsReactionRule.metabolites`.
 
         SMARTS runs once, on this mol. A hit picks the cached parent by bond
@@ -1362,7 +1563,7 @@ class ResonanceRule(SmartsReactionRule):
         context = mol if context_mol is None else context_mol
         _bump(counters, "rule_expansions")
         cache = _kekule_cache(mol)
-        seen = set()
+        seen: set[object] = set()
         ranks = topol_equiv(context)
 
         for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
@@ -1374,11 +1575,12 @@ class ResonanceRule(SmartsReactionRule):
                 if not site:
                     continue
                 effect = resolve_effect(context, mapped, pattern)
-                info = {
+                info: dict[str, object] = {
                     "site": site,
                     "rule": self,
                     "options": effect,
                     "rxn_num": rxn_num,
+                    "pattern": pattern,
                 }
                 _bump(counters, "sites_considered")
                 if not filter_sites(site, info):
@@ -1425,16 +1627,16 @@ class ResonancePairRule(ResonanceRule):
     """
 
     endpoints: tuple[tuple[str, PatternInfo], ...] = ()
-    systems = "conjugated"
+    systems: str = "conjugated"
 
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
         context_mol: Mol | None = None,
-        **kwargs,
-    ):
+        **kwargs: object,
+    ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
         ``filter_rules`` runs before any pair is built. ``filter_sites``
@@ -1453,7 +1655,13 @@ class ResonancePairRule(ResonanceRule):
             mol, filter_rules, filter_sites, counters=kwargs.get("counters")
         )
 
-    def pair_metabolites(self, mol: Mol, filter_rules, filter_sites, counters=None):
+    def pair_metabolites(
+        self,
+        mol: Mol,
+        filter_rules: FilterRules,
+        filter_sites: FilterSites,
+        counters: object | None = None,
+    ) -> Generator[ProductsOfReaction, None, None]:
         """Endpoint loop.
 
         ``filter_rules`` drops endpoint patterns before they are matched.
@@ -1477,20 +1685,28 @@ class ResonancePairRule(ResonanceRule):
         if not systems:
             return
 
-        hits = defaultdict(list)
+        hits: dict[int, list[tuple[dict[int, int], PatternInfo]]] = defaultdict(list)
         for smarts, info in active:
             for mapped in smarts_matches(mol, smarts):
                 hits[mapped[1]].append((mapped, info))
         if len(hits) < 2:
             return
 
-        rings = None
+        rings: dict[int, tuple[tuple[int, ...], ...]] | None = None
         cache: KekuleParents | None = None
         for system in systems:
             anchors = [atom for atom in hits if atom in system]
             neighbors = system_neighbors(mol, system)
             for start, end in odd_anchor_pairs(anchors, neighbors):
-                combos = []
+                combos: list[
+                    tuple[
+                        dict[int, int],
+                        PatternInfo,
+                        dict[int, int],
+                        PatternInfo,
+                        dict[str, object],
+                    ]
+                ] = []
                 both_aromatic = (
                     mol.GetAtomWithIdx(start).GetIsAromatic()
                     and mol.GetAtomWithIdx(end).GetIsAromatic()
@@ -1505,7 +1721,7 @@ class ResonancePairRule(ResonanceRule):
                     site = frozenset((site_a, site_b))
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
-                    preview = {
+                    preview: dict[str, object] = {
                         "site": site,
                         "rule": self,
                         "options": merge_effects(end1, end2, both_aromatic),
@@ -1524,7 +1740,7 @@ class ResonancePairRule(ResonanceRule):
                 if cache is None:
                     cache = _kekule_cache(mol)
                 ends = parents_for_ends(mol, start, end, cache)
-                paths = []
+                paths: list[tuple[Mol, list[int]]] = []
                 for parent in ends.parents:
                     path = alternating_path(
                         _current_bond_map(parent), start, end, neighbors
@@ -1585,7 +1801,8 @@ class Hydroxylation(SmartsReactionRule):
                     ),
                     adds="O",
                     removes="H",
-                )
+                ),
+                name="h",
             ),
         ),
         (
@@ -1595,7 +1812,8 @@ class Hydroxylation(SmartsReactionRule):
                     ({"map": 1, "z": 6, "h": 2}, {"map": 1, "z": 6, "h": 3}),
                     adds="O",
                     removes="H",
-                )
+                ),
+                name="h2",
             ),
         ),
     )

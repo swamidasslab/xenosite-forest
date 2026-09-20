@@ -1,9 +1,9 @@
-"""Phase I as rules, and the class names already on each addition.
+"""Phase I as rules, and the names already on each addition.
 
 Call :data:`PhaseOne` or one of the grouped sets. Each product records the
 rules that ran under ``atom_trace["additions"]``. :func:`reaction_labels`
-reads that chain. The label is the class name. A ruleset in the chain
-contributes its class name too.
+reads that chain. The label is each rule's initialization name. A ruleset
+with no name stays on the chain and contributes no label.
 
 Epoxidation and N-dealkylation phase-I look-aheads stay deferred.
 Tautomerization is not in these sets.
@@ -78,15 +78,20 @@ def metabolize(mol, **kwargs):
 
 
 def reaction_labels(addition) -> tuple[str, ...]:
-    """Class name of each rule on the addition's chain.
+    """Initialization name of each named rule on the addition's chain.
 
     ``addition`` is the dict at ``atom_trace["additions"][id]`` or an
     :class:`~xenosite.refactor_poc.records.Addition`. Both store the chain
-    on ``rules``. The class name is the label. A ruleset is included when
-    it is in that chain.
+    on ``rules``. A ruleset with no name stays on the chain and is skipped
+    here. The pattern that fired is on ``addition["pattern"]``, not here.
     """
 
     chain = getattr(addition, "rules", None)
     if chain is None:
         chain = addition["rules"]
-    return tuple(type(rule).__name__ for rule in chain)
+    labels = []
+    for rule in chain:
+        name = getattr(rule, "name", None)
+        if name:
+            labels.append(name)
+    return tuple(labels)

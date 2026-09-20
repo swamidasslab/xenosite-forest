@@ -17,7 +17,7 @@ from xenosite.refactor_poc.rules import (
 )
 from xenosite.refactor_poc.rulesets import RuleSet
 
-_ADDITION_FIELDS = ("site", "rules", "info", "effect", "name", "phase1", "depth")
+_ADDITION_FIELDS = ("site", "rules", "info", "effect", "name", "phase1", "depth", "pattern")
 
 
 def _chemistry(mol):
@@ -108,8 +108,9 @@ def test_a_new_atom_points_at_one_addition_record():
     addition = trace["additions"][transform_id]
     assert set(_ADDITION_FIELDS) <= set(addition)
     names = tuple(getattr(item, "name", item) for item in addition["rules"])
-    assert names == ("Poc", "Hydroxylation")
+    assert names == ("Hydroxylation", "Poc")
     assert addition["name"] == "Hydroxylation"
+    assert addition["pattern"] is Hydroxylation.smarts[0][1]
     assert addition["depth"] == 0
     delta = trace["delta_formula"][transform_id]
     for element, change in delta["counts"].items():

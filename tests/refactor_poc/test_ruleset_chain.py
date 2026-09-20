@@ -7,8 +7,12 @@ from xenosite.refactor_poc.rules import Hydroxylation
 from xenosite.refactor_poc.rulesets import RuleSet
 
 
+def _addition(product):
+    return product._forest["atom_trace"]["additions"]["R1"]
+
+
 def _rules(product):
-    return product._forest["atom_trace"]["additions"]["R1"]["rules"]
+    return _addition(product)["rules"]
 
 
 def test_ruleset_appends_itself_after_the_leaf_on_the_same_molecule():
@@ -44,8 +48,33 @@ def test_nested_phaseone_ruleset_keeps_the_inner_set_on_the_chain():
         break
 
     assert product is not None
-    rules = _rules(product)
+    addition = _addition(product)
+    rules = addition["rules"]
     assert type(rules[0]) is Hydroxylation
     assert rules[1] is StableOxygenation_PhaseOne
     assert rules[-1] is PhaseOneRS
     assert len(rules) == 3
+    assert StableOxygenation_PhaseOne.name == "SO"
+    assert PhaseOneRS.name is None
+    from xenosite.refactor_poc.phaseone import reaction_labels
+
+    assert reaction_labels(addition) == ("Hydroxylation", "SO")
+    assert addition["pattern"] is Hydroxylation.smarts[0][1]
+    assert addition["pattern"]["name"] == "h"
+    assert addition["pattern"] not in rules
+
+
+def test_unnamed_ruleset_stays_on_the_chain_and_emits_no_name():
+    leaf = Hydroxylation()
+    ruleset = RuleSet((leaf,), name="")
+    assert ruleset.name is None
+
+    product, _info = next(ruleset.metabolize(Chem.MolFromSmiles("CC")))
+    addition = _addition(product)
+    rules = addition["rules"]
+    assert type(rules[0]) is Hydroxylation
+    assert rules[-1] is ruleset
+    from xenosite.refactor_poc.phaseone import reaction_labels
+
+    assert reaction_labels(addition) == ("Hydroxylation",)
+    assert addition["pattern"] is Hydroxylation.smarts[0][1]

@@ -55,7 +55,17 @@ class RuleSet(ReactionRule):
         self.rules = tuple(contained)
         if name is None and len(self.rules) == 1:
             name = self.rules[0].name
-        super().__init__(name=name or "RuleSet", longname=longname)
+        if name == "":
+            name = None
+        # ReactionRule fills a class-name default when name is missing.
+        # A ruleset keeps the given name, or no name. It still appends
+        # itself on the chain either way.
+        super().__init__(name=name, longname=longname)
+        self.name = name
+        if longname is None:
+            self.longname = name
+        else:
+            self.longname = longname
 
     def __iter__(self):
         yield from self.rules

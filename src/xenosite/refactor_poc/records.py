@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
+from typing import TYPE_CHECKING, NamedTuple, TypedDict
 
 if TYPE_CHECKING:
     # rules.py imports Effect, PatternInfo, and When from this module.
@@ -41,7 +41,10 @@ class AtomRef(NamedTuple):
         for transform_id, detail in trace.get("additions", {}).items():
             if int(detail.get("depth", 0)) != self.depth:
                 continue
-            if self.idx not in _flat_ints(detail.get("site")):
+            site = detail.get("site")
+            if site is None:
+                continue
+            if self.idx not in _flat_ints(site):
                 continue
             wanted.append(transform_id)
         for record in trace.get("records", {}).values():
@@ -54,11 +57,13 @@ class AtomRef(NamedTuple):
         raise KeyError((self.idx, self.element, self.depth))
 
 
-def _flat_ints(site) -> set[int]:
+def _flat_ints(site: Site) -> set[int]:
+    """Flatten a known-index site to atom indexes. Resolve FutureSite first."""
+
     if isinstance(site, int):
         return {site}
-    if isinstance(site, str) or site is None:
-        return set()
+    if isinstance(site, tuple):
+        return set(site)
     found: set[int] = set()
     for item in site:
         if isinstance(item, int):
@@ -68,10 +73,15 @@ def _flat_ints(site) -> set[int]:
     return found
 
 
-# One atom, a pair of atoms, or a set of those pairs.
-# A position may be an index or a ref to an atom that does not exist yet.
-# The frozenset[int] form has exactly two atom indices.
-Site = int | AtomRef | frozenset[int | AtomRef] | frozenset[frozenset[int | AtomRef]]
+# Known atom indices only. No deferred refs.
+# A frozenset[int] is a two-atom site. Nested frozensets are pair-of-pairs.
+# Trace storage may keep a sorted tuple of the same indexes.
+Site = int | tuple[int, ...] | frozenset[int] | frozenset[frozenset[int]]
+
+# Deferred atom a later frame resolves. Oxygen added by hydroxylation is one.
+FutureSite = AtomRef
+
+AnySite = Site | FutureSite
 
 
 class Formula(TypedDict):
@@ -126,10 +136,12 @@ class PatternInfo(TypedDict, total=False):
     ``span`` stays an open dict. It is the collapsed effect fields, and a
     value may be a bare result or a tuple of the branches that disagree.
     Naming that as one TypedDict would hide the disagreement.
+    ``name`` distinguishes this pattern from the others on the same rule.
     """
 
+    name: str
     possibilities: tuple[Effect, ...]
-    span: dict[str, Any]
+    span: dict[str, object]
     edit: str
     site_map: int | tuple[int, ...]
     # Map numbers that receive an isotope label. More than one map can be
@@ -144,11 +156,12 @@ class Addition(NamedTuple):
 
     site: Site
     rules: tuple[ReactionRule, ...]
-    info: dict[str, Any]
+    info: dict[str, object]
     effect: Effect
     name: str | None
-    phase1: Any
+    phase1: object | None
     depth: int
+    pattern: PatternInfo | None = None
 
 
 class McsResult(NamedTuple):
@@ -160,7 +173,7 @@ class McsResult(NamedTuple):
 class FragmentSplit(NamedTuple):
     """Pieces of one split. This module does not name a molecule type."""
 
-    pieces: tuple[Any, ...]
+    pieces: tuple[Mol, ...]
 
 
 class AtomRecord(TypedDict, total=False):
@@ -182,16 +195,19 @@ class TraceAddition(TypedDict):
     Same fields as :class:`Addition`. Stored as a dict because the trace
     writes it that way. ``info`` stays open: it is the pattern snapshot
     with rule objects replaced by names, and ``options`` dropped.
+    ``pattern`` is the :class:`PatternInfo` that fired, the same object
+    the rule holds. It is not a rule and is not on ``rules``.
     ``phase1`` is reserved. Its schema is not decided.
     """
 
     site: Site
     rules: tuple[ReactionRule, ...]
-    info: dict[str, Any]
+    info: dict[str, object]
     effect: Effect
     name: str | None
-    phase1: Any
+    phase1: object | None
     depth: int
+    pattern: PatternInfo | None
 
 
 class AtomTrace(TypedDict, total=False):

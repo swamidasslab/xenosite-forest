@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+- PatternInfo now carries a distinguishing ``name``. Where a short role name is not ready, the rule numbers the pattern ("1", "2", …) on that object at init; that numbering is a disfavored interim, not the final names.
+- RuleSet always appends itself on the product chain. Its reported label is the initialization name; an unnamed set (including ``name=""``) stays on the chain and contributes no label. The addition links to the PatternInfo that fired; the pattern is not a chain entry.
+
+## 2026-09-19
+
 - RuleSet was flattening nested sets, so a product chain kept only the outer set and the leaf. It now calls metabolize on each contained rule and appends itself on that product. PhaseOneRS hydroxylation of ethane is Hydroxylation, then StableOxygenation (`SO`), then PhaseOneRS.
 
 ## 2026-09-19
