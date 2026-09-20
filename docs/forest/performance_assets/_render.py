@@ -7,7 +7,7 @@ Reactants: xenopict ``mark_atoms`` circles on **sites of metabolism only**
 
 Products: MCS-aligned to the paired reactant via ``Xenopict.align_to``.
 
-Re-run from repo root (needs ``xenopict`` via ``tool.uv.sources``):
+Re-run from repo root (needs ``xenopict>=0.3`` in the dev group):
 
   uv run python docs/forest/performance_assets/_render.py
 """

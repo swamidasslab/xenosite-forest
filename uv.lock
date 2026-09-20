@@ -2392,7 +2392,8 @@ wheels = [
 
 [[package]]
 name = "xenopict"
-source = { directory = "../xenopict" }
+version = "0.3"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorcet" },
     { name = "lxml" },
@@ -2400,36 +2401,17 @@ dependencies = [
     { name = "matplotlib", version = "3.11.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pydantic" },
     { name = "rdkit" },
     { name = "shapely" },
     { name = "simplejson" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "colorcet", specifier = ">=3.1.0" },
-    { name = "jinja2", marker = "extra == 'pandas'", specifier = ">=3.1.0" },
-    { name = "lxml", specifier = ">=5.3.1" },
-    { name = "matplotlib", specifier = ">=3.9.4" },
-    { name = "networkx", specifier = ">=3.2.1" },
-    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2.3" },
-    { name = "pydantic", specifier = ">=2.11.1" },
-    { name = "rdkit", specifier = ">=2023.9.1" },
-    { name = "shapely", specifier = ">=2.0.7" },
-    { name = "simplejson", specifier = ">=3.20.1" },
-]
-provides-extras = ["pandas"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "jupytext", specifier = ">=1.16.7" },
-    { name = "marimo", specifier = ">=0.13.15" },
-    { name = "myst-nb", specifier = ">=1.2.0" },
-    { name = "myst-parser", specifier = ">=3.0.1" },
-    { name = "sphinx", specifier = ">=7.4.7" },
-    { name = "sphinx-autodoc-typehints", specifier = ">=2.3.0" },
-    { name = "sphinx-rtd-theme", specifier = ">=3.0.2" },
+sdist = { url = "https://files.pythonhosted.org/packages/3d/49/bcee5affcffbfbbcca7654d748a62d3b8256ad50bcd4e5e4989de6f7cf30/xenopict-0.3.tar.gz", hash = "sha256:36be995c1cb8492f7910d6388aea871682dcb7042633995839e5f361aa9d78e9", size = 67976, upload-time = "2025-03-31T22:45:37.859Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/26/ea4c742b8ac77c2df057b10eb73742b77bca690bef5ca1eaaf27b5255dc9/xenopict-0.3-py3-none-any.whl", hash = "sha256:313a3c0db9c48090af36c3e262f292b6ff2fed08b86a44f9ec25f0bf35dc09b2", size = 71494, upload-time = "2025-03-31T22:45:36.108Z" },
 ]
 
 [[package]]
@@ -2488,7 +2470,7 @@ dev = [
     { name = "ruff", specifier = ">=0.16.8" },
     { name = "towncrier", specifier = ">=24.0" },
     { name = "tqdm", specifier = ">=4.66.0" },
-    { name = "xenopict", directory = "../xenopict" },
+    { name = "xenopict", specifier = ">=0.3" },
 ]
 
 [[package]]
