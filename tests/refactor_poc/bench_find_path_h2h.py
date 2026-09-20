@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """Head-to-head find_path: forest (PhaseOneQF) vs refactor_poc (PhaseOne).
 
-Same reactants/targets. Reports work counters and wall time. Does not paste
-guided_path rankers; each side uses its own search defaults under a shared
-budget ceiling large enough that both sides can finish when a path exists.
+Same reactants/targets. Reports work counters that exist on both sides plus
+side-specific billed units, with labels that say what each number means.
+
+Comparable columns (both sides expose these):
+  mol_edits   — accepted reaction applies / kekulé overlays
+  rule_exp    — frontier rule expansions (metabolize / enumerate calls)
+  nodes       — poc: queue pops; forest: nodes_enqueued
+  wall_s      — wall time
+
+Side-specific (not the same unit — do not equate):
+  forest billed = linearizations_applied + site_applies
+    (guided PhaseOneQF often has site_applies=0; linearizations are the work)
+  poc billed    = mol_edits + nodes
 
 Rulesets (closest Phase I + QF pair; neither default includes conjugation):
   forest: PhaseOneQF  (find_path default)
@@ -42,16 +52,25 @@ CASES: list[tuple[str, str, str]] = [
     ("benzene→quinone", "c1ccccc1", "O=C1C=CC(=O)C=C1"),
     ("phenol→quinone", "Oc1ccccc1", "O=C1C=CC(=O)C=C1"),
     ("butylbenzene→ω-OH", "c1ccc(CCCC)cc1", "OCCCCc1ccccc1"),
-    # Prior hard: terbinafine → enyne aldehyde (many expansions / cleavages)
     (
         "TBA→enyne aldehyde",
         "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12",
         "CC(C)(C)C#CC=CC=O",
     ),
-    # Prior hard: acetate + O-dealkylation to catechol
     ("acetate→catechol", "CC(=O)Oc1ccc(OC)cc1", "Oc1ccc(O)cc1"),
-    # Multi-hop oxygenation + dearomatization under PhaseOne
     ("PhCH2OH→quinone", "OCc1ccccc1", "O=C1C=CC(=O)C=C1"),
+    # Forest flaky / high-budget under PhaseOneQF; poc should solve.
+    (
+        "MeOPhOH→hydroxyquinone",
+        "COc1ccc(O)cc1",
+        "O=C1C=C(O)C(=O)C(O)=C1",
+    ),
+    (
+        "MeOPhOH→orthocarbonate Q",
+        "COc1ccc(O)cc1",
+        "O=C1C=CC(OC(O)O)=CC1=O",
+    ),
+    ("naphthalene→1,4-NQ", "c1ccc2ccccc2c1", "O=C1C=CC(=O)c2ccccc12"),
 ]
 
 
@@ -90,11 +109,12 @@ def run_forest(reactant: str, target: str) -> SideResult:
         product=product,
         seconds=elapsed,
         work={
+            "mol_edits": counters.mol_edits,
+            "rule_expansions": counters.rule_expansions,
+            "nodes": counters.nodes_enqueued,
+            "linearizations": counters.linearizations_applied,
             "site_applies": counters.site_applies,
             "billed": counters.billed(),
-            "linearizations": counters.linearizations_applied,
-            "rule_expansions": counters.rule_expansions,
-            "mol_edits": counters.mol_edits,
             "budget_exhausted": counters.budget_exhausted,
         },
     )
@@ -121,32 +141,37 @@ def run_poc(reactant: str, target: str) -> SideResult:
         seconds=elapsed,
         work={
             "mol_edits": counters.mol_edits,
-            "billed": counters.billed,
+            "rule_expansions": counters.rule_expansions,
             "nodes": counters.nodes,
             "sites_considered": counters.sites_considered,
             "sites_skipped": counters.sites_skipped,
-            "rule_expansions": counters.rule_expansions,
+            "billed": counters.billed,
         },
     )
 
 
-def _fmt_forest(r: SideResult) -> str:
-    # Guided PhaseOneQF bills plan linearizations; site_applies often stays 0.
-    return "bill=%s lin=%s ed=%s sa=%s  %.3fs%s" % (
-        r.work["billed"],
-        r.work["linearizations"],
-        r.work["mol_edits"],
-        r.work["site_applies"],
-        r.seconds,
-        " EXH" if r.work.get("budget_exhausted") else "",
-    )
+def _fmt_side(label: str, r: SideResult) -> str:
+    """Print comparable counters first; side billed after."""
 
-
-def _fmt_poc(r: SideResult) -> str:
-    return "ed=%s bill=%s nd=%s  %.3fs" % (
+    if label == "forest":
+        return (
+            "ed=%s re=%s nd=%s  bill(lin+sa)=%s (L=%s sa=%s)  %.3fs%s"
+            % (
+                r.work["mol_edits"],
+                r.work["rule_expansions"],
+                r.work["nodes"],
+                r.work["billed"],
+                r.work["linearizations"],
+                r.work["site_applies"],
+                r.seconds,
+                " EXH" if r.work.get("budget_exhausted") else "",
+            )
+        )
+    return "ed=%s re=%s nd=%s  bill(ed+nd)=%s  %.3fs" % (
         r.work["mol_edits"],
-        r.work["billed"],
+        r.work["rule_expansions"],
         r.work["nodes"],
+        r.work["billed"],
         r.seconds,
     )
 
@@ -165,6 +190,12 @@ def main() -> int:
         "ceilings: forest max_expansions=%s  poc max_nodes=%s  max_paths=%s"
         % (FOREST_MAX_EXPANSIONS, POC_MAX_NODES, MAX_PATHS)
     )
+    print(
+        "comparable: mol_edits (ed) / rule_expansions (re) / nodes (nd) / wall_s"
+    )
+    print(
+        "billed units differ: forest=lin+site_applies; poc=mol_edits+nodes"
+    )
     print(flush=True)
     rows = []
     for i, (label, reactant, target) in enumerate(CASES, 1):
@@ -173,7 +204,7 @@ def main() -> int:
         print("  forest...", flush=True)
         fr = run_forest(reactant, target)
         print(
-            "    %s hit=%s product=%s" % (_fmt_forest(fr), fr.hit, fr.product),
+            "    %s hit=%s product=%s" % (_fmt_side("forest", fr), fr.hit, fr.product),
             flush=True,
         )
         if _forest_idle(fr) and not fr.hit:
@@ -181,7 +212,7 @@ def main() -> int:
         print("  poc...", flush=True)
         pr = run_poc(reactant, target)
         print(
-            "    %s hit=%s product=%s" % (_fmt_poc(pr), pr.hit, pr.product),
+            "    %s hit=%s product=%s" % (_fmt_side("poc", pr), pr.hit, pr.product),
             flush=True,
         )
 
@@ -192,46 +223,57 @@ def main() -> int:
         print("  match=%s  target=%s" % (match, target_c), flush=True)
         print(flush=True)
 
-    print("=" * 110)
+    print("=" * 130)
     print(
-        "%-22s  %-36s  %-28s  %s"
-        % ("case", "forest (bill/lin/ed / s)", "poc (ed/bill / s)", "match")
+        "%-24s  %-55s  %-40s  %s"
+        % (
+            "case",
+            "forest ed/re/nd bill(L+sa) / s",
+            "poc ed/re/nd bill(ed+nd) / s",
+            "match",
+        )
     )
-    print("-" * 110)
+    print("-" * 130)
     for label, _r, _target_c, fr, pr, match in rows:
-        fcell = "b=%s L=%s ed=%s %.2fs" % (
+        fcell = "ed=%s re=%s nd=%s b=%s(L=%s sa=%s) %.2fs" % (
+            fr.work["mol_edits"],
+            fr.work["rule_expansions"],
+            fr.work["nodes"],
             fr.work["billed"],
             fr.work["linearizations"],
-            fr.work["mol_edits"],
+            fr.work["site_applies"],
             fr.seconds,
         )
         if fr.work.get("budget_exhausted"):
             fcell += " EXH"
         if not fr.hit:
             fcell += " miss"
-        pcell = "ed=%s b=%s %.2fs" % (
+        pcell = "ed=%s re=%s nd=%s b=%s %.2fs" % (
             pr.work["mol_edits"],
+            pr.work["rule_expansions"],
+            pr.work["nodes"],
             pr.work["billed"],
             pr.seconds,
         )
         if not pr.hit:
             pcell += " miss"
-        print("%-22s  %-36s  %-28s  %s" % (label, fcell, pcell, match))
-    print("=" * 110)
+        print("%-24s  %-55s  %-40s  %s" % (label, fcell, pcell, match))
+    print("=" * 130)
     print()
-    print("Notes:")
-    print(
-        "  forest: billed=linearizations+site_applies; guided PhaseOneQF often"
-        " has site_applies=0 with linearizations>0 (not idle)."
-    )
-    print("  poc:    mol_edits; billed=mol_edits+nodes")
-    print("  Units differ; compare within-side and wall time across sides.")
-    print("  Conjugation is not in PhaseOneQF / PhaseOne (closest Phase I+QF pair).")
+    print("Metric definitions:")
+    print("  mol_edits (ed)     both: accepted reaction apply / overlay")
+    print("  rule_expansions    both: frontier rule metabolize/enumerate")
+    print("  nodes (nd)         poc queue pops; forest nodes_enqueued")
+    print("  forest billed      linearizations_applied + site_applies")
+    print("                     (sa often 0 on guided; lin is the real work)")
+    print("  poc billed         mol_edits + nodes")
+    print("  Conjugation is not in PhaseOneQF / PhaseOne.")
     n_match = sum(1 for *_, m in rows if m)
     n_both = sum(1 for *_, fr, pr, _m in rows if fr.hit and pr.hit)
+    n_poc = sum(1 for *_, fr, pr, _m in rows if pr.hit)
     print(
-        "  both hit: %s/%s   products match: %s/%s"
-        % (n_both, len(rows), n_match, len(rows))
+        "  both hit: %s/%s   poc hit: %s/%s   products match when both: %s/%s"
+        % (n_both, len(rows), n_poc, len(rows), n_match, len(rows))
     )
     idle = [label for label, _r, _t, fr, _pr, _m in rows if _forest_idle(fr)]
     if idle:

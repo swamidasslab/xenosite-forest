@@ -2,6 +2,14 @@
 
 ## 2026-09-19
 
+- Forest epox / N-dealk `phase1_steps` are identity singletons (`Epoxidation` / `NDealkylation`), not StableOxygenation / UnstableOxygenation. UO is Dealkylation+OD; ND is its own ruleset. Reverted dfa17e2 look-aheads; poc `canonical_plan` matches forest.
+- PhCH2OH→quinone miss: MCS mapped benzylic CH2 onto a quinone ring carbon so `{1,2}` was not in `cleavage_bonds`. Fix: ring-membership mismatch on a mapped atom adds the bridge into the ring. Path found (ed=21, nd=3).
+- TBA: first frontier already hit the target but kept editing siblings (ed=43). Prepend target hits and stop site edits once `max_paths` queued → ed=3.
+- H2H bench (`tests/refactor_poc/bench_find_path_h2h.py`) now prints comparable `mol_edits` / `rule_expansions` / `nodes` / wall on both sides; forest billed stays `lin+sa` (sa often 0). Added hard cases: MeOPhOH→hydroxyquinone (forest EXH miss, poc hit), orthocarbonate Q, naphthalene→1,4-NQ. 10/10 poc hit; 9/10 both hit.
+- Sample H2H (comparable ed/re/nd; billed units differ): TBA forest ed=4 re=8 nd=3 b=1(L=1) 0.13s vs poc ed=3 re=1 nd=2 b=5 0.02s; PhCH2OH forest ed=21 re=79 nd=15 b=62 vs poc ed=21 re=26 nd=3 b=24; hydroxyquinone forest EXH vs poc ed=319 nd=40.
+
+## 2026-09-19
+
 - Easy phase-I look-aheads on `canonical_plan`: Epoxidation → `StableOxygenation` at the same site; NDealkylation → `UnstableOxygenation` at the same site (phaseone group RuleSets). Not multi-step. Default identity and QuinoneFormation hydroxylation/dehydrogenation unchanged. Search still only calls `rule.canonical_plan`.
 
 ## 2026-09-19
