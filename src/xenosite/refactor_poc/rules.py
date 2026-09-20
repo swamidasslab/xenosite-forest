@@ -7,7 +7,7 @@ import copy
 import itertools
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, NamedTuple, TypeAlias, cast
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias, cast
 
 if TYPE_CHECKING:
     # Static re-export so ``from .rules import RuleSet`` types correctly.
@@ -49,13 +49,14 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitized_fragments,
 )
 from xenosite.refactor_poc.records import (
-    AtomPairOrbitSignature,
+    BondAtomOrbitSignature,
     EditCounters,
     Effect,
     EffectField,
     Formula,
     InitializedAtomTrace,
     KekuleParents,
+    PairOrbitSignature,
     PairSiteInfo,
     PatternInfo,
     ProductInfo,
@@ -69,8 +70,11 @@ from xenosite.refactor_poc.records import (
     When,
 )
 
+# Unique-edit orbit mode on a rule (data, not a search branch).
+UniqueOrbit: TypeAlias = Literal["atom_atom", "bond_atom"]
+
 # Dedup key for one SMARTS site across Kekulé forms / equivalent carbons.
-# Last field: AtomPairOrbitSignature, or None for a one-atom site.
+# Last field: pair-orbit signature, or None for a one-atom site without bond_atom.
 SiteSignature: TypeAlias = tuple[
     tuple[tuple[int, int], ...],
     tuple[tuple[int, int, float], ...],
@@ -79,7 +83,7 @@ SiteSignature: TypeAlias = tuple[
     str | None,
     bool,
     bool,
-    AtomPairOrbitSignature | None,
+    PairOrbitSignature | tuple[BondAtomOrbitSignature, BondAtomOrbitSignature] | tuple | None,
 ]
 
 
@@ -156,6 +160,9 @@ class ReactionRule:
     name: str | None
     longname: str | None
     sites_on: SitesOn | None = None
+    # Unique-edit pair orbit: ``atom_atom`` (default) or ``bond_atom``
+    # (Dehydrogenation one-bond SMARTS / paired end bonds). Data on the rule.
+    unique_orbit: UniqueOrbit = "atom_atom"
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -773,6 +780,7 @@ def describe(
     pin: tuple[int, ...] | None = None,
     skip_same_rings: bool = False,
     name: str | None = None,
+    swap_group: str | None = None,
     **single: EffectField,
 ) -> PatternInfo:
     """Build a :class:`PatternInfo`.
@@ -780,6 +788,7 @@ def describe(
     One outcome: ``describe(adds="O", removes="H")``.
     Several: ``describe(*branches(...), edit="dealkylate")``.
     ``name`` distinguishes this pattern from the others on the same rule.
+    ``swap_group`` marks interchangeable pair ends (see HEURISTICS).
     """
 
     if single and possibilities:
@@ -808,6 +817,8 @@ def describe(
         info["skip_same_rings"] = True
     if name is not None:
         info["name"] = name
+    if swap_group is not None:
+        info["swap_group"] = swap_group
     return info
 
 
@@ -1182,7 +1193,7 @@ class SmartsReactionRule(ReactionRule):
                     # A two-atom site also carries its pair orbit, which is
                     # not those ranks.
                     signature = _site_signature(
-                        context, work, mapped, ranks, site, rxn_num, effect
+                        context, work, mapped, ranks, site, rxn_num, effect, self
                     )
                     if signature in seen:
                         _bump(counters, "sites_skipped")
@@ -1449,6 +1460,140 @@ def _unique_csmi_key(info: SiteInfo, csmi: str) -> tuple[str, str | None, str]:
     return (rule_name, _pattern_dedup_token(info), csmi)
 
 
+def _bond_atom_orbit_for_match(
+    mol: Mol, mapped: Mapping[int, int], site_atom: int
+) -> BondAtomOrbitSignature | None:
+    """``bond_atom`` orbit for the bond between maps 1 and 2 plus ``site_atom``."""
+
+    left, right = mapped.get(1), mapped.get(2)
+    if left is None or right is None:
+        return None
+    bond = mol.GetBondBetweenAtoms(left, right)
+    if bond is None:
+        return None
+    return mol.xf.bond_atom_orbit_key(bond.GetIdx(), site_atom)
+
+
+def _resolved_swap_group(
+    info: PatternInfo, effect: Effect | None = None
+) -> str | None:
+    """``swap_group`` from a resolved When, else from PatternInfo."""
+
+    if effect is not None:
+        when = effect.get("when")
+        if when is not None and "swap_group" in when:
+            group = when.get("swap_group")
+            return group if group else None
+    group = info.get("swap_group")
+    return group if group else None
+
+
+def _ends_swappable(
+    info1: PatternInfo,
+    info2: PatternInfo,
+    effect1: Effect | None = None,
+    effect2: Effect | None = None,
+) -> bool:
+    """True → unordered pair orbit; False → ordered.
+
+    Reads ``swap_group`` (PatternInfo, or When override on a resolved effect).
+    Unordered only when both ends share the same non-empty group — data for
+    equivalent/swappable edits that co-apply. Missing or unequal → ordered.
+    Canonical pattern order for ordered keys uses ``PatternInfo.name``.
+    """
+
+    g1 = _resolved_swap_group(info1, effect1)
+    g2 = _resolved_swap_group(info2, effect2)
+    return g1 is not None and g1 == g2
+
+
+# Compat alias used in early unique-edit drafts.
+_end_roles_symmetric = _ends_swappable
+
+
+def _map_rank_key(
+    ranks: dict[int, int], mapped: Mapping[int, int]
+) -> tuple[tuple[int, int], ...]:
+    """Stable (mapno, topological-rank) embedding identity."""
+
+    return tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items()))
+
+
+def _formula_key(value: str | None) -> str:
+    """Order-invariant formula bag for signature keys (``HCl`` ≡ ``ClH``)."""
+
+    if not value:
+        return ""
+    return "".join(sorted(value))
+
+
+def _site_orbit(
+    rule: ReactionRule,
+    context: Mol,
+    mapped: Mapping[int, int],
+    site: frozenset[int],
+) -> PairOrbitSignature | None:
+    """Unique-edit orbit field. Reads ``rule.unique_orbit`` (data, not a branch)."""
+
+    mode = getattr(rule, "unique_orbit", "atom_atom")
+    if mode == "bond_atom" and len(site) == 1:
+        return _bond_atom_orbit_for_match(context, mapped, next(iter(site)))
+    return context.xf.atom_pair_orbit_key(site)
+
+
+def _pair_orbit(
+    rule: ReactionRule,
+    mol: Mol,
+    map1: Mapping[int, int],
+    map2: Mapping[int, int],
+    site_a: int,
+    site_b: int,
+    site: frozenset[int],
+    info1: PatternInfo,
+    info2: PatternInfo,
+    effect1: Effect | None = None,
+    effect2: Effect | None = None,
+) -> (
+    PairOrbitSignature
+    | tuple[BondAtomOrbitSignature, BondAtomOrbitSignature]
+    | None
+):
+    """Orbit identity for a ResonancePairRule emission.
+
+    :func:`_ends_swappable` → unordered (sorted) orbit pair; else ordered
+    ends sorted by PatternInfo ``name`` (canonical pattern order).
+    """
+
+    mode = getattr(rule, "unique_orbit", "atom_atom")
+    swappable = _ends_swappable(info1, info2, effect1, effect2)
+    if mode == "bond_atom":
+        left = _bond_atom_orbit_for_match(mol, map1, site_a)
+        right = _bond_atom_orbit_for_match(mol, map2, site_b)
+        if left is not None and right is not None:
+            if swappable:
+                return tuple(sorted((left, right)))
+            # Canonical pattern-name order (not match / atom-index order).
+            name1 = info1.get("name") or ""
+            name2 = info2.get("name") or ""
+            if (name1, site_a) <= (name2, site_b):
+                return (left, right)
+            return (right, left)
+    key = mol.xf.atom_pair_orbit_key(site)
+    if swappable or key is None:
+        return key
+    # Asymmetric atom_atom: keep end order by canonical name beside the
+    # unordered atom-pair orbit (frozenset key alone loses role order).
+    ranks = mol.xf.topol_equiv
+    name1 = info1.get("name") or ""
+    name2 = info2.get("name") or ""
+    ordered_ranks = (
+        (ranks[site_a], ranks[site_b])
+        if (name1, site_a) <= (name2, site_b)
+        else (ranks[site_b], ranks[site_a])
+    )
+    return cast(PairOrbitSignature | None, (ordered_ranks, key))
+
+
 def _site_signature(
     context: Mol,
     work: Mol,
@@ -1457,8 +1602,9 @@ def _site_signature(
     site: frozenset[int],
     rxn_num: int,
     effect: Effect,
+    rule: ReactionRule,
 ) -> SiteSignature:
-    """Dedup key. Last field is ``((ga, gb), pair_group_id)``, or ``None`` for one atom."""
+    """Dedup key. Last field is a pair-orbit signature, or ``None`` for one atom."""
 
     return (
         tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items())),
@@ -1468,7 +1614,76 @@ def _site_signature(
         effect.get("removes"),
         bool(effect.get("cleaves")),
         bool(effect.get("dearomatizes")),
-        context.xf.atom_pair_orbit_key(site),
+        _site_orbit(rule, context, mapped, site),
+    )
+
+
+def _pair_site_signature(
+    mol: Mol,
+    ranks: dict[int, int],
+    map1: Mapping[int, int],
+    map2: Mapping[int, int],
+    site_a: int,
+    site_b: int,
+    info1: PatternInfo,
+    info2: PatternInfo,
+    preview: PairSiteInfo,
+    rule: ReactionRule,
+) -> tuple:
+    """Unique-edit key for a pair-path emission (before mol edit).
+
+    Swappable ends (shared ``swap_group``): roles + map embeddings sorted so
+    match order does not matter. Ordered ends: canonical ``name`` order so
+    (pat_lo@site, pat_hi@other) is stable under argument swap, while swapping
+    which pattern sits on which atom stays distinct. Map ranks distinguish
+    dealkylate embeddings that share path ends but cleave different partners.
+    """
+
+    effect = preview["options"]
+    site = preview["site"]
+    ends = preview.get("ends")
+    effect1: Effect | None = ends[0] if ends else None
+    effect2: Effect | None = ends[1] if ends else None
+    name1 = info1.get("name") or ""
+    name2 = info2.get("name") or ""
+    maps1 = _map_rank_key(ranks, map1)
+    maps2 = _map_rank_key(ranks, map2)
+    swappable = _ends_swappable(info1, info2, effect1, effect2)
+    if swappable:
+        roles: tuple = tuple(
+            sorted(
+                (
+                    (_resolved_swap_group(info1, effect1) or name1, maps1),
+                    (_resolved_swap_group(info2, effect2) or name2, maps2),
+                )
+            )
+        )
+    elif (name1, site_a, maps1) <= (name2, site_b, maps2):
+        roles = ((name1, maps1), (name2, maps2))
+    else:
+        roles = ((name2, maps2), (name1, maps1))
+    return (
+        roles,
+        tuple(sorted(ranks[i] for i in site)),
+        tuple(sorted(ranks[i] for i in preview["path_ends"])),
+        _formula_key(effect.get("adds")),
+        _formula_key(effect.get("removes")),
+        bool(effect.get("cleaves")),
+        bool(effect.get("dearomatizes")),
+        bool(effect.get("methide")),
+        _pair_orbit(
+            rule,
+            mol,
+            map1,
+            map2,
+            site_a,
+            site_b,
+            site,
+            info1,
+            info2,
+            effect1,
+            effect2,
+        ),
     )
 
 
@@ -1801,7 +2016,7 @@ class ResonanceRule(SmartsReactionRule):
                     _bump(counters, "sites_skipped")
                     continue
                 signature = _site_signature(
-                    context, work, mapped, ranks, site, rxn_num, effect
+                    context, work, mapped, ranks, site, rxn_num, effect, self
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
@@ -1894,6 +2109,8 @@ class ResonancePairRule(ResonanceRule):
         if len(hits) < 2:
             return
 
+        ranks = mol.xf.topol_equiv
+        seen: set[tuple] = set()
         rings: dict[int, tuple[tuple[int, ...], ...]] | None = None
         cache: KekuleParents | None = None
         resonance_parents: tuple[Mol, ...] | None = None
@@ -1910,6 +2127,7 @@ class ResonancePairRule(ResonanceRule):
                         dict[int, int],
                         PatternInfo,
                         PairSiteInfo,
+                        tuple,
                     ]
                 ] = []
                 # Any aromatic atom makes the whole system the dearomatizing
@@ -1945,7 +2163,24 @@ class ResonancePairRule(ResonanceRule):
                     if not filter_sites(live, site, preview):
                         _bump(counters, "sites_skipped")
                         continue
-                    combos.append((map1, info1, map2, info2, preview))
+                    signature = _pair_site_signature(
+                        mol,
+                        ranks,
+                        map1,
+                        map2,
+                        site_a,
+                        site_b,
+                        info1,
+                        info2,
+                        preview,
+                        self,
+                    )
+                    if signature in seen:
+                        _bump(counters, "sites_skipped")
+                        continue
+                    # Reserve the unique-edit slot once per swappable/ordered site.
+                    seen.add(signature)
+                    combos.append((map1, info1, map2, info2, preview, signature))
                 if not combos:
                     continue
                 if self.systems == "aromatic":
@@ -1977,12 +2212,16 @@ class ResonancePairRule(ResonanceRule):
                 paths.sort(key=lambda item: len(item[1]))
                 if not paths:
                     continue
-                for map1, info1, map2, info2, preview in combos:
+                for map1, info1, map2, info2, preview, signature in combos:
                     if rings is None and (
                         info1.get("skip_same_rings") or info2.get("skip_same_rings")
                     ):
                         rings = mol.xf.rings
                     ring_table = rings or {}
+                    # Same unique-edit site can still yield distinct products
+                    # across kekulé parents / path lengths; collapse only
+                    # duplicate csmi (resonance dups), not the whole site.
+                    emitted_csmi: set[str] = set()
                     for parent, path in paths:
                         _bump(counters, "mol_edits")
                         rw = rw_copy(parent)
@@ -1999,7 +2238,15 @@ class ResonancePairRule(ResonanceRule):
                         products = list(sanitized_fragments(rw, counters).pieces)
                         if not products:
                             continue
-                        yield ProductsOfReaction(info=preview, products=products)
+                        fresh = []
+                        for product in products:
+                            csmi = product.xf.csmi
+                            if csmi in emitted_csmi:
+                                continue
+                            emitted_csmi.add(csmi)
+                            fresh.append(product)
+                        if fresh:
+                            yield ProductsOfReaction(info=preview, products=fresh)
 
 
 class Hydroxylation(SmartsReactionRule):
@@ -2046,8 +2293,13 @@ class Dehydrogenation(ResonancePairRule):
     ``filter_rules`` sees ``span`` (what is still ambiguous). ``filter_sites``
     sees the branch the two atoms selected, including whether the path
     actually dearomatizes.
+
+    Unique-edit uses ``bond_atom`` orbits (the C–X bond plus the site atom).
+    Pair-path ends with the same PatternInfo role are unordered; different
+    roles (phenol vs amine) are ordered so ``(a,b)`` ≠ ``(b,a)``.
     """
 
+    unique_orbit: UniqueOrbit = "bond_atom"
     phase1_sites_on = "atom_hydrogen"
     sites_on = "atom_hydrogen"
 
@@ -2096,6 +2348,7 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=2,
                 name="phenol_end",
+                swap_group="phenol_end",
             ),
         ),
         (
@@ -2110,6 +2363,7 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=2,
                 name="amine_end",
+                swap_group="amine_end",
             ),
         ),
         (
@@ -2128,6 +2382,7 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=1,
                 name="methide_end",
+                swap_group="methide_end",
             ),
         ),
     )
@@ -2185,6 +2440,7 @@ class QuinoneFormation(ResonancePairRule):
                 site_map=1,
                 skip_same_rings=True,
                 name="single_to_double",
+                swap_group="single_to_double",
             ),
         ),
         (
@@ -2197,6 +2453,7 @@ class QuinoneFormation(ResonancePairRule):
                 edit="add_carbonyl_o",
                 site_map=1,
                 name="add_carbonyl_o",
+                swap_group="add_carbonyl_o",
             ),
         ),
         (
@@ -2216,6 +2473,7 @@ class QuinoneFormation(ResonancePairRule):
                 edit="replace_halogen",
                 site_map=1,
                 name="replace_halogen",
+                swap_group="replace_halogen",
             ),
         ),
         (
@@ -2227,6 +2485,7 @@ class QuinoneFormation(ResonancePairRule):
                 site_map=1,
                 skip_same_rings=True,
                 name="iminium",
+                swap_group="iminium",
             ),
         ),
         (
@@ -2241,6 +2500,7 @@ class QuinoneFormation(ResonancePairRule):
                 site_map=1,
                 skip_same_rings=True,
                 name="dealkylate",
+                swap_group="dealkylate",
             ),
         ),
     )
@@ -2687,6 +2947,46 @@ class Hydrogenation(ResonancePairRule):
             describe(adds="H", edit="keep", name="path_end"),
         ),
     )
+
+
+class TautomerRule(ResonancePairRule):
+    """Stub for long-range tautomerization (forest ``Tautomerization``).
+
+    Raises ``NotImplementedError`` from :meth:`metabolites`. Captures the
+    design so it is not lost in chat history.
+
+    **What forest did.** ``Tautomerization`` was a ``ResonanceRule`` that
+    walked ``resonate_with_pair_paths``, then extended each alternating path
+    by one H-bearing neighbor (``[#6D1H3,#6D2H2,#6D3H1,#7D2H1,#7D1H2,#8H]``)
+    and flipped bonds along that full path. Net heavy-atom formula and H
+    count were unchanged (enol↔keto style). It did not use SMARTS
+    ``RunReactants``; the edit was path swap only. Example pairs in forest
+    tests: ``O=C1CCCCC1`` ↔ ``OC1=CCCCC1``, long-range ``ClCC=CC=CC=CC=CO``
+    ↔ ``ClCCC=CC=CC=CC=O``.
+
+    **What this is not.** Separate deferred work (TODO / LOG): tautomer
+    *SMARTS matching* — match a tautomer of a reactant pattern via
+    RDKit ``TautomerQuery`` (or equivalent), then infer the tautomerization
+    on hit. Preferred direction only; Status: not decided; wait for mature
+    tests. That matching helper is orthogonal to a first-class tautomer
+    *rule* that emits tautomer metabolites.
+
+    **POC stance.** Not in PhaseOne. Patternless stub until chemistry and
+    unique-edit (ordered vs unordered ends) are decided. When implemented,
+    prefer data on ``PatternInfo`` / endpoints over a silent search branch
+    (see HEURISTICS.md).
+    """
+
+    name = "TautomerRule"
+    longname = "Tautomerization"
+    endpoints = ()
+    smarts = ()
+
+    def metabolites(self, mol: Mol, *args, **kwargs):  # type: ignore[override]
+        raise NotImplementedError(
+            "TautomerRule is a design stub; see class docstring and "
+            "HEURISTICS.md / TODO.md (tautomer SMARTS vs tautomer rule)"
+        )
 
 
 class NitrogenReduction(SmartsReactionRule):

@@ -1,13 +1,11 @@
 # TODO
 
 - PatternInfo coverage gaps: product-side SMARTS parse; `pin` maps present in reactant; `skip_same_rings` / `edit` checked beyond presence; `breaks_ring` and `partner`/`partner_h` filled by `resolve_effect` (not only declared survival)
-- Scaffold `find_network_paths`: group of mols + optional known parent substrates; report step_plans between mols in the group (do not plan *to* designated parents)
 - `find_path_to_MS1`: condensed StepPlan-like form of reactions + possible sites to reach an MS1 m/z (z/charge) within tolerance; isotope-aware; all in-tolerance resolutions; alongside PhaseOne + conjugation, rules for common MS changes and MS-relevant input adjustments (e.g. C12→C14, add H+)
 - After MS1 is solid/tested: `find_path_to_MS2` same idea plus MS2 fragmentation rules to develop
-- Wire Dehydrogenation unique-edit to bond–atom pair orbits (`bond_atom_orbit_key` / `site_pair_orbits_*["bond_atom"]`); recipe approved, not wired yet
 - Optimize `alternating_path`: quadratic because each BFS step copies the path; odd rings can leave the search (parity to the other side is fixed by whether the path skips parity), and those decomposed subproblems are then 2-colorable so all-pairs odd-distance BFS per anchor is not required
 - xf: hang remaining helpers still free (`resonance_bond_maps`, MCS pairwise, `carry_forest` / split, `reordered_forest_labels`); drop thin shims `stamp_forest_labels` / `install_forest` / `ensure_forest` / `forest_trace` once tests use `mol.xf` only
-- Deferred: tautomer SMARTS matching / TautomerQuery vs Tautomerization rule — not this phase
+- TautomerRule stub in rules.py (NotImplementedError); still deferred: tautomer SMARTS matching / TautomerQuery — separate from the rule stub
 - Later: SMARTS least-common atoms first
 - refactor_poc: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)
 - Guided `and_cleave_plan` SMARTS: optional per-SMARTS flags naming atoms made dirty on match, so match-before/after deps are less leaky (fewer false precedes; less rely on apply-replay)

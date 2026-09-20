@@ -2,6 +2,14 @@
 
 ## 2026-09-20
 
+- Pair unique-edit schema: PatternInfo/When ``swap_group`` (approved). Unordered iff shared non-empty group; else ordered by canonical ``name``. Map-rank embeddings in signature (fixes QF Reaction95843 dealkylate collapse); formula-bag key for adds/removes (``HCl``≡``ClH``). Instinct: QF **no** cross-role swappable (partially correct — same-group pairs still unordered); DH **yes** same-group (phenol×phenol), **no** cross-role despite shared edit. Dedicated tests: `tests/refactor_poc/test_pair_signatures.py`. Nauty six-family + DH ``bond_atom`` remain.
+
+## 2026-09-20
+
+- Pair unique-edit: unordered only when PatternInfo `_ends_swappable` (same `name`+`edit` = equivalent edit and co-applicable role). Else ordered. QF instinct check: no cross-pattern unordered (distinct edits; no site overlap); same-name `add_carbonyl_o`×2 is unordered. DH: cross-name phenol/amine/methide stay ordered (effects differ; no co-apply); same-name `phenol_end`×2 unordered. Nauty `all_site_pair_orbits_nauty` six families landed; `atom_bond` ordered≡unordered. DH `unique_orbit=bond_atom` + pair `seen` collapses resonance dups. Profile honesty: prior `artifacts/pair_orbit_profile.out` used `time.perf_counter()` per-case wall **and** cProfile; nauty batch times are real (calls `pynauty.autgrp` / `_colored_graph`); not misleading — isotope was slower on drug-like mols. Dropped POC `find_network_paths` / net scaffolding (DROPPED approved); MS1/MS2 stay on find_path. `TautomerRule` stub + AtomTracker xf facade + parity/rdkit-behavior ports. Migration note: later forest→archive, POC→`xenosite.forest` tree; AtomTracker names aim at seamless swap (not executed).
+
+## 2026-09-20
+
 - CI lint gate for POC only: `.github/workflows/test.yml` job `lint` runs `uv run ruff check src/xenosite/refactor_poc tests/refactor_poc` and `uv run pyright src/xenosite/refactor_poc`. Forest stays out. Pyright include is src package only (tests deferred for MolFromSmiles/TypedDict noise). Ruff still covers POC tests. Small fixes for green: Xf Protocol pair-orbit methods, PairMode annotation, duplicate `emitable_names_by_rule`, ruff autofix on POC tests.
 
 ## 2026-09-20

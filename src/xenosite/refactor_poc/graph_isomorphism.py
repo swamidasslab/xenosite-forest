@@ -1,45 +1,29 @@
 """Site-pair orbits under the molecular automorphism group.
 
-Unified recipes compute ``atom_atom``, ``bond_bond``, and ``bond_atom``
-together (share: marked-SMILES and optional ``pynauty``). Recipe 2
-(self-substructure match) is not implemented.
+**Source of truth:** :func:`all_site_pair_orbits_nauty` — six families via
+colored pynauty graphs (atoms + bond-as-vertex). RDKit isotope recipes remain
+callable for profiling but are not the unique-edit authority.
 
-Unique-edit pair signature (atom–atom; same shape for bond modes)::
+Families::
+
+    atom_atom_unordered / atom_atom_ordered
+    atom_bond_unordered / atom_bond_ordered   # identical partitions (types differ)
+    bond_bond_unordered / bond_bond_ordered
+
+Same-kind unordered uses combinations + sorted images; same-kind ordered uses
+permutations. Asymmetric PatternInfo end roles → ordered family; symmetric →
+unordered. ``atom_bond`` ordered/unordered share one partition.
+
+Legacy :func:`site_pair_orbits_nauty` maps ``atom_atom`` / ``bond_bond`` to
+unordered and ``bond_atom`` to the atom_bond family (pairs stored as
+``(bond, atom)`` for existing unique-edit tables).
+
+Unique-edit pair signature::
 
     ((ga, gb), pair_group_id)
 
-``ga, gb`` are topological group ids of the two ends (sorted for same-kind
-pairs; bond then atom for ``bond_atom``). ``(ga, gb)`` selects a slice of
-``(end_id, end_id) -> pair_group_id``. The signature is that outer group
-tuple plus the looked-up ``pair_group_id``.
-
-``pair_group_id`` is a sequential ``PairGroupId`` (int NewType) numbered
-``0..n-1`` by sorting CIP-based orbit membership tuples. Singleton topeqiv
-ends use ``TRIVIAL_PAIR_GROUP`` without materializing a table.
-
-CIP sort-key shapes (atom before bond; all unordered collections are sorted
-tuples)::
-
-    atom site:  ("atom", cip)
-    bond site:  ("bond", cip_lo, cip_hi)   # sorted endpoint CIPs
-    site pair:  sorted (site_a, site_b) for same-kind; (bond, atom) for bond_atom
-    group:      sorted tuple of site-pair keys → PairGroupId
-
-Forest cache (on ``mol._forest["structure"]``, not on ephemeral ``Xf``):
-
-- ``site_pair_orbits_nauty`` — nested tables filled up front on first need
-  when backend is ``nauty`` (default when ``pynauty`` imports)::
-
-      mode -> (ga, gb) -> {(a, b): pair_group_id, ...}
-
-- ``site_pair_orbits_smiles`` — same shape; RDKit isotope path. Implemented and
-  callable (``backend="smiles"`` / ``XENOSITE_PAIR_ORBIT_BACKEND=smiles``), but
-  **not** the auto fallback when pynauty is absent — that default is ``none``
-  (topeqiv + ``TRIVIAL_PAIR_GROUP``; product csmi is the safety net).
-
 Public access is ``mol.xf.atom_pair_orbit_key`` / ``bond_pair_orbit_key`` /
-``bond_atom_orbit_key`` / ``site_pair_orbits`` / ``pair_orbit_backend``. Free
-functions here are the profileable implementations xf calls.
+``bond_atom_orbit_key`` / ``site_pair_orbits`` / ``pair_orbit_backend``.
 """
 
 from __future__ import annotations
@@ -48,7 +32,7 @@ import importlib
 import os
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import combinations, product
+from itertools import combinations, permutations, product
 from typing import Any, Final, Literal, cast
 
 from xenosite.refactor_poc.rdkit_api import AssignStereochemistry, Mol, MolToSmiles
@@ -72,11 +56,22 @@ from xenosite.refactor_poc.records import (
     TopoGroupId,
 )
 
+# Legacy three-mode names used by unique-edit / forest cache tables.
 PairMode = Literal["atom_atom", "bond_bond", "bond_atom"]
+# Six-family nauty API (source of truth). atom_bond ordered ≡ unordered.
+OrbitFamily = Literal[
+    "atom_atom_unordered",
+    "atom_atom_ordered",
+    "atom_bond_unordered",
+    "atom_bond_ordered",
+    "bond_bond_unordered",
+    "bond_bond_ordered",
+]
 SiteKind = Literal["atom", "bond"]
 MarkedSite = tuple[SiteKind, int]
 # Dispatcher backends. ``smiles`` is RDKit isotope marking — implemented and
 # callable, but not the default when pynauty is absent (does not improve speed).
+# Unique-edit prefers nauty; isotope is not the source of truth for groups.
 PairOrbitBackend = Literal["nauty", "smiles", "none"]
 
 PAIR_MODES: dict[PairMode, tuple[SiteKind, SiteKind]] = {
@@ -86,7 +81,16 @@ PAIR_MODES: dict[PairMode, tuple[SiteKind, SiteKind]] = {
 }
 
 _DEFAULT_MODES: tuple[PairMode, ...] = ("atom_atom", "bond_bond", "bond_atom")
+_ORBIT_FAMILIES: tuple[OrbitFamily, ...] = (
+    "atom_atom_unordered",
+    "atom_atom_ordered",
+    "atom_bond_unordered",
+    "atom_bond_ordered",
+    "bond_bond_unordered",
+    "bond_bond_ordered",
+)
 _CACHE_NAUTY = "site_pair_orbits_nauty"
+_CACHE_NAUTY_FAMILIES = "site_pair_orbits_nauty_families"
 _CACHE_SMILES = "site_pair_orbits_smiles"
 _ENV_BACKEND = "XENOSITE_PAIR_ORBIT_BACKEND"
 _MEMBERSHIP_BASE = 4
@@ -97,6 +101,8 @@ TRIVIAL_PAIR_GROUP: Final[PairGroupId] = PairGroupId(-1)
 
 # Process-wide override. ``None`` → env var → auto (nauty if importable else none).
 _backend_override: PairOrbitBackend | None = None
+
+SitePairOrbitGroups = dict[OrbitFamily, list[list[tuple[int, int]]]]
 
 
 def get_pair_orbit_backend() -> PairOrbitBackend:
@@ -319,6 +325,133 @@ def atom_bond_generators_nauty(
     return generators
 
 
+def all_site_pair_orbits_nauty(
+    mol: Mol,
+    *,
+    include_stereo: bool = True,
+    atom_indices: Iterable[int] | None = None,
+    bond_indices: Iterable[int] | None = None,
+) -> SitePairOrbitGroups:
+    """Six-family nauty site-pair orbits (source of truth for unique-edit).
+
+    Families::
+
+      atom_atom_unordered : (a1, a2) with a1 < a2
+      atom_atom_ordered   : (a1, a2) with a1 != a2
+      atom_bond_unordered : (atom_idx, bond_idx)
+      atom_bond_ordered   : same partition as unordered (types already differ)
+      bond_bond_unordered : (b1, b2) with b1 < b2
+      bond_bond_ordered   : (b1, b2) with b1 != b2
+
+    ``atom_bond_ordered`` and ``atom_bond_unordered`` share one computation —
+    atoms and bonds are not interchangeable same-kind sites, so ordering does
+    not change the partition.
+
+    Optional ``atom_indices`` / ``bond_indices`` restrict returned members;
+    orbits are still computed on the full molecular graph.
+    """
+
+    generators = atom_bond_generators_nauty(mol, include_stereo=include_stereo)
+    n_atoms = mol.GetNumAtoms()
+    n_bonds = mol.GetNumBonds()
+    all_atoms = tuple(range(n_atoms))
+    all_bonds = tuple(range(n_bonds))
+    selected_atoms = set(all_atoms) if atom_indices is None else set(atom_indices)
+    selected_bonds = set(all_bonds) if bond_indices is None else set(bond_indices)
+
+    same_kind_specs: dict[OrbitFamily, tuple[SiteKind, SiteKind, bool]] = {
+        "atom_atom_unordered": ("atom", "atom", False),
+        "atom_atom_ordered": ("atom", "atom", True),
+        "bond_bond_unordered": ("bond", "bond", False),
+        "bond_bond_ordered": ("bond", "bond", True),
+    }
+
+    output: SitePairOrbitGroups = {}
+
+    for name, (kind1, kind2, ordered) in same_kind_specs.items():
+        ids1 = all_atoms if kind1 == "atom" else all_bonds
+        if ordered:
+            candidates = list(permutations(ids1, 2))
+        else:
+            candidates = list(combinations(ids1, 2))
+        output[name] = _orbit_groups_from_generators(
+            candidates,
+            generators,
+            kind1=kind1,
+            kind2=kind2,
+            ordered=ordered,
+            selected_atoms=selected_atoms,
+            selected_bonds=selected_bonds,
+        )
+
+    # Cross-kind: one partition for both ordered and unordered keys.
+    atom_bond_candidates = list(product(all_atoms, all_bonds))
+    atom_bond_groups = _orbit_groups_from_generators(
+        atom_bond_candidates,
+        generators,
+        kind1="atom",
+        kind2="bond",
+        ordered=True,  # product images stay (atom, bond); no sort
+        selected_atoms=selected_atoms,
+        selected_bonds=selected_bonds,
+    )
+    output["atom_bond_unordered"] = atom_bond_groups
+    output["atom_bond_ordered"] = atom_bond_groups
+
+    return output
+
+
+def _orbit_groups_from_generators(
+    candidates: list[tuple[int, int]],
+    generators: list[tuple[tuple[int, ...], tuple[int, ...]]],
+    *,
+    kind1: SiteKind,
+    kind2: SiteKind,
+    ordered: bool,
+    selected_atoms: set[int],
+    selected_bonds: set[int],
+) -> list[list[tuple[int, int]]]:
+    """Union-find orbit partition under automorphism generators."""
+
+    parent: dict[tuple[int, int], tuple[int, int]] = {p: p for p in candidates}
+
+    def find(item: tuple[int, int]) -> tuple[int, int]:
+        while parent[item] != item:
+            parent[item] = parent[parent[item]]
+            item = parent[item]
+        return item
+
+    def union(a: tuple[int, int], b: tuple[int, int]) -> None:
+        a, b = find(a), find(b)
+        if a != b:
+            parent[b] = a
+
+    for pair in candidates:
+        first, second = pair
+        for atom_map, bond_map in generators:
+            mapped_first = atom_map[first] if kind1 == "atom" else bond_map[first]
+            mapped_second = (
+                atom_map[second] if kind2 == "atom" else bond_map[second]
+            )
+            image = (mapped_first, mapped_second)
+            if kind1 == kind2 and not ordered:
+                image = _sorted_pair(image[0], image[1])
+            union(pair, image)
+
+    buckets: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
+    for pair in candidates:
+        first, second = pair
+        first_ok = (
+            first in selected_atoms if kind1 == "atom" else first in selected_bonds
+        )
+        second_ok = (
+            second in selected_atoms if kind2 == "atom" else second in selected_bonds
+        )
+        if first_ok and second_ok:
+            buckets[find(pair)].append(pair)
+    return list(buckets.values())
+
+
 def site_pair_orbits_nauty(
     mol: Mol,
     modes: Sequence[PairMode] = _DEFAULT_MODES,
@@ -327,83 +460,42 @@ def site_pair_orbits_nauty(
     *,
     include_stereo: bool = True,
 ) -> dict[PairMode, list[OrbitMembership]]:
-    """Unified nauty orbits. Each group is a CIP-sorted tuple of index pairs."""
+    """Legacy three-mode view over :func:`all_site_pair_orbits_nauty`.
 
-    bonds = _index_tuple(bond_indices, mol.GetNumBonds())
-    atoms = _index_tuple(atom_indices, mol.GetNumAtoms())
-    generators = atom_bond_generators_nauty(mol, include_stereo=include_stereo)
+    Maps ``atom_atom`` → unordered, ``bond_bond`` → unordered, ``bond_atom`` →
+    ``atom_bond`` (pair stored as ``(bond, atom)`` for table compatibility).
+    Each group is a CIP-sorted tuple of index pairs.
+    """
+
+    families = all_site_pair_orbits_nauty(
+        mol,
+        include_stereo=include_stereo,
+        atom_indices=atom_indices,
+        bond_indices=bond_indices,
+    )
     cip = cip_ids(mol, include_stereo=include_stereo)
     result: dict[PairMode, list[OrbitMembership]] = {}
-
     for mode in modes:
         if mode == "atom_atom":
-            candidates = list(combinations(atoms, 2))
-
-            def apply_generator(
-                pair: tuple[int, int],
-                atom_map: tuple[int, ...],
-                bond_map: tuple[int, ...],
-            ) -> tuple[int, int]:
-                a1, a2 = pair
-                return _sorted_pair(atom_map[a1], atom_map[a2])
-
+            raw = families["atom_atom_unordered"]
         elif mode == "bond_bond":
-            candidates = list(combinations(bonds, 2))
-
-            def apply_generator(
-                pair: tuple[int, int],
-                atom_map: tuple[int, ...],
-                bond_map: tuple[int, ...],
-            ) -> tuple[int, int]:
-                b1, b2 = pair
-                return _sorted_pair(bond_map[b1], bond_map[b2])
-
+            raw = families["bond_bond_unordered"]
         elif mode == "bond_atom":
-            candidates = list(product(bonds, atoms))
-
-            def apply_generator(
-                pair: tuple[int, int],
-                atom_map: tuple[int, ...],
-                bond_map: tuple[int, ...],
-            ) -> tuple[int, int]:
-                b, a = pair
-                return (bond_map[b], atom_map[a])
-
+            # Families use (atom, bond); PairMode tables use (bond, atom).
+            raw = [
+                [(b, a) for a, b in group]
+                for group in families["atom_bond_unordered"]
+            ]
         else:
             raise ValueError(mode)
-
-        candidate_set = set(candidates)
-        parent = {x: x for x in candidates}
-
-        def find(x: tuple[int, int]) -> tuple[int, int]:
-            while parent[x] != x:
-                parent[x] = parent[parent[x]]
-                x = parent[x]
-            return x
-
-        def union(x: tuple[int, int], y: tuple[int, int]) -> None:
-            x, y = find(x), find(y)
-            if x != y:
-                parent[y] = x
-
-        for pair in candidates:
-            for atom_map, bond_map in generators:
-                image = apply_generator(pair, atom_map, bond_map)
-                if image in candidate_set:
-                    union(pair, image)
-
-        buckets: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
-        for pair in candidates:
-            buckets[find(pair)].append(pair)
         result[mode] = [
-            orbit_membership(mol, cip, mode, pairs) for pairs in buckets.values()
+            orbit_membership(mol, cip, mode, pairs) for pairs in raw
         ]
-
     return result
 
 
 def atom_pair_orbit_pynauty(mol: Mol, left: int, right: int) -> NautyPairGroup:
-    """Recipe 3 for one atom pair. Orbit as a CIP-sorted tuple of pairs."""
+    """Recipe 3 for one unordered atom pair."""
 
     groups = site_pair_orbits_nauty(mol, modes=("atom_atom",))["atom_atom"]
     needle = _sorted_pair(left, right)
@@ -413,8 +505,21 @@ def atom_pair_orbit_pynauty(mol: Mol, left: int, right: int) -> NautyPairGroup:
     raise KeyError((left, right))
 
 
+def atom_pair_orbit_pynauty_ordered(
+    mol: Mol, left: int, right: int
+) -> NautyPairGroup:
+    """Ordered atom–atom orbit membership (asymmetric end roles)."""
+
+    families = all_site_pair_orbits_nauty(mol)
+    needle = (left, right)
+    for group in families["atom_atom_ordered"]:
+        if needle in group:
+            return tuple(sorted(group))
+    raise KeyError((left, right))
+
+
 def bond_pair_orbit_pynauty(mol: Mol, bond_a: int, bond_b: int) -> NautyPairGroup:
-    """Recipe 3 for one bond pair."""
+    """Recipe 3 for one unordered bond pair."""
 
     groups = site_pair_orbits_nauty(mol, modes=("bond_bond",))["bond_bond"]
     needle = _sorted_pair(bond_a, bond_b)
@@ -427,7 +532,7 @@ def bond_pair_orbit_pynauty(mol: Mol, bond_a: int, bond_b: int) -> NautyPairGrou
 def bond_atom_orbit_pynauty(
     mol: Mol, bond_idx: int, atom_idx: int
 ) -> NautyPairGroup:
-    """Recipe 3 for one (bond, atom) pair."""
+    """Recipe 3 for one (bond, atom) pair via the atom_bond family."""
 
     groups = site_pair_orbits_nauty(mol, modes=("bond_atom",))["bond_atom"]
     needle = (bond_idx, atom_idx)
@@ -474,7 +579,10 @@ def bond_pair_orbit_key(
 def bond_atom_orbit_key(
     mol: Mol, bond_idx: int, atom_idx: int
 ) -> BondAtomOrbitSignature:
-    """``BondAtomOrbitSignature``. Hook for Dehydrogenation; not wired yet."""
+    """``BondAtomOrbitSignature`` for a (bond, atom) pair.
+
+    Used by Dehydrogenation unique-edit (``unique_orbit = \"bond_atom\"``).
+    """
 
     return cast(
         BondAtomOrbitSignature,

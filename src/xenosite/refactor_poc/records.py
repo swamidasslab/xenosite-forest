@@ -109,11 +109,16 @@ class Formula(TypedDict):
 
 
 class When(TypedDict, total=False):
-    """Constraint that picks one branch of a SMARTS OR once atoms are known."""
+    """Constraint that picks one branch of a SMARTS OR once atoms are known.
+
+    ``swap_group`` optionally overrides :class:`PatternInfo` ``swap_group`` for
+    this branch (pair unique-edit unordered vs ordered). See HEURISTICS.
+    """
 
     map: int
     z: int
     h: int
+    swap_group: str
 
 
 class Effect(TypedDict, total=False):
@@ -188,6 +193,11 @@ class PatternInfo(TypedDict, total=False):
     ``span`` is the collapsed effect fields. A value may be bare or a tuple of
     the branches that disagree. ``name`` distinguishes this pattern from the
     others on the same rule.
+
+    ``swap_group`` (optional): pair unique-edit. Two ends with the same
+    non-empty group are unordered (swappable roles). Missing or unequal
+    groups stay ordered, with ends sorted by ``name`` for a stable key.
+    A resolved :class:`When` may override via ``When["swap_group"]``.
     """
 
     name: str
@@ -200,6 +210,7 @@ class PatternInfo(TypedDict, total=False):
     # are written first so the match cannot land on a different atom.
     pin: tuple[int, ...]
     skip_same_rings: bool
+    swap_group: str
 
 
 class _SiteInfoCore(TypedDict):

@@ -129,3 +129,17 @@ Status: not decided.
 also wrote `partners` and `aromatic` onto the merged options. Nothing in
 the poc read those keys. Closed `SiteInfo` / `Effect` TypedDicts reject
 them; the writes are gone. Per-end partners stay on `info["ends"]`.
+
+
+## Network module / find_network_paths (xenosite.forest.net)
+
+Status: approved to drop from the POC plan.
+
+Forest `net.py` builds a NetworkX reaction graph from one-step
+`find_path` metabolites (Rxn records, SMILES-order atom maps). That
+network API / `find_network_paths` scaffolding is not coming into the
+POC. MS1 / MS2 path finding (if pursued) stays on `find_path`-style
+APIs, not a revived `xenosite.net` package.
+
+Old code: `src/xenosite/forest/net.py` (forest-only; leave in place until
+a later archive move).

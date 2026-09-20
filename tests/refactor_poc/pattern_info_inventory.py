@@ -34,6 +34,7 @@ PATTERNLESS_REACTION_RULE_BASES: frozenset[type[ReactionRule]] = frozenset(
         ResonanceRule,
         ResonancePairRule,
         RuleSet,
+        rules_mod.TautomerRule,  # design stub; raises NotImplementedError
     }
 )
 

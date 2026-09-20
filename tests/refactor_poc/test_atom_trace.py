@@ -30,6 +30,7 @@ _SKIP = frozenset(
         "ResonanceRule",
         "ResonancePairRule",
         "ConjugationRule",
+        "TautomerRule",
     }
 )
 
