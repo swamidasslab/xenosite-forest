@@ -30,7 +30,7 @@ Optional [xenosite-predict](https://github.com/swamidasslab/xenosite-predict) (s
 uv add "xenosite-forest[predict]"
 ```
 
-Requires **Python 3.11–3.13** and **RDKit 2022.03+**.
+Requires **Python 3.11–3.14** and **RDKit 2022.03+**.
 
 ## Quick start
 
