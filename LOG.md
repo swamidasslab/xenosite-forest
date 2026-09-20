@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+- Ported forest correctness suites into `tests/refactor_poc/` (import example SMILES; no copies): `test_rules.py`, `test_quinone.py`, `test_basic.py`, `test_conjugates.py`, `test_ndealkylation.py`, `test_phaseone.py`. Helpers use `rdkit_api` types. Failures marked `@pytest.mark.xfail` + `@pytest.mark.regression` (no production fixes). Skipped: Tautomerization, `include_thiol` / `load_ruleset`, forest `clean` / `rxns=` surgery, net.py.
+- `pytest tests/refactor_poc -q`: 1009 passed, 146 xfailed.
+
+## 2026-09-19
+
 - Forest epox / N-dealk `phase1_steps` are identity singletons (`Epoxidation` / `NDealkylation`), not StableOxygenation / UnstableOxygenation. UO is Dealkylation+OD; ND is its own ruleset. Reverted dfa17e2 look-aheads; poc `canonical_plan` matches forest.
 - PhCH2OH→quinone miss: MCS mapped benzylic CH2 onto a quinone ring carbon so `{1,2}` was not in `cleavage_bonds`. Fix: ring-membership mismatch on a mapped atom adds the bridge into the ring. Path found (ed=21, nd=3).
 - TBA: first frontier already hit the target but kept editing siblings (ed=43). Prepend target hits and stop site edits once `max_paths` queued → ed=3.
