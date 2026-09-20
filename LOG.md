@@ -2,7 +2,10 @@
 
 ## 2026-09-20
 
-- **Retire `bond_atom` UniqueOrbit:** never an intended Site pattern (POC unique-edit framing from `dd9c8ef` / `d30b6d5` / `ba836e5`). DH/QF/Hydrogenation declare ``site_arity=2`` + ``sites_on="atom_pairs"``; one-bond SMARTS ``site_map=(1,2)``. Unique-edit is atom–atom only (`AtomPairOrbitSignature`). Dropped `BondAtom*` types, `unique_orbit`, xf `bond_atom_orbit_key`. Site shape is class data — not `Generic[SiteT]` (heterogeneous RuleSets; pyright cannot enforce frozenset cardinality). Docs: PAIR_ORBITS / HEURISTICS / DROPPED approved.
+- **Pytest:** uncaught warnings fail tests (`filterwarnings = error` in pyproject). Archive `UnstableWarning` still ignored; AtomTracker deprecation asserted via `pytest.warns` / local `catch_warnings(ignore)`.
+
+- **`site_kind` + examples (pre-v0.7.0):** `RuleSiteKind` `"atom"` / `"atom_pair"` on every leaf; `_example_substrates` short SMILES; `tests/forest/test_site_kind.py` asserts emit len matches declaration. Expand examples later for all patterns/whens (TODO).
+- **Retire `bond_atom` UniqueOrbit:** never an intended Site pattern (POC unique-edit framing from `dd9c8ef` / `d30b6d5` / `ba836e5`). DH/QF/Hydrogenation declare ``site_kind="atom_pair"`` + ``sites_on="atom_pairs"``; one-bond SMARTS ``site_map=(1,2)``. Unique-edit is atom–atom only (`AtomPairOrbitSignature`). Dropped `BondAtom*` types, `unique_orbit`, xf `bond_atom_orbit_key`. Site shape is `site_kind` class data (+ `_example_substrates` meta-test) — not `Generic[SiteT]` (heterogeneous RuleSets; pyright cannot enforce frozenset cardinality). Docs: PAIR_ORBITS / HEURISTICS / DROPPED approved.
 
 
 - **Promote + v0.7.0:** `refactor_poc` → live `xenosite.forest`; pre-swap forest archived to `src/xenosite/_archive_forest/` (read-only / locked; CI excludes archive tests + lint). Tests → `tests/forest/`. `AtomTracker` facade kept, deprecated (prefer `mol.xf`); StepPlan still imported from archive. Design docs moved to `docs/forest/` (`PERFORMANCE.md`, `PAIR_ORBITS.md`, `HEURISTICS.md`, `DIVERGENCES.md`, `DROPPED.md`, `performance_assets/`); package stays code-focused. Stripped leftover POC/`refactor_poc` wording. Release target **v0.7.0** (hatch-vcs; latest tag `v0.6.1`). Commit: `b323ba6` (promote), docs follow-ups through `1500dd1`.

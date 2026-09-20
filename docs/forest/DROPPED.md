@@ -13,9 +13,9 @@ Status: approved.
 POC unique-edit framed Dehydrogenation as directed `(bond, atom)` keys
 (`BondAtomOrbitSignature` / `BondAtomPairOrbitSignature`,
 `unique_orbit="bond_atom"`). That was never an intended Site pattern — Sites
-stay atom-index frozensets. Live forest uses ``site_arity=2`` unordered
+stay atom-index frozensets. Live forest uses ``site_kind="atom_pair"`` unordered
 atom pairs (one-bond: both endpoints; path: two ends). Class data
-``site_arity`` / ``sites_on`` replaces UniqueOrbit; not ``Generic[SiteT]``.
+``site_kind`` / ``sites_on`` replaces UniqueOrbit; not ``Generic[SiteT]``.
 
 ## PathContext and its MCS bookkeeping
 

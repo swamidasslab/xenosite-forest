@@ -1,5 +1,8 @@
 # TODO
 
+- **Gate (PR #15 / pre-v0.7.0):** do not merge or tag v0.7.0 until `bond_atom` is gone, DH uses atom-pair Sites, `site_kind` + `_example_substrates` + `test_site_kind` are green, and PAIR_ORBITS/HEURISTICS/LOG docs match the atom-pair taxonomy
+- Expand each rule's `_example_substrates` so examples cover all patterns/whens (meta-test currently only checks site_kind shape)
+
 - Later (optional): hardcode `canonical_emitted_sites=True` on flaky forest tests (topo / guided gold / path hard / unique-edit) if lex site identity helps — fuzz already draws the flip via Hypothesis
 - PatternInfo coverage gaps: product-side SMARTS parse; `pin` maps present in reactant; `skip_same_rings` / `edit` checked beyond presence; `breaks_ring` and `partner`/`partner_h` filled by `resolve_effect` (not only declared survival)
 - `find_path_to_MS1`: condensed StepPlan-like form of reactions + possible sites to reach an MS1 m/z (z/charge) within tolerance; isotope-aware; all in-tolerance resolutions; alongside PhaseOne + conjugation, rules for common MS changes and MS-relevant input adjustments (e.g. C12→C14, add H+)

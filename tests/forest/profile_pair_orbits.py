@@ -80,7 +80,6 @@ def run_signature_walk(mol) -> None:
     for i in range(nb):
         for j in range(i + 1, nb):
             gi.bond_pair_orbit_key(mol, frozenset({i, j}))
-        for a in range(n):
 
 
 def run_named_single_pair(mol) -> None:
@@ -98,8 +97,6 @@ def run_named_single_pair(mol) -> None:
             gi.bond_pair_orbit_isotope(mol, i, j)
             if HAS_PYNAUTY:
                 gi.bond_pair_orbit_pynauty(mol, i, j)
-        for a in range(min(n, 6)):
-            if HAS_PYNAUTY:
 
 
 def main() -> int:

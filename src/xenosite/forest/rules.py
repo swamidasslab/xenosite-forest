@@ -68,7 +68,7 @@ from xenosite.forest.records import (
     PatternInfo,
     ProductInfo,
     Site,
-    SiteArity,
+    RuleSiteKind,
     SiteInfo,
     SitesOn,
     SmartsSiteInfo,
@@ -162,10 +162,13 @@ class ReactionRule:
     name: str | None
     longname: str | None
     sites_on: SitesOn | None = None
-    # Emitted Site cardinality (atom-index frozenset). Class data — not
+    # Emitted Site shape (atom-index frozenset). Class data — not
     # Generic[SiteT] (heterogeneous RuleSets erase the param; pyright cannot
-    # enforce frozenset size). ``1`` singleton; ``2`` unordered atom pair.
-    site_arity: SiteArity = 1
+    # enforce frozenset size). ``"atom"`` singleton; ``"atom_pair"`` unordered pair.
+    site_kind: RuleSiteKind = "atom"
+    # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
+    # TODO: expand so examples cover all patterns/whens on this rule.
+    _example_substrates: tuple[str, ...] = ()
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -2200,7 +2203,8 @@ class Hydroxylation(SmartsReactionRule):
 
     phase1_sites_on = "atom_hydrogen"
     sites_on = "atom_hydrogen"
-    site_arity: SiteArity = 1
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCO', 'c1ccccc1')
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2235,7 +2239,7 @@ class Dehydrogenation(ResonancePairRule):
     sees the branch the two atoms selected, including whether the path
     actually dearomatizes.
 
-    Sites are unordered atom pairs (``site_arity=2``): one-bond SMARTS emit
+    Sites are unordered atom pairs (``site_kind="atom_pair"``): one-bond SMARTS emit
     both bond endpoints; path emissions are the two end atoms. Unique-edit
     uses atom–atom pair orbits. Same PatternInfo role → unordered; different
     roles (phenol vs amine) → ordered so ``(a,b)`` ≠ ``(b,a)``.
@@ -2243,7 +2247,8 @@ class Dehydrogenation(ResonancePairRule):
 
     phase1_sites_on = "atom_hydrogen"
     sites_on = "atom_pairs"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccc(O)cc1')
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2349,7 +2354,8 @@ class QuinoneFormation(ResonancePairRule):
 
     systems = "conjugated"
     sites_on = "atom_pairs"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('c1ccccc1', 'Oc1ccccc1')
 
     def canonical_plan(self, mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
         """Hydroxylations for missing oxygens, then one dehydrogenation."""
@@ -2460,7 +2466,8 @@ class Dealkylation(SmartsReactionRule):
     The site is both atoms of the broken bond.
     """
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('CCO', 'COc1ccccc1')
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
@@ -2625,7 +2632,8 @@ class NDealkylation(SmartsReactionRule):
     NDealkylation has its own ruleset.
     """
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('CCN', 'CN(C)C')
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
@@ -2671,7 +2679,8 @@ class AzoSplitting(SmartsReactionRule):
     and an open azo are the same pattern; a filter reads ``breaks_ring``.
     """
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('N=Nc1ccccc1',)
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
@@ -2690,7 +2699,8 @@ class BenzodioxoleReduction(SmartsReactionRule):
     Both bonds are in that ring. A filter reads ``leave_count``.
     """
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('c1ccc2c(c1)OCO2',)
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
@@ -2715,7 +2725,8 @@ class NitroaromaticReduction(SmartsReactionRule):
     A filter reads ``leave_count``.
     """
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('[O-][N+](=O)c1ccccc1',)
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
@@ -2749,7 +2760,8 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
     stays None. It does not cleave. A filter reads ``adds``.
     """
     sites_on = "atoms"
-    site_arity: SiteArity = 1
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('c1ccsc1',)
 
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
@@ -2773,7 +2785,8 @@ class Dephosphorylation(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('COP(=O)(O)O',)
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>"
@@ -2790,7 +2803,8 @@ class EpoxideOpening(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('C1OC1', 'c1ccccc1C1CO1')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])",
@@ -2808,7 +2822,8 @@ class Hydrolysis(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CC(=O)OC',)
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])",
@@ -2843,7 +2858,8 @@ class Dehydration(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCO',)
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
@@ -2891,7 +2907,8 @@ class Hydrogenation(ResonancePairRule):
 
     phase1_sites_on = "atoms"
     sites_on = "atom_pairs"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ('C=C', 'C#C')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6:1]#[#6:2]>>[*:1]=[*:2]",
@@ -2938,7 +2955,8 @@ class TautomerRule(ResonancePairRule):
     (see docs/forest/HEURISTICS.md).
     """
     sites_on = "atom_pairs"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom_pair"
+    _example_substrates: tuple[str, ...] = ()
 
 
     name = "TautomerRule"
@@ -2961,7 +2979,8 @@ class NitrogenReduction(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCNO', '[O-][N+](=O)c1ccccc1')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
@@ -3003,7 +3022,8 @@ class OxygenReduction(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CC(=O)OC', 'CC=O')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8:1]=[#6,#7:2]>>[*:1]-[*:2]",
@@ -3028,7 +3048,8 @@ class ReductiveDehalogenation(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCCl', 'Clc1ccccc1')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]",
@@ -3064,7 +3085,8 @@ class SulfurReduction(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CS(=O)C', 'CCSO')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#16:1]=[#8:2]>>[*:1].[*:2]",
@@ -3102,7 +3124,8 @@ class Epoxidation(ResonanceRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('C=C', 'c1ccccc1')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6:1]=,:[#6,#7:2]>>[*:1]1-[*:2][O]1",
@@ -3122,7 +3145,8 @@ class SulfurOxidation(SmartsReactionRule):
 
     phase1_sites_on = "atoms"
     sites_on = "atoms"
-    site_arity: SiteArity = 1
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCS', 'CSC')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#16;v2,v4:1]>>[*&H0&+:1][O-]",
@@ -3144,7 +3168,8 @@ class NitrogenOxidation(SmartsReactionRule):
 
     phase1_sites_on = "atoms"
     sites_on = "atoms"
-    site_arity: SiteArity = 1
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCN', 'CN(C)C')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#7v3h:1]>>[*:1]O",
@@ -3172,7 +3197,8 @@ class OxidativeDehalogenation(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_arity: SiteArity = 2
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCCl', 'Clc1ccccc1')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
@@ -3325,7 +3351,8 @@ class ConjugationRule(SmartsReactionRule):
     terminal (``is_terminal_rule``): conjugation ends further expansion.
     """
     sites_on = "atoms"
-    site_arity: SiteArity = 1
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCO',)
 
 
     is_terminal_rule: bool = True
@@ -3399,6 +3426,8 @@ class Acetylation(ConjugationRule):
     Calls :class:`ConjugationRule`. The acetyl SMARTS and the star collapse
     stay there. ``as_star=False`` keeps the acetyl. A filter reads ``symbol``.
     """
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCO', 'Nc1ccccc1')
 
 
 class Sulfation(ConjugationRule):
@@ -3408,6 +3437,8 @@ class Sulfation(ConjugationRule):
     collapse stays there. ``as_star=False`` keeps the sulfate. The oxygen
     has one hydrogen. A filter reads ``partner_h``.
     """
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -3440,6 +3471,8 @@ class Glucuronidation(ConjugationRule):
     carbon beside an alcohol oxygen is the partner. A filter reads
     ``partner_h``. The carbonyl pattern matches ``=[#8]`` only.
     """
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -3481,6 +3514,8 @@ class Glutathionation(ConjugationRule):
     ``partner``. Ring carbons are separate patterns: one query of the three
     ring atoms keeps a single embedding.
     """
+    site_kind: RuleSiteKind = "atom"
+    _example_substrates: tuple[str, ...] = ('C=C', 'C1OC1')
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (

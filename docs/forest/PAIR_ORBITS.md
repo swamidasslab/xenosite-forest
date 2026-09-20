@@ -2,7 +2,7 @@
 
 Source of truth at HEAD: `graph_isomorphism.py` + signature types in `records.py`.
 Rule chemistry stays in `rules.py` (thin call sites). HEURISTICS Status: approved
-for `swap_group` / nauty six-family. DH uses `site_arity=2` atom-pair Sites (not bond_atom).
+for `swap_group` / nauty six-family. DH uses `site_kind="atom_pair"` atom-pair Sites (not bond_atom).
 
 This doc is for another agent. Facts only. Do **not** claim novelty for
 “automorphisms on pairs” — that construction is classical (see References).
@@ -70,14 +70,14 @@ ordered. QF same-name pairs unordered; cross-role ordered.
 
 ## 3. Dehydrogenation: atom-pair Sites
 
-Dehydrogenation declares ``site_arity = 2`` and ``sites_on = "atom_pairs"``.
+Dehydrogenation declares ``site_kind = "atom_pair"`` and ``sites_on = "atom_pairs"``.
 One-bond SMARTS emit **both** bond endpoints (``site_map=(1, 2)``). Path
 emissions are already the two end atoms. Unique-edit uses unordered
 ``AtomPairOrbitSignature`` (ordered when ``swap_group`` / PatternInfo names
 differ). Directed ``bond_atom`` UniqueOrbit / ``BondAtomOrbitSignature`` was
 never an intended Site pattern and was retired (DROPPED approved).
 
-Site shape is class data on ``ReactionRule`` (``site_arity: Literal[1, 2]``),
+Site shape is class data on ``ReactionRule`` (``site_kind: Literal["atom", "atom_pair"]``),
 not ``Generic[SiteT]`` — shared emit path + heterogeneous RuleSets erase a
 type param; pyright cannot enforce frozenset cardinality.
 
@@ -190,7 +190,7 @@ Also: benzene meta share orbit, meta ≠ para. Suites: `test_pair_signatures.py`
 |----------|----------------|
 | `graph_isomorphism.py` | Generators, six families, tables, TRIVIAL, swap helpers, signatures, lex-rep opt-in |
 | `records.py` | `swap_group`, signature NamedTuples, `SiteInfo.discovered_site` |
-| `rules.py` | Thin call sites; DH `site_arity=2`; post-filter canonical remap (SMARTS + ResonancePair) |
+| `rules.py` | Thin call sites; DH `site_kind="atom_pair"`; post-filter canonical remap (SMARTS + ResonancePair) |
 | `rdkitutil.py` | `restamp_product_forest_last_layer` (product-only) |
 | Tests §5 / §6 | Orbits, signatures, DH, six-family, `test_canonical_emitted_sites.py` |
 

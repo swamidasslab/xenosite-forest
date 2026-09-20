@@ -16,14 +16,8 @@ from xenosite.forest.rules import Hydroxylation as LiveHydroxylation
 def test_atom_tracker_facade_emits_deprecation_warning():
     mol = Chem.MolFromSmiles("CCO")
     assert mol is not None
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", DeprecationWarning)
+    with pytest.warns(DeprecationWarning, match="AtomTracker is deprecated"):
         LiveAtomTracker.topol_equiv(mol)
-    assert any(
-        issubclass(w.category, DeprecationWarning)
-        and "AtomTracker is deprecated" in str(w.message)
-        for w in caught
-    )
 
 
 def test_topol_equiv_parity_on_same_smiles():

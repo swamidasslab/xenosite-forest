@@ -19,10 +19,10 @@ def _mol(smi: str):
     return mol
 
 
-def test_dehydrogenation_declares_atom_pair_site_arity():
-    assert Dehydrogenation.site_arity == 2
+def test_dehydrogenation_declares_atom_pair_site_kind():
+    assert Dehydrogenation.site_kind == "atom_pair"
     assert Dehydrogenation.sites_on == "atom_pairs"
-    assert QuinoneFormation.site_arity == 2
+    assert QuinoneFormation.site_kind == "atom_pair"
     assert QuinoneFormation.sites_on == "atom_pairs"
     assert not hasattr(Dehydrogenation, "unique_orbit")
 

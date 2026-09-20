@@ -298,10 +298,11 @@ class TraceInfo(TypedDict, total=False):
 
 
 SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
-# Emitted Site cardinality (atom-index frozenset). Class data on ReactionRule —
+# Emitted Site shape (atom-index frozenset). Class data on ReactionRule —
 # not Generic[SiteT] (shared emit path + heterogeneous RuleSets erase the param;
 # pyright cannot enforce frozenset size). Replaces UniqueOrbit / bond_atom.
-SiteArity: TypeAlias = Literal[1, 2]
+# Distinct from graph_isomorphism.SiteKind (atom/bond marks for orbits).
+RuleSiteKind: TypeAlias = Literal["atom", "atom_pair"]
 
 # Keyword values :func:`~xenosite.forest.rules.describe` / ``branches`` accept.
 EffectField: TypeAlias = str | bool | int | When | None
@@ -451,7 +452,7 @@ class EndParents(NamedTuple):
 # --- Pair-orbit unique-edit signatures (graph_isomorphism) ---
 #
 # Unique-edit keys, **not** :data:`Site` definitions. Sites name concrete
-# atom indexes (arity 1 or 2 via :data:`SiteArity`); these name isomorphism
+# atom indexes (atom vs atom_pair via :data:`RuleSiteKind`); these name isomorphism
 # classes of an *edit*.
 #
 # Core shape: (groups=(ga, gb), pair_group_id).

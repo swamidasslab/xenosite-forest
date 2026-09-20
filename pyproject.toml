@@ -154,8 +154,11 @@ norecursedirs = [
     "_archive_forest",
 ]
 filterwarnings = [
-    "ignore::DeprecationWarning",
+    "error",
+    # Intentional archive chemotype noise; not a live-forest contract.
     "ignore::xenosite._archive_forest.unstable.UnstableWarning",
+    # Deprecated AtomTracker facade: tests that call it use pytest.warns /
+    # catch_warnings(ignore). Do not blanket-ignore DeprecationWarning.
 ]
 markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
