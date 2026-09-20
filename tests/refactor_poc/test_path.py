@@ -5,6 +5,7 @@ from rdkit import Chem
 
 from xenosite.forest.step_plan import Deps
 from xenosite.refactor_poc.find_path import PathCounters, atom_diff, canon_smiles, find_path
+from xenosite.refactor_poc.records import AtomRef
 from xenosite.refactor_poc.rules import Hydroxylation, ReactionRule, RuleSet
 
 
@@ -159,6 +160,33 @@ def test_phenol_to_quinone_plan_has_no_quinone_formation_step():
     dehydrogenation = names.index("Dehydrogenation")
     assert (hydroxyl, dehydrogenation) in set(hits[0].plan.precedes), message
     assert hits[0].smiles == canon_smiles(quinone), message
+
+
+def test_quinone_oxygen_ref_resolves_to_the_atom_hydroxylation_adds():
+    quinone = "O=C1C=CC(=O)C=C1"
+    hits = list(find_path("Oc1ccccc1", quinone))
+    assert hits
+    steps = hits[0].plan.children
+    names = [step.rule for step in steps]
+    hydroxyl = names.index("Hydroxylation")
+    dehydrogenation = names.index("Dehydrogenation")
+    assert (hydroxyl, dehydrogenation) in set(hits[0].plan.precedes)
+
+    origin = next(ref.origin for ref in steps[hydroxyl].site if ref.origin is not None)
+    ref = AtomRef(origin, "O")
+    mol = Chem.MolFromSmiles("Oc1ccccc1")
+    product = next(
+        candidate
+        for candidate, info in Hydroxylation().metabolize(mol)
+        if origin in info["site"]
+    )
+    idx = ref.resolve(product)
+    atom = product.GetAtomWithIdx(idx)
+    assert atom.GetAtomicNum() == 8
+    added = product._forest["atom_trace"]["records"][atom.GetProp("forestLabel")]["added_by"]
+    addition = product._forest["atom_trace"]["additions"][added]
+    assert addition["name"] == "Hydroxylation"
+    assert origin in addition["site"]
 
 
 def test_butylbenzene_to_quinone_and_chain_alcohol_bills_those_sites():

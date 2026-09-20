@@ -9,9 +9,69 @@ if TYPE_CHECKING:
     from xenosite.refactor_poc.rdkit_api import Mol
     from xenosite.refactor_poc.rules import ReactionRule
 
+_ATOMIC_NUMBER = {"H": 1, "C": 6, "N": 7, "O": 8, "S": 16}
+
+
+class AtomRef(NamedTuple):
+    """An atom a later step needs. It may not exist yet.
+
+    ``idx`` is an index in the ``depth`` frame. Depth 0 is the input
+    molecule. ``element`` is the atom this names.
+
+    ``AtomRef(0, "O")`` is the oxygen added to the first atom of the input.
+    ``AtomRef(0, "H", 3)`` is index 0 in the depth-3 frame, resolved once
+    that atom has an H added.
+    """
+
+    idx: int
+    element: str
+    depth: int = 0
+
+    def resolve(self, mol: Mol) -> int:
+        """Current index of this atom. Fails until the atom exists."""
+
+        forest = getattr(mol, "_forest", None)
+        if not forest or "atom_trace" not in forest:
+            raise KeyError("atom_trace")
+        trace = forest["atom_trace"]
+        number = _ATOMIC_NUMBER.get(self.element)
+        if number is None:
+            raise KeyError(self.element)
+        wanted = []
+        for transform_id, detail in trace.get("additions", {}).items():
+            if int(detail.get("depth", 0)) != self.depth:
+                continue
+            if self.idx not in _flat_ints(detail.get("site")):
+                continue
+            wanted.append(transform_id)
+        for record in trace.get("records", {}).values():
+            if record.get("added_by") not in wanted:
+                continue
+            current = record["idx"][-1]
+            atom = mol.GetAtomWithIdx(current)
+            if atom.GetAtomicNum() == number:
+                return current
+        raise KeyError((self.idx, self.element, self.depth))
+
+
+def _flat_ints(site) -> set[int]:
+    if isinstance(site, int):
+        return {site}
+    if isinstance(site, str) or site is None:
+        return set()
+    found: set[int] = set()
+    for item in site:
+        if isinstance(item, int):
+            found.add(item)
+        else:
+            found |= _flat_ints(item)
+    return found
+
+
 # One atom, a pair of atoms, or a set of those pairs.
+# A position may be an index or a ref to an atom that does not exist yet.
 # The frozenset[int] form has exactly two atom indices.
-Site = int | frozenset[int] | frozenset[frozenset[int]]
+Site = int | AtomRef | frozenset[int | AtomRef] | frozenset[frozenset[int | AtomRef]]
 
 
 class Formula(TypedDict):

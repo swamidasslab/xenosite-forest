@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 
 from xenosite.refactor_poc.rdkitutil import (
@@ -26,7 +26,9 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitize_catch,
     split_fragments,
 )
-from xenosite.forest.step_plan import AtomRef, Deps, Step
+from xenosite.forest.step_plan import AtomRef as AddedRef
+from xenosite.forest.step_plan import Deps, Step
+from xenosite.refactor_poc.records import AtomRef
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
@@ -645,11 +647,22 @@ def _atom_ref(mol: Mol, idx):
         site = (site,)
     if name is None:
         return idx
-    return AtomRef(added_by=(name, frozenset(site)))
+    return AddedRef(added_by=(name, frozenset(site)))
+
+
+class _PlanStep(NamedTuple):
+    """One phase-I step before it is handed to :class:`Deps`.
+
+    ``site`` may hold an int, an :class:`AddedRef`, or an :class:`AtomRef`
+    for an atom that does not exist yet.
+    """
+
+    rule: str
+    site: tuple
 
 
 def _step(mol: Mol, rule_name, site):
-    return Step(rule_name, frozenset(_atom_ref(mol, idx) for idx in site))
+    return _PlanStep(rule_name, tuple(_atom_ref(mol, idx) for idx in site))
 
 
 def _steps_for(mol: Mol, info):
@@ -694,10 +707,15 @@ def _quinone_phase1(mol: Mol, info):
             "O" in (end.get("adds") or "") and partner != "O"
         )
         if adds_oxygen:
-            step = Step("Hydroxylation", frozenset((_atom_ref(mol, atom),)))
-            hydroxylations.append(step)
-            origin = next(iter(step.site)).origin
-            dh_refs.append(AtomRef(added_by=("Hydroxylation", frozenset({origin}))))
+            anchor = _atom_ref(mol, atom)
+            hydroxylations.append(_PlanStep("Hydroxylation", (anchor,)))
+            if isinstance(anchor, int):
+                idx, depth = anchor, 0
+            elif anchor.origin is not None:
+                idx, depth = anchor.origin, anchor.depth
+            else:
+                idx, depth = atom, 0
+            dh_refs.append(AtomRef(idx, "O", depth))
             continue
         atomic_num = {"O": 8, "N": 7, "C": 6, "S": 16}.get(partner)
         hetero = _bonded(mol, atom, atomic_num) if atomic_num else None
@@ -705,28 +723,65 @@ def _quinone_phase1(mol: Mol, info):
             dh_refs.append(_atom_ref(mol, hetero))
     if not dh_refs:
         return (_step(mol, "Dehydrogenation", info["site"]),)
-    return tuple(hydroxylations) + (Step("Dehydrogenation", frozenset(dh_refs)),)
+    return tuple(hydroxylations) + (_PlanStep("Dehydrogenation", tuple(dh_refs)),)
+
+
+def _anchor(item) -> int | None:
+    if isinstance(item, AtomRef):
+        return item.idx
+    if isinstance(item, int):
+        return item
+    origin = getattr(item, "origin", None)
+    if origin is None:
+        return None
+    return int(origin)
+
+
+def _anchors(step) -> set[int]:
+    return {anchor for anchor in (_anchor(item) for item in step.site) if anchor is not None}
+
+
+def _forest_item(item, steps, later):
+    """Hand :class:`Deps` a forest ref. The rule name is the earlier step's."""
+
+    if not isinstance(item, AtomRef):
+        return item
+    for previous in steps[:later]:
+        if item.idx in _anchors(previous):
+            return AddedRef(added_by=(previous.rule, frozenset({item.idx})))
+    return item.idx
 
 
 def _deps(steps):
-    """A later step depends on an earlier one when its site was ``added_by`` it."""
+    """A later step depends on an earlier one when its site names an atom that step added.
+
+    An :class:`AtomRef` is that note: its ``idx`` is the atom the earlier
+    step changed, and its ``element`` is what had to be added.
+    """
 
     edges = []
+    forest_steps = []
     for later, step in enumerate(steps):
-        for ref in step.site:
-            if ref.added_by is None:
+        for item in step.site:
+            if isinstance(item, AtomRef):
+                for earlier, previous in enumerate(steps[:later]):
+                    if item.idx in _anchors(previous):
+                        edges.append((earlier, later))
                 continue
-            rule_name, site = ref.added_by
+            added = getattr(item, "added_by", None)
+            if not added:
+                continue
+            rule_name, site = added
             wanted = frozenset(site)
             for earlier, previous in enumerate(steps):
                 if previous.rule != rule_name:
                     continue
-                origins = frozenset(
-                    item.origin for item in previous.site if item.origin is not None
-                )
-                if origins == wanted:
+                if _anchors(previous) == wanted:
                     edges.append((earlier, later))
-    return cast(Any, Deps)(steps, edges)
+        forest_steps.append(
+            Step(step.rule, frozenset(_forest_item(item, steps, later) for item in step.site))
+        )
+    return cast(Any, Deps)(tuple(forest_steps), edges)
 
 
 # ---------------------------------------------------------------------------
