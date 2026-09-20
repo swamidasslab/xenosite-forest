@@ -20,7 +20,7 @@ def test_filter_rules_refuses_one_child_and_keeps_the_other():
     ruleset = RuleSet((Hydroxylation, Dealkylation), name="Poc")
     seen = []
 
-    def filter_rules(rule, info):
+    def filter_rules(mol, rule, info):
         seen.append(type(rule).__name__)
         assert "span" in info
         return type(rule) is not Hydroxylation

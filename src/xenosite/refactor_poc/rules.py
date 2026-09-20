@@ -200,8 +200,8 @@ class ReactionRule:
     def metabolize(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         unique_csmi: bool = True,
         **kwargs,
     ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
@@ -232,8 +232,8 @@ class ReactionRule:
         - Carries ``info["csmi"]``, the canonical SMILES of that product.
           The same SMILES is not yielded twice.
 
-        ``filter_rules(rule, pattern_info)`` sees the pattern before a
-        match. ``filter_sites(site, info)`` sees the resolved effect
+        ``filter_rules(mol, rule, pattern_info)`` sees the pattern before a
+        match. ``filter_sites(mol, site, info)`` sees the resolved effect
         before an edit. Either may refuse. A refusal edits nothing.
         """
         if mol is None:
@@ -338,8 +338,8 @@ class ReactionRule:
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Yield one :class:`ProductsOfReaction` per edit. Subclasses override this.
@@ -359,9 +359,9 @@ class ReactionRule:
           fragment in that list before :meth:`metabolize` runs
           ``forest_trace``. It does not return one mol that is several pieces.
 
-        ``filter_rules(rule, pattern_info)`` is called before a match and
+        ``filter_rules(mol, rule, pattern_info)`` is called before a match and
         can see the pattern's ``span``. False means that pattern is skipped.
-        ``filter_sites(site, info)`` is called after the effect is resolved
+        ``filter_sites(mol, site, info)`` is called after the effect is resolved
         and before any edit. False means that site is skipped.
 
         This method must not edit the mol it is given. ``metabolize`` has
@@ -372,8 +372,8 @@ class ReactionRule:
         raise NotImplementedError
 
 
-FilterRules = Callable[[ReactionRule, PatternInfo], bool]
-FilterSites = Callable[[Site, SiteInfo], bool]
+FilterRules = Callable[[ForestTracingMol, ReactionRule, PatternInfo], bool]
+FilterSites = Callable[[ForestTracingMol, Site, SiteInfo], bool]
 
 
 def __getattr__(name: str) -> type[ReactionRule]:
@@ -1097,32 +1097,35 @@ class SmartsReactionRule(ReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         context_mol: Mol | None = None,
         **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
-        ``filter_rules`` sees this rule and the pattern, including ``span``,
-        before SMARTS runs. ``filter_sites`` sees the resolved effect in
-        ``info["options"]`` before ``RunReactants``. ``context_mol`` is the
-        unsubstituted parent when ``mol`` is a kekulé copy. Aromatic flags
-        are read from it. ``counters``, when passed, records one
-        ``rule_expansions`` per call, one ``sites_considered`` per match,
-        ``sites_skipped`` when a filter or a topological duplicate refuses
-        the site, and one ``mol_edits`` inside :func:`react_at`.
+        ``filter_rules(mol, rule, pattern)`` sees this rule and the pattern,
+        including ``span``, before SMARTS runs. ``filter_sites(mol, site, info)``
+        sees the resolved effect in ``info["options"]`` before ``RunReactants``.
+        ``mol`` is the live tracing parent (``context_mol`` when ``mol`` is a
+        kekulé copy). ``context_mol`` is the unsubstituted parent when ``mol``
+        is a kekulé copy. Aromatic flags are read from it. ``counters``, when
+        passed, records one ``rule_expansions`` per call, one
+        ``sites_considered`` per match, ``sites_skipped`` when a filter or a
+        topological duplicate refuses the site, and one ``mol_edits`` inside
+        :func:`react_at`.
         """
 
         counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
+        live = cast(ForestTracingMol, context)
         _bump(counters, "rule_expansions")
         seen: set[SiteSignature] = set()
         ranks = topol_equiv(context)
 
         for work in _kekule_forms(mol):
             for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
-                if not filter_rules(self, pattern):
+                if not filter_rules(live, self, pattern):
                     continue
 
                 reactant = smarts.split(">>", 1)[0]
@@ -1139,7 +1142,7 @@ class SmartsReactionRule(ReactionRule):
                         "pattern": pattern,
                     }
                     _bump(counters, "sites_considered")
-                    if not filter_sites(site, info):
+                    if not filter_sites(live, site, info):
                         _bump(counters, "sites_skipped")
                         continue
                     # Same map roles and the same incident bond orders are one
@@ -1655,8 +1658,8 @@ class ResonanceRule(SmartsReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         context_mol: Mol | None = None,
         **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
@@ -1671,13 +1674,14 @@ class ResonanceRule(SmartsReactionRule):
             return
         counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
+        live = cast(ForestTracingMol, context)
         _bump(counters, "rule_expansions")
         cache = _kekule_cache(mol)
         seen: set[SiteSignature] = set()
         ranks = topol_equiv(context)
 
         for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
-            if not filter_rules(self, pattern):
+            if not filter_rules(live, self, pattern):
                 continue
             reactant = smarts.split(">>", 1)[0]
             for mapped in smarts_matches(mol, reactant):
@@ -1693,7 +1697,7 @@ class ResonanceRule(SmartsReactionRule):
                     "pattern": pattern,
                 }
                 _bump(counters, "sites_considered")
-                if not filter_sites(site, info):
+                if not filter_sites(live, site, info):
                     _bump(counters, "sites_skipped")
                     continue
                 work = _reactant_parent(mol, mapped, cache)
@@ -1742,8 +1746,8 @@ class ResonancePairRule(ResonanceRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         context_mol: Mol | None = None,
         **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
@@ -1780,10 +1784,11 @@ class ResonancePairRule(ResonanceRule):
 
         _bump(counters, "rule_expansions")
 
+        live = cast(ForestTracingMol, mol)
         active = [
             (smarts, info)
             for smarts, info in self.endpoints
-            if filter_rules(self, info)
+            if filter_rules(live, self, info)
         ]
         if not active:
             return
@@ -1841,7 +1846,7 @@ class ResonancePairRule(ResonanceRule):
                         "path_ends": frozenset((start, end)),
                     }
                     _bump(counters, "sites_considered")
-                    if not filter_sites(site, preview):
+                    if not filter_sites(live, site, preview):
                         _bump(counters, "sites_skipped")
                         continue
                     combos.append((map1, info1, map2, info2, preview))
@@ -2888,8 +2893,8 @@ class ConjugationRule(SmartsReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
+        filter_rules=lambda mol, rule, info: True,
+        filter_sites=lambda mol, site, info: True,
         context_mol: Mol | None = None,
         **kwargs,
     ):

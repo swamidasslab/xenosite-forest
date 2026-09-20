@@ -8,6 +8,7 @@ fragments that were not expanded.
 
 from __future__ import annotations
 
+import heapq
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from xenosite.forest.step_plan import StepPlan
 from xenosite.refactor_poc.canonical_plan import CanonicalStep, as_deps
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
+    ForestTracingMol,
     Mol,
     as_mol,
     cannonicalize_order,
@@ -27,7 +29,15 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitize_catch,
     split_fragments,
 )
-from xenosite.refactor_poc.records import AtomRef, PatternInfo, ProductInfo, Site, SiteInfo, Span, _flat_ints
+from xenosite.refactor_poc.records import (
+    AtomRef,
+    PatternInfo,
+    ProductInfo,
+    Site,
+    SiteInfo,
+    Span,
+    _flat_ints,
+)
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
@@ -538,8 +548,8 @@ def _formula_oxygen(mol: Mol) -> int:
     return sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
 
 
-def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: Mol):
-    """``filter_rules`` sees ``span``, the atom diff, and the current mol."""
+def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: ForestTracingMol | Mol):
+    """``filter_rules`` sees ``span``, the atom diff, and the live mol."""
 
     span: Span = info.get("span") or {
         "adds": "",
@@ -628,8 +638,10 @@ def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
     return (_side(left, right), _side(right, left))
 
 
-def _site_could_help(site: Site, info: SiteInfo, diff: AtomDiff, mol: Mol) -> bool:
-    """``filter_sites`` sees one resolved effect, the mol, and the local atom diff."""
+def _site_could_help(
+    site: Site, info: SiteInfo, diff: AtomDiff, mol: ForestTracingMol | Mol
+) -> bool:
+    """``filter_sites`` sees one resolved effect, the live mol, and the local atom diff."""
 
     effect = info["options"]
     atoms = _flat_ints(site)
@@ -691,14 +703,19 @@ def _site_could_help(site: Site, info: SiteInfo, diff: AtomDiff, mol: Mol) -> bo
     return True
 
 
-def _filters(diff, enabled, mol: Mol):
-    if not enabled:
-        return (lambda rule, info: True), (lambda site, info: True)
+def _filters(diff, enabled):
+    """Build search filters that close over ``diff`` only (mol is an argument)."""
 
-    def filter_rules(rule, info):
+    if not enabled:
+        return (
+            (lambda mol, rule, info: True),
+            (lambda mol, site, info: True),
+        )
+
+    def filter_rules(mol, rule, info):
         return _pattern_could_help(info, diff, mol)
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         return _site_could_help(site, info, diff, mol)
 
     return filter_rules, filter_sites
@@ -827,6 +844,33 @@ class _Walk:
     opens: tuple[frozenset[int], ...]
 
 
+def _walk_priority(*, target_hit: bool, seq: int) -> tuple[int, int]:
+    """Heap key matching the old deque: hits first, then FIFO.
+
+    Lower is better. The queue had no priority key before this; a richer key
+    from ``atom_diff`` / ``order_key`` is not decided (see HEURISTICS.md).
+    """
+
+    return (0 if target_hit else 1, seq)
+
+
+def _fresh_walk_priority(
+    walk: _Walk, target_smiles: str, seq: int
+) -> tuple[int, int]:
+    """Cheap rescore before expand. Today: target-hit check only."""
+
+    return _walk_priority(
+        target_hit=canon_smiles(walk.mol) == target_smiles,
+        seq=seq,
+    )
+
+
+def _stale_vs_peek(fresh: tuple[int, int], heap: list) -> bool:
+    """True when ``fresh`` is worse than the heap's current best priority."""
+
+    return bool(heap) and fresh > heap[0][0]
+
+
 def _cleavage_site(value: Site) -> frozenset[int]:
     """Known-index site as a frozenset for cleavage bookkeeping."""
 
@@ -873,12 +917,24 @@ def find_path(
     if counters is None:
         counters = PathCounters()
 
-    queue = deque([_Walk(reactant, (), (), ())])
+    # Lazy heap: (priority, seq, walk). Priority is target-hit + FIFO only.
+    heap: list[tuple[tuple[int, int], int, _Walk]] = []
+    seq = 0
+    heapq.heappush(
+        heap,
+        (_walk_priority(target_hit=False, seq=seq), seq, _Walk(reactant, (), (), ())),
+    )
+    seq += 1
     seen = {canon_smiles(reactant)}
     found = 0
 
-    while queue and found < max_paths and counters.nodes < max_nodes:
-        walk = queue.popleft()
+    while heap and found < max_paths and counters.nodes < max_nodes:
+        _stored, item_seq, walk = heapq.heappop(heap)
+        fresh = _fresh_walk_priority(walk, target_smiles, item_seq)
+        # Stale / optimistic key: put it back instead of expanding.
+        if fresh != _stored and _stale_vs_peek(fresh, heap):
+            heapq.heappush(heap, (fresh, item_seq, walk))
+            continue
         counters.nodes += 1
         here = canon_smiles(walk.mol)
         if here == target_smiles:
@@ -893,7 +949,7 @@ def find_path(
         diff = atom_diff(walk.mol, target_mol)
         parent_cost = diff.cost()
         # See HEURISTICS.md before changing what these filters are allowed to see.
-        filter_rules, filter_sites = _filters(diff, use_filters, walk.mol)
+        filter_rules, filter_sites = _filters(diff, use_filters)
         # Order reads span data against the diff (cleave / dearomatize / oxygen).
         order_key = _order_key_for(diff)
 
@@ -942,13 +998,13 @@ def find_path(
             steps = walk.steps + _steps_for(walk.mol, por.info)
             child_walk = _Walk(child, steps, sides, opens)
             # A hit at this depth goes next; stop editing once enough are queued.
+            pri = _walk_priority(target_hit=target_hit, seq=seq)
+            heapq.heappush(heap, (pri, seq, child_walk))
+            seq += 1
             if target_hit:
-                queue.appendleft(child_walk)
                 hits_from_here += 1
                 if found + hits_from_here >= max_paths:
                     break
-            else:
-                queue.append(child_walk)
 
 
 @dataclass
@@ -958,11 +1014,11 @@ class _Expand:
     info: ProductInfo | None = None
 
 
-def _keep_rule(rule, info) -> bool:
+def _keep_rule(mol, rule, info) -> bool:
     return True
 
 
-def _keep_site(site, info) -> bool:
+def _keep_site(mol, site, info) -> bool:
     return True
 
 

@@ -130,7 +130,7 @@ def test_refusing_the_rule_edits_nothing_and_still_instruments_the_parent():
     mol = Chem.MolFromSmiles("CC")
     before = _chemistry(mol)
     products = list(
-        Hydroxylation().metabolize(mol, filter_rules=lambda rule, info: False)
+        Hydroxylation().metabolize(mol, filter_rules=lambda mol, rule, info: False)
     )
     assert products == []
     assert _chemistry(mol) == before
@@ -141,7 +141,7 @@ def test_refusing_every_site_edits_nothing():
     mol = Chem.MolFromSmiles("CC")
     before = _chemistry(mol)
     products = list(
-        Hydroxylation().metabolize(mol, filter_sites=lambda site, info: False)
+        Hydroxylation().metabolize(mol, filter_sites=lambda mol, site, info: False)
     )
     assert products == []
     assert _chemistry(mol) == before

@@ -42,7 +42,7 @@ def test_ruleset_runs_children_and_filters_see_them():
     assert [type(rule) for rule in ruleset] == [Hydroxylation]
     seen = []
 
-    def filter_rules(rule, info):
+    def filter_rules(mol, rule, info):
         seen.append((type(rule).__name__, "span" in info))
         return False
 
@@ -423,3 +423,30 @@ def test_leave_count_one_refuses_a_larger_leaving_fragment():
     info_ok = dict(info, site=(2, 3), options={"cleaves": True, "leave_count": 1})
     assert diff.site_is_cleavage({2, 3})
     assert _site_could_help((2, 3), info_ok, diff, mol)
+
+
+def test_stale_priority_is_pushed_back():
+    """Lazy heap: a rescored key worse than peek is deferred, not expanded."""
+
+    from xenosite.refactor_poc.find_path import _stale_vs_peek, _walk_priority
+
+    best = _walk_priority(target_hit=True, seq=1)
+    heap = [(best, 1, object())]
+    worse = _walk_priority(target_hit=False, seq=0)
+    assert _stale_vs_peek(worse, heap)
+    assert not _stale_vs_peek(_walk_priority(target_hit=True, seq=0), heap)
+    assert not _stale_vs_peek(worse, [])
+
+
+def test_filter_sites_receives_live_mol_without_closure():
+    """``FilterSites`` takes the traced mol first; callers need not close over it."""
+
+    seen = []
+
+    def filter_sites(mol, site, info):
+        seen.append(mol)
+        return True
+
+    list(Hydroxylation().metabolize(Chem.MolFromSmiles("CC"), filter_sites=filter_sites))
+    assert seen
+    assert all(getattr(item, "_forest", None) is not None for item in seen)

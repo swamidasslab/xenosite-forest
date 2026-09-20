@@ -43,7 +43,7 @@ def test_nested_phaseone_ruleset_keeps_the_inner_set_on_the_chain():
     product = None
     for product, _info in PhaseOneRS.metabolize(
         Chem.MolFromSmiles("CC"),
-        filter_rules=lambda rule, info: type(rule) is Hydroxylation,
+        filter_rules=lambda mol, rule, info: type(rule) is Hydroxylation,
     ):
         break
 

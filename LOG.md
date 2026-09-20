@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+- Lazy heap on poc `find_path`: queue had no walk priority (deque + target-hit prepend). Minimal key `(hit_tier, seq)` preserves that order; on pop, cheaply rescore and push back if worse than peek (`fresh != stored`). Richer `atom_diff`/`order_key` walk key still not decided (sibling cost-sort lesson). `HEURISTICS.md` Status: approved for lazy handling.
+- Filter API: `FilterRules` / `FilterSites` take live `ForestTracingMol` first so filters need no mol closure; mol stays out of `SiteInfo`. `find_path` `_filters` closes over `diff` only.
+- H2H after: poc 10/10 hit, both 9/10. PhCH2OH ed=22; TBA ed=3; hydroxyQ ed=331 (forest EXH miss).
+
+## 2026-09-19
+
 - `find_path` / `ReactionRule.metabolize` / `RuleSet.metabolize` / `as_mol` raise `ValueError` on `None` (no forest-style any-path soft pass). Test: `test_find_path_and_metabolize_reject_none`.
 - Search heuristics (data-not-branches): `order_key` prefers cleave → dearomatize → oxygen from span+diff; filters see live mol oxygen count; `leave_count` int on cleaving effects prunes wrong-sized fragments. Tried equal-cost sideways and sibling cost-sort — both inflated PhCH2OH/hydroxyQ; recorded not decided / do-not-revive in `HEURISTICS.md`.
 - H2H after: poc 10/10 hit, both 9/10. PhCH2OH ed=22 (was 21); TBA ed=3; hydroxyQ ed=331 (was 319); benzene/phenol/naphthalene quinone `re` dropped to 1 via dearomatize-first order.

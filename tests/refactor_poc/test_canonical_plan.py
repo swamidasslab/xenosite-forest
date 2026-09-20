@@ -96,7 +96,7 @@ def _identity_reaches(
         assert isinstance(item, int), item
         wanted.add(item)
 
-    def filter_sites(site, _info):
+    def filter_sites(mol, site, _info):
         return _flat_ints(site) == wanted
 
     hits = {

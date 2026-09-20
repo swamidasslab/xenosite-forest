@@ -82,8 +82,8 @@ class RuleSet(ReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         order_key=None,
         **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
@@ -101,8 +101,8 @@ class RuleSet(ReactionRule):
     def metabolize(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda rule, info: True,
-        filter_sites: FilterSites = lambda site, info: True,
+        filter_rules: FilterRules = lambda mol, rule, info: True,
+        filter_sites: FilterSites = lambda mol, site, info: True,
         unique_csmi: bool = True,
         order_key=None,
         **kwargs,

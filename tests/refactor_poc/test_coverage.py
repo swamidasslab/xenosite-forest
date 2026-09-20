@@ -33,7 +33,7 @@ def _canon(smiles):
 def _fragments(rule, smiles, pattern):
     found = set()
 
-    def filter_rules(rule, info):
+    def filter_rules(mol, rule, info):
         return info is pattern
 
     for product, _info in rule.metabolize(

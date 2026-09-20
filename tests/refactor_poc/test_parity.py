@@ -127,7 +127,7 @@ def test_filter_skips_named_methyl_and_keeps_open_alkyl():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         count = info["options"].get("leave_count")
         if count is not None:
             refused.append((site, count, info["options"].get("partner")))
@@ -161,7 +161,7 @@ def test_filter_skips_ring_nitrogen_and_keeps_open_azo():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         if info["options"].get("breaks_ring"):
             refused.append((site, info["options"].get("partner")))
             return False
@@ -194,7 +194,7 @@ def test_filter_skips_named_methylene():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         count = info["options"].get("leave_count")
         if count is not None:
             refused.append(
@@ -237,7 +237,7 @@ def test_filter_skips_named_nitro_oxygen():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         count = info["options"].get("leave_count")
         if count is not None:
             refused.append(
@@ -280,7 +280,7 @@ def test_filter_skips_sulfur_oxygen_addition():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         added = info["options"].get("adds")
         if added:
             refused.append(
@@ -328,7 +328,7 @@ def test_filter_skips_nitrogen_and_keeps_the_phenol_star():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         symbol = info["options"].get("symbol")
         if symbol == "N":
             refused.append(
@@ -372,7 +372,7 @@ def test_filter_skips_nitrogen_and_keeps_the_phenol_acetyl():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         symbol = info["options"].get("symbol")
         if symbol == "N":
             refused.append(
@@ -457,7 +457,7 @@ def test_filter_skips_the_benzylic_alcohol_and_keeps_the_phenol_sulfate():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         partner_h = info["options"].get("partner_h")
         if partner_h == 2:
             refused.append(
@@ -510,7 +510,7 @@ def test_filter_skips_the_benzylic_alcohol_and_keeps_the_phenol_glucuronide():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         partner_h = info["options"].get("partner_h")
         if partner_h == 2:
             refused.append(
@@ -574,7 +574,7 @@ def test_filter_skips_the_alkyl_chloride_and_keeps_the_epoxide_glutathione():
 
     refused = []
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         partner = info["options"].get("partner")
         if partner == "Cl":
             refused.append(

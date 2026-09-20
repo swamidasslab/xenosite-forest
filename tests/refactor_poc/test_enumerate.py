@@ -45,7 +45,7 @@ def test_filter_sites_keeps_the_chain_alcohol_and_drops_the_ring():
     mol = Chem.MolFromSmiles(reactant)
     ring = {atom.GetIdx() for atom in mol.GetAtoms() if atom.IsInRing()}
 
-    def filter_sites(site, info):
+    def filter_sites(mol, site, info):
         atoms = site if isinstance(site, frozenset) else frozenset((site,))
         return atoms.isdisjoint(ring)
 
@@ -64,6 +64,6 @@ def test_filter_sites_keeps_the_chain_alcohol_and_drops_the_ring():
 def test_filter_rules_can_refuse_the_only_child():
     ruleset = RuleSet((Hydroxylation,), name="Poc")
     products = list(
-        bfs("CC", ruleset, filter_rules=lambda rule, info: False, depth=1)
+        bfs("CC", ruleset, filter_rules=lambda mol, rule, info: False, depth=1)
     )
     assert products == []

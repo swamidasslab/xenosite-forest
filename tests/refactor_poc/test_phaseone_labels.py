@@ -19,7 +19,7 @@ from xenosite.refactor_poc.rulesets import RuleSet
 def _addition(ruleset, smiles, leaf):
     mol = Chem.MolFromSmiles(smiles)
     for product, _info in ruleset.metabolize(
-        mol, filter_rules=lambda rule, info: type(rule) is leaf
+        mol, filter_rules=lambda mol, rule, info: type(rule) is leaf
     ):
         return product._forest["atom_trace"]["additions"]["R1"]
     raise AssertionError(leaf)
