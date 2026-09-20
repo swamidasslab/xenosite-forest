@@ -24,7 +24,7 @@ More correct. Not a problem in live forest. The three old-only strings are the `
 
 ## Azo splitting of pyridazine
 
-The old library kekulizes once. That form of pyridazine has an N-N single bond, so the split does not run. Every Kekulé form is searched here, and the N=N writing matches. RDKit's `[#7:1]=[#7:2]>>[*:1].[*:2]` then drops one nitrogen. `C=CC=CN` is not a metabolite: pyridazine is C4H4N2. Both Kekulé forms parse, and neither atom is charged, so the dropped nitrogen is the reaction, not a charge left on the wrong atom.
+The old library kekulizes once. That form of pyridazine has an N-N single bond, so the split does not run. Live forest matches aromatic ring N=N with `=,:` on a ResonanceRule and reacts on the Kekulé parent where that bond is double. RDKit's `[#7:1]=,:[#7:2]>>[*:1].[*:2]` then drops one nitrogen. `C=CC=CN` is not a metabolite: pyridazine is C4H4N2. Both Kekulé forms parse, and neither atom is charged, so the dropped nitrogen is the reaction, not a charge left on the wrong atom.
 
 - Reactant: `c1ccnnc1`
 - Only old: none
@@ -48,7 +48,7 @@ Not a problem. The nitroso is the metabolite the rule describes, and it parses. 
 
 ## Thiophene S-oxidation of benzothiophene
 
-The old library kekulizes once. That form is `C1=CC=C2SC=CC2=C1`, so the thiophene ring is not `C=C-C=C-S` and the oxidation does not run. The other Kekulé form is that pattern, and the same SMARTS writes the S-oxide. Thiophene itself has no second writing to miss: both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
+The old library kekulizes once. That form is `C1=CC=C2SC=CC2=C1`, so the thiophene ring is not `C=C-C=C-S` and the oxidation does not run. Live forest matches aromatic thiophene with `=,:` on a ResonanceRule and reacts on the Kekulé parent where maps 1–2 are the S–C single (SMARTS-implied order). That writes the S-oxide. Thiophene itself has no second writing to miss: both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
 
 - Reactant: `c1ccc2sccc2c1`
 - Only old: none
@@ -57,7 +57,15 @@ The old library kekulizes once. That form is `C1=CC=C2SC=CC2=C1`, so the thiophe
 
 Dibenzothiophene (`c1ccc2c(c1)sc1ccccc12`): only new `[O-][s+]1c2ccccc2c2ccccc21`.
 
-More correct. Not a problem in live forest. The other Kekulé form is the `C=C-C=C-S` pattern, and the same SMARTS writes the S-oxide that only live forest emits. The old library stops on `C1=CC=C2SC=CC2=C1`, which is not that pattern. Thiophene has no second writing, and both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
+More correct. Not a problem in live forest. ResonanceRule picks the Kekulé parent that matches the S–C single implied by the SMARTS, so live forest emits the S-oxide the old one-Kekulé walk misses. Thiophene has no second writing, and both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
+
+## No global Kekulé loop on SmartsReactionRule
+
+Status: documented (shipped on PR #15; residual CSMI open)
+
+Plain `SmartsReactionRule.metabolites` no longer fans out over `_kekule_forms(mol)`. Matching and unique-edit run on the input (usually aromatic) mol. Rules that need a specific Kekulé bond order for `RunReactants` are `ResonanceRule` subclasses: aromatic-matching SMARTS (`=,:` / `-,:`), then `_reactant_parent` selects the assignment whose maps 1–2 match the SMARTS-implied order (`_smarts_mapped_bond_order`). Unique-edit `incident_orders` stay on the aromatic parent so Kekulé 1.0↔2.0 flips do not split equivalent sites (phenol Hydroxylation: 0 CSMI). Reparented: Dealkylation, AzoSplitting, ThiopheneSulfurOxidation, NitrogenReduction (hydroxylamine).
+
+Chem suite green with `CsmiDedupWarning` ignored. Remaining WAE failures are still mostly Epoxidation CSMI (plus Hydrogenation / Dealkylation / OxidativeDehalogenation / peers) — unique-edit does not yet fully collapse those symmetric sites. Not a parity claim against the archive; residual same-product drops under live `unique_csmi`.
 
 ## Arene-oxide methyl sulfone
 

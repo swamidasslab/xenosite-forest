@@ -1180,10 +1180,9 @@ class SmartsReactionRule(ReactionRule):
         ``filter_rules(mol, rule, pattern)`` sees this rule and the pattern,
         including ``span``, before SMARTS runs. ``filter_sites(mol, site, info)``
         sees the resolved effect in ``info["options"]`` before ``RunReactants``.
-        ``mol`` is the live tracing parent (``context_mol`` when ``mol`` is a
-        kekulé copy). ``context_mol`` is the unsubstituted parent when ``mol``
-        is a kekulé copy. Aromatic flags are read from it. ``counters``, when
-        passed, records one ``rule_expansions`` per call, one
+        ``mol`` is the live tracing parent. ``context_mol``, when set, is an
+        alternate unsubstituted parent for aromatic flags / ranks. ``counters``,
+        when passed, records one ``rule_expansions`` per call, one
         ``sites_considered`` per match, ``sites_skipped`` when a filter or a
         topological duplicate refuses the site, and one ``mol_edits`` inside
         :func:`react_at`.
@@ -1197,74 +1196,73 @@ class SmartsReactionRule(ReactionRule):
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
 
-        for work in _kekule_forms(mol):
-            for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
-                if not filter_rules(live, self, pattern):
-                    continue
+        for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
+            if not filter_rules(live, self, pattern):
+                continue
 
-                reactant = smarts.split(">>", 1)[0]
-                for mapped in work.xf.smarts_matches(reactant):
-                    site = _site_indexes(mapped, pattern)
-                    if not site:
-                        continue
-                    effect = resolve_effect(context, mapped, pattern)
-                    info: SmartsSiteInfo = {
-                        "site": site,
-                        "rule": self,
-                        "options": effect,
-                        "rxn_num": rxn_num,
-                        "pattern": pattern,
-                    }
-                    _bump(counters, "sites_considered")
-                    # Filters see the discovery site (not the lex representative).
-                    if not filter_sites(live, site, info):
-                        _bump(counters, "sites_skipped")
-                        continue
-                    signature = site_signature(
+            reactant = smarts.split(">>", 1)[0]
+            for mapped in mol.xf.smarts_matches(reactant):
+                site = _site_indexes(mapped, pattern)
+                if not site:
+                    continue
+                effect = resolve_effect(context, mapped, pattern)
+                info: SmartsSiteInfo = {
+                    "site": site,
+                    "rule": self,
+                    "options": effect,
+                    "rxn_num": rxn_num,
+                    "pattern": pattern,
+                }
+                _bump(counters, "sites_considered")
+                # Filters see the discovery site (not the lex representative).
+                if not filter_sites(live, site, info):
+                    _bump(counters, "sites_skipped")
+                    continue
+                signature = site_signature(
+                    context,
+                    mol,
+                    mapped,
+                    ranks,
+                    site,
+                    rxn_num,
+                    effect,
+                )
+                if signature in seen:
+                    _bump(counters, "sites_skipped")
+                    continue
+                emit_mapped: dict[int, int] = dict(mapped)
+                emit_site = site
+                if want_canonical:
+                    remapped = canonicalize_smarts_match(
                         context,
-                        work,
                         mapped,
-                        ranks,
                         site,
-                        rxn_num,
-                        effect,
+                        parent=context,
                     )
-                    if signature in seen:
+                    if remapped is None:
                         _bump(counters, "sites_skipped")
                         continue
-                    emit_mapped: dict[int, int] = dict(mapped)
-                    emit_site = site
-                    if want_canonical:
-                        remapped = canonicalize_smarts_match(
-                            context,
-                            mapped,
-                            site,
-                            parent=context,
-                        )
-                        if remapped is None:
-                            _bump(counters, "sites_skipped")
-                            continue
-                        emit_mapped, emit_site = remapped
-                        if emit_site != site:
-                            info = {
-                                **info,
-                                "site": emit_site,
-                                "discovered_site": site,
-                            }
-                        else:
-                            info = {**info, "site": emit_site}
-                    products = react_at(
-                        self,
-                        smarts,
-                        work,
-                        emit_mapped,
-                        counters,
-                        pattern.get("pin"),
-                    )
-                    if not products:
-                        continue
-                    seen.add(signature)
-                    yield ProductsOfReaction(info=info, products=products)
+                    emit_mapped, emit_site = remapped
+                    if emit_site != site:
+                        info = {
+                            **info,
+                            "site": emit_site,
+                            "discovered_site": site,
+                        }
+                    else:
+                        info = {**info, "site": emit_site}
+                products = react_at(
+                    self,
+                    smarts,
+                    mol,
+                    emit_mapped,
+                    counters,
+                    pattern.get("pin"),
+                )
+                if not products:
+                    continue
+                seen.add(signature)
+                yield ProductsOfReaction(info=info, products=products)
 
     def _smarts2rxns(
         self,
@@ -1792,8 +1790,46 @@ def _kekule_cache(mol: Mol) -> KekuleParents:
     return cache
 
 
-def _reactant_parent(mol: Mol, mapped: dict[int, int], cache: KekuleParents) -> Mol | None:
-    """Kekulé parent whose bond orders match an aromatic hit. Else ``mol``."""
+def _smarts_mapped_bond_order(
+    smarts: str, left_map: int = 1, right_map: int = 2
+) -> float | None:
+    """Bond order the reactant SMARTS asks for between two atom maps.
+
+    Reads the reactant template only. ``=`` / ``=,:`` → 2.0; ``-`` / ``-,:`` /
+    unspecified (single-or-aromatic) → 1.0. ``None`` when the maps or bond are
+    missing.
+    """
+
+    reactant = smarts.split(">>", 1)[0]
+    query = MolFromSmarts(reactant)
+    if query is None:
+        return None
+    idxs = {
+        atom.GetAtomMapNum(): atom.GetIdx()
+        for atom in query.GetAtoms()
+        if atom.GetAtomMapNum()
+    }
+    if left_map not in idxs or right_map not in idxs:
+        return None
+    bond = query.GetBondBetweenAtoms(idxs[left_map], idxs[right_map])
+    if bond is None:
+        return None
+    return float(bond.GetBondTypeAsDouble())
+
+
+def _reactant_parent(
+    mol: Mol,
+    mapped: dict[int, int],
+    cache: KekuleParents,
+    smarts: str | None = None,
+) -> Mol | None:
+    """Kekulé parent whose bond orders match an aromatic hit. Else ``mol``.
+
+    On an aromatic bond, the order is the one the reactant SMARTS implies
+    between maps 1 and 2 (single or double), not a hard-coded double. That
+    lets ring-open / S-oxide patterns pick the single-bond Kekulé parent while
+    epoxidation still picks the double.
+    """
 
     left = mapped.get(1)
     right = mapped.get(2)
@@ -1806,21 +1842,30 @@ def _reactant_parent(mol: Mol, mapped: dict[int, int], cache: KekuleParents) -> 
     end = mol.GetAtomWithIdx(bond.GetEndAtomIdx())
     if bond.GetIsAromatic():
         order = 2.0
+        if smarts is not None:
+            implied = _smarts_mapped_bond_order(smarts)
+            if implied is not None:
+                order = implied
     elif begin.GetIsAromatic() or end.GetIsAromatic():
         order = bond.GetBondTypeAsDouble()
     else:
         return mol
     ensure_kekule_parents(mol, left, right, cache)
-    return parent_for_bond(cache, left, right, order)
+    parent = parent_for_bond(cache, left, right, order)
+    # No assignment with that order (charged rings, awkward systems): keep the
+    # aromatic parent so the site is not dropped.
+    return mol if parent is None else parent
 
 
 class ResonanceRule(SmartsReactionRule):
     """Match once on the aromatic parent, then react on a cached kekulé parent.
 
-    The pattern's ``=,:`` bond matches aromatic bonds. One parent is cached
-    per assignment of the conjugated system that contains the match. Other
-    systems stay aromatic. The dict is stored on the molecule's forest.
-    The helpers that fill it do not read ``_forest``.
+    The reactant SMARTS should match aromatic bonds (``=,:``, ``-,:``, or
+    unspecified). One parent is cached per assignment of the conjugated system
+    that contains the match; ``_reactant_parent`` selects the assignment where
+    maps 1–2 have the bond order the SMARTS implies. Other systems stay
+    aromatic. The dict is stored on the molecule's forest. The helpers that
+    fill it do not read ``_forest``.
     """
 
     def metabolites(
@@ -1833,9 +1878,11 @@ class ResonanceRule(SmartsReactionRule):
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`SmartsReactionRule.metabolites`.
 
-        SMARTS runs once, on this mol. A hit picks the cached parent by bond
-        order. The reaction runs on that copy. ``context_mol`` keeps the
-        original aromatic flags for :func:`resolve_effect`.
+        SMARTS runs once on this mol (patterns should match aromatic bonds).
+        A hit picks the cached Kekulé parent where maps 1–2 have the bond order
+        the reactant SMARTS implies; if none exists, the aromatic mol is kept.
+        Unique-edit signatures use aromatic ``incident_orders``. ``context_mol``
+        keeps the original aromatic flags for :func:`resolve_effect`.
         """
 
         if not self.rxns:
@@ -1869,13 +1916,15 @@ class ResonanceRule(SmartsReactionRule):
                 if not filter_sites(live, site, info):
                     _bump(counters, "sites_skipped")
                     continue
-                work = _reactant_parent(mol, mapped, cache)
+                work = _reactant_parent(mol, mapped, cache, smarts)
                 if work is None:
                     _bump(counters, "sites_skipped")
                     continue
+                # Unique-edit ranks / incident_orders stay on the aromatic
+                # parent so Kekulé bond-order flips do not split equivalent sites.
                 signature = site_signature(
                     context,
-                    work,
+                    mol,
                     mapped,
                     ranks,
                     site,
@@ -1906,7 +1955,7 @@ class ResonanceRule(SmartsReactionRule):
                         }
                     else:
                         info = {**info, "site": emit_site}
-                    work = _reactant_parent(mol, emit_mapped, cache)
+                    work = _reactant_parent(mol, emit_mapped, cache, smarts)
                     if work is None:
                         _bump(counters, "sites_skipped")
                         continue
@@ -2501,10 +2550,11 @@ def _whens(mapno: int, atomic_nums: Sequence[int]) -> tuple[When, ...]:
     return tuple(out)
 
 
-class Dealkylation(SmartsReactionRule):
+class Dealkylation(ResonanceRule):
     """Cleaves a C-N, C-O, C-S, or C-C bond and oxygenates the carbon side.
 
-    The site is both atoms of the broken bond.
+    The site is both atoms of the broken bond. Aromatic hits react on the
+    Kekulé parent where that bond is single (SMARTS-implied order).
     """
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom_pair"
@@ -2712,12 +2762,13 @@ class NDealkylation(SmartsReactionRule):
     )
 
 
-class AzoSplitting(SmartsReactionRule):
+class AzoSplitting(ResonanceRule):
     """Splits an N=N bond. Both fragments stay.
 
     The pattern names both nitrogens and no leaving piece, so ``leave_count``
     stays None. ``breaks_ring`` is filled from the cleaved bond. A ring N=N
     and an open azo are the same pattern; a filter reads ``breaks_ring``.
+    ``=,:`` matches aromatic ring N=N; the Kekulé parent keeps that bond double.
     """
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom_pair"
@@ -2726,7 +2777,7 @@ class AzoSplitting(SmartsReactionRule):
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
-            "[#7:1]=[#7:2]>>[*:1].[*:2]",
+            "[#7:1]=,:[#7:2]>>[*:1].[*:2]",
             describe(cleaves=True, partner="N", site_map=(1, 2), name="azo"),
         ),
     )
@@ -2794,11 +2845,12 @@ class NitroaromaticReduction(SmartsReactionRule):
     )
 
 
-class ThiopheneSulfurOxidation(SmartsReactionRule):
+class ThiopheneSulfurOxidation(ResonanceRule):
     """Oxidizes the sulfur of a thiophene to the S-oxide.
 
     The pattern adds oxygen and names no leaving atom, so ``leave_count``
-    stays None. It does not cleave. A filter reads ``adds``.
+    stays None. It does not cleave. A filter reads ``adds``. ``=,:`` matches
+    the aromatic ring; maps 1–2 are the S–C single in the Kekulé parent.
     """
     sites_on = "atoms"
     site_kind: RuleSiteKind = "atom"
@@ -2807,7 +2859,7 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
-            "[#6:2]1=[#6:3][#6:4]=[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
+            "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
             describe(adds="O", symbol="S", name="thiophene_s_oxide"),
         ),
     )
@@ -3012,10 +3064,12 @@ class TautomerRule(ResonancePairRule):
         )
 
 
-class NitrogenReduction(SmartsReactionRule):
+class NitrogenReduction(ResonanceRule):
     """Cleaves N-O of nitro, nitroso, and hydroxylamine groups.
 
     The nitroso pattern uses ``[*:2]``. The old ``[*2]`` string emitted a dummy atom.
+    Hydroxylamine uses ``-,:`` so aromatic N–O (isoxazole / benzisoxazole) matches;
+    the Kekulé parent keeps that bond single.
     """
 
     phase1_sites_on = "bonds"
@@ -3044,7 +3098,7 @@ class NitrogenReduction(SmartsReactionRule):
             describe(removes="OO", cleaves=True, partner="O", name="nitro_both"),
         ),
         (
-            "[#7:1]-[#8:2]>>([*:1].[*:2])",
+            "[#7:1]-,:[#8:2]>>([*:1].[*:2])",
             describe(removes="O", cleaves=True, partner="O", name="hydroxylamine"),
         ),
         (
