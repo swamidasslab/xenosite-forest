@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Ruff is a dev dependency (`ruff>=0.16.8`). Select is E, W, F, and I; line length 100; target Python 3.10. Bugbear stays off: B905 wants `zip(..., strict=)`, and `strict=True` can change search. Forest, `phaseone.py`, and `test.ipynb` are excluded until the phase-one class rewrite. `_BOND` keys `1.0`, `2.0`, and `3.0` hashed the same as `1`, `2`, and `3` and stored the same bond types, so dropping the duplicates does not change `GetBondTypeAsDouble()` lookup.
+
+## 2026-09-19
+
 - Moving formal charge, and hydrogen on a neutral carbon, with a kekulé bond flip repairs 1,4-dinitrobenzene: the second nitro parses as `O=Nc1ccc([N+](=O)[O-])cc1` plus `O`. Pyridazine still yields `C=CC=CN`. Both Kekulé forms parse and neither nitrogen is charged, so the dropped atom is the reaction, not a charge left on the wrong atom.
 
 ## 2026-09-19

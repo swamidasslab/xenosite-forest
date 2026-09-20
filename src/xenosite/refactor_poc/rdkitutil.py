@@ -32,7 +32,7 @@ import ast
 import copy
 from collections import defaultdict, deque
 from collections.abc import Iterable
-from typing import Any, NamedTuple, TypeGuard, TypeVar, cast, overload
+from typing import Any, TypeGuard, TypeVar, cast, overload
 
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
@@ -53,14 +53,13 @@ from xenosite.refactor_poc.rdkit_api import (
     MolFromSmiles,
     MolToSmiles,
     NoForestMol,
-    RWMol,
     ReactionFromSmarts,
     RenumberAtoms,
     ResonanceMolSupplier,
+    RWMol,
     SanitizeFlags,
     SanitizeMol,
 )
-
 from xenosite.refactor_poc.records import (
     EndParents,
     Forest,

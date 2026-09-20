@@ -1,10 +1,11 @@
 """Define specific reaction rules."""
 
 # Standard Library
+import copy
 import itertools
 from collections import defaultdict, deque
-import json
-import copy
+from collections.abc import Generator
+from typing import Any, NamedTuple, cast
 
 from xenosite.refactor_poc.rdkit_api import MolFromSmarts, MolToSmarts, RenumberAtoms
 from xenosite.refactor_poc.rdkitutil import (
@@ -36,21 +37,15 @@ from xenosite.refactor_poc.rdkitutil import (
     smarts_matches,
     topol_equiv,
 )
-
-from typing import Any, NamedTuple, cast
-
 from xenosite.refactor_poc.records import (
     AtomTrace,
-    Effect,
     Forest,
     Formula,
     InitializedAtomTrace,
     KekuleParents,
     PatternInfo,
     TraceAddition,
-    When,
 )
-from collections.abc import Callable, Generator
 
 
 def set_terminal_product(mol: Mol, value: bool = True) -> ForestMol:
@@ -163,8 +158,7 @@ class ReactionRule:
         assert mol is not None
         # The caller's chemistry is not edited. A mol with no trace gets one,
         # at its current depth, so products can sit one step below it.
-        parent = ensure_tracing(mol)
-        parent_depth = parent._forest["atom_trace"]["depth"]
+        ensure_tracing(mol)
         # Matching, map clearing, and forest stamps happen on a copy.
         mol = ensure_tracing(_work_copy(mol))
 
@@ -185,7 +179,6 @@ class ReactionRule:
             info = por.info
             products = por.products
             # print("INFO", info, len(products))
-            site = info["site"]
 
             # Same canonical SMILES is one outcome. Two sites in one atom
             # class can still be different molecules (ortho quinone and para).
@@ -213,7 +206,7 @@ class ReactionRule:
 
     def _top_site(self, site, mol: Mol):
         te = topol_equiv(mol)
-        if type(site) == int:
+        if type(site) is int:
             return te[site]
         else:
             return frozenset(int(te[s]) for s in site)
@@ -410,7 +403,7 @@ def forest_trace(reactant: Mol, product: Mol, info, executed=None):
     rule = info.get("rule")
     site = info.get("site")
     parent = stamp_forest_labels(reactant)
-    product = ensure_forest(product)
+    product = ensure_forest(product)  #TODO: declare side effects so this isn't a rdkit error?
     trace = copy.deepcopy(parent._forest["atom_trace"])
     trace.setdefault("additions", {})
     trace.setdefault("delta_formula", {})
@@ -478,7 +471,6 @@ def forest_trace(reactant: Mol, product: Mol, info, executed=None):
         trace["deletes"][tag] = record
 
     trace["records"] = new_records
-
     product._forest["atom_trace"] = cast(AtomTrace, trace)
 
     return trace
@@ -599,7 +591,10 @@ def describe(
 
 
 def may(info, key, value=True):
-    """True if any possibility has this outcome. For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring."""
+    """True if any possibility has this outcome.
+
+    For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring.
+    """
 
     for possibility in info["possibilities"]:
         have = possibility.get(key, _EFFECT_DEFAULTS.get(key))
@@ -927,6 +922,8 @@ class SmartsReactionRule(ReactionRule):
         """Converts SMARTS reactions to RDKit reactions."""
         return reaction_from_smarts(smarts)
 
+    # TODO: should this method be moved to library? Needed by this class,
+    # but isn't specific to its quirks.
     def _lift_forest_labels(self, reactant: Mol, product: Mol) -> Mol:
         """Carry the forest labels from the reactant to the product."""
 
@@ -939,6 +936,10 @@ class SmartsReactionRule(ReactionRule):
 
         return product
 
+    # this method should probably stay here, because it has to do with how
+    # reactions are process.
+    # TODO: A reaction helper in rdkitutil could apply reactions and return
+    # products while maintaining the forest instead of maintaing that logic here.
     def _get_product_mappings(self, product: Mol):
         mapno2idx = {}
         reactant2idx = {}
@@ -972,13 +973,12 @@ class SmartsReactionRule(ReactionRule):
 
 # Bond order stored in the structure cache. Not RDKit mols: those do not
 # belong in a dict that is deep-copied onto every product.
+# Int keys: 1.0, 2.0, and 3.0 hash the same as 1, 2, and 3, so a
+# GetBondTypeAsDouble() lookup still hits these entries.
 _BOND = {
     1: BondType.SINGLE,
-    1.0: BondType.SINGLE,
     2: BondType.DOUBLE,
-    2.0: BondType.DOUBLE,
     3: BondType.TRIPLE,
-    3.0: BondType.TRIPLE,
     1.5: BondType.AROMATIC,
 }
 
@@ -1448,7 +1448,9 @@ class ResonancePairRule(ResonanceRule):
         _bump(counters, "rule_expansions")
 
         active = [
-            (smarts, info) for smarts, info in self.endpoints if filter_rules(self, info)
+            (smarts, info)
+            for smarts, info in self.endpoints
+            if filter_rules(self, info)
         ]
         if not active:
             return
@@ -2244,13 +2246,15 @@ class SulfurReduction(SmartsReactionRule):
     )
 
 
+
 class Epoxidation(ResonanceRule):
     """Adds an epoxide across a C=C or C=N bond.
 
     The reactant bond is ``=,:``, so an aromatic bond matches on the parent.
     The reaction runs on the cached kekulé parent for that bond.
 
-    NOTE: Downstream epoxidation model only considers carbone-carbon epoxides. Phase 1 model additionally considers carbon-nitrogen.
+    NOTE: Downstream epoxidation model only considers carbone-carbon epoxides.
+    Phase 1 model additionally considers carbon-nitrogen.
     """
 
     phase1_sites_on = "bonds"

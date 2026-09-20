@@ -6,6 +6,7 @@ filter refuses is not run. A pattern it accepts is.
 """
 
 from xenosite.refactor_poc.rdkitutil import Mol
+
 from .rules import (
     Dealkylation,
     Dehydration,
@@ -13,9 +14,9 @@ from .rules import (
     Dephosphorylation,
     Epoxidation,
     EpoxideOpening,
+    Hydrogenation,
     Hydrolysis,
     Hydroxylation,
-    Hydrogenation,
     NitrogenOxidation,
     NitrogenReduction,
     OxidativeDehalogenation,

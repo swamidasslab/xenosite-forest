@@ -12,7 +12,8 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, NamedTuple, cast
 
-
+from xenosite.forest.step_plan import AtomRef as AddedRef
+from xenosite.forest.step_plan import Deps, Step
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
     Mol,
@@ -26,8 +27,6 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitize_catch,
     split_fragments,
 )
-from xenosite.forest.step_plan import AtomRef as AddedRef
-from xenosite.forest.step_plan import Deps, Step
 from xenosite.refactor_poc.records import AtomRef
 from xenosite.refactor_poc.rules import (
     Dealkylation,
@@ -38,7 +37,6 @@ from xenosite.refactor_poc.rules import (
     forest_trace,
     install_forest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Counters
@@ -897,7 +895,11 @@ def find_path(
         # the filters; this only picks an order.
         order_key = None
         if diff.target_smaller or diff.has_cleavage:
-            order_key = lambda rule: (0 if _rule_can_cleave(rule) else 1, rule.name)
+
+            def _cleavage_first(rule):
+                return (0 if _rule_can_cleave(rule) else 1, rule.name)
+
+            order_key = _cleavage_first
 
         for por in ruleset.metabolites(
             walk.mol,

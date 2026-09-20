@@ -263,14 +263,14 @@ else:
     from rdkit.Chem.AllChem import MolToSmiles as MolToSmiles
     from rdkit.Chem.AllChem import ReactionFromSmarts as ReactionFromSmarts
     from rdkit.Chem.AllChem import RenumberAtoms as RenumberAtoms
-    from rdkit.Chem.rdChemReactions import ChemicalReaction as ChemicalReaction
+    from rdkit.Chem.rdchem import KEKULE_ALL as KEKULE_ALL
     from rdkit.Chem.rdchem import Atom as Atom
     from rdkit.Chem.rdchem import Bond as Bond
     from rdkit.Chem.rdchem import BondType as BondType
-    from rdkit.Chem.rdchem import KEKULE_ALL as KEKULE_ALL
     from rdkit.Chem.rdchem import Mol as Mol
-    from rdkit.Chem.rdchem import RWMol as RWMol
     from rdkit.Chem.rdchem import ResonanceMolSupplier as ResonanceMolSupplier
+    from rdkit.Chem.rdchem import RWMol as RWMol
+    from rdkit.Chem.rdChemReactions import ChemicalReaction as ChemicalReaction
 
     AtomCompare = rdFMCS.AtomCompare
     BondCompare = rdFMCS.BondCompare

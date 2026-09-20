@@ -11,7 +11,6 @@ from xenosite.refactor_poc.rdkitutil import (
 )
 from xenosite.refactor_poc.rules import Epoxidation, OxygenReduction
 
-
 _ANTHRACENE = "c1ccc2cc3ccccc3cc2c1"
 _POLYPHENYL = "c1ccc(-c2ccc(-c3ccc(-c4ccc(-c5ccc(-c6ccccc6)cc5)cc4)cc3)cc2)cc1"
 _CC = Chem.MolFromSmarts("[#6:1]=,:[#6:2]")
@@ -52,7 +51,11 @@ def test_anthracene_is_four_parents_not_sixteen():
     mol, cache = _fill(_ANTHRACENE)
     assert getattr(mol, "_forest", None) is None
     assert len(cache["parents"]) == 4
-    assert all(not atom.GetIsAromatic() for parent in cache["parents"] for atom in parent.GetAtoms())
+    assert all(
+        not atom.GetIsAromatic()
+        for parent in cache["parents"]
+        for atom in parent.GetAtoms()
+    )
 
 
 def test_polyphenyl_is_twelve_parents_not_sixty_four():
