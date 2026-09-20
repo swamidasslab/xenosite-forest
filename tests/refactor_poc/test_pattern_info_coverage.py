@@ -5,18 +5,28 @@ chosen so ``resolve_effect`` selects that possibility (including every
 ``when`` branch). Assertions stay on PatternInfo shape and resolution, not
 full product chemistry.
 
-Known unreachable branches are explicit xfails — do not drop them.
+Inventory comes from :mod:`.pattern_info_inventory` so this file and the
+completeness meta-test cannot drift. Known unreachable branches are
+explicit xfails — do not drop them.
 """
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Mapping, Sequence
-from typing import Any
 
 import pytest
 from rdkit import Chem
 
+from .pattern_info_inventory import (
+    PATTERNLESS_REACTION_RULE_BASES,
+    discover_reaction_rule_classes,
+    instantiate_rule,
+    iter_pattern_possibilities,
+    pattern_possibility_keys,
+    patterns_on,
+    possibility_key,
+    when_key,
+)
 from .substrate_library import SUBSTRATE_LIBRARY
 from xenosite.refactor_poc.rdkit_api import Mol, MolFromSmiles
 from xenosite.refactor_poc.records import Effect, PatternInfo, When
@@ -121,47 +131,6 @@ _CANDIDATES: tuple[str, ...] = tuple(
 
 # (rule, pattern_name, poss_index) -> reason. Unreachable with current SMARTS.
 _UNREACHABLE: dict[tuple[str, str, int], str] = {}
-
-
-def _instantiate(cls: type[ReactionRule]) -> ReactionRule:
-    kwargs: dict[str, Any] = {}
-    sig = inspect.signature(cls.__init__)
-    if "as_star" in sig.parameters:
-        kwargs["as_star"] = False
-    return cls(**kwargs) if kwargs else cls()
-
-
-def _rule_classes() -> list[type[ReactionRule]]:
-    out: list[type[ReactionRule]] = []
-    for _name, obj in inspect.getmembers(rules_module(), inspect.isclass):
-        if not issubclass(obj, ReactionRule) or obj is ReactionRule:
-            continue
-        out.append(obj)
-    return sorted(out, key=lambda c: c.__name__)
-
-
-def rules_module():
-    from xenosite.refactor_poc import rules as mod
-
-    return mod
-
-
-def _patterns(
-    rule: ReactionRule,
-) -> list[tuple[str, str, PatternInfo]]:
-    """``(group, smarts, info)`` for ``smarts`` and ``endpoints``."""
-
-    rows: list[tuple[str, str, PatternInfo]] = []
-    for group in ("smarts", "endpoints"):
-        for smarts, info in getattr(rule, group, ()) or ():
-            rows.append((group, smarts, info))
-    return rows
-
-
-def _when_tuple(when: When | None) -> tuple[int | None, int | None, int | None] | None:
-    if when is None:
-        return None
-    return (when.get("map"), when.get("z"), when.get("h"))
 
 
 def _atom_satisfies(mol: Mol, mapped: Mapping[int, int], when: When | None) -> bool:
@@ -295,74 +264,78 @@ def _build_cases():
     mols = _parsed_mols()
     cases = []
     when_total = 0
-    for cls in _rule_classes():
-        try:
-            rule = _instantiate(cls)
-        except TypeError:
-            continue
-        for group, smarts, info in _patterns(rule):
-            name = info.get("name") or ""
-            possibilities = info.get("possibilities") or ()
-            reactant = smarts.split(">>", 1)[0]
-            for poss_i, poss in enumerate(possibilities):
-                when = poss.get("when")
-                if when is not None:
-                    when_total += 1
-                cover = _find_cover(info, reactant, poss_i, mols)
-                gap = _UNREACHABLE.get((cls.__name__, name, poss_i))
-                case_id = (
-                    f"{cls.__name__}/{name or '?'}#{poss_i}"
-                    f"/when={_when_tuple(when)}"
+    for row in iter_pattern_possibilities():
+        if row.when is not None:
+            when_total += 1
+        reactant = row.smarts.split(">>", 1)[0]
+        # Re-resolve PatternInfo from the live rule so cover search sees
+        # the same object the parameterized test will assert on.
+        rule = instantiate_rule(row.rule_cls)
+        info = None
+        for group, smarts, pattern in patterns_on(rule):
+            if (
+                group == row.group
+                and smarts == row.smarts
+                and (pattern.get("name") or "") == row.pattern_name
+            ):
+                info = pattern
+                break
+        assert info is not None, row
+        cover = _find_cover(info, reactant, row.poss_i, mols)
+        gap = _UNREACHABLE.get((row.rule_cls.__name__, row.pattern_name, row.poss_i))
+        case_id = (
+            f"{row.rule_cls.__name__}/{row.pattern_name or '?'}#{row.poss_i}"
+            f"/when={when_key(row.when)}"
+        )
+        if gap is not None:
+            cases.append(
+                pytest.param(
+                    row.rule_cls,
+                    row.group,
+                    row.smarts,
+                    row.pattern_name,
+                    row.poss_i,
+                    row.when,
+                    None,
+                    id=case_id,
+                    marks=pytest.mark.xfail(reason=gap, strict=True),
                 )
-                if gap is not None:
-                    cases.append(
-                        pytest.param(
-                            cls,
-                            group,
-                            smarts,
-                            name,
-                            poss_i,
-                            when,
-                            None,
-                            id=case_id,
-                            marks=pytest.mark.xfail(reason=gap, strict=True),
-                        )
-                    )
-                elif cover is None:
-                    cases.append(
-                        pytest.param(
-                            cls,
-                            group,
-                            smarts,
-                            name,
-                            poss_i,
-                            when,
-                            None,
-                            id=case_id,
-                            marks=pytest.mark.xfail(
-                                reason=(
-                                    "no covering mol in substrate library + "
-                                    "_PATTERN_SUBSTRATES; add a substrate or "
-                                    "record an _UNREACHABLE gap"
-                                ),
-                                strict=True,
-                            ),
-                        )
-                    )
-                else:
-                    smiles, _mol, _work, _mapped = cover
-                    cases.append(
-                        pytest.param(
-                            cls,
-                            group,
-                            smarts,
-                            name,
-                            poss_i,
-                            when,
-                            smiles,
-                            id=case_id,
-                        )
-                    )
+            )
+        elif cover is None:
+            cases.append(
+                pytest.param(
+                    row.rule_cls,
+                    row.group,
+                    row.smarts,
+                    row.pattern_name,
+                    row.poss_i,
+                    row.when,
+                    None,
+                    id=case_id,
+                    marks=pytest.mark.xfail(
+                        reason=(
+                            "no covering mol in substrate library + "
+                            "_PATTERN_SUBSTRATES; add a substrate or "
+                            "record an _UNREACHABLE gap"
+                        ),
+                        strict=True,
+                    ),
+                )
+            )
+        else:
+            smiles, _mol, _work, _mapped = cover
+            cases.append(
+                pytest.param(
+                    row.rule_cls,
+                    row.group,
+                    row.smarts,
+                    row.pattern_name,
+                    row.poss_i,
+                    row.when,
+                    smiles,
+                    id=case_id,
+                )
+            )
     return cases, when_total
 
 
@@ -382,9 +355,9 @@ def test_pattern_info_possibility(
     when: When | None,
     smiles: str | None,
 ):
-    rule = _instantiate(rule_cls)
+    rule = instantiate_rule(rule_cls)
     info = None
-    for g, text, pattern in _patterns(rule):
+    for g, text, pattern in patterns_on(rule):
         if g == group and text == smarts and pattern.get("name", "") == pattern_name:
             info = pattern
             break
@@ -415,20 +388,67 @@ def test_pattern_info_possibility(
 def test_when_branch_inventory_matches_params():
     """Every ``when`` on every PatternInfo has a parameterized row."""
 
-    when_params = 0
-    for param in _CASES:
-        when = param.values[5]
-        if when is not None:
-            when_params += 1
+    when_params = sum(1 for param in _CASES if param.values[5] is not None)
     assert when_params == _WHEN_BRANCH_COUNT
-    live = 0
-    for cls in _rule_classes():
-        try:
-            rule = _instantiate(cls)
-        except TypeError:
-            continue
-        for _group, _smarts, info in _patterns(rule):
-            for poss in info.get("possibilities") or ():
-                if poss.get("when") is not None:
-                    live += 1
+    live = sum(1 for row in iter_pattern_possibilities() if row.when is not None)
     assert when_params == live
+
+
+def test_coverage_rows_match_rule_derived_possibilities():
+    """Coverage params == :func:`iter_pattern_possibilities` (no silent gaps)."""
+
+    expected = pattern_possibility_keys()
+    observed = {
+        possibility_key(param.values[0], param.values[3], param.values[4], param.values[5])
+        for param in _CASES
+    }
+    missing = sorted(expected - observed)
+    extra = sorted(observed - expected)
+    assert not missing and not extra, (
+        f"pattern-info coverage drifted from rule inventory; "
+        f"missing={missing[:20]}{'…' if len(missing) > 20 else ''} "
+        f"extra={extra[:20]}{'…' if len(extra) > 20 else ''}"
+    )
+
+
+def test_patternless_whitelist_is_exact():
+    """Whitelist entries subclass ReactionRule, exist, and stay patternless."""
+
+    discovered = set(discover_reaction_rule_classes())
+    for cls in PATTERNLESS_REACTION_RULE_BASES:
+        assert issubclass(cls, ReactionRule), cls
+        assert cls in discovered, (
+            f"whitelist entry {cls.__name__} is not a discovered ReactionRule "
+            f"subclass under refactor_poc"
+        )
+
+    patterned_whitelist = sorted(
+        cls.__name__
+        for cls in PATTERNLESS_REACTION_RULE_BASES
+        if list(patterns_on(instantiate_rule(cls)))
+    )
+    assert not patterned_whitelist, (
+        "whitelist entries must be patternless; move coverage to the "
+        f"inventory instead: {patterned_whitelist}"
+    )
+
+
+def test_every_concrete_rule_with_patterns_is_inventoried():
+    """Non-whitelisted rules that declare patterns appear in the inventory."""
+
+    keys = pattern_possibility_keys()
+    missing: list[tuple[str, str, int, object]] = []
+    for cls in discover_reaction_rule_classes():
+        if cls in PATTERNLESS_REACTION_RULE_BASES:
+            continue
+        rule = instantiate_rule(cls)
+        for _group, _smarts, info in patterns_on(rule):
+            name = info.get("name") or ""
+            for poss_i, poss in enumerate(info.get("possibilities") or ()):
+                key = possibility_key(cls, name, poss_i, poss.get("when"))
+                if key not in keys:
+                    missing.append(key)
+    assert not missing, (
+        f"rule-derived possibilities missing from inventory: {missing[:20]}"
+        f"{'…' if len(missing) > 20 else ''}"
+    )

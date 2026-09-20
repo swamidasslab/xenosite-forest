@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Pattern-info completeness meta-test: shared `tests/refactor_poc/pattern_info_inventory.py` (`iter_pattern_possibilities`) feeds coverage params and meta asserts. Whitelist (patternless bases only): `ReactionRule`, `SmartsReactionRule`, `ResonanceRule`, `ResonancePairRule`, `RuleSet`. No missing (rule, pattern, when) vs coverage; 190 possibilities / 135 when-branches. Suite: pattern_info_coverage + pattern_names **196 passed**.
+
+## 2026-09-20
+
 - PatternInfo coverage audit: tests check names, reactant SMARTS parse, span==`_span(possibilities)`, when branches, `resolve_effect` selection, and declared survival of adds/removes/cleaves/leave_count/methide/dearomatizes/needs. Gaps (TODO): product SMARTS, `pin`, `skip_same_rings`/`edit` behavior, resolve-filled `breaks_ring`/`partner`/`partner_h`. RuleSet `unique_csmi` aligned to `_unique_csmi_key`; invariant test updated.
 
 ## 2026-09-20
