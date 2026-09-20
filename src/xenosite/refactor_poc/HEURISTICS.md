@@ -37,6 +37,7 @@ A rule may later carry data that it is less likely, and a filter may read that. 
 - `find_path` and `ReactionRule.metabolize` / `RuleSet.metabolize` raise `ValueError` on `None` input (invalid parse must not soft-pass as any-path).
 - Lazy heap / stale-priority handling on the find_path frontier. Status: approved. The queue had no walk priority key (plain deque + appendleft). Minimal key matches old behavior: `(0 if target_hit else 1, seq)` — hits before non-hits, then FIFO. On pop, cheaply rescore; if the fresh key differs and is worse than peek, `heappush` back instead of expanding (compare-to-peek; no O(n) resort). Not a forest ranker. Test: `test_stale_priority_is_pushed_back`.
 - `leave_count` on a cleaving effect is read by `filter_sites`: when it is an int, the smaller fragment across the cleaved bond must have that many heavy atoms. Test: `test_leave_count_one_refuses_a_larger_leaving_fragment`.
+- Methide is always on the rule data (Dehydrogenation `methide_end`, QuinoneFormation alkyl branch). Opt-in `pathways=("methide",)` is dropped (DROPPED.md). Pair resolve skips both-methide ends; `filter_sites` that reads `options["methide"]` refuses methide when the caller wants none. Search already skips alkyl `partner=="C"` ends unless `_alkyl_bond_raises`. Tests: `test_dh_methide_pathways.py`.
 
 ## Schema proposals (not yet in PatternInfo)
 

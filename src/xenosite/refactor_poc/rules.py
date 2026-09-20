@@ -1927,6 +1927,11 @@ class ResonancePairRule(ResonanceRule):
                     site = frozenset((site_a, site_b))
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
+                    # At most one methide end is data: two methide ends do not
+                    # resolve (DROPPED.md / data-not-branches). Not a search
+                    # filter — the pair is never built.
+                    if end1.get("methide") and end2.get("methide"):
+                        continue
                     preview: PairSiteInfo = {
                         "site": site,
                         "rule": self,
@@ -2105,6 +2110,24 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=2,
                 name="amine_end",
+            ),
+        ),
+        (
+            "[#6:1]-[#6D1H3,#6D2H2,#6D3H1:2]",
+            describe(
+                *branches(
+                    (
+                        {"map": 2, "z": 6, "h": 3},
+                        {"map": 2, "z": 6, "h": 2},
+                        {"map": 2, "z": 6, "h": 1},
+                    ),
+                    removes="H",
+                    dearomatizes=True,
+                    methide=True,
+                ),
+                edit="single_to_double",
+                site_map=1,
+                name="methide_end",
             ),
         ),
     )

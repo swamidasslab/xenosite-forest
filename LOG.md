@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Ported forest base suites into `tests/refactor_poc/`: `test_maybe_path.py` (Maybe/allows bags), `test_dh_methide_pathways.py` (methide always in data; refuse via `filter_sites`; toluene→o-QM), `test_topo_emission.py` (unique_csmi / symmetry collapse), `test_rdkit_valence.py` (focused crashers), `test_guided_path_gold.py` (APAP/NAPQI, BQ budgets, terminal conjugates, TBA). POC fix: Dehydrogenation `methide_end` + skip both-methide pair resolve (DROPPED approved drop of pathways= opt-in). Ester→acid Hydrolysis bags need `use_filters=False` (atom-diff skips). Suite: **27 passed** on the five modules; pattern_info_coverage **193 passed**, 2 xfailed. Pre-existing `test_path` budget asserts (butylbenzene/PhCH2OH) unchanged by this diff. Did not touch `guided_path.py` / `test.ipynb`.
+
+## 2026-09-20
+
 - Contract: CX ``atomLabel`` on input start atoms is preserved. Captured once into ``_forest["start_labels"]`` (depth-0 idx → label) on forest establish; restamped from ``_write_forest_labels`` / ``_reordered_forest_labels`` / ``XfTracing._trace`` / ``carry_forest``. No rules/find_path call-site changes. Red before fix: missing ``start_labels``, cleared label not restored, hydroxylation site atom dropped ``alpha``. Test: `tests/refactor_poc/test_start_atom_labels.py` (3 passed).
 
 ## 2026-09-20
