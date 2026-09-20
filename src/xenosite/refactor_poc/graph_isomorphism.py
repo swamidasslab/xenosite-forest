@@ -49,7 +49,7 @@ from itertools import (
     permutations,
     product,
 )
-from typing import Final, Literal, Protocol, TypeAlias, cast
+from typing import Final, Literal, NamedTuple, Protocol, TypeAlias, cast
 
 from xenosite.refactor_poc.rdkit_api import AssignStereochemistry, Mol, MolToSmiles
 from xenosite.refactor_poc.rdkitutil import cip_ids
@@ -129,7 +129,9 @@ _CACHE_NAUTY = "site_pair_orbits_nauty"
 _CACHE_NAUTY_FAMILIES = "site_pair_orbits_nauty_families"
 _CACHE_SMILES = "site_pair_orbits_smiles"
 _CACHE_BA_PAIR = "bond_atom_pair_orbits_nauty"
+_CACHE_LEX_REPS = "lexical_orbit_representatives"
 _ENV_BACKEND = "XENOSITE_PAIR_ORBIT_BACKEND"
+_ENV_CANONICAL_SITES = "XENOSITE_CANONICAL_EMITTED_SITES"
 _MEMBERSHIP_BASE = 4
 # Documented trivial pair_group when either end is a singleton topeqiv group,
 # or when backend is ``none`` for multi–multi (cheap path; no isotope tables).
@@ -149,8 +151,26 @@ BondAtomPairOrbitTables: TypeAlias = dict[
 
 # Process-wide override. ``None`` → env var → auto (nauty if importable else none).
 _backend_override: PairOrbitBackend | None = None
+# Opt-in canonical emitted sites. ``None`` → env var → False (current behavior).
+_canonical_emitted_sites_override: bool | None = None
 
 SitePairOrbitGroups = dict[OrbitFamily, list[list[tuple[int, int]]]]
+
+# Concrete site shapes for lex-orbit emission (not unique-edit signatures).
+OrbitKind = Literal[
+    "atom_atom",
+    "bond_bond",
+    "bond_atom",
+    "bond_atom_pair",
+]
+AtomPairSite: TypeAlias = tuple[int, int]
+BondPairSite: TypeAlias = tuple[int, int]
+# Directed (bond_idx, atom_idx) — same as BondAtomSite.
+BondAtomPairSite: TypeAlias = BondAtomSitePair
+OrbitCandidate: TypeAlias = (
+    AtomPairSite | BondPairSite | BondAtomSite | BondAtomPairSite
+)
+LexicalRepTable: TypeAlias = dict[OrbitCandidate, OrbitCandidate]
 
 
 def get_pair_orbit_backend() -> PairOrbitBackend:
@@ -173,6 +193,35 @@ def set_pair_orbit_backend(backend: PairOrbitBackend | None) -> None:
     if backend is not None and backend not in ("nauty", "smiles", "none"):
         raise ValueError(f"unknown pair_orbit_backend: {backend!r}")
     _backend_override = backend
+
+
+def get_canonical_emitted_sites() -> bool:
+    """Opt-in lex-orbit site emission. Default False (current discovery order).
+
+    Override via :func:`set_canonical_emitted_sites`, else env
+    ``XENOSITE_CANONICAL_EMITTED_SITES`` ∈ ``{1,true,yes,on}``, else False.
+    Per-call ``metabolize(..., canonical_emitted_sites=...)`` wins.
+    """
+
+    if _canonical_emitted_sites_override is not None:
+        return _canonical_emitted_sites_override
+    env = os.environ.get(_ENV_CANONICAL_SITES, "").strip().lower()
+    return env in ("1", "true", "yes", "on")
+
+
+def set_canonical_emitted_sites(enabled: bool | None) -> None:
+    """Process-wide opt-in, or ``None`` to clear (env / default resume)."""
+
+    global _canonical_emitted_sites_override
+    _canonical_emitted_sites_override = enabled
+
+
+def canonical_emitted_sites_requested(kwargs: Mapping[str, object]) -> bool:
+    """Resolve opt-in: explicit kwargs key, else :func:`get_canonical_emitted_sites`."""
+
+    if "canonical_emitted_sites" in kwargs:
+        return bool(kwargs["canonical_emitted_sites"])
+    return get_canonical_emitted_sites()
 
 
 # --- CIP sort keys (canonical ordering of orbit groups) ---
@@ -379,7 +428,12 @@ class _NautyModule(Protocol):
 def atom_bond_generators_nauty(
     mol: Mol, *, include_stereo: bool = True
 ) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
-    """Generators as ``(atom_permutation, bond_permutation)``."""
+    """Generators as ``(atom_permutation, bond_permutation)``.
+
+    Automorphism group via nauty/Traces (McKay & Piperno 2014). Induced
+    orbits on ordered pairs are classically *orbitals* (Sharp 1999); see
+    ``PAIR_ORBITS.md`` References.
+    """
 
     nauty = cast(_NautyModule, importlib.import_module("pynauty"))
     graph, n_atoms, n_bonds = _colored_graph(mol, nauty, include_stereo=include_stereo)
@@ -1568,3 +1622,513 @@ _pair_orbit = pair_orbit
 _incident_orders = incident_orders
 _site_signature = site_signature
 _pair_site_signature = pair_site_signature
+
+
+# --- Lexical orbit representatives (opt-in canonical emitted sites) ---
+
+
+class LexicalOrbitRepresentatives(NamedTuple):
+    """Concrete candidate → lex-smallest orbit member, by kind / orderedness.
+
+    Built from nauty six-family groups plus bond_atom / bond_atom_pair orbits.
+    Cached on ``_forest["cache"]`` under :data:`_CACHE_LEX_REPS`.
+    """
+
+    atom_atom_unordered: LexicalRepTable
+    atom_atom_ordered: LexicalRepTable
+    bond_bond_unordered: LexicalRepTable
+    bond_bond_ordered: LexicalRepTable
+    bond_atom: LexicalRepTable
+    bond_atom_pair_unordered: LexicalRepTable
+    bond_atom_pair_ordered: LexicalRepTable
+
+
+def normalize_orbit_candidate(
+    candidate: OrbitCandidate,
+    *,
+    kind: OrbitKind,
+    ordered: bool,
+) -> OrbitCandidate:
+    """Normalize candidate representation before lookup / emission.
+
+    ``ordered`` matters for same-kind pairs and pairs of bond-atom sites.
+    Ignored for one bond-atom site: ``(bond, atom)`` already has fixed roles.
+    """
+
+    if kind in ("atom_atom", "bond_bond"):
+        left, right = cast(tuple[int, int], candidate)
+        return (left, right) if ordered else tuple(sorted((left, right)))
+
+    if kind == "bond_atom":
+        bond_idx, atom_idx = cast(BondAtomSite, candidate)
+        return (bond_idx, atom_idx)
+
+    if kind == "bond_atom_pair":
+        left, right = cast(BondAtomSitePair, candidate)
+        left_n = (int(left[0]), int(left[1]))
+        right_n = (int(right[0]), int(right[1]))
+        if ordered:
+            return (left_n, right_n)
+        return _sorted_composite_pair(left_n, right_n)
+
+    raise ValueError(f"Unknown kind: {kind}")
+
+
+def lexical_orbit_representatives(
+    orbit_groups: Iterable[Iterable[OrbitCandidate]],
+    *,
+    kind: OrbitKind,
+    ordered: bool = False,
+) -> LexicalRepTable:
+    """Build concrete candidate → canonical concrete representative.
+
+    Each representative is the lexicographically lowest normalized candidate
+    in its nauty orbit. Emitted sites become independent of discovery order,
+    while remaining relative to the current RDKit atom/bond indexing.
+    """
+
+    representative_of: LexicalRepTable = {}
+    for raw_members in orbit_groups:
+        members = {
+            normalize_orbit_candidate(member, kind=kind, ordered=ordered)
+            for member in raw_members
+        }
+        if not members:
+            continue
+        representative = min(members)
+        for member in members:
+            representative_of[member] = representative
+    return representative_of
+
+
+def canonical_emitted_site(
+    candidate: OrbitCandidate,
+    representative_of: LexicalRepTable,
+    *,
+    kind: OrbitKind,
+    ordered: bool = False,
+) -> OrbitCandidate:
+    """Convert a discovered candidate to the concrete site that should be emitted."""
+
+    normalized = normalize_orbit_candidate(
+        candidate, kind=kind, ordered=ordered
+    )
+    try:
+        return representative_of[normalized]
+    except KeyError as exc:
+        raise KeyError(
+            f"orbit candidate {normalized!r} (kind={kind}, ordered={ordered}) "
+            "missing from representative table"
+        ) from exc
+
+
+def ensure_lexical_orbit_representatives(
+    mol: Mol,
+) -> LexicalOrbitRepresentatives | None:
+    """Materialize lex-rep tables from nauty families / bond_atom groups.
+
+    Returns ``None`` when nauty is unavailable (opt-in path then skips
+    remapping and keeps discovery-order emission).
+    """
+
+    if get_pair_orbit_backend() != "nauty" or not _pynauty_available():
+        return None
+
+    structure = _structure(mol)
+    cached = structure.get(_CACHE_LEX_REPS)
+    if cached is not None:
+        return cast(LexicalOrbitRepresentatives, cached)
+
+    families = all_site_pair_orbits_nauty(mol)
+    generators = atom_bond_generators_nauty(mol, include_stereo=True)
+    sites = endpoint_bond_atom_sites(mol)
+    ba_groups, _ = bond_atom_orbits_from_nauty_generators(sites, generators)
+    ba_pair_u, _ = bond_atom_pair_orbits_from_nauty_generators(
+        sites, generators, ordered=False
+    )
+    ba_pair_o, _ = bond_atom_pair_orbits_from_nauty_generators(
+        sites, generators, ordered=True
+    )
+
+    tables = LexicalOrbitRepresentatives(
+        atom_atom_unordered=lexical_orbit_representatives(
+            families["atom_atom_unordered"], kind="atom_atom", ordered=False
+        ),
+        atom_atom_ordered=lexical_orbit_representatives(
+            families["atom_atom_ordered"], kind="atom_atom", ordered=True
+        ),
+        bond_bond_unordered=lexical_orbit_representatives(
+            families["bond_bond_unordered"], kind="bond_bond", ordered=False
+        ),
+        bond_bond_ordered=lexical_orbit_representatives(
+            families["bond_bond_ordered"], kind="bond_bond", ordered=True
+        ),
+        bond_atom=lexical_orbit_representatives(
+            ba_groups, kind="bond_atom", ordered=True
+        ),
+        bond_atom_pair_unordered=lexical_orbit_representatives(
+            ba_pair_u, kind="bond_atom_pair", ordered=False
+        ),
+        bond_atom_pair_ordered=lexical_orbit_representatives(
+            ba_pair_o, kind="bond_atom_pair", ordered=True
+        ),
+    )
+    structure[_CACHE_LEX_REPS] = tables
+    return tables
+
+
+def _image_orbit_candidate(
+    candidate: OrbitCandidate,
+    atom_map: Sequence[int],
+    bond_map: Sequence[int],
+    *,
+    kind: OrbitKind,
+    ordered: bool,
+) -> OrbitCandidate:
+    """Apply an atom/bond automorphism to a concrete orbit candidate."""
+
+    if kind in ("atom_atom", "bond_bond"):
+        left, right = cast(tuple[int, int], candidate)
+        if kind == "atom_atom":
+            imaged = (atom_map[left], atom_map[right])
+        else:
+            imaged = (bond_map[left], bond_map[right])
+        return normalize_orbit_candidate(imaged, kind=kind, ordered=ordered)
+
+    if kind == "bond_atom":
+        bond_idx, atom_idx = cast(BondAtomSite, candidate)
+        return (bond_map[bond_idx], atom_map[atom_idx])
+
+    left, right = cast(BondAtomSitePair, candidate)
+    imaged_pair: BondAtomSitePair = (
+        (bond_map[left[0]], atom_map[left[1]]),
+        (bond_map[right[0]], atom_map[right[1]]),
+    )
+    return normalize_orbit_candidate(
+        imaged_pair, kind="bond_atom_pair", ordered=ordered
+    )
+
+
+def automorphism_to_representative(
+    mol: Mol,
+    candidate: OrbitCandidate,
+    representative: OrbitCandidate,
+    *,
+    kind: OrbitKind,
+    ordered: bool,
+) -> tuple[tuple[int, ...], tuple[int, ...]] | None:
+    """Atom/bond maps sending ``candidate`` → ``representative``, or None."""
+
+    normalized = normalize_orbit_candidate(
+        candidate, kind=kind, ordered=ordered
+    )
+    target = normalize_orbit_candidate(
+        representative, kind=kind, ordered=ordered
+    )
+    n_atoms = mol.GetNumAtoms()
+    n_bonds = mol.GetNumBonds()
+    identity_a = tuple(range(n_atoms))
+    identity_b = tuple(range(n_bonds))
+    if normalized == target:
+        return identity_a, identity_b
+
+    generators = atom_bond_generators_nauty(mol, include_stereo=True)
+    if not generators:
+        return None
+
+    from collections import deque
+
+    seen: set[tuple[int, ...]] = {identity_a}
+    queue: deque[tuple[tuple[int, ...], tuple[int, ...]]] = deque(
+        [(identity_a, identity_b)]
+    )
+    while queue:
+        atom_map, bond_map = queue.popleft()
+        for gen_a, gen_b in generators:
+            # gen ∘ current
+            next_a = tuple(gen_a[i] for i in atom_map)
+            next_b = tuple(gen_b[i] for i in bond_map)
+            if next_a in seen:
+                continue
+            seen.add(next_a)
+            imaged = _image_orbit_candidate(
+                normalized,
+                next_a,
+                next_b,
+                kind=kind,
+                ordered=ordered,
+            )
+            if imaged == target:
+                return next_a, next_b
+            queue.append((next_a, next_b))
+    return None
+
+
+def remap_mapped_atoms(
+    mapped: Mapping[int, int], atom_map: Sequence[int]
+) -> dict[int, int]:
+    """Apply an atom automorphism to a SMARTS mapno → atom-index match."""
+
+    return {mapno: int(atom_map[idx]) for mapno, idx in mapped.items()}
+
+
+def is_canonical_orbit_candidate(
+    candidate: OrbitCandidate,
+    representative_of: LexicalRepTable,
+    *,
+    kind: OrbitKind,
+    ordered: bool = False,
+) -> bool:
+    """True when ``candidate`` is already the lex representative of its orbit."""
+
+    normalized = normalize_orbit_candidate(
+        candidate, kind=kind, ordered=ordered
+    )
+    return representative_of.get(normalized) == normalized
+
+
+def select_rep_table(
+    tables: LexicalOrbitRepresentatives,
+    *,
+    kind: OrbitKind,
+    ordered: bool,
+) -> LexicalRepTable:
+    """Pick the lex-rep lookup for one orbit kind / orderedness."""
+
+    if kind == "atom_atom":
+        return (
+            tables.atom_atom_ordered if ordered else tables.atom_atom_unordered
+        )
+    if kind == "bond_bond":
+        return (
+            tables.bond_bond_ordered if ordered else tables.bond_bond_unordered
+        )
+    if kind == "bond_atom":
+        return tables.bond_atom
+    return (
+        tables.bond_atom_pair_ordered
+        if ordered
+        else tables.bond_atom_pair_unordered
+    )
+
+
+def _remap_match_via_auto(
+    mol: Mol,
+    mapped: Mapping[int, int],
+    site: frozenset[int],
+    candidate: OrbitCandidate,
+    representative: OrbitCandidate,
+    *,
+    kind: OrbitKind,
+    ordered: bool,
+) -> tuple[dict[int, int], frozenset[int]] | None:
+    """Apply an automorphism taking ``candidate`` → ``representative`` to a match."""
+
+    if candidate == representative:
+        return dict(mapped), frozenset(site)
+    auto = automorphism_to_representative(
+        mol, candidate, representative, kind=kind, ordered=ordered
+    )
+    if auto is None:
+        return None
+    atom_map, _bond_map = auto
+    new_mapped = remap_mapped_atoms(mapped, atom_map)
+    new_site = frozenset(int(atom_map[idx]) for idx in site)
+    return new_mapped, new_site
+
+
+def canonicalize_smarts_match(
+    mol: Mol,
+    mapped: Mapping[int, int],
+    site: frozenset[int],
+    *,
+    unique_orbit: UniqueOrbit = "atom_atom",
+) -> tuple[dict[int, int], frozenset[int]] | None:
+    """Force a SMARTS match onto its lex orbit representative.
+
+    HEAD wiring (``SmartsReactionRule`` / ``ResonanceRule``): call **after**
+    ``filter_sites`` and unique-edit accept, so filters see the discovery
+    site; remapping only affects chemistry maps and the emitted ``site``
+    (with ``discovered_site`` when they differ). Returns ``None`` only when
+    a representative exists but no automorphism was found (caller should
+    skip the embedding). With no nauty tables, returns the input unchanged.
+    """
+
+    tables = ensure_lexical_orbit_representatives(mol)
+    if tables is None:
+        return dict(mapped), frozenset(site)
+
+    if unique_orbit == "bond_atom" and len(site) == 1:
+        site_atom = next(iter(site))
+        candidate = bond_atom_site_for_match(mol, mapped, site_atom)
+        if candidate is None:
+            return dict(mapped), frozenset(site)
+        representative = cast(
+            BondAtomSite,
+            canonical_emitted_site(
+                candidate, tables.bond_atom, kind="bond_atom", ordered=True
+            ),
+        )
+        return _remap_match_via_auto(
+            mol,
+            mapped,
+            site,
+            candidate,
+            representative,
+            kind="bond_atom",
+            ordered=True,
+        )
+
+    if len(site) == 2:
+        # One-pattern two-atom sites use unordered atom–atom orbits.
+        left, right = sorted(site)
+        candidate = (left, right)
+        representative = cast(
+            AtomPairSite,
+            canonical_emitted_site(
+                candidate,
+                tables.atom_atom_unordered,
+                kind="atom_atom",
+                ordered=False,
+            ),
+        )
+        return _remap_match_via_auto(
+            mol,
+            mapped,
+            site,
+            candidate,
+            representative,
+            kind="atom_atom",
+            ordered=False,
+        )
+
+    # Single-atom / other sites: no lex-orbit remapping among the four kinds.
+    return dict(mapped), frozenset(site)
+
+
+def canonicalize_pair_match(
+    mol: Mol,
+    map1: Mapping[int, int],
+    map2: Mapping[int, int],
+    site_a: int,
+    site_b: int,
+    info1: PatternInfo,
+    info2: PatternInfo,
+    *,
+    unique_orbit: UniqueOrbit = "atom_atom",
+    effect1: Effect | None = None,
+    effect2: Effect | None = None,
+) -> tuple[dict[int, int], dict[int, int], int, int] | None:
+    """Force a ResonancePair match onto its lex orbit representative.
+
+    Same contract as :func:`canonicalize_smarts_match`: remap after
+    ``filter_sites`` accept for chemistry and the emitted ``site`` key.
+    ``None`` → skip embedding.
+    """
+
+    tables = ensure_lexical_orbit_representatives(mol)
+    if tables is None:
+        return dict(map1), dict(map2), site_a, site_b
+
+    ordered = not ends_swappable(info1, info2, effect1, effect2)
+
+    if unique_orbit == "bond_atom":
+        left_site = bond_atom_site_for_match(mol, map1, site_a)
+        right_site = bond_atom_site_for_match(mol, map2, site_b)
+        if left_site is None or right_site is None:
+            return dict(map1), dict(map2), site_a, site_b
+        # Match pair_orbit's ordered name-order for the concrete candidate.
+        if ordered:
+            name1 = info1.get("name") or ""
+            name2 = info2.get("name") or ""
+            if (name1, site_a) <= (name2, site_b):
+                candidate: BondAtomSitePair = (left_site, right_site)
+                swap_maps = False
+            else:
+                candidate = (right_site, left_site)
+                swap_maps = True
+        else:
+            candidate = cast(
+                BondAtomSitePair,
+                normalize_orbit_candidate(
+                    (left_site, right_site),
+                    kind="bond_atom_pair",
+                    ordered=False,
+                ),
+            )
+            swap_maps = False
+        rep_table = select_rep_table(
+            tables, kind="bond_atom_pair", ordered=ordered
+        )
+        representative = cast(
+            BondAtomSitePair,
+            canonical_emitted_site(
+                candidate, rep_table, kind="bond_atom_pair", ordered=ordered
+            ),
+        )
+        if candidate == representative:
+            return dict(map1), dict(map2), site_a, site_b
+        auto = automorphism_to_representative(
+            mol,
+            candidate,
+            representative,
+            kind="bond_atom_pair",
+            ordered=ordered,
+        )
+        if auto is None:
+            return None
+        atom_map, _bond_map = auto
+        if swap_maps:
+            # Candidate was built with ends swapped; maps stay in call order,
+            # then both are remapped by the same atom automorphism.
+            new_map1 = remap_mapped_atoms(map1, atom_map)
+            new_map2 = remap_mapped_atoms(map2, atom_map)
+        else:
+            new_map1 = remap_mapped_atoms(map1, atom_map)
+            new_map2 = remap_mapped_atoms(map2, atom_map)
+        return (
+            new_map1,
+            new_map2,
+            int(atom_map[site_a]),
+            int(atom_map[site_b]),
+        )
+
+    # atom–atom ResonancePair ends.
+    if ordered:
+        name1 = info1.get("name") or ""
+        name2 = info2.get("name") or ""
+        candidate_aa: AtomPairSite = (
+            (site_a, site_b) if (name1, site_a) <= (name2, site_b) else (site_b, site_a)
+        )
+    else:
+        candidate_aa = cast(
+            AtomPairSite,
+            normalize_orbit_candidate(
+                (site_a, site_b), kind="atom_atom", ordered=False
+            ),
+        )
+    rep_table = select_rep_table(tables, kind="atom_atom", ordered=ordered)
+    representative_aa = cast(
+        AtomPairSite,
+        canonical_emitted_site(
+            candidate_aa, rep_table, kind="atom_atom", ordered=ordered
+        ),
+    )
+    if candidate_aa == representative_aa:
+        return dict(map1), dict(map2), site_a, site_b
+    auto = automorphism_to_representative(
+        mol,
+        candidate_aa,
+        representative_aa,
+        kind="atom_atom",
+        ordered=ordered,
+    )
+    if auto is None:
+        return None
+    atom_map, _bond_map = auto
+    return (
+        remap_mapped_atoms(map1, atom_map),
+        remap_mapped_atoms(map2, atom_map),
+        int(atom_map[site_a]),
+        int(atom_map[site_b]),
+    )

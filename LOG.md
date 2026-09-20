@@ -2,6 +2,11 @@
 
 ## 2026-09-20
 
+- Opt-in canonical lex-orbit site emission (`canonical_emitted_sites` / env / `set_canonical_emitted_sites`; default off). After `filter_sites` accepts discovery, chemistry remaps to lex rep; emitted `site` = canonical; `discovered_site` escape hatch when they differ (SiteInfo + TraceAddition). Product-only last-layer restamp. Filters must not assume `site` == discovery. Helpers + tables in `graph_isomorphism`; wired SMARTS + ResonancePair. Docs: PAIR_ORBITS §5, HEURISTICS. Tests: `test_canonical_emitted_sites.py`.
+- Profile off vs on (`tests/refactor_poc/profile_canonical_emitted_sites.py`, same find_path cases as forest_copy): OFF wall **3.731s**, ON **4.001s**, Δ **+0.270s (+7.2%)**. Lex helpers on ON path: `ensure_lexical_orbit_representatives` cum ~5.2% (cache miss per work-copy forest), `canonicalize_smarts_match` ~4.6%, pair ~1.0%, automorphism negligible. Artifacts: `artifacts/canonical_emitted_sites_profile.{out,pstats,live.log}` (untracked).
+
+## 2026-09-20
+
 - Rewrote `PAIR_ORBITS.md` from scratch (deleted stale briefing). Verified citations: McKay–Piperno 2014 (keep — nauty/Traces); Sharp 1999 (keep — orbitals = orbits on ordered pairs); Surge 2022 / Laffitte et al. 2026 optional adjacent context only. Methods sentence frames classical orbital construction; chemistry novelty is typed sites / directed bond–atom / recursive composite orbiting / stable emission — not “automorphisms on pairs”. Scrubbed false “remap before filter so filters see emit” story in canonicalize_* docs; HEURISTICS unique-edit bullet now names second-order `BondAtomPairOrbitSignature` + truthful canonical-emission wiring (SMARTS/Resonance after filter; pair helper unwired).
 
 ## 2026-09-20

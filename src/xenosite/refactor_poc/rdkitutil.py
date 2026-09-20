@@ -947,6 +947,21 @@ def _reordered_forest_labels(mol: Mol) -> None:
     _restamp_start_labels(mol)
 
 
+def restamp_product_forest_last_layer(mol: Mol) -> None:
+    """Rewrite the product's last ``atom_trace`` idx layer and restamp props.
+
+    Product-only: does not edit a parent mol. Use after opt-in canonical
+    emission remaps chemistry onto the lex representative (or after
+    ``RenumberAtoms`` on a product). Updates ``idx[-1]`` from current atom
+    positions via ``forestLabel``, then restamps CX ``atomLabel``.
+    """
+
+    if not is_tracing(mol):
+        return
+    _reordered_forest_labels(mol)
+    _write_forest_labels(mol)
+
+
 
 
 def mol_from_smiles(smiles: str) -> NoForestMol:

@@ -121,23 +121,36 @@ Legacy three-mode tables flip cross-kind to `(bond, atom)` for unique-edit.
 
 ## 5. Opt-in canonical emitted sites
 
-Default **off** (`XENOSITE_CANONICAL_EMITTED_SITES` / kwargs
-`canonical_emitted_sites`). Lex-smallest concrete member of each nauty orbit
-(`LexicalOrbitRepresentatives`); relative to current RDKit indexing.
+Default **off**. Enable via kwargs ``metabolize(..., canonical_emitted_sites=True)``,
+process override ``set_canonical_emitted_sites(True)``, or env
+``XENOSITE_CANONICAL_EMITTED_SITES`` ∈ ``{1,true,yes,on}``.
 
-**HEAD wiring (truthful):**
+Lex-smallest concrete member of each nauty orbit
+(``LexicalOrbitRepresentatives`` on forest ``cache``); relative to current
+RDKit indexing. Four kinds: atom–atom, bond–bond, directed bond–atom, pair of
+bond–atom sites (ordered vs unordered as for unique-edit).
 
-1. `filter_sites` always sees the **discovery** site.
-2. Unique-edit signatures are computed on the discovery embedding.
-3. After accept, SMARTS / ResonanceRule paths may remap maps + emitted
-   `info["site"]` via `canonicalize_smarts_match`. When remapped,
-   `discovered_site` holds the pre-canonical indexes.
-4. `canonicalize_pair_match` exists but is **not** yet called from
-   `ResonancePairRule`.
+### Contract (do not invert)
 
-Do **not** claim filters see the emitted lex site, or that remapping runs
-before filters. Filters that need discovery after remap must read
-`discovered_site` when present.
+1. **`filter_sites` always sees the discovery site** — never the lex
+   representative. Filters must **not** assume ``info["site"]`` after emit
+   equals what they filtered. Hazard: search / allows / SiteInfo bags that
+   assumed identity with emitted sites will be wrong when opt-in is on.
+2. Unique-edit signatures are computed on the **discovery** embedding (orbit
+   collapse unchanged).
+3. After accept, chemistry remaps onto the lex representative
+   (``canonicalize_smarts_match`` / ``canonicalize_pair_match``). Emitted
+   **`site` = canonical**; optional **`discovered_site`** holds pre-canonical
+   discovery indexes when they differ (SiteInfo, TraceAddition, TraceInfo).
+4. Product-only: parent mol indexes are not mutated. After remap, product
+   forest last ``idx`` layer is restamped (``restamp_product_forest_last_layer``).
+5. Non-canonical embeddings are not separate products (unique-edit + chemistry
+   at the rep).
+
+Escape hatch for callers that need discovery: read ``discovered_site`` when
+present. Tests: ``test_canonical_emitted_sites.py``.
+
+Status: approved (opt-in emission policy; HEURISTICS).
 
 ---
 
@@ -191,8 +204,9 @@ joint orbit (§3b). Suites: `test_pair_signatures.py`,
 |----------|----------------|
 | `graph_isomorphism.py` | Generators, six families, tables, TRIVIAL, swap helpers, signatures, lex-rep opt-in |
 | `records.py` | `swap_group`, signature NamedTuples, `SiteInfo.discovered_site` |
-| `rules.py` | Thin call sites; DH `unique_orbit="bond_atom"`; SMARTS/Resonance canonical remap after filter |
-| Tests listed in §6 | Orbits, signatures, DH, six-family |
+| `rules.py` | Thin call sites; DH `unique_orbit="bond_atom"`; post-filter canonical remap (SMARTS + ResonancePair) |
+| `rdkitutil.py` | `restamp_product_forest_last_layer` (product-only) |
+| Tests §5 / §6 | Orbits, signatures, DH, six-family, `test_canonical_emitted_sites.py` |
 
 Do **not** invent a Site field for bond-vs-atom direction. Do **not** replace
 `swap_group` with SMARTS narrowing for same-role ResonancePair couples.

@@ -8,6 +8,7 @@ from typing import (
     Literal,
     NamedTuple,
     NewType,
+    NotRequired,
     Protocol,
     TypeAlias,
     TypedDict,
@@ -222,11 +223,19 @@ class PatternInfo(TypedDict, total=False):
 
 
 class _SiteInfoCore(TypedDict):
-    """Fields every ``filter_sites`` bag carries before an edit."""
+    """Fields every ``filter_sites`` bag carries before an edit.
+
+    ``site`` is the site key used for emission / unique-edit bookkeeping after
+    accept. With opt-in ``canonical_emitted_sites``, that key is the lex
+    orbit representative — **not** necessarily what ``filter_sites`` saw.
+    When remapping ran, ``discovered_site`` holds the pre-canonical discovery
+    indexes (escape hatch for callers that need discovery).
+    """
 
     site: Site
     rule: ReactionRule
     options: Effect
+    discovered_site: NotRequired[Site]
 
 
 class SmartsSiteInfo(_SiteInfoCore):
@@ -278,6 +287,7 @@ class TraceInfo(TypedDict, total=False):
     """
 
     site: Site
+    discovered_site: Site
     rule: str | None
     rule_chain: tuple[str | None, ...]
     rxn_num: int
@@ -314,6 +324,7 @@ class Addition(NamedTuple):
     phase1: None
     depth: int
     pattern: PatternInfo | None = None
+    discovered_site: Site | None = None
 
 
 class McsResult(NamedTuple):
@@ -350,6 +361,10 @@ class TraceAddition(TypedDict):
     :class:`PatternInfo` that fired, the same object the rule holds. It is
     not a rule and is not on ``rules``. ``phase1`` is reserved; only ``None``
     until its schema is decided.
+
+    ``site`` is the emission site key (lex representative when opt-in
+    canonicalization ran). ``discovered_site`` is optional: pre-canonical
+    discovery indexes when they differ from ``site``.
     """
 
     site: Site
@@ -360,6 +375,7 @@ class TraceAddition(TypedDict):
     phase1: None
     depth: int
     pattern: PatternInfo | None
+    discovered_site: NotRequired[Site]
 
 
 class AtomTrace(TypedDict):

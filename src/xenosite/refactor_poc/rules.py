@@ -23,6 +23,9 @@ from xenosite.refactor_poc.forest_copy import copy_mutable
 from xenosite.refactor_poc.graph_isomorphism import (
     SiteSignature,
     UniqueOrbit,
+    canonical_emitted_sites_requested,
+    canonicalize_pair_match,
+    canonicalize_smarts_match,
     pair_site_signature,
     site_signature,
 )
@@ -265,8 +268,16 @@ class ReactionRule:
           without a pattern use ``None`` for the middle field.
 
         ``filter_rules(mol, rule, pattern_info)`` sees the pattern before a
-        match. ``filter_sites(mol, site, info)`` sees the resolved effect
-        before an edit. Either may refuse. A refusal edits nothing.
+        match. ``filter_sites(mol, site, info)`` sees the **discovery** site
+        and resolved effect before an edit. Either may refuse. A refusal
+        edits nothing.
+
+        ``canonical_emitted_sites`` (opt-in, default off): after a site is
+        accepted, isomorphic embeddings are remapped to the lex-smallest
+        orbit representative for chemistry and the emitted ``site`` key.
+        ``discovered_site`` holds the pre-canonical indexes when they differ.
+        Filters must not assume ``info["site"]`` equals discovery — use
+        ``discovered_site`` when present. See PAIR_ORBITS.md / HEURISTICS.
         """
         if mol is None:
             raise ValueError("mol is required")
@@ -313,6 +324,13 @@ class ReactionRule:
 
             # Stamp + trace + clear structure caches on each fragment.
             finished = mol.xf.of_products(products, info, executed=self)
+            if "discovered_site" in info:
+                from xenosite.refactor_poc.rdkitutil import (
+                    restamp_product_forest_last_layer,
+                )
+
+                for p in finished:
+                    restamp_product_forest_last_layer(p)
 
             # Same (rule, pattern, product csmi) is one outcome. Two sites in
             # one atom class can still be different molecules (ortho / para).
@@ -521,6 +539,8 @@ def _trace_info(info: SiteInfo) -> TraceInfo:
         "site": info["site"],
         "rule": _rule_name(info["rule"]),
     }
+    if "discovered_site" in info:
+        kept["discovered_site"] = info["discovered_site"]
     if "rxn_num" in info:
         kept["rxn_num"] = info["rxn_num"]
     if "ends" in info:
@@ -662,6 +682,8 @@ def _apply_forest_trace(
         "depth": frame,
         "pattern": pattern,
     }
+    if "discovered_site" in info:
+        addition["discovered_site"] = _site_tuple(info["discovered_site"])
     trace["additions"][transform_id] = addition
     trace["transforms"].append(transform_id)
 
@@ -1162,11 +1184,13 @@ class SmartsReactionRule(ReactionRule):
         """
 
         counters = kwargs.get("counters")
+        want_canonical = canonical_emitted_sites_requested(kwargs)
         context = mol if context_mol is None else context_mol
         live = cast(TracingMol, context)
         _bump(counters, "rule_expansions")
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
+        unique_orbit = cast(UniqueOrbit, getattr(self, "unique_orbit", "atom_atom"))
 
         for work in _kekule_forms(mol):
             for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
@@ -1187,14 +1211,10 @@ class SmartsReactionRule(ReactionRule):
                         "pattern": pattern,
                     }
                     _bump(counters, "sites_considered")
+                    # Filters see the discovery site (not the lex representative).
                     if not filter_sites(live, site, info):
                         _bump(counters, "sites_skipped")
                         continue
-                    # Same map roles and the same incident bond orders are one
-                    # edit. Equivalent carbons share a rank. Another Kekulé
-                    # writing, or swapping which atom is map 1, is not.
-                    # A two-atom site also carries its pair orbit, which is
-                    # not those ranks.
                     signature = site_signature(
                         context,
                         work,
@@ -1203,13 +1223,39 @@ class SmartsReactionRule(ReactionRule):
                         site,
                         rxn_num,
                         effect,
-                        unique_orbit=getattr(self, "unique_orbit", "atom_atom"),
+                        unique_orbit=unique_orbit,
                     )
                     if signature in seen:
                         _bump(counters, "sites_skipped")
                         continue
+                    emit_mapped: dict[int, int] = dict(mapped)
+                    emit_site = site
+                    if want_canonical:
+                        remapped = canonicalize_smarts_match(
+                            context,
+                            mapped,
+                            site,
+                            unique_orbit=unique_orbit,
+                        )
+                        if remapped is None:
+                            _bump(counters, "sites_skipped")
+                            continue
+                        emit_mapped, emit_site = remapped
+                        if emit_site != site:
+                            info = {
+                                **info,
+                                "site": emit_site,
+                                "discovered_site": site,
+                            }
+                        else:
+                            info = {**info, "site": emit_site}
                     products = react_at(
-                        self, smarts, work, mapped, counters, pattern.get("pin")
+                        self,
+                        smarts,
+                        work,
+                        emit_mapped,
+                        counters,
+                        pattern.get("pin"),
                     )
                     if not products:
                         continue
@@ -1746,12 +1792,14 @@ class ResonanceRule(SmartsReactionRule):
         if not self.rxns:
             return
         counters = kwargs.get("counters")
+        want_canonical = canonical_emitted_sites_requested(kwargs)
         context = mol if context_mol is None else context_mol
         live = cast(TracingMol, context)
         _bump(counters, "rule_expansions")
         cache = _kekule_cache(mol)
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
+        unique_orbit = cast(UniqueOrbit, getattr(self, "unique_orbit", "atom_atom"))
 
         for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
             if not filter_rules(live, self, pattern):
@@ -1785,13 +1833,43 @@ class ResonanceRule(SmartsReactionRule):
                     site,
                     rxn_num,
                     effect,
-                    unique_orbit=getattr(self, "unique_orbit", "atom_atom"),
+                    unique_orbit=unique_orbit,
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
                     continue
+                emit_mapped: dict[int, int] = dict(mapped)
+                emit_site = site
+                if want_canonical:
+                    remapped = canonicalize_smarts_match(
+                        context,
+                        mapped,
+                        site,
+                        unique_orbit=unique_orbit,
+                    )
+                    if remapped is None:
+                        _bump(counters, "sites_skipped")
+                        continue
+                    emit_mapped, emit_site = remapped
+                    if emit_site != site:
+                        info = {
+                            **info,
+                            "site": emit_site,
+                            "discovered_site": site,
+                        }
+                    else:
+                        info = {**info, "site": emit_site}
+                    work = _reactant_parent(mol, emit_mapped, cache)
+                    if work is None:
+                        _bump(counters, "sites_skipped")
+                        continue
                 products = react_at(
-                    self, smarts, work, mapped, counters, pattern.get("pin")
+                    self,
+                    smarts,
+                    work,
+                    emit_mapped,
+                    counters,
+                    pattern.get("pin"),
                 )
                 if not products:
                     continue
@@ -1837,7 +1915,11 @@ class ResonancePairRule(ResonanceRule):
             **kwargs,
         )
         yield from self.pair_metabolites(
-            mol, filter_rules, filter_sites, counters=kwargs.get("counters")
+            mol,
+            filter_rules,
+            filter_sites,
+            counters=kwargs.get("counters"),
+            canonical_emitted_sites=canonical_emitted_sites_requested(kwargs),
         )
 
     def pair_metabolites(
@@ -1846,11 +1928,16 @@ class ResonancePairRule(ResonanceRule):
         filter_rules: FilterRules,
         filter_sites: FilterSites,
         counters: EditCounters | None = None,
+        *,
+        canonical_emitted_sites: bool = False,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Endpoint loop.
 
         ``filter_rules`` drops endpoint patterns before they are matched.
-        ``filter_sites`` drops a pair before a cached parent is copied.
+        ``filter_sites`` drops a pair before a cached parent is copied
+        (discovery site). With ``canonical_emitted_sites``, chemistry and the
+        emitted ``site`` key use the lex representative; ``discovered_site``
+        records the pre-canonical indexes when they differ.
         """
 
         _bump(counters, "rule_expansions")
@@ -1879,10 +1966,12 @@ class ResonancePairRule(ResonanceRule):
             return
 
         ranks = mol.xf.topol_equiv
+        unique_orbit = cast(UniqueOrbit, getattr(self, "unique_orbit", "atom_atom"))
         seen: set[tuple] = set()
         rings: dict[int, tuple[tuple[int, ...], ...]] | None = None
         cache: KekuleParents | None = None
         resonance_parents: tuple[Mol, ...] | None = None
+        path_cache: dict[tuple[int, int], list[tuple[Mol, list[int]]]] = {}
         for system in systems:
             anchors = [atom for atom in hits if atom in system]
             neighbors = system_neighbors(mol, system)
@@ -1897,6 +1986,8 @@ class ResonancePairRule(ResonanceRule):
                         PatternInfo,
                         PairSiteInfo,
                         tuple,
+                        int,
+                        int,
                     ]
                 ] = []
                 # Any aromatic atom makes the whole system the dearomatizing
@@ -1929,6 +2020,7 @@ class ResonancePairRule(ResonanceRule):
                         "path_ends": frozenset((start, end)),
                     }
                     _bump(counters, "sites_considered")
+                    # Filters see discovery indexes.
                     if not filter_sites(live, site, preview):
                         _bump(counters, "sites_skipped")
                         continue
@@ -1942,56 +2034,124 @@ class ResonancePairRule(ResonanceRule):
                         info1,
                         info2,
                         preview,
-                        unique_orbit=getattr(self, "unique_orbit", "atom_atom"),
+                        unique_orbit=unique_orbit,
                     )
                     if signature in seen:
                         _bump(counters, "sites_skipped")
                         continue
+                    emit_map1: dict[int, int] = dict(map1)
+                    emit_map2: dict[int, int] = dict(map2)
+                    emit_a, emit_b = site_a, site_b
+                    emit_start, emit_end = start, end
+                    if canonical_emitted_sites:
+                        remapped = canonicalize_pair_match(
+                            mol,
+                            map1,
+                            map2,
+                            site_a,
+                            site_b,
+                            info1,
+                            info2,
+                            unique_orbit=unique_orbit,
+                            effect1=end1,
+                            effect2=end2,
+                        )
+                        if remapped is None:
+                            _bump(counters, "sites_skipped")
+                            continue
+                        emit_map1, emit_map2, emit_a, emit_b = remapped
+                        emit_start = emit_map1[1]
+                        emit_end = emit_map2[1]
+                        emit_site = frozenset((emit_a, emit_b))
+                        preview = {
+                            **preview,
+                            "site": emit_site,
+                            "end_atoms": (emit_a, emit_b),
+                            "end_maps": (emit_map1, emit_map2),
+                            "path_ends": frozenset((emit_start, emit_end)),
+                        }
+                        if emit_site != site:
+                            preview = {**preview, "discovered_site": site}
                     # Reserve the unique-edit slot once per swappable/ordered site.
                     seen.add(signature)
-                    combos.append((map1, info1, map2, info2, preview, signature))
+                    combos.append(
+                        (
+                            emit_map1,
+                            info1,
+                            emit_map2,
+                            info2,
+                            preview,
+                            signature,
+                            emit_start,
+                            emit_end,
+                        )
+                    )
                 if not combos:
                     continue
-                if self.systems == "aromatic":
-                    if cache is None:
-                        cache = _kekule_cache(mol)
-                    scope = aromatic_parent_atoms(mol, start, end)
-                    if scope is None:
+                for (
+                    map1,
+                    info1,
+                    map2,
+                    info2,
+                    preview,
+                    signature,
+                    path_start,
+                    path_end,
+                ) in combos:
+                    path_key = (path_start, path_end)
+                    if path_key not in path_cache:
+                        if self.systems == "aromatic":
+                            if cache is None:
+                                cache = _kekule_cache(mol)
+                            scope = aromatic_parent_atoms(
+                                mol, path_start, path_end
+                            )
+                            if scope is None:
+                                path_cache[path_key] = []
+                            else:
+                                parent_mols = parents_for_ends(
+                                    mol,
+                                    path_start,
+                                    path_end,
+                                    cache,
+                                    atoms=scope,
+                                ).parents
+                                paths: list[tuple[Mol, list[int]]] = []
+                                for parent in parent_mols:
+                                    for path in alternating_paths(
+                                        _current_bond_map(parent),
+                                        path_start,
+                                        path_end,
+                                        neighbors,
+                                    ):
+                                        paths.append((parent, path))
+                                paths.sort(key=lambda item: len(item[1]))
+                                path_cache[path_key] = paths
+                        else:
+                            if resonance_parents is None:
+                                resonance_parents = tuple(
+                                    overlay_kekule(mol, bond_map).GetMol()
+                                    for bond_map in resonance_bond_maps(mol)
+                                )
+                            paths = []
+                            for parent in resonance_parents:
+                                for path in alternating_paths(
+                                    _current_bond_map(parent),
+                                    path_start,
+                                    path_end,
+                                    neighbors,
+                                ):
+                                    paths.append((parent, path))
+                            paths.sort(key=lambda item: len(item[1]))
+                            path_cache[path_key] = paths
+                    paths = path_cache[path_key]
+                    if not paths:
                         continue
-                    parent_mols = parents_for_ends(
-                        mol, start, end, cache, atoms=scope
-                    ).parents
-                else:
-                    # Resonance writings of this molecule. The conjugated
-                    # system is kekulized whole, including atoms that are
-                    # not themselves aromatic. A carbon-only matching misses
-                    # some of those writings.
-                    if resonance_parents is None:
-                        resonance_parents = tuple(
-                            overlay_kekule(mol, bond_map).GetMol()
-                            for bond_map in resonance_bond_maps(mol)
-                        )
-                    parent_mols = resonance_parents
-                paths: list[tuple[Mol, list[int]]] = []
-                for parent in parent_mols:
-                    for path in alternating_paths(
-                        _current_bond_map(parent), start, end, neighbors
-                    ):
-                        paths.append((parent, path))
-                paths.sort(key=lambda item: len(item[1]))
-                if not paths:
-                    continue
-                for map1, info1, map2, info2, preview, signature in combos:
                     if rings is None and (
                         info1.get("skip_same_rings") or info2.get("skip_same_rings")
                     ):
                         rings = mol.xf.rings
                     ring_table = rings or {}
-                    # Same unique-edit site can still yield distinct products
-                    # across kekulé parents / path lengths; collapse only
-                    # duplicate csmi (resonance dups), not the whole site.
-                    # Bill once per unique-edit combo — path/kekulé fan-out is
-                    # how the writing is found, not a second site apply.
                     emitted_csmi: set[str] = set()
                     _bump(counters, "mol_edits")
                     for parent, path in paths:
