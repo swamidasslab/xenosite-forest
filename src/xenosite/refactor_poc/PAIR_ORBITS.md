@@ -156,8 +156,7 @@ orbit the same way pairs do.
 Escape hatch for callers that need discovery: read ``discovered_site`` when
 present. Tests: ``test_canonical_emitted_sites.py`` (includes
 parent-cache-after-clear).
-Profile (same find_path cases as forest_copy): ~+3.7% wall when on
-(after parent-cache + singleton atom; was ~+7% pre-parent-cache).
+Profile (same find_path cases as forest_copy): OFF 3.862s / ON 4.007s ≈ **+3.7%** wall (commit 6f13ca9).
 
 Status: approved (opt-in emission policy; HEURISTICS).
 
