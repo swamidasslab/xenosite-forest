@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+- Hydrogenation is a ResonancePairRule. Endpoint `[#6;!$(*#[#6]):1]` with edit `keep`. The path flip writes 2-butene (`CC=CC`) from `C=CC=C`. The even path that wrote 1,2-butadiene is not a pair, so `C=C=CC` stays only on the old side. Ethene and ethyne stay `CC` and `C=C`.
+- Ethenediol pair draft `O=[CH2][CH2]=O` failed `SANITIZE_PROPERTIES`. Clearing explicit H and sanitizing again yields glyoxal `O=CC=O`, which round-trips. Ethanol dehydrogenation is still the one-bond SMARTS (`CC=O`, `C=CO`).
+
+## 2026-09-19
+
 - Ruff is a dev dependency (`ruff>=0.16.8`). Select is E, W, F, and I; line length 100; target Python 3.10. Bugbear stays off: B905 wants `zip(..., strict=)`, and `strict=True` can change search. Forest, `phaseone.py`, and `test.ipynb` are excluded until the phase-one class rewrite. `_BOND` keys `1.0`, `2.0`, and `3.0` hashed the same as `1`, `2`, and `3` and stored the same bond types, so dropping the duplicates does not change `GetBondTypeAsDouble()` lookup.
 
 ## 2026-09-19

@@ -770,6 +770,22 @@ def _bump(counters: Any, name: str, amount: int = 1) -> None:
     setattr(counters, name, getattr(counters, name) + amount)
 
 
+def _sanitize_piece(frag: Mol) -> bool:
+    """True when ``frag`` sanitizes. The second try drops explicit H.
+
+    Pair edits can leave ``[CH2]`` on a carbon whose new bonds already
+    use those hydrogens. ``O=[CH2][CH2]=O`` is that draft of glyoxal.
+    The bond orders are the product. The explicit count is not.
+    """
+
+    if not SanitizeMol(frag, catchErrors=True):
+        return True
+    for atom in frag.GetAtoms():
+        atom.SetNumExplicitHs(0)
+        atom.SetNoImplicit(False)
+    return not SanitizeMol(frag, catchErrors=True)
+
+
 def sanitized_fragments(mol: Mol, counters: Any = None) -> FragmentSplit:
     """Split, drop the dealkylation leaving group, sanitize.
 
@@ -783,7 +799,7 @@ def sanitized_fragments(mol: Mol, counters: Any = None) -> FragmentSplit:
     for frag in frags:
         if any(atom.HasProp("dealk-noncarbon") for atom in frag.GetAtoms()):
             continue
-        if SanitizeMol(frag, catchErrors=True):
+        if not _sanitize_piece(frag):
             _bump(counters, "sanitize_dropped")
             return FragmentSplit(pieces=())
         out.append(frag)

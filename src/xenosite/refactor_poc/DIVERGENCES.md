@@ -91,29 +91,29 @@ More correct. Not a problem in the proof of concept. Those strings replace the h
 
 ## Hydrogenation of 1,3-butadiene
 
-The old class swaps bonds along a resonance path after the `C=C` SMARTS. The 1,4 swap is 2-butene. The same walk also writes 1,2-butadiene, which is still C4H6. This class runs the SMARTS only. It does not swap that path.
+The class is a ResonancePairRule. The one-bond SMARTS writes 1-butene. The pair flips an alternating path between two carbons and writes 2-butene. That gap is closed. The old walk also writes 1,2-butadiene. That path has an even number of bonds, so it is not a pair here.
 
 - Reactant: `C=CC=C`
-- Only old: `CC=CC`, `C=C=CC`
+- Only old: `C=C=CC`
 - Only new: none
-- Shared: `C=CCC`
+- Shared: `C=CCC`, `CC=CC`
 
 Ethene (`C=C`) and ethyne (`C#C`) do not hit that path. Both libraries yield `CC` and `C=C`.
 
-Problem. The proof of concept is less correct on 2-butene. `CC=CC` is C4H8, the 1,4-hydrogenation. `C=C=CC` is not a metabolite: it has the same formula as butadiene. The shared string is 1-butene, the one-bond reduction.
+More correct to omit `C=C=CC`. It is still C4H6, the same formula as butadiene, not a hydrogenation. `CC=CC` is C4H8, the 1,4 product, and it is shared.
 
 ## Dehydrogenation of ethenediol
 
-The old pair path writes glyoxal. Here the same ends are edited and the path is flipped, and the carbons come out as `[CH2]`. `O=[CH2][CH2]=O` does not sanitize, so glyoxal is dropped. The one-bond SMARTS still writes the ketene.
+The pair path writes glyoxal. The draft was `O=[CH2][CH2]=O` and failed sanitization. Clearing those explicit hydrogens and sanitizing again yields `O=CC=O`. That gap is closed. The one-bond SMARTS still writes the ketene.
 
 - Reactant: `OC=CO`
-- Only old: `O=CC=O`
+- Only old: none
 - Only new: none
-- Shared: `O=C=CO`
+- Shared: `O=C=CO`, `O=CC=O`
 
 Ethanol (`CCO`) is one bond, not that path. Both libraries yield `CC=O` and `C=CO`.
 
-Problem. The proof of concept is less correct on glyoxal. `O=CC=O` is the dehydrogenation of both alcohols (C2H2O2). The path product does not sanitize. The shared string is hydroxyketene, the one-end SMARTS.
+Not a problem. The gap is closed. `O=CC=O` is the dehydrogenation of both alcohols (C2H2O2). The shared ketene is the one-end SMARTS.
 
 ## Nitrogen reduction of nitrosomethane
 

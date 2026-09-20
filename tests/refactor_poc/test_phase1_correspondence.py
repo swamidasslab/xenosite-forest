@@ -43,11 +43,8 @@ from xenosite.refactor_poc.rules import (
     SulfurReduction,
 )
 
-# Old pair-path swap. See DIVERGENCES.md.
-_OLD_BUTADIENE = {"CC=CC", "C=C=CC"}
-
-# Old pair path writes glyoxal. The path product here does not sanitize.
-_OLD_GLYOXAL = {"O=CC=O"}
+# Even path. Still C4H6. See DIVERGENCES.md.
+_OLD_CUMULENE = {"C=C=CC"}
 
 # Old `[#7D2:1]=[#8:2]>>([*:1].[*2])`. `[*2]` is a dummy, not oxygen.
 _OLD_NITROSO_DUMMY = {"*"}
@@ -94,13 +91,14 @@ def test_ethene_and_ethyne_hydrogenation_match_old():
     assert _new(Hydrogenation(), "C#C") == _old(OldHydrogenation(), "C#C") == {"C=C"}
 
 
-def test_butadiene_hydrogenation_records_the_pair_path():
-    """1-butene is shared. 2-butene is the old path swap. The cumulene is not C4H8."""
+def test_butadiene_hydrogenation_includes_2_butene():
+    """1,4-hydrogenation is 2-butene. 1,2-butadiene is still only the old walk."""
 
     old = _old(OldHydrogenation(), "C=CC=C")
     new = _new(Hydrogenation(), "C=CC=C")
-    assert "C=CCC" in new
-    assert old - new == _OLD_BUTADIENE
+    assert new == {"C=CCC", "CC=CC"}
+    assert "C=C=CC" not in new
+    assert old - new == _OLD_CUMULENE
     assert new - old == set()
 
 
@@ -118,14 +116,12 @@ def test_ethanol_dehydrogenation_matches_old():
     assert new == old == {"CC=O", "C=CO"}
 
 
-def test_ethenediol_dehydrogenation_misses_glyoxal():
-    """The old pair path writes glyoxal. That product is recorded, not dropped."""
+def test_ethenediol_dehydrogenation_includes_glyoxal():
+    """Both alcohols dehydrogenate to glyoxal. The ketene is the one-bond SMARTS."""
 
     old = _old(OldDehydrogenation(), "OC=CO")
     new = _new(Dehydrogenation(), "OC=CO")
-    assert "O=C=CO" in new
-    assert old - new == _OLD_GLYOXAL
-    assert new - old == set()
+    assert new == old == {"O=C=CO", "O=CC=O"}
 
 
 def test_acetaldehyde_oxygen_reduction_matches_old():

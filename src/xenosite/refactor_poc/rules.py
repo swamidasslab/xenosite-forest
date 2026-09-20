@@ -1169,22 +1169,29 @@ def adjust_hydrogens(mol: Mol, idx, change):
 
 
 def swap_bonds_along_path(mol: Mol, atoms):
-    """Flip single and double bonds along ``atoms``. Adjust H at the ends."""
+    """Flip single and double bonds along ``atoms``. Adjust H at the ends.
+
+    False when a bond is missing or none of them flipped. A triple bond
+    stays a triple bond. That copy is not a product.
+    """
 
     bond = None
+    flipped = False
     for i in range(len(atoms) - 1):
         bond = mol.GetBondBetweenAtoms(atoms[i], atoms[i + 1])
         if bond is None:
             return False
         if bond.GetBondType() == BondType.DOUBLE:
             bond.SetBondType(BondType.SINGLE)
+            flipped = True
         elif bond.GetBondType() == BondType.SINGLE:
             bond.SetBondType(BondType.DOUBLE)
+            flipped = True
         if i == 0:
             _correct_end_hydrogens(mol, atoms[0], bond)
     if bond is not None:
         _correct_end_hydrogens(mol, atoms[-1], bond)
-    return True
+    return flipped
 
 
 def _correct_end_hydrogens(mol: Mol, idx, bond: Bond):
@@ -1241,6 +1248,12 @@ def edit_iminium(rw: RWMol, mapped, info, rings):
     return True
 
 
+def edit_keep(rw: RWMol, mapped, info, rings):
+    """Leave the endpoint bond alone. The path flip is the reaction."""
+
+    return 1 in mapped
+
+
 def edit_dealkylate(rw: RWMol, mapped, info, rings):
     hetero, alkyl = mapped.get(2), mapped.get(3)
     if hetero is None or alkyl is None:
@@ -1262,6 +1275,7 @@ EDITS = {
     "replace_halogen": edit_replace_halogen,
     "iminium": edit_iminium,
     "dealkylate": edit_dealkylate,
+    "keep": edit_keep,
 }
 
 
@@ -1405,8 +1419,9 @@ class ResonancePairRule(ResonanceRule):
     ``systems`` to ``"conjugated"`` or ``"aromatic"``. ``info["edit"]`` names
     a module-level edit applied at that end; the path's bonds are then flipped.
 
-    Dehydrogenation and quinone formation both use this. Hydroxylation does
-    not: it is a one-atom SMARTS reaction.
+    Dehydrogenation and quinone formation edit the ends, then flip the path.
+    Hydrogenation names ``keep``: the flip is the whole reaction.
+    Hydroxylation does not use this. It is a one-atom SMARTS reaction.
     """
 
     endpoints: tuple[tuple[str, PatternInfo], ...] = ()
@@ -2101,10 +2116,13 @@ class Dehydration(SmartsReactionRule):
     )
 
 
-class Hydrogenation(ResonanceRule):
-    """Reduces C#C to C=C and C=C to C-C.
+class Hydrogenation(ResonancePairRule):
+    """Reduces C#C to C=C, C=C to C-C, and a conjugated pair across the path.
 
     The double-bond pattern is ``=,:``, so an aromatic bond matches once.
+    The pair names ``keep``: nothing changes at the end except the path
+    flip, which adds H where a double bond becomes single. A carbon on a
+    triple bond is not an end. That reduction is the ``#`` SMARTS.
     Heavy-atom formula is unchanged (``adds`` is ``HH``).
     """
 
@@ -2118,6 +2136,12 @@ class Hydrogenation(ResonanceRule):
         (
             "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
             describe(adds="HH", partner="C"),
+        ),
+    )
+    endpoints: tuple[tuple[str, PatternInfo], ...] = (
+        (
+            "[#6;!$(*#[#6]):1]",
+            describe(adds="H", partner="C", edit="keep"),
         ),
     )
 
