@@ -8,13 +8,11 @@ from typing import (
     Literal,
     NamedTuple,
     NewType,
+    NotRequired,
     Protocol,
     TypeAlias,
     TypedDict,
 )
-
-# NotRequired is typing 3.11+; keep 3.10 via typing_extensions.
-from typing_extensions import NotRequired
 
 if TYPE_CHECKING:
     # rules.py imports Effect, PatternInfo, SiteInfo, and When from this module.

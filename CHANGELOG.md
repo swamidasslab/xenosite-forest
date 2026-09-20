@@ -36,6 +36,7 @@ Previous forest (0.6.x API): archive directory
 - **Dependencies:** ``pynauty`` is now required (no longer optional). Needed
   for the correct unique-edit / pair-orbit nauty backend (forest unique-edit
   authority). RDKit/SMILES pair-orbit is not shipped as a product fallback.
+- **Breaking:** Python **3.11+** is required (3.10 is no longer supported).
 
 ### Deprecated
 

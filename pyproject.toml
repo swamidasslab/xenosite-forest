@@ -8,13 +8,12 @@ dynamic = ["version"]
 description = "Metabolic Forest: enumerate metabolite structures from reaction rules"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "S. Joshua Swamidass", email = "swamidass@gmail.com" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -26,7 +25,6 @@ classifiers = [
 dependencies = [
     "rdkit>=2022.3.3",
     "pynauty",
-    "typing-extensions>=4.0",
 ]
 keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
 
@@ -36,9 +34,8 @@ network = [
     "tqdm>=4.66.0",
 ]
 # Downstream predictors; not installed on CI (workflows use --extra network only).
-# Marker keeps forest's requires-python>=3.10 resolvable; predict itself needs >=3.11.
 predict = [
-    "xenosite-predict>=0.4.2; python_version >= '3.11'",
+    "xenosite-predict>=0.4.2",
 ]
 
 [project.urls]
@@ -192,7 +189,7 @@ reportUntypedFunctionDecorator = "error"
 
 # Live forest + its tests. Archive and examples stay out.
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 extend-exclude = [
