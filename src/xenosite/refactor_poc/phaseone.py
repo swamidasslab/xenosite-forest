@@ -14,6 +14,7 @@ Tautomerization is not in these sets.
 from __future__ import annotations
 
 from collections.abc import Generator, Sequence
+from typing import Any
 
 from xenosite.refactor_poc.rdkitutil import Mol, TracingMol
 from xenosite.refactor_poc.records import Addition, ProductInfo, TraceAddition
@@ -82,7 +83,7 @@ PhaseOneQF = RuleSet(
 
 
 def metabolize(
-    mol: Mol, **kwargs
+    mol: Mol, **kwargs: Any
 ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
     """Run :data:`PhaseOne`. Yields ``(product, info)``."""
 

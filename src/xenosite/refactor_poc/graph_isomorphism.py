@@ -43,8 +43,13 @@ import importlib
 import os
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from itertools import combinations, permutations, product
-from typing import Any, Final, Literal, TypeAlias, cast
+from itertools import (
+    combinations,
+    combinations_with_replacement,
+    permutations,
+    product,
+)
+from typing import Final, Literal, Protocol, TypeAlias, cast
 
 from xenosite.refactor_poc.rdkit_api import AssignStereochemistry, Mol, MolToSmiles
 from xenosite.refactor_poc.rdkitutil import cip_ids
@@ -62,12 +67,16 @@ from xenosite.refactor_poc.records import (
     PairGroupId,
     PairOrbitByGroups,
     PairOrbitSignature,
+    PairRoleKey,
     PairSiteInfo,
+    PairSiteSignature,
     PatternInfo,
     SiteCipKey,
     SitePairCipKey,
     SitePairOrbitTables,
+    SiteSignature,
     SmilesPairGroup,
+    Structure,
     TopoGroupId,
 )
 
@@ -91,18 +100,15 @@ PairOrbitBackend = Literal["nauty", "smiles", "none"]
 # Unique-edit orbit mode declared on a rule (data; read here, not branched).
 UniqueOrbit: TypeAlias = Literal["atom_atom", "bond_atom"]
 
-# Dedup key for one SMARTS site across Kekulé forms / equivalent carbons.
-# Last field: pair-orbit signature, or None for a one-atom site without bond_atom.
-SiteSignature: TypeAlias = tuple[
-    tuple[tuple[int, int], ...],
-    tuple[tuple[int, int, float], ...],
-    int,
-    str | None,
-    str | None,
-    bool,
-    bool,
-    PairOrbitSignature | None,
-]
+# Re-export schema types owned by records (call sites historically imported here).
+__all__ = (
+    "UniqueOrbit",
+    "SiteSignature",
+    "PairSiteSignature",
+    "PairOrbitBackend",
+    "PairMode",
+    "OrbitFamily",
+)
 
 PAIR_MODES: dict[PairMode, tuple[SiteKind, SiteKind]] = {
     "atom_atom": ("atom", "atom"),
@@ -122,12 +128,24 @@ _ORBIT_FAMILIES: tuple[OrbitFamily, ...] = (
 _CACHE_NAUTY = "site_pair_orbits_nauty"
 _CACHE_NAUTY_FAMILIES = "site_pair_orbits_nauty_families"
 _CACHE_SMILES = "site_pair_orbits_smiles"
+_CACHE_BA_PAIR = "bond_atom_pair_orbits_nauty"
 _ENV_BACKEND = "XENOSITE_PAIR_ORBIT_BACKEND"
 _MEMBERSHIP_BASE = 4
 # Documented trivial pair_group when either end is a singleton topeqiv group,
 # or when backend is ``none`` for multi–multi (cheap path; no isotope tables).
 # Reserved negative id so sequential orbit ids stay 0..n-1.
+# Also used for second-order bond–atom composite pairs when nauty is unavailable
+# or every involved atom/bond class is a singleton (no relative-placement choice).
 TRIVIAL_PAIR_GROUP: Final[PairGroupId] = PairGroupId(-1)
+
+# One directed bond–atom composite site: (bond_idx, atom_idx).
+BondAtomSite: TypeAlias = tuple[int, int]
+# Pair of composite sites (ordered or index-sorted when unordered).
+BondAtomSitePair: TypeAlias = tuple[BondAtomSite, BondAtomSite]
+# ordered=True/False → {(site1, site2): PairGroupId}
+BondAtomPairOrbitTables: TypeAlias = dict[
+    Literal[True, False], dict[BondAtomSitePair, PairGroupId]
+]
 
 # Process-wide override. ``None`` → env var → auto (nauty if importable else none).
 _backend_override: PairOrbitBackend | None = None
@@ -339,12 +357,31 @@ def site_pair_orbits_smiles(
 # --- pynauty (recipe 3), named for profiling ---
 
 
+class _NautyGraph(Protocol):
+    """Minimal pynauty Graph surface used here."""
+
+
+class _NautyModule(Protocol):
+    def Graph(
+        self,
+        *,
+        number_of_vertices: int,
+        directed: bool,
+        adjacency_dict: Mapping[int, set[int]],
+        vertex_coloring: list[set[int]],
+    ) -> _NautyGraph: ...
+
+    def autgrp(
+        self, graph: _NautyGraph
+    ) -> tuple[list[Sequence[int]], object, object, object, object]: ...
+
+
 def atom_bond_generators_nauty(
     mol: Mol, *, include_stereo: bool = True
 ) -> list[tuple[tuple[int, ...], tuple[int, ...]]]:
     """Generators as ``(atom_permutation, bond_permutation)``."""
 
-    nauty = cast(Any, importlib.import_module("pynauty"))
+    nauty = cast(_NautyModule, importlib.import_module("pynauty"))
     graph, n_atoms, n_bonds = _colored_graph(mol, nauty, include_stereo=include_stereo)
     raw_generators, _, _, _, _ = nauty.autgrp(graph)
     generators: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
@@ -662,20 +699,32 @@ def ordered_bond_pair_orbit(
 
 
 def unordered_bond_atom_pair(
-    left: BondAtomOrbitSignature, right: BondAtomOrbitSignature
+    left: BondAtomOrbitSignature,
+    right: BondAtomOrbitSignature,
+    pair_group: PairGroupId,
 ) -> BondAtomPairOrbitSignature:
-    """Two bond_atom ends, sorted so argument order does not matter."""
+    """Two bond_atom ends, sorted so argument order does not matter.
+
+    ``pair_group`` is the second-order orbit of the concrete composite-site
+    pair (looked up via :func:`bond_atom_pair_group`).
+    """
 
     ends = (left, right) if left <= right else (right, left)
-    return BondAtomPairOrbitSignature(ends, False)
+    return BondAtomPairOrbitSignature(ends, pair_group, False)
 
 
 def ordered_bond_atom_pair(
-    left: BondAtomOrbitSignature, right: BondAtomOrbitSignature
+    left: BondAtomOrbitSignature,
+    right: BondAtomOrbitSignature,
+    pair_group: PairGroupId,
 ) -> BondAtomPairOrbitSignature:
-    """Two bond_atom ends already in canonical PatternInfo.name order."""
+    """Two bond_atom ends already in canonical PatternInfo.name order.
 
-    return BondAtomPairOrbitSignature((left, right), True)
+    ``pair_group`` is the second-order orbit for ``(left_site, right_site)``
+    in the same order as ``(left, right)``.
+    """
+
+    return BondAtomPairOrbitSignature((left, right), pair_group, True)
 
 
 # Compat names used by the unique-edit signature before the rename.
@@ -874,10 +923,10 @@ def _nested_tables_from_groups(
     return tables
 
 
-def _structure(mol: Mol) -> dict[str, Any]:
+def _structure(mol: Mol) -> Structure:
     from xenosite.refactor_poc.rdkitutil import _structure as forest_structure
 
-    return cast(dict[str, Any], forest_structure(mol))
+    return forest_structure(mol)
 
 
 def _index_tuple(indices: Iterable[int] | None, n: int) -> tuple[int, ...]:
@@ -890,9 +939,267 @@ def _sorted_pair(left: int, right: int) -> tuple[int, int]:
     return (left, right) if left <= right else (right, left)
 
 
+def _sorted_composite_pair(
+    left: BondAtomSite, right: BondAtomSite
+) -> BondAtomSitePair:
+    """Unordered normalization of two composite (bond, atom) sites."""
+
+    return (left, right) if left <= right else (right, left)
+
+
+def endpoint_bond_atom_sites(mol: Mol) -> list[BondAtomSite]:
+    """Directed (bond, atom) sites where the atom is a bond endpoint.
+
+    Closed under nauty automorphisms. ResonancePair ``bond_atom`` unique-edit
+    always uses incident sites (bond between maps 1–2 plus a matched end atom).
+    """
+
+    sites: list[BondAtomSite] = []
+    for bond in mol.GetBonds():
+        bi = bond.GetIdx()
+        sites.append((bi, bond.GetBeginAtomIdx()))
+        sites.append((bi, bond.GetEndAtomIdx()))
+    return sites
+
+
+_incident_bond_atom_sites = endpoint_bond_atom_sites
+
+
+def bond_atom_orbits_from_nauty_generators(
+    bond_atom_sites: Iterable[BondAtomSite],
+    generators: Iterable[tuple[Sequence[int], Sequence[int]]],
+) -> tuple[list[tuple[BondAtomSite, ...]], dict[BondAtomSite, int]]:
+    """Orbit lookup for individual directed ``(bond_idx, atom_idx)`` sites.
+
+    ``bond_atom_sites`` must be closed under the generators. Returns
+    ``(groups, site_to_group)`` with sequential group ids.
+    """
+
+    sites = tuple(sorted(set(bond_atom_sites)))
+    site_set = set(sites)
+    parent: dict[BondAtomSite, BondAtomSite] = {site: site for site in sites}
+
+    def find(item: BondAtomSite) -> BondAtomSite:
+        while parent[item] != item:
+            parent[item] = parent[parent[item]]
+            item = parent[item]
+        return item
+
+    def union(left: BondAtomSite, right: BondAtomSite) -> None:
+        left, right = find(left), find(right)
+        if left != right:
+            parent[right] = left
+
+    for bond_idx, atom_idx in sites:
+        for atom_map, bond_map in generators:
+            image = (bond_map[bond_idx], atom_map[atom_idx])
+            if image not in site_set:
+                raise ValueError(
+                    "bond_atom_sites is not closed under nauty automorphisms. "
+                    "Compute on a closed superset, then filter the result."
+                )
+            union((bond_idx, atom_idx), image)
+
+    raw: dict[BondAtomSite, list[BondAtomSite]] = defaultdict(list)
+    for site in sites:
+        raw[find(site)].append(site)
+    groups = [tuple(sorted(members)) for members in raw.values()]
+    groups.sort()
+    lookup = {
+        site: group_id
+        for group_id, members in enumerate(groups)
+        for site in members
+    }
+    return groups, lookup
+
+
+def bond_atom_pair_orbits_from_nauty_generators(
+    bond_atom_sites: Iterable[BondAtomSite],
+    generators: Iterable[tuple[Sequence[int], Sequence[int]]],
+    *,
+    ordered: bool,
+    distinct: bool = True,
+) -> tuple[list[tuple[BondAtomSitePair, ...]], dict[BondAtomSitePair, int]]:
+    """Orbits of *pairs* of directed bond–atom composite sites.
+
+    A primitive site is ``(bond_idx, atom_idx)``. Candidates are
+    ``((b1, a1), (b2, a2))``. ``bond_atom_sites`` must be closed under the
+    nauty generators (endpoint sites are closed).
+
+    ``ordered=True`` → permutations (roles not swappable).
+    ``ordered=False`` → combinations (swappable ends).
+    ``distinct=True`` (default) forbids the identical site twice; shared
+    atoms or shared bonds between the two ends remain allowed.
+
+    Returns ``(groups, pair_to_group)`` with sequential orbit ids. Lookup keys
+    are canonical: ordered keeps ``((b1,a1),(b2,a2))``; unordered stores the
+    lexicographically sorted pair of sites.
+    """
+
+    sites = tuple(sorted(set(bond_atom_sites)))
+    site_set = set(sites)
+    gen_list = list(generators)
+
+    def image_site(
+        site: BondAtomSite, atom_map: Sequence[int], bond_map: Sequence[int]
+    ) -> BondAtomSite:
+        bond_idx, atom_idx = site
+        return (bond_map[bond_idx], atom_map[atom_idx])
+
+    for site in sites:
+        for atom_map, bond_map in gen_list:
+            image = image_site(site, atom_map, bond_map)
+            if image not in site_set:
+                raise ValueError(
+                    "bond_atom_sites is not closed under nauty automorphisms. "
+                    "Compute on a closed superset, then filter the result."
+                )
+
+    if ordered:
+        candidates: list[BondAtomSitePair] = (
+            list(permutations(sites, 2))  # type: ignore[arg-type]
+            if distinct
+            else list(product(sites, repeat=2))  # type: ignore[arg-type]
+        )
+    else:
+        candidates = (
+            list(combinations(sites, 2))  # type: ignore[arg-type]
+            if distinct
+            else list(combinations_with_replacement(sites, 2))  # type: ignore[arg-type]
+        )
+
+    parent: dict[BondAtomSitePair, BondAtomSitePair] = {
+        candidate: candidate for candidate in candidates
+    }
+
+    def find(item: BondAtomSitePair) -> BondAtomSitePair:
+        while parent[item] != item:
+            parent[item] = parent[parent[item]]
+            item = parent[item]
+        return item
+
+    def union(left: BondAtomSitePair, right: BondAtomSitePair) -> None:
+        left, right = find(left), find(right)
+        if left != right:
+            parent[right] = left
+
+    for candidate in candidates:
+        left, right = candidate
+        for atom_map, bond_map in gen_list:
+            image: BondAtomSitePair = (
+                image_site(left, atom_map, bond_map),
+                image_site(right, atom_map, bond_map),
+            )
+            if not ordered:
+                image = _sorted_composite_pair(image[0], image[1])
+            union(candidate, image)
+
+    raw: dict[BondAtomSitePair, list[BondAtomSitePair]] = defaultdict(list)
+    for candidate in candidates:
+        raw[find(candidate)].append(candidate)
+
+    # Deterministic under fixed RDKit indexing.
+    groups = [tuple(sorted(members)) for members in raw.values()]
+    groups.sort()
+    pair_to_group = {
+        candidate: group_id
+        for group_id, members in enumerate(groups)
+        for candidate in members
+    }
+    return groups, pair_to_group
+
+
+def _composite_pair_needs_orbit(
+    mol: Mol, left: BondAtomSite, right: BondAtomSite
+) -> bool:
+    """True when topeqiv leaves room for more than one relative placement.
+
+    ``topol_equiv`` / bond classes are CIP rank proxies (not true automorphism
+    orbits). When every involved atom and bond class is a singleton, the
+    concrete pair is unique under that proxy → ``TRIVIAL_PAIR_GROUP``.
+    """
+
+    b1, a1 = left
+    b2, a2 = right
+    return (
+        _bond_group_size(mol, b1) > 1
+        or _atom_group_size(mol, a1) > 1
+        or _bond_group_size(mol, b2) > 1
+        or _atom_group_size(mol, a2) > 1
+    )
+
+
+def _ensure_bond_atom_pair_tables(mol: Mol) -> BondAtomPairOrbitTables:
+    """Materialize second-order orbits for incident composite-site pairs."""
+
+    structure = _structure(mol)
+    cached = structure.get(_CACHE_BA_PAIR)
+    if cached is not None:
+        return cast(BondAtomPairOrbitTables, cached)
+
+    generators = atom_bond_generators_nauty(mol, include_stereo=True)
+    sites = endpoint_bond_atom_sites(mol)
+    tables: BondAtomPairOrbitTables = {}
+    for ordered in (False, True):
+        _, lookup = bond_atom_pair_orbits_from_nauty_generators(
+            sites, generators, ordered=ordered
+        )
+        tables[ordered] = {
+            key: PairGroupId(gid) for key, gid in lookup.items()
+        }
+
+    structure[_CACHE_BA_PAIR] = tables
+    return tables
+
+
+def bond_atom_pair_group(
+    mol: Mol,
+    left: BondAtomSite,
+    right: BondAtomSite,
+    *,
+    ordered: bool,
+) -> PairGroupId:
+    """Second-order orbit id for a pair of composite (bond, atom) sites.
+
+    Unordered: ``combinations`` partition (argument order irrelevant).
+    Ordered: ``permutations`` partition (``(left, right)`` direction kept).
+    """
+
+    if left == right:
+        raise ValueError("bond_atom composite-pair ends must be distinct sites")
+    if not _composite_pair_needs_orbit(mol, left, right):
+        return TRIVIAL_PAIR_GROUP
+    backend = get_pair_orbit_backend()
+    if backend != "nauty" or not _pynauty_available():
+        return TRIVIAL_PAIR_GROUP
+
+    tables = _ensure_bond_atom_pair_tables(mol)
+    key: BondAtomSitePair = (
+        (left, right) if ordered else _sorted_composite_pair(left, right)
+    )
+    return tables[ordered][key]
+
+
+def bond_atom_pair_orbit_key(
+    mol: Mol,
+    left: BondAtomSite,
+    right: BondAtomSite,
+    *,
+    ordered: bool,
+) -> BondAtomPairOrbitSignature:
+    """Full ResonancePair bond_atom unique-edit key with joint ``pair_group``."""
+
+    left_sig = bond_atom_orbit_key(mol, left[0], left[1])
+    right_sig = bond_atom_orbit_key(mol, right[0], right[1])
+    pair_group = bond_atom_pair_group(mol, left, right, ordered=ordered)
+    if ordered:
+        return ordered_bond_atom_pair(left_sig, right_sig, pair_group)
+    return unordered_bond_atom_pair(left_sig, right_sig, pair_group)
+
+
 def _colored_graph(
-    mol: Mol, nauty: Any, *, include_stereo: bool = True
-) -> tuple[Any, int, int]:
+    mol: Mol, nauty: _NautyModule, *, include_stereo: bool = True
+) -> tuple[_NautyGraph, int, int]:
     marked = Mol(mol)
     if include_stereo:
         AssignStereochemistry(marked, cleanIt=True, force=True)
@@ -1023,10 +1330,10 @@ def formula_key(value: str | None) -> str:
     return "".join(sorted(value))
 
 
-def bond_atom_orbit_for_match(
+def bond_atom_site_for_match(
     mol: Mol, mapped: Mapping[int, int], site_atom: int
-) -> BondAtomOrbitSignature | None:
-    """``bond_atom`` orbit for the bond between maps 1 and 2 plus ``site_atom``."""
+) -> BondAtomSite | None:
+    """Incident composite site: bond between maps 1–2 plus ``site_atom``."""
 
     left, right = mapped.get(1), mapped.get(2)
     if left is None or right is None:
@@ -1034,7 +1341,18 @@ def bond_atom_orbit_for_match(
     bond = mol.GetBondBetweenAtoms(left, right)
     if bond is None:
         return None
-    return mol.xf.bond_atom_orbit_key(bond.GetIdx(), site_atom)
+    return (bond.GetIdx(), site_atom)
+
+
+def bond_atom_orbit_for_match(
+    mol: Mol, mapped: Mapping[int, int], site_atom: int
+) -> BondAtomOrbitSignature | None:
+    """``bond_atom`` orbit for the bond between maps 1 and 2 plus ``site_atom``."""
+
+    site = bond_atom_site_for_match(mol, mapped, site_atom)
+    if site is None:
+        return None
+    return mol.xf.bond_atom_orbit_key(site[0], site[1])
 
 
 def site_orbit(
@@ -1068,21 +1386,34 @@ def pair_orbit(
     """Orbit identity for a ResonancePairRule emission.
 
     :func:`ends_swappable` → unordered; else ordered by PatternInfo ``name``.
+    For ``unique_orbit="bond_atom"``, includes the second-order joint
+    ``pair_group`` of the two composite (bond, atom) sites.
     """
 
     swappable = ends_swappable(info1, info2, effect1, effect2)
     if unique_orbit == "bond_atom":
-        left = bond_atom_orbit_for_match(mol, map1, site_a)
-        right = bond_atom_orbit_for_match(mol, map2, site_b)
-        if left is None or right is None:
+        left_site = bond_atom_site_for_match(mol, map1, site_a)
+        right_site = bond_atom_site_for_match(mol, map2, site_b)
+        if left_site is None or right_site is None:
             return None
+        left = mol.xf.bond_atom_orbit_key(left_site[0], left_site[1])
+        right = mol.xf.bond_atom_orbit_key(right_site[0], right_site[1])
         if swappable:
-            return unordered_bond_atom_pair(left, right)
+            pair_group = bond_atom_pair_group(
+                mol, left_site, right_site, ordered=False
+            )
+            return unordered_bond_atom_pair(left, right, pair_group)
         name1 = info1.get("name") or ""
         name2 = info2.get("name") or ""
         if (name1, site_a) <= (name2, site_b):
-            return ordered_bond_atom_pair(left, right)
-        return ordered_bond_atom_pair(right, left)
+            pair_group = bond_atom_pair_group(
+                mol, left_site, right_site, ordered=True
+            )
+            return ordered_bond_atom_pair(left, right, pair_group)
+        pair_group = bond_atom_pair_group(
+            mol, right_site, left_site, ordered=True
+        )
+        return ordered_bond_atom_pair(right, left, pair_group)
 
     key = mol.xf.atom_pair_orbit_key(site)
     if key is None:
@@ -1160,7 +1491,7 @@ def pair_site_signature(
     preview: PairSiteInfo,
     *,
     unique_orbit: UniqueOrbit = "atom_atom",
-) -> tuple:
+) -> PairSiteSignature:
     """Unique-edit key for a pair-path emission (before mol edit).
 
     Swappable ends (shared ``swap_group``): roles + map embeddings sorted so
@@ -1182,28 +1513,31 @@ def pair_site_signature(
     maps2 = map_rank_key(ranks, map2)
     swappable = ends_swappable(info1, info2, effect1, effect2)
     if swappable:
-        roles: tuple = tuple(
-            sorted(
-                (
-                    (resolved_swap_group(info1, effect1) or name1, maps1),
-                    (resolved_swap_group(info2, effect2) or name2, maps2),
+        roles = cast(
+            tuple[PairRoleKey, PairRoleKey],
+            tuple(
+                sorted(
+                    (
+                        (resolved_swap_group(info1, effect1) or name1, maps1),
+                        (resolved_swap_group(info2, effect2) or name2, maps2),
+                    )
                 )
-            )
+            ),
         )
     elif (name1, site_a, maps1) <= (name2, site_b, maps2):
         roles = ((name1, maps1), (name2, maps2))
     else:
         roles = ((name2, maps2), (name1, maps1))
-    return (
-        roles,
-        tuple(sorted(ranks[i] for i in site)),
-        tuple(sorted(ranks[i] for i in preview["path_ends"])),
-        formula_key(effect.get("adds")),
-        formula_key(effect.get("removes")),
-        bool(effect.get("cleaves")),
-        bool(effect.get("dearomatizes")),
-        bool(effect.get("methide")),
-        pair_orbit(
+    return PairSiteSignature(
+        roles=roles,
+        site_ranks=tuple(sorted(ranks[i] for i in site)),
+        path_end_ranks=tuple(sorted(ranks[i] for i in preview["path_ends"])),
+        adds=formula_key(effect.get("adds")),
+        removes=formula_key(effect.get("removes")),
+        cleaves=bool(effect.get("cleaves")),
+        dearomatizes=bool(effect.get("dearomatizes")),
+        methide=bool(effect.get("methide")),
+        orbit=pair_orbit(
             mol,
             map1,
             map2,

@@ -19,7 +19,7 @@ does not wrap them.
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from typing import TYPE_CHECKING, Literal, Protocol, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 
 if TYPE_CHECKING:
     from xenosite.refactor_poc.records import (
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         Forest,
         Formula,
         InitializedAtomTrace,
+        SiteInfo,
         SitePairOrbitTables,
         TracingForest,
     )
@@ -137,7 +138,7 @@ if TYPE_CHECKING:
         def _stamp(self) -> TracingMol: ...
         def _install(self) -> TracingMol: ...
         def _trace(
-            self, reactant: Mol, info, executed=None
+            self, reactant: Mol, info: SiteInfo, executed: Any | None = None
         ) -> InitializedAtomTrace: ...
 
     class Xf(Protocol):
@@ -192,8 +193,8 @@ if TYPE_CHECKING:
         def of_products(
             self,
             product_or_product_list: Mol | Sequence[Mol],
-            site_info,
-            executed=None,
+            site_info: SiteInfo,
+            executed: Any | None = None,
         ) -> list[TracingMol]: ...
 
     class NoForestMol(Mol):

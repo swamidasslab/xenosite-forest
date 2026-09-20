@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import heapq
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from xenosite.forest.step_plan import AtomRef as AddedRef
 from xenosite.forest.step_plan import StepPlan
@@ -31,6 +32,7 @@ from xenosite.refactor_poc.rdkitutil import (
 )
 from xenosite.refactor_poc.records import (
     AtomRef,
+    Effect,
     PatternInfo,
     ProductInfo,
     Site,
@@ -41,9 +43,13 @@ from xenosite.refactor_poc.records import (
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
+    FilterRules,
+    FilterSites,
     Hydroxylation,
     QuinoneFormation,
     ReactionRule,
+    _accept_all_rules,
+    _accept_all_sites,
     _as_site,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
@@ -62,7 +68,7 @@ class PathCounters:
     second search mode.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.rule_expansions = 0
         self.sites_considered = 0
         self.sites_skipped = 0
@@ -71,7 +77,7 @@ class PathCounters:
         self.nodes = 0
 
     @property
-    def billed(self):
+    def billed(self) -> int:
         return self.mol_edits + self.nodes
 
 
@@ -125,15 +131,21 @@ def _site_keys(site: Site | Sequence[int | AddedRef | AtomRef] | None) -> frozen
 class Maybe:
     """Uncleared cleavage fragments. Not a step, and not searched."""
 
-    entries: tuple = ()
+    entries: tuple[CleavageSide, ...] = ()
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.entries)
 
-    def sides(self):
+    def sides(self) -> tuple[str, ...]:
         return tuple(entry.side for entry in self.entries)
 
-    def allows(self, rule_name=None, site=None, *, side=None):
+    def allows(
+        self,
+        rule_name: str | None = None,
+        site: Site | Sequence[int | AddedRef | AtomRef] | None = None,
+        *,
+        side: Mol | str | None = None,
+    ) -> bool:
         """True when ``side`` is a discarded fragment, or ``site`` overlaps one.
 
         The bifurcating cleavage site itself does not pass: that step is
@@ -204,17 +216,17 @@ class AtomDiff:
         reactant: Mol,
         target: Mol,
         mapping: dict[int, int],
-        needs_oxygen,
-        needs_carbonyl,
-        needs_alcohol,
-        cleaved,
-        cleavage_bonds,
-        loses_aromaticity,
-        h_delta,
-        n_extra,
-        bond_order_mismatches,
-        bond_raises,
-    ):
+        needs_oxygen: Iterable[int],
+        needs_carbonyl: Iterable[int],
+        needs_alcohol: Iterable[int],
+        cleaved: Iterable[int],
+        cleavage_bonds: Iterable[frozenset[int]],
+        loses_aromaticity: Iterable[int],
+        h_delta: Mapping[int, int],
+        n_extra: int,
+        bond_order_mismatches: int,
+        bond_raises: Iterable[frozenset[int]],
+    ) -> None:
         self.reactant = reactant
         self.target = target
         self.mapping = mapping
@@ -234,18 +246,18 @@ class AtomDiff:
         self._view_costs: tuple[int, ...] | None = None
 
     @property
-    def target_smaller(self):
+    def target_smaller(self) -> bool:
         return self.target_heavy < self.reactant_heavy
 
     @property
-    def has_cleavage(self):
+    def has_cleavage(self) -> bool:
         return bool(self.cleaved or self.cleavage_bonds)
 
     @property
-    def h_loss(self):
+    def h_loss(self) -> bool:
         return any(delta < 0 for delta in self.h_delta.values())
 
-    def site_is_cleavage(self, atoms):
+    def site_is_cleavage(self, atoms: Iterable[int]) -> bool:
         """True when ``atoms`` is the bond that separates kept from gone.
 
         Touching a leaving-group atom is not enough. The site has to be
@@ -260,7 +272,7 @@ class AtomDiff:
                 return True
         return False
 
-    def cost(self):
+    def cost(self) -> int:
         """How much of the reactant still disagrees with the target.
 
         Used only to refuse a child that moved away. Not a ranker.
@@ -272,7 +284,7 @@ class AtomDiff:
             return min(self._view_costs)
         return self._field_cost()
 
-    def _field_cost(self):
+    def _field_cost(self) -> int:
         h_off = sum(1 for delta in self.h_delta.values() if delta)
         return (
             3 * len(self.cleaved)
@@ -285,7 +297,9 @@ class AtomDiff:
         )
 
 
-def _mapping_score(reactant: Mol, target: Mol, r_match, t_match):
+def _mapping_score(
+    reactant: Mol, target: Mol, r_match: Sequence[int], t_match: Sequence[int]
+) -> int:
     """Prefer a pairing that keeps rings on rings and bond orders put."""
 
     score = 0
@@ -510,7 +524,7 @@ def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
 # ---------------------------------------------------------------------------
 
 
-def _span_values(span: Span, key: str, default):
+def _span_values(span: Span, key: str, default: Any) -> tuple[Any, ...]:
     if key not in span:
         return (default,)
     value = span[key]  # type: ignore[literal-required]
@@ -519,16 +533,20 @@ def _span_values(span: Span, key: str, default):
     return (value,)
 
 
-def _any_span(span: Span, key: str, pred, default):
+def _any_span(
+    span: Span, key: str, pred: Callable[[Any], bool], default: Any
+) -> bool:
     return any(pred(value) for value in _span_values(span, key, default))
 
 
-def _all_span(span: Span, key: str, pred, default):
+def _all_span(
+    span: Span, key: str, pred: Callable[[Any], bool], default: Any
+) -> bool:
     values = _span_values(span, key, default)
     return bool(values) and all(pred(value) for value in values)
 
 
-def _effect_adds_oxygen(effect):
+def _effect_adds_oxygen(effect: Effect) -> bool:
     return "O" in (effect.get("adds") or "") or "O" in (effect.get("needs") or "")
 
 
@@ -597,7 +615,7 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
     return True
 
 
-def _alkyl_bond_raises(mol: Mol, atom_idx, diff):
+def _alkyl_bond_raises(mol: Mol, atom_idx: int, diff: AtomDiff) -> bool:
     """True when an exocyclic C-C bond at ``atom_idx`` is higher in the target."""
 
     atom = mol.GetAtomWithIdx(atom_idx)
@@ -702,19 +720,16 @@ def _site_could_help(
     return True
 
 
-def _filters(diff, enabled):
+def _filters(diff: AtomDiff, enabled: bool) -> tuple[FilterRules, FilterSites]:
     """Build search filters that close over ``diff`` only (mol is an argument)."""
 
     if not enabled:
-        return (
-            (lambda mol, rule, info: True),
-            (lambda mol, site, info: True),
-        )
+        return (_accept_all_rules, _accept_all_sites)
 
-    def filter_rules(mol, rule, info):
+    def filter_rules(mol: TracingMol, rule: ReactionRule, info: PatternInfo) -> bool:
         return _pattern_could_help(info, diff, mol)
 
-    def filter_sites(mol, site, info):
+    def filter_sites(mol: TracingMol, site: Site, info: SiteInfo) -> bool:
         return _site_could_help(site, info, diff, mol)
 
     return filter_rules, filter_sites
@@ -790,7 +805,7 @@ def _steps_for(mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
 # ---------------------------------------------------------------------------
 
 
-def default_ruleset():
+def default_ruleset() -> RuleSet:
     """The poc catalog as one rule. Phase I is the ``Deps`` search yields."""
 
     return RuleSet(
@@ -799,7 +814,12 @@ def default_ruleset():
     )
 
 
-def _finish(parent: Mol, raw_products, info, counters):
+def _finish(
+    parent: Mol,
+    raw_products: Sequence[Mol],
+    info: SiteInfo,
+    counters: PathCounters,
+) -> list[TracingMol]:
     """Sanitize and trace each fragment. Failed sanitizes are dropped.
 
     Does not renumber atoms or compute SMILES. Callers use ``mol.xf.csmi``
@@ -820,7 +840,9 @@ def _finish(parent: Mol, raw_products, info, counters):
     return parent.xf.of_products(pieces, info)
 
 
-def _keep_fragment(finished, target: Mol, target_smiles: str):
+def _keep_fragment(
+    finished: Sequence[TracingMol], target: Mol, target_smiles: str
+) -> tuple[TracingMol | None, list[TracingMol]]:
     """The fragment closest to ``target``. The rest were cleaved off."""
 
     best = None
@@ -869,7 +891,9 @@ def _fresh_walk_priority(
     )
 
 
-def _stale_vs_peek(fresh: tuple[int, int], heap: list) -> bool:
+def _stale_vs_peek(
+    fresh: tuple[int, int], heap: list[tuple[tuple[int, int], int, _Walk]]
+) -> bool:
     """True when ``fresh`` is worse than the heap's current best priority."""
 
     return bool(heap) and fresh > heap[0][0]
@@ -892,13 +916,13 @@ def _cleavage_site(value: Site) -> frozenset[int]:
 def find_path(
     reactant: Mol | str,
     target: Mol | str,
-    ruleset=None,
-    counters=None,
+    ruleset: RuleSet | ReactionRule | None = None,
+    counters: PathCounters | None = None,
     *,
-    use_filters=True,
-    max_paths=1,
-    max_nodes=800,
-):
+    use_filters: bool = True,
+    max_paths: int = 1,
+    max_nodes: int = 800,
+) -> Iterator[PathOutcome]:
     """Yield phase-I plans that turn ``reactant`` into ``target``.
 
     ``ruleset`` is one :class:`~xenosite.refactor_poc.rules.RuleSet`. Filters
@@ -1021,24 +1045,24 @@ class _Expand:
     info: ProductInfo | None = None
 
 
-def _keep_rule(mol, rule, info) -> bool:
+def _keep_rule(mol: TracingMol, rule: ReactionRule, info: PatternInfo) -> bool:
     return True
 
 
-def _keep_site(mol, site, info) -> bool:
+def _keep_site(mol: TracingMol, site: Site, info: SiteInfo) -> bool:
     return True
 
 
 def _enumerate(
     reactant: Mol | str,
-    ruleset,
+    ruleset: RuleSet | ReactionRule | None,
     *,
-    filter_rules,
-    filter_sites,
+    filter_rules: FilterRules,
+    filter_sites: FilterSites,
     depth: int,
-    pop,
+    pop: Callable[[deque[_Expand]], _Expand],
     lifo: bool,
-):
+) -> Iterator[tuple[Mol, ProductInfo]]:
     """Metabolites of one ruleset, up to ``depth``. No atom diff, no closer drop.
 
     ``pop`` is the frontier. A stack (``lifo``) expands the newest child
@@ -1078,12 +1102,12 @@ def _enumerate(
 
 def bfs(
     reactant: Mol | str,
-    ruleset=None,
+    ruleset: RuleSet | ReactionRule | None = None,
     *,
-    filter_rules=_keep_rule,
-    filter_sites=_keep_site,
+    filter_rules: FilterRules = _keep_rule,
+    filter_sites: FilterSites = _keep_site,
     depth: int = 1,
-):
+) -> Iterator[tuple[Mol, ProductInfo]]:
     """Breadth-first metabolites. A queue. See :func:`_enumerate`."""
 
     yield from _enumerate(
@@ -1099,12 +1123,12 @@ def bfs(
 
 def dfs(
     reactant: Mol | str,
-    ruleset=None,
+    ruleset: RuleSet | ReactionRule | None = None,
     *,
-    filter_rules=_keep_rule,
-    filter_sites=_keep_site,
+    filter_rules: FilterRules = _keep_rule,
+    filter_sites: FilterSites = _keep_site,
     depth: int = 1,
-):
+) -> Iterator[tuple[Mol, ProductInfo]]:
     """Depth-first metabolites. A stack. See :func:`_enumerate`."""
 
     yield from _enumerate(

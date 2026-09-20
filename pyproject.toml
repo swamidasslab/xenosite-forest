@@ -168,6 +168,13 @@ exclude = [
 ]
 # tests/refactor_poc stays out until its MolFromSmiles / TypedDict noise is
 # cleaned. Local and CI both use this include list.
+#
+# Untyped parameters error for POC scope (CI: `uv run pyright src/xenosite/refactor_poc`).
+# Argument / member / variable Unknown stay off: RDKit stubs and heterogeneous
+# forest trees still flood those. Forest and examples are not in include.
+reportMissingParameterType = "error"
+reportUnknownParameterType = "error"
+reportUntypedFunctionDecorator = "error"
 
 # POC only. Forest and examples stay out. test.ipynb is not Python source.
 # Top-level tests/test_*.py is the forest suite; nested tests/refactor_poc stays.

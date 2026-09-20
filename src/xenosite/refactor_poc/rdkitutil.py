@@ -47,7 +47,7 @@ from __future__ import annotations
 import ast
 from collections import defaultdict, deque
 from collections.abc import Iterable, Sequence
-from typing import Literal, TypeGuard, TypeVar, cast, overload
+from typing import Any, Literal, TypeGuard, TypeVar, cast, overload
 
 from xenosite.refactor_poc.forest_copy import (
     copy_mutable,
@@ -317,7 +317,7 @@ class XfTracing:
         return self._ensure()
 
     def _trace(
-        self, reactant: Mol, info: SiteInfo, executed=None
+        self, reactant: Mol, info: SiteInfo, executed: Any | None = None
     ) -> InitializedAtomTrace:
         """Record one transform from ``reactant`` onto this product mol.
 
@@ -555,7 +555,7 @@ class Xf:
         self,
         product_or_product_list: Mol | Sequence[Mol],
         site_info: SiteInfo,
-        executed=None,
+        executed: Any | None = None,
     ) -> list[TracingMol]:
         """Stamp and trace products of this reactant; return the finished list.
 

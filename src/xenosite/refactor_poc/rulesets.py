@@ -7,7 +7,8 @@ filter refuses is not run. A pattern it accepts is.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
+from typing import Any
 
 from xenosite.refactor_poc.rdkit_api import TracingMol
 from xenosite.refactor_poc.rdkitutil import Mol
@@ -35,6 +36,8 @@ from .rules import (
     ReductiveDehalogenation,
     SulfurOxidation,
     SulfurReduction,
+    _accept_all_rules,
+    _accept_all_sites,
     _unique_csmi_key,
 )
 
@@ -50,7 +53,15 @@ class RuleSet(ReactionRule):
     does not wrap them.
     """
 
-    def __init__(self, rules=(), name=None, longname=None):
+    def __init__(
+        self,
+        rules: (
+            tuple[ReactionRule | type[ReactionRule], ...]
+            | list[ReactionRule | type[ReactionRule]]
+        ) = (),
+        name: str | None = None,
+        longname: str | None = None,
+    ):
         contained = []
         for rule in rules:
             if isinstance(rule, type):
@@ -82,10 +93,10 @@ class RuleSet(ReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
-        order_key=None,
-        **kwargs,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
+        order_key: Callable[[ReactionRule], Any] | None = None,
+        **kwargs: Any,
     ) -> Generator[ProductsOfReaction, None, None]:
         rules = self.rules
         if order_key is not None:
@@ -101,11 +112,11 @@ class RuleSet(ReactionRule):
     def metabolize(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
         unique_csmi: bool = True,
-        order_key=None,
-        **kwargs,
+        order_key: Callable[[ReactionRule], Any] | None = None,
+        **kwargs: Any,
     ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
         """Run each contained rule, then append this set on that product.
 

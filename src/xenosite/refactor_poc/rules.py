@@ -4,9 +4,10 @@ from __future__ import annotations
 
 # Standard Library
 import itertools
+import re
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     # Static re-export so ``from .rules import RuleSet`` types correctly.
@@ -87,11 +88,11 @@ class _LazyProductInfo(dict):
 
     __slots__ = ("_mol",)
 
-    def __init__(self, data: dict, mol: ForestMol):
+    def __init__(self, data: dict[str, object], mol: ForestMol):
         super().__init__(data)
         self._mol = mol
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> object:
         if key == "csmi":
             return self._mol.xf.csmi
         return super().__getitem__(key)
@@ -101,7 +102,7 @@ class _LazyProductInfo(dict):
             return self._mol.xf.csmi
         return super().get(key, default)
 
-    def __contains__(self, key):
+    def __contains__(self, key: object) -> bool:
         return key == "csmi" or super().__contains__(key)
 
 
@@ -139,6 +140,16 @@ class ProductsOfReaction(NamedTuple):
     products: list[Mol]
 
 
+def _accept_all_rules(
+    mol: TracingMol, rule: ReactionRule, info: PatternInfo
+) -> bool:
+    return True
+
+
+def _accept_all_sites(mol: TracingMol, site: Site, info: SiteInfo) -> bool:
+    return True
+
+
 class ReactionRule:
     """A reaction, and the contract every reaction keeps.
 
@@ -165,8 +176,8 @@ class ReactionRule:
         name: str | None = None,
         sites_on: SitesOn | None = None,
         longname: str | None = None,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         # super().__init__( *args, **kwargs)
 
@@ -206,7 +217,7 @@ class ReactionRule:
         return identity_canonical_plan(self.name, mol, info["site"])
 
     def __call__(
-        self, mol: Mol, **kwargs
+        self, mol: Mol, **kwargs: Any
     ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
@@ -216,10 +227,10 @@ class ReactionRule:
     def metabolize(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
         unique_csmi: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
         """Apply this rule and yield ``(product, info)`` pairs.
 
@@ -360,9 +371,9 @@ class ReactionRule:
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
-        **kwargs,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
+        **kwargs: Any,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Yield one :class:`ProductsOfReaction` per edit. Subclasses override this.
 
@@ -733,7 +744,7 @@ def branches(
     whens: Sequence[When],
     site_map: int = 1,
     removes_partner: bool = False,
-    **effect: EffectField,
+    **effect: Any,
 ) -> tuple[Effect, ...]:
     """Copy ``effect`` once per ``when``. The site atom and the OR atom differ.
 
@@ -998,7 +1009,7 @@ def _isotope_smarts(smarts: str, pin: tuple[int, ...]) -> str:
 
     wanted = set(pin)
 
-    def repl(match):
+    def repl(match: re.Match[str]) -> str:
         mapno = int(match.group(2))
         if mapno not in wanted:
             return match.group(0)
@@ -1115,7 +1126,7 @@ class SmartsReactionRule(ReactionRule):
 
     rxns: list[tuple[str, ChemicalReaction, PatternInfo]]
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         super().__init__(*args, **kwargs)
 
@@ -1131,10 +1142,10 @@ class SmartsReactionRule(ReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
         context_mol: Mol | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
@@ -1209,7 +1220,7 @@ class SmartsReactionRule(ReactionRule):
         self,
         smarts: str,
         use_implicit_properties: bool = False,
-        **kwargs,
+        **kwargs: Any,
     ) -> ChemicalReaction:
         """Converts SMARTS reactions to RDKit reactions."""
         return reaction_from_smarts(smarts)
@@ -1720,10 +1731,10 @@ class ResonanceRule(SmartsReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
         context_mol: Mol | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`SmartsReactionRule.metabolites`.
 
@@ -1806,10 +1817,10 @@ class ResonancePairRule(ResonanceRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules: FilterRules = lambda mol, rule, info: True,
-        filter_sites: FilterSites = lambda mol, site, info: True,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
         context_mol: Mol | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
@@ -2405,7 +2416,7 @@ class Dealkylation(SmartsReactionRule):
 
 
 def _ndealk(
-    smarts: str, leave_count: int | None, name: str, **effect
+    smarts: str, leave_count: int | None, name: str, **effect: Any
 ) -> tuple[str, PatternInfo]:
     """One N-dealkylation pattern. ``leave_count`` is the named leaving atoms."""
 
@@ -2734,7 +2745,7 @@ class TautomerRule(ResonancePairRule):
     endpoints = ()
     smarts = ()
 
-    def metabolites(self, mol: Mol, *args, **kwargs):  # type: ignore[override]
+    def metabolites(self, mol: Mol, *args: Any, **kwargs: Any):  # type: ignore[override]
         raise NotImplementedError(
             "TautomerRule is a design stub; see class docstring and "
             "HEURISTICS.md / TODO.md (tautomer SMARTS vs tautomer rule)"
@@ -3123,8 +3134,8 @@ class ConjugationRule(SmartsReactionRule):
         self,
         as_star: bool | None = None,
         star_label: str | None = None,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ):
         if as_star is None:
             as_star = type(self).as_star
@@ -3149,10 +3160,10 @@ class ConjugationRule(SmartsReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda mol, rule, info: True,
-        filter_sites=lambda mol, site, info: True,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
         context_mol: Mol | None = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         for por in super().metabolites(
             mol,

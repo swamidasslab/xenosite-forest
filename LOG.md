@@ -2,6 +2,12 @@
 
 ## 2026-09-20
 
+- POC pyright: untyped parameters now **error** (`reportMissingParameterType`, `reportUnknownParameterType`, `reportUntypedFunctionDecorator` in `[tool.pyright]`). Scoped to `src/xenosite/refactor_poc` only (forest stays out). Argument/member/variable Unknown left off — RDKit stubs flood those (~670 with all unknown reports).
+- Typing tighten: `PairSiteSignature` / `SiteSignature` / `MapRankKey` / `PairRoleKey` in `records.py`; `pair_site_signature` returns NamedTuple; `forest_copy` / `copy_mutable` use `object`+TypeVar instead of `Any`; pynauty via `_NautyModule` Protocol; filter defaults are typed `_accept_all_*` helpers (not bare lambdas).
+- Before (old CI config): **3** errors (`atom_tracker` Mol|Mapping union). After settings+fixes: **0**. Mid-probe with new rules alone was ~201 before annotation pass.
+
+## 2026-09-20
+
 - Agent briefing `src/xenosite/refactor_poc/PAIR_ORBITS.md`: problem, swap_group ordered/unordered, directed bond–atom (not a Site), nauty emit + flip, types, three assessment checks (HQ collapse, phenol C–O+O ≠ C–O+C, ethane either C), code map, TRIVIAL / atom_bond ordered≡unordered caveats. Excerpted from HEAD; no code change.
 
 ## 2026-09-20

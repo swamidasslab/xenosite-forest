@@ -452,7 +452,8 @@ class EndParents(NamedTuple):
 # separate Site field. Atom–atom / bond–bond have no type-level direction;
 # same-kind ends use ``swap_group`` ordered/unordered only.
 # A *pair* of bond–atom units (ResonancePair) is
-# :class:`BondAtomPairOrbitSignature` with its own ``ordered`` flag.
+# :class:`BondAtomPairOrbitSignature` with ``ends``, a joint second-order
+# ``pair_group`` (orbit of ``((b1,a1),(b2,a2))``), and ``ordered``.
 # Constructors: ``unordered_*`` / ``ordered_*`` in ``graph_isomorphism``.
 
 TopoGroupId = NewType("TopoGroupId", int)
@@ -528,9 +529,15 @@ class BondAtomPairOrbitSignature(NamedTuple):
     Unique-edit key, not a Site. Each end is already directed bond→atom;
     ``ordered`` only decides whether the *two ends* are swappable
     (``swap_group``), not whether bond and atom roles swap.
+
+    ``pair_group`` is the **second-order** orbit of the composite-site pair
+    ``((b1, a1), (b2, a2))`` under the molecular automorphism group. The two
+    first-order end signatures alone are not enough: on benzene, neighbor vs
+    opposite placements share identical end signatures but not ``pair_group``.
     """
 
     ends: tuple[BondAtomOrbitSignature, BondAtomOrbitSignature]
+    pair_group: PairGroupId
     ordered: Literal[True, False]
 
 
@@ -543,6 +550,45 @@ PairOrbitSignature: TypeAlias = (
     | BondAtomOrbitSignature
     | BondAtomPairOrbitSignature
 )
+
+# Map embedding identity: sorted (mapno, topological-rank) pairs.
+MapRankKey: TypeAlias = tuple[tuple[int, int], ...]
+# One end's role in a pair unique-edit key: (swap_group|name, map ranks).
+PairRoleKey: TypeAlias = tuple[str, MapRankKey]
+
+
+class PairSiteSignature(NamedTuple):
+    """Unique-edit dedup key for a ResonancePair emission (before mol edit).
+
+    ``roles`` is two ``(label, map_rank_key)`` ends: sorted when swappable
+    (shared ``swap_group``), else canonical ``PatternInfo.name`` order.
+    """
+
+    roles: tuple[PairRoleKey, PairRoleKey]
+    site_ranks: tuple[int, ...]
+    path_end_ranks: tuple[int, ...]
+    adds: str
+    removes: str
+    cleaves: bool
+    dearomatizes: bool
+    methide: bool
+    orbit: PairOrbitSignature | None
+
+
+# Dedup key for one SMARTS site across Kekulé forms / equivalent carbons.
+# Last field: pair-orbit signature, or None for a one-atom site without bond_atom.
+# Built in ``graph_isomorphism.site_signature``; declared here so records own
+# the schema the same way ``PairSiteSignature`` does.
+SiteSignature: TypeAlias = tuple[
+    MapRankKey,
+    tuple[tuple[int, int, float], ...],
+    int,
+    str | None,
+    str | None,
+    bool,
+    bool,
+    PairOrbitSignature | None,
+]
 
 # Forest nested tables: (ga, gb) -> {(end_a, end_b): pair_group_id}
 PairOrbitSlice: TypeAlias = dict[tuple[int, int], PairGroupId]
@@ -579,6 +625,10 @@ class Structure(TypedDict, total=False):
     mcs_targets: dict[str, McsResult]
     site_pair_orbits_nauty: SitePairOrbitTables
     site_pair_orbits_smiles: SitePairOrbitTables
+    # Second-order bond–atom composite-pair orbits (ordered / unordered slices).
+    bond_atom_pair_orbits_nauty: dict[
+        Literal[True, False], dict[tuple[tuple[int, int], tuple[int, int]], PairGroupId]
+    ]
     bond_topeqiv: dict[int, int]
     cip_ids: tuple[int, ...]
     cip_ids_stereo: tuple[int, ...]
