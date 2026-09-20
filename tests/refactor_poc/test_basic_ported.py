@@ -23,6 +23,7 @@ from xenosite.refactor_poc.rules import (
 )
 from xenosite.refactor_poc.rulesets import RuleSet
 
+
 def test_epoxide_opening_aromatic():
     hits = list(
         find_path(

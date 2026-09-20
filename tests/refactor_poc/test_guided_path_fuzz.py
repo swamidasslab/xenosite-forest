@@ -7,7 +7,8 @@ are not expanded.
 
 from __future__ import annotations
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 from rdkit import Chem
 
 from xenosite.refactor_poc.find_path import PathCounters, find_path

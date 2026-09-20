@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- CI lint gate for POC only: `.github/workflows/test.yml` job `lint` runs `uv run ruff check src/xenosite/refactor_poc tests/refactor_poc` and `uv run pyright src/xenosite/refactor_poc`. Forest stays out. Pyright include is src package only (tests deferred for MolFromSmiles/TypedDict noise). Ruff still covers POC tests. Small fixes for green: Xf Protocol pair-orbit methods, PairMode annotation, duplicate `emitable_names_by_rule`, ruff autofix on POC tests.
+
+## 2026-09-20
+
 - Ported forest base suites into `tests/refactor_poc/`: `test_maybe_path.py` (Maybe/allows bags), `test_dh_methide_pathways.py` (methide always in data; refuse via `filter_sites`; toluene→o-QM), `test_topo_emission.py` (unique_csmi / symmetry collapse), `test_rdkit_valence.py` (focused crashers), `test_guided_path_gold.py` (APAP/NAPQI, BQ budgets, terminal conjugates, TBA). POC fix: Dehydrogenation `methide_end` + skip both-methide pair resolve (DROPPED approved drop of pathways= opt-in). Ester→acid Hydrolysis bags need `use_filters=False` (atom-diff skips). Suite: **27 passed** on the five modules; pattern_info_coverage **193 passed**, 2 xfailed. Pre-existing `test_path` budget asserts (butylbenzene/PhCH2OH) unchanged by this diff. Did not touch `guided_path.py` / `test.ipynb`.
 
 ## 2026-09-20

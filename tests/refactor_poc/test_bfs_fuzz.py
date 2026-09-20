@@ -8,7 +8,8 @@ A star acetyl is terminal here, so dehydrogenation does not expand it.
 
 from __future__ import annotations
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 from rdkit import Chem
 
 from xenosite.refactor_poc.find_path import bfs, dfs

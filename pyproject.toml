@@ -162,13 +162,15 @@ show_missing = true
 [tool.pyright]
 include = [
     "src/xenosite/refactor_poc",
-    "tests/refactor_poc",
 ]
 exclude = [
     "src/xenosite/refactor_poc/test.ipynb",
 ]
+# tests/refactor_poc stays out until its MolFromSmiles / TypedDict noise is
+# cleaned. Local and CI both use this include list.
 
 # POC only. Forest and examples stay out. test.ipynb is not Python source.
+# Top-level tests/test_*.py is the forest suite; nested tests/refactor_poc stays.
 [tool.ruff]
 target-version = "py310"
 line-length = 100
@@ -177,6 +179,9 @@ extend-exclude = [
     "src/xenosite/forest",
     "examples",
     "src/xenosite/refactor_poc/test.ipynb",
+    "tests/conftest.py",
+    "tests/phase1_helpers.py",
+    "tests/test_*.py",
 ]
 
 [tool.ruff.lint]

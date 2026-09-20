@@ -12,7 +12,6 @@ import cProfile
 import importlib.util
 import io
 import pstats
-import sys
 import time
 from pathlib import Path
 

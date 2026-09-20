@@ -3,7 +3,6 @@
 import copy
 from typing import TYPE_CHECKING, cast
 
-import pytest
 from rdkit import Chem
 
 from xenosite.refactor_poc.rdkitutil import (
@@ -20,9 +19,9 @@ if TYPE_CHECKING:
     from xenosite.refactor_poc.rdkit_api import (
         ForestMol,
         ForestNoTracingMol,
-        TracingMol,
         NoForestMol,
         NoTracingMol,
+        TracingMol,
     )
 
     def _needs_no_trace(mol: NoTracingMol) -> None:

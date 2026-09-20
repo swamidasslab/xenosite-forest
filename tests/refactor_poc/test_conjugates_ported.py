@@ -14,15 +14,16 @@ import pytest
 from test_conjugates import (
     ACETALDEHYDE,
     ACETANILIDE,
+    ALIPHATIC_THIOL,
     AZETIDINE_PHENYL,
     BENZALDEHYDE,
     BENZOIC_ACID,
+    BENZONITRILE,
     BENZOQUINONE,
     BENZYL_BROMIDE,
     BENZYL_CHLORIDE,
     BENZYL_IODIDE,
     BENZYL_MESYLATE,
-    BENZONITRILE,
     BETA_ENONE,
     CARBODIIMIDE,
     CINNAMALDEHYDE,
@@ -32,8 +33,8 @@ from test_conjugates import (
     MENADIONE,
     METHYL_MESYLATE,
     METHYLGLYOXAL,
-    NAPQI,
     N_PHENYLAZIRIDINE,
+    NAPQI,
     PHENOL,
     PHENYL_ISOCYANATE,
     PHENYL_ISOTHIOCYANATE,
@@ -44,7 +45,6 @@ from test_conjugates import (
     SULFONIC_ACID,
     TERMINAL_ALKENE,
     THIOPHENOL,
-    ALIPHATIC_THIOL,
 )
 from xenosite.forest.utils import mol_to_cxsmiles
 from xenosite.refactor_poc.rdkit_api import Mol, MolFromSmiles, MolToSmiles

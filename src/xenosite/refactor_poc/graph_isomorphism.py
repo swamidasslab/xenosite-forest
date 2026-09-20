@@ -651,7 +651,8 @@ def _nested_tables_from_groups(
 
     cip = cip_ids(mol, include_stereo=include_stereo)
     tables: SitePairOrbitTables = {}
-    for mode, groups in orbits.items():
+    for mode_key, groups in orbits.items():
+        mode: PairMode = mode_key
         unordered = mode != "bond_atom"
         # Membership may already be sorted; re-normalize for a stable key.
         memberships = [

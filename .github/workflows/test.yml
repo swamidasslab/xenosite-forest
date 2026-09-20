@@ -35,3 +35,20 @@ jobs:
         run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
       - name: Run tests in parallel
         run: uv run pytest -n auto --cov=xenosite.forest --cov-report=term-missing
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and dev extras
+        run: uv sync --extra network --group dev
+      - name: Ruff (refactor_poc only)
+        run: uv run ruff check src/xenosite/refactor_poc tests/refactor_poc
+      - name: Pyright (refactor_poc src only)
+        # Paths match [tool.pyright] include; tests stay out until typed clean.
+        run: uv run pyright src/xenosite/refactor_poc

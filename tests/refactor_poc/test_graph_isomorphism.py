@@ -57,6 +57,7 @@ import pytest
 
 from xenosite.refactor_poc.graph_isomorphism import (
     TRIVIAL_PAIR_GROUP,
+    _nested_tables_from_groups,
     atom_pair_orbit_isotope,
     atom_pair_orbit_key,
     atom_site_cip_key,
@@ -70,7 +71,6 @@ from xenosite.refactor_poc.graph_isomorphism import (
     site_pair_cip_key,
     site_pair_orbits_nauty,
     site_pair_orbits_smiles,
-    _nested_tables_from_groups,
 )
 from xenosite.refactor_poc.rdkitutil import Mol, MolFromSmiles, cip_ids
 from xenosite.refactor_poc.records import (

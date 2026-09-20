@@ -23,11 +23,14 @@ from typing import TYPE_CHECKING, Literal, Protocol, overload
 
 if TYPE_CHECKING:
     from xenosite.refactor_poc.records import (
+        AtomPairOrbitSignature,
+        BondAtomOrbitSignature,
+        BondPairOrbitSignature,
         Forest,
         Formula,
         InitializedAtomTrace,
+        SitePairOrbitTables,
         TracingForest,
-        UntracedForest,
     )
 
     class BondType:
@@ -166,6 +169,24 @@ if TYPE_CHECKING:
         def topol_equiv(self) -> dict[int, int]: ...
         @property
         def formula(self) -> Formula: ...
+        @property
+        def pair_orbit_backend(self) -> Literal["nauty", "smiles", "none"]: ...
+        @classmethod
+        def set_pair_orbit_backend(
+            cls, backend: Literal["nauty", "smiles", "none"] | None
+        ) -> None: ...
+        def atom_pair_orbit_key(
+            self, site: frozenset[int]
+        ) -> AtomPairOrbitSignature | None: ...
+        def bond_pair_orbit_key(
+            self, bonds: frozenset[int]
+        ) -> BondPairOrbitSignature | None: ...
+        def bond_atom_orbit_key(
+            self, bond_idx: int, atom_idx: int
+        ) -> BondAtomOrbitSignature: ...
+        def site_pair_orbits(
+            self, backend: Literal["nauty", "smiles", "none"] | None = None
+        ) -> SitePairOrbitTables | None: ...
         def sanitize(self) -> int: ...
         def smarts_matches(self, smarts: str) -> tuple[dict[int, int], ...]: ...
         def of_products(

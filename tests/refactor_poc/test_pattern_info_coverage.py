@@ -17,6 +17,17 @@ from collections.abc import Mapping, Sequence
 import pytest
 from rdkit import Chem
 
+from xenosite.refactor_poc.rdkit_api import Mol, MolFromSmiles
+from xenosite.refactor_poc.records import Effect, PatternInfo, When
+from xenosite.refactor_poc.rules import (
+    ReactionRule,
+    _kekule_forms,
+    _site_indexes,
+    _span,
+    _when_matches,
+    resolve_effect,
+)
+
 from .pattern_info_inventory import (
     PATTERNLESS_REACTION_RULE_BASES,
     discover_reaction_rule_classes,
@@ -28,16 +39,6 @@ from .pattern_info_inventory import (
     when_key,
 )
 from .substrate_library import SUBSTRATE_LIBRARY
-from xenosite.refactor_poc.rdkit_api import Mol, MolFromSmiles
-from xenosite.refactor_poc.records import Effect, PatternInfo, When
-from xenosite.refactor_poc.rules import (
-    ReactionRule,
-    _kekule_forms,
-    _site_indexes,
-    _span,
-    _when_matches,
-    resolve_effect,
-)
 
 # Extra substrates beyond SUBSTRATE_LIBRARY that hit rare OR branches
 # (At / I geminal dihalides, hemiaminals, aziridines, arene oxide, etc.).

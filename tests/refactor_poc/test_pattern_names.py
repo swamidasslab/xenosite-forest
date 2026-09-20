@@ -11,6 +11,8 @@ per-rule uniqueness set via :func:`emitable_pattern_names`.
 
 from __future__ import annotations
 
+from xenosite.refactor_poc.records import PatternInfo
+
 from .pattern_info_inventory import (
     PATTERNLESS_REACTION_RULE_BASES,
     discover_reaction_rule_classes,
@@ -20,7 +22,6 @@ from .pattern_info_inventory import (
     optional_when_name,
     patterns_on,
 )
-from xenosite.refactor_poc.records import PatternInfo
 
 
 def _name_is_missing(info: PatternInfo) -> bool:

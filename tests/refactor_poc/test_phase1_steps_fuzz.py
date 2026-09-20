@@ -7,7 +7,8 @@ the preps that supply oxygen; epoxidation and N-dealkylation are themselves.
 
 from __future__ import annotations
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 from rdkit import Chem
 
 from xenosite.refactor_poc.rules import (

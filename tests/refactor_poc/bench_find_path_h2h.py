@@ -36,7 +36,8 @@ from rdkit import Chem
 from xenosite.forest import PathSearchCounters
 from xenosite.forest import find_path as forest_find_path
 from xenosite.forest.utils import canon_smi
-from xenosite.refactor_poc.find_path import PathCounters, find_path as poc_find_path
+from xenosite.refactor_poc.find_path import PathCounters
+from xenosite.refactor_poc.find_path import find_path as poc_find_path
 from xenosite.refactor_poc.rdkitutil import canon_smiles
 from xenosite.refactor_poc.rulesets import PhaseOne
 

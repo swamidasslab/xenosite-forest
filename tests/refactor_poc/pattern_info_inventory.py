@@ -8,13 +8,12 @@ checks cannot drift from the rule-derived set.
 from __future__ import annotations
 
 import inspect
-from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from typing import Any, NamedTuple
 
 from xenosite.refactor_poc import rules as rules_mod
 from xenosite.refactor_poc import rulesets
-from xenosite.refactor_poc.records import Effect, PatternInfo, When
+from xenosite.refactor_poc.records import PatternInfo, When
 from xenosite.refactor_poc.rules import (
     ReactionRule,
     ResonancePairRule,
@@ -163,23 +162,6 @@ def emitable_names_for_pattern(info: PatternInfo) -> list[str]:
         if resolved:
             names.append(resolved)
     return names
-
-
-def emitable_names_by_rule() -> dict[str, list[str]]:
-    """Every emitable name per concrete (non-whitelisted) ``ReactionRule``.
-
-    Duplicate names across different rules are fine; callers check
-    uniqueness within each rule's list.
-    """
-
-    by_rule: dict[str, list[str]] = defaultdict(list)
-    for cls in discover_reaction_rule_classes():
-        if cls in PATTERNLESS_REACTION_RULE_BASES:
-            continue
-        rule = instantiate_rule(cls)
-        for _group, _smarts, info in patterns_on(rule):
-            by_rule[cls.__name__].extend(emitable_names_for_pattern(info))
-    return dict(by_rule)
 
 
 def optional_when_name(when: When | None) -> str | None:
