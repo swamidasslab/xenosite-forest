@@ -4,7 +4,9 @@ from __future__ import annotations
 
 # Standard Library
 import itertools
+import logging
 import re
+import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
@@ -340,8 +342,10 @@ class ReactionRule:
                 assert p.xf.tracing.active
 
                 if unique_csmi:
-                    key = _unique_csmi_key(info, p.xf.csmi)
+                    product_csmi = p.xf.csmi
+                    key = _unique_csmi_key(info, product_csmi)
                     if key in seen:
+                        _report_csmi_dedup_drop(mol, info, product_csmi)
                         continue
                     seen.add(key)
 
@@ -1522,6 +1526,36 @@ def _unique_csmi_key(info: SiteInfo, csmi: str) -> tuple[str, str | None, str]:
     rule = info["rule"]
     rule_name = getattr(rule, "name", None) or type(rule).__name__
     return (rule_name, _pattern_dedup_token(info), csmi)
+
+
+class CsmiDedupWarning(UserWarning):
+    """Product csmi dedup dropped a duplicate that unique-edit / orbit missed."""
+
+
+# Identical text every call so warnings' default once-per-message filter works.
+_CSMI_DEDUP_WARNING = (
+    "CSMI dedup triggered: canonization / unique-edit filtering is off or "
+    "incomplete (unique-edit/orbit missed a duplicate product). "
+    "Raise log level to INFO on this logger for per-drop detail."
+)
+
+_logger = logging.getLogger(__name__)
+
+
+def _report_csmi_dedup_drop(substrate: Mol, info: SiteInfo, product_csmi: str) -> None:
+    """Warn (generic) and log INFO detail when ``unique_csmi`` drops a product."""
+
+    warnings.warn(_CSMI_DEDUP_WARNING, CsmiDedupWarning, stacklevel=2)
+    rule = info["rule"]
+    rule_name = getattr(rule, "name", None) or type(rule).__name__
+    _logger.info(
+        "CSMI dedup drop: substrate=%s rule=%s site=%s pattern=%s product=%s",
+        substrate.xf.csmi,
+        rule_name,
+        info.get("site"),
+        _pattern_dedup_token(info),
+        product_csmi,
+    )
 
 
 def overlay_kekule(mol: Mol, bond_map: Mapping[tuple[int, int], float]) -> RWMol:

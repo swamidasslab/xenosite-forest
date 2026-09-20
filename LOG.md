@@ -2,6 +2,8 @@
 
 ## 2026-09-20
 
+- **CSMI dedup diagnostics:** `ReactionRule.metabolize` / `RuleSet.metabolize` emit `CsmiDedupWarning` every drop (identical generic message; stdlib once-per-message when not error) plus `logger.info` per drop (`substrate`, `rule`, `site`, `pattern`, `product`; INFO off by default). Suite under warnings-as-errors: **87 failed / 1482 passed** — all sampled failures are `CsmiDedupWarning` (unique-edit/orbit still misses duplicates). Artifact: `artifacts/csmi_dedup_warn_suite.live.log`. Prefer fixing root causes over globally silencing; do not ignore in pyproject yet.
+
 - **Pytest:** uncaught warnings fail tests (`filterwarnings = error` in pyproject). Archive `UnstableWarning` still ignored; AtomTracker deprecation asserted via `pytest.warns` / local `catch_warnings(ignore)`.
 
 - **`site_kind` + examples (pre-v0.7.0):** `RuleSiteKind` `"atom"` / `"atom_pair"` on every leaf; `_example_substrates` short SMILES; `tests/forest/test_site_kind.py` asserts emit len matches declaration. Expand examples later for all patterns/whens (TODO).

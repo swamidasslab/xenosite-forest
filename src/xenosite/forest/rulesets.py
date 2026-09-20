@@ -38,6 +38,7 @@ from .rules import (
     SulfurReduction,
     _accept_all_rules,
     _accept_all_sites,
+    _report_csmi_dedup_drop,
     _unique_csmi_key,
 )
 
@@ -149,8 +150,10 @@ class RuleSet(ReactionRule):
                 addition = trace["additions"][trace["transforms"][-1]]
                 addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
-                    key = _unique_csmi_key(info, product.xf.csmi)
+                    product_csmi = product.xf.csmi
+                    key = _unique_csmi_key(info, product_csmi)
                     if key in seen:
+                        _report_csmi_dedup_drop(mol, info, product_csmi)
                         continue
                     seen.add(key)
                 yield product, info

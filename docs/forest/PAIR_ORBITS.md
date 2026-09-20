@@ -31,7 +31,9 @@ Two layers (do not conflate — HEURISTICS):
 1. **Site unique-edit** — topological ranks + pair-orbit signature. Equivalent
    embeddings of the *same* edit share one key before `RunReactants`.
 2. **Product csmi dedup** (`unique_csmi`) — drops site topology; keys
-   `(rule name, PatternInfo.name | SMARTS, product csmi)`.
+   `(rule name, PatternInfo.name | SMARTS, product csmi)`. A drop emits
+   `CsmiDedupWarning` (generic, once-per-message) plus an INFO log with
+   substrate / rule / site.
 
 Pair orbits refine (1) when atom ranks alone are not enough. Classic negative:
 benzene meta vs para share ranks but not atom–atom orbits
