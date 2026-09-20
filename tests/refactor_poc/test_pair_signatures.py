@@ -8,6 +8,8 @@ Contract (HEURISTICS / PatternInfo ``swap_group``):
    for the same chemical pairing.
 4. Covers helpers (``_ends_swappable``, ``_pair_orbit``, ``_pair_site_signature``)
    and real QF / Dehydrogenation PatternInfo couples.
+5. Resolved group defaults to ``name`` (omit annotation when equal); When may
+   override; explicit ``swap_group`` only when grouping differs from ``name``.
 """
 
 from __future__ import annotations
@@ -97,18 +99,22 @@ def _info_for_map(rule, mol, mapped: Mapping[int, int], site_atom: int) -> Patte
 # ---------------------------------------------------------------------------
 
 
-def test_swap_group_declared_on_dh_and_qf_endpoints():
-    for rule in (Dehydrogenation(), QuinoneFormation()):
+def test_swap_group_defaults_to_name_on_pair_endpoints():
+    """Resolved swap_group defaults to name; no redundant annotation needed."""
+
+    from xenosite.refactor_poc.rules import Hydrogenation
+
+    for rule in (Dehydrogenation(), QuinoneFormation(), Hydrogenation()):
         names = []
         for _smarts, info in rule.endpoints:
-            assert info.get("swap_group"), info
-            assert info["swap_group"] == info.get("name")
+            assert "swap_group" not in info, info  # omit when equal to name
+            assert _resolved_swap_group(info) == info.get("name")
             names.append(info["name"])
         assert len(names) == len(set(names))
 
 
 def test_ends_swappable_reads_swap_group_not_edit_string():
-    """DH phenol/amine share edit=single_to_double but different swap_group."""
+    """DH phenol/amine share edit=single_to_double but different names → ordered."""
 
     phenol = _endpoint(Dehydrogenation, "phenol_end")
     amine = _endpoint(Dehydrogenation, "amine_end")
@@ -122,10 +128,17 @@ def test_ends_swappable_reads_swap_group_not_edit_string():
     assert _ends_swappable(add_o, add_o)
     assert not _ends_swappable(add_o, std)
     assert not _ends_swappable(std, dealk)
-    # QF never shares a swap_group across distinct endpoint roles.
-    groups = {_endpoint(QuinoneFormation, n).get("swap_group") for n in (
-        "single_to_double", "add_carbonyl_o", "replace_halogen", "iminium", "dealkylate"
-    )}
+    # Distinct endpoint names → distinct resolved groups (no cross-role swap).
+    groups = {
+        _resolved_swap_group(_endpoint(QuinoneFormation, n))
+        for n in (
+            "single_to_double",
+            "add_carbonyl_o",
+            "replace_halogen",
+            "iminium",
+            "dealkylate",
+        )
+    }
     assert len(groups) == 5
 
 
@@ -134,8 +147,12 @@ def test_when_swap_group_override():
     amine = _endpoint(Dehydrogenation, "amine_end")
     # Synthetic When override: force amine into phenol's group.
     effect_override = {"when": {"map": 2, "z": 7, "h": 2, "swap_group": "phenol_end"}}
+    assert _resolved_swap_group(amine) == "amine_end"  # default = name
     assert _resolved_swap_group(amine, effect_override) == "phenol_end"
     assert _ends_swappable(phenol, amine, None, effect_override)
+    # Empty When.swap_group falls through to PatternInfo then name.
+    effect_empty = {"when": {"map": 2, "z": 7, "h": 2, "swap_group": ""}}
+    assert _resolved_swap_group(amine, effect_empty) == "amine_end"
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from xenosite.refactor_poc.rules import (
     _ends_swappable,
     _pair_orbit,
     _pair_site_signature,
+    _resolved_swap_group,
 )
 
 
@@ -49,11 +50,11 @@ def test_aminophenol_asymmetric_ends_emit_once():
 def test_end_roles_swappable_vs_ordered():
     phenol = Dehydrogenation.endpoints[0][1]
     amine = Dehydrogenation.endpoints[1][1]
-    assert phenol.get("swap_group") == "phenol_end"
-    assert amine.get("swap_group") == "amine_end"
+    assert _resolved_swap_group(phenol) == "phenol_end"
+    assert _resolved_swap_group(amine) == "amine_end"
     assert _ends_swappable(phenol, phenol)
     assert not _ends_swappable(phenol, amine)
-    # QF: distinct swap_groups are never swappable; same add_carbonyl_o is.
+    # QF: distinct names are never swappable; same add_carbonyl_o is.
     add_o = next(i for _, i in QuinoneFormation.endpoints if i.get("name") == "add_carbonyl_o")
     std = next(i for _, i in QuinoneFormation.endpoints if i.get("name") == "single_to_double")
     assert _ends_swappable(add_o, add_o)

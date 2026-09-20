@@ -788,7 +788,8 @@ def describe(
     One outcome: ``describe(adds="O", removes="H")``.
     Several: ``describe(*branches(...), edit="dealkylate")``.
     ``name`` distinguishes this pattern from the others on the same rule.
-    ``swap_group`` marks interchangeable pair ends (see HEURISTICS).
+    ``swap_group`` is optional; omit when it equals ``name`` (the default).
+    Set it only when interchangeable ends group differently from ``name``.
     """
 
     if single and possibilities:
@@ -1477,15 +1478,24 @@ def _bond_atom_orbit_for_match(
 def _resolved_swap_group(
     info: PatternInfo, effect: Effect | None = None
 ) -> str | None:
-    """``swap_group`` from a resolved When, else from PatternInfo."""
+    """Resolved swap group: When override, else PatternInfo, else ``name``.
+
+    Default is ``name`` so same-role pair ends are unordered without an
+    explicit annotation. Set ``swap_group`` only when grouping differs from
+    ``name`` (see HEURISTICS).
+    """
 
     if effect is not None:
         when = effect.get("when")
         if when is not None and "swap_group" in when:
             group = when.get("swap_group")
-            return group if group else None
+            if group:
+                return group
     group = info.get("swap_group")
-    return group if group else None
+    if group:
+        return group
+    name = info.get("name")
+    return name if name else None
 
 
 def _ends_swappable(
@@ -1496,9 +1506,8 @@ def _ends_swappable(
 ) -> bool:
     """True → unordered pair orbit; False → ordered.
 
-    Reads ``swap_group`` (PatternInfo, or When override on a resolved effect).
-    Unordered only when both ends share the same non-empty group — data for
-    equivalent/swappable edits that co-apply. Missing or unequal → ordered.
+    Reads resolved ``swap_group`` (When → PatternInfo → ``name``). Unordered
+    when both ends share the same non-empty group. Unequal → ordered.
     Canonical pattern order for ordered keys uses ``PatternInfo.name``.
     """
 
@@ -2221,9 +2230,11 @@ class ResonancePairRule(ResonanceRule):
                     # Same unique-edit site can still yield distinct products
                     # across kekulé parents / path lengths; collapse only
                     # duplicate csmi (resonance dups), not the whole site.
+                    # Bill once per unique-edit combo — path/kekulé fan-out is
+                    # how the writing is found, not a second site apply.
                     emitted_csmi: set[str] = set()
+                    _bump(counters, "mol_edits")
                     for parent, path in paths:
-                        _bump(counters, "mol_edits")
                         rw = rw_copy(parent)
                         edit1 = EDITS.get(info1.get("edit", ""))
                         edit2 = EDITS.get(info2.get("edit", ""))
@@ -2348,7 +2359,6 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=2,
                 name="phenol_end",
-                swap_group="phenol_end",
             ),
         ),
         (
@@ -2363,7 +2373,6 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=2,
                 name="amine_end",
-                swap_group="amine_end",
             ),
         ),
         (
@@ -2382,7 +2391,6 @@ class Dehydrogenation(ResonancePairRule):
                 edit="single_to_double",
                 site_map=1,
                 name="methide_end",
-                swap_group="methide_end",
             ),
         ),
     )
@@ -2440,7 +2448,6 @@ class QuinoneFormation(ResonancePairRule):
                 site_map=1,
                 skip_same_rings=True,
                 name="single_to_double",
-                swap_group="single_to_double",
             ),
         ),
         (
@@ -2453,7 +2460,6 @@ class QuinoneFormation(ResonancePairRule):
                 edit="add_carbonyl_o",
                 site_map=1,
                 name="add_carbonyl_o",
-                swap_group="add_carbonyl_o",
             ),
         ),
         (
@@ -2473,7 +2479,6 @@ class QuinoneFormation(ResonancePairRule):
                 edit="replace_halogen",
                 site_map=1,
                 name="replace_halogen",
-                swap_group="replace_halogen",
             ),
         ),
         (
@@ -2485,7 +2490,6 @@ class QuinoneFormation(ResonancePairRule):
                 site_map=1,
                 skip_same_rings=True,
                 name="iminium",
-                swap_group="iminium",
             ),
         ),
         (
@@ -2500,7 +2504,6 @@ class QuinoneFormation(ResonancePairRule):
                 site_map=1,
                 skip_same_rings=True,
                 name="dealkylate",
-                swap_group="dealkylate",
             ),
         ),
     )

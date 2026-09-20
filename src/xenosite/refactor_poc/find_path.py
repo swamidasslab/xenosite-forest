@@ -56,9 +56,10 @@ from xenosite.refactor_poc.rulesets import RuleSet
 class PathCounters:
     """Billed work for one search.
 
-    ``mol_edits`` counts a ``RunReactants`` or a kekulé overlay that a filter
-    has already accepted. ``billed`` is edits plus nodes visited. It is a
-    measurement, not a second search mode.
+    ``mol_edits`` counts a ``RunReactants`` or one ResonancePair unique-edit
+    combo (kekulé / path fan-out is how the writing is found, not a second
+    bill). ``billed`` is edits plus nodes visited. It is a measurement, not a
+    second search mode.
     """
 
     def __init__(self):

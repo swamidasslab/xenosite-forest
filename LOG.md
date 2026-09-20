@@ -2,6 +2,18 @@
 
 ## 2026-09-20
 
+- ``swap_group`` default = ``name``: dropped redundant ``swap_group=name`` annotations on DH/QF/H endpoints. ``_resolved_swap_group`` is When → PatternInfo → ``name``. Explicit field only when grouping differs from ``name``. Schema comments on PatternInfo/When in `records.py`. Tests assert resolved default, not stored key. Path-budget Hydrogenation unordered still holds via name default (no annotation).
+
+## 2026-09-20
+
+- Path-budget regression (butyl `mol_edits` 3→6, PhCH2OH 22→76): surfaced after `dd9c8ef` ResonancePair unique-edit (not Hydroxylation partition alone). Causes: (1) `mol_edits` billed once per kekulé parent × alternating path even when csmi collapsed; (2) Hydrogenation `path_end` pairs were ordered until resolved `swap_group` defaulted to `name`. Fix: bill once per unique-edit combo; `_resolved_swap_group` falls through to `name` (omit redundant annotations). Restored butyl=3 / PhCH2OH=30. Suites: path + gold + outcome_hard + maybe_path + fuzz + pair_signatures **84 passed**.
+
+## 2026-09-20
+
+- ResonancePair audit (narrowing vs ``swap_group``): only four subclasses — DH, QF, Hydrogenation, TautomerRule stub. Same-group couples that must stay unordered: DH ``phenol_end``×2 / ``amine_end``×2; QF ``add_carbonyl_o``×2, ``single_to_double``×2, ``replace_halogen``×2, ``dealkylate``×2, ``iminium``×2; Hydrogenation ``path_end``×2. Cross-role (DH phenol×amine, QF add_o×std, …) stay ordered via distinct groups. Narrowing SMARTS/`when` cannot eliminate those same-group pairs without losing real pathways (unlike Hydroxylation `#6h1` vs `#6h2,#6h3`). Verdict: prefer ``swap_group``; do not rip it out. Hygiene: Hydrogenation ``path_end`` uses default ``swap_group``=``name``. HEURISTICS Status: not approved (narrowing as swap_group replacement).
+
+## 2026-09-20
+
 - `_forest` copy optimization (two stages). **Approach:** explicit `forest_copy` / `copy_mutable` walker in `src/xenosite/refactor_poc/forest_copy.py` — not `ReactionRule.__deepcopy__` / pickle hooks. Magic on rules would hide the cost model and surprise picklers; the forest schema already names the three layers, so the copy policy lives next to that schema.
 - **Keys:** `immutable` (MappingProxyType; only immutable types downward — currently `start_labels: Mapping[int, str]`); `cache` (renamed from `structure` — structure-dependent ephemeral answers); mutable rest (`atom_trace`, `is_terminal_product`, …).
 - **API:** `forest_copy(forest, *, same_structure=False)` — deep-copy mutable (share ReactionRule + PatternInfo by id); shallow-copy `immutable`; drop `cache` unless `same_structure=True` (then keep by identity). Wired through `copy_mol` (same_structure=True), `cannonicalize_order` (False), `_apply_forest_trace`, `carry_forest`.

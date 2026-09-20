@@ -112,13 +112,15 @@ class Formula(TypedDict):
 class When(TypedDict, total=False):
     """Constraint that picks one branch of a SMARTS OR once atoms are known.
 
-    ``swap_group`` optionally overrides :class:`PatternInfo` ``swap_group`` for
-    this branch (pair unique-edit unordered vs ordered). See HEURISTICS.
+    ``swap_group`` optionally overrides the resolved PatternInfo group for this
+    branch only (pair unique-edit). See ``PatternInfo.swap_group``.
     """
 
     map: int
     z: int
     h: int
+    # Optional override of PatternInfo.swap_group for this when-branch.
+    # Absent / None → fall through to PatternInfo (then name). See HEURISTICS.
     swap_group: str
 
 
@@ -195,10 +197,12 @@ class PatternInfo(TypedDict, total=False):
     the branches that disagree. ``name`` distinguishes this pattern from the
     others on the same rule.
 
-    ``swap_group`` (optional): pair unique-edit. Two ends with the same
-    non-empty group are unordered (swappable roles). Missing or unequal
-    groups stay ordered, with ends sorted by ``name`` for a stable key.
-    A resolved :class:`When` may override via ``When["swap_group"]``.
+    ``swap_group`` (optional): pair unique-edit ordered vs unordered. Resolved
+    as When override → this field → ``name`` (``None`` / absent means use
+    ``name``). Same non-empty resolved group on both ends → unordered
+    (swappable); unequal → ordered, ends sorted by ``name``. Set explicitly
+    only when grouping should differ from ``name``. A resolved :class:`When`
+    may override via ``When["swap_group"]``. See HEURISTICS.
     """
 
     name: str
@@ -211,6 +215,9 @@ class PatternInfo(TypedDict, total=False):
     # are written first so the match cannot land on a different atom.
     pin: tuple[int, ...]
     skip_same_rings: bool
+    # Pair unique-edit group. Optional override when grouping differs from
+    # ``name``; None / absent → use ``name``. Same resolved group on both
+    # ends → unordered orbit; else ordered by ``name``. When may override.
     swap_group: str
 
 
