@@ -47,7 +47,7 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 - `leave_count` on a cleaving effect is read by `filter_sites`: when it is an int, the smaller fragment across the cleaved bond must have that many heavy atoms. Test: `test_leave_count_one_refuses_a_larger_leaving_fragment`.
 - Methide is always on the rule data (Dehydrogenation `methide_end`, QuinoneFormation alkyl branch). Opt-in `pathways=("methide",)` is dropped (DROPPED.md). Pair resolve skips both-methide ends; `filter_sites` that reads `options["methide"]` refuses methide when the caller wants none. Search already skips alkyl `partner=="C"` ends unless `_alkyl_bond_raises`. Tests: `test_dh_methide_pathways.py`.
 - **Adds-H vs removes-H filters (Hydrogenation ≠ Dehydrogenation).** `filter_sites` already refused removes-H effects unless some site atom has `h_delta < 0` (or intersects `loses_aromaticity`). Symmetric: effects whose `adds` contains H (and that do not also add O / cleave) are refused unless some site atom has `h_delta > 0`. `filter_rules` mirrors this on span.adds. **Hydrogenation adds H** (reduction / saturation); **Dehydrogenation removes H**. Do not conflate. `dearomatizes` alone is not enough toward a quinone target: both H and DH can dearomatize, but only DH/QF match oxidative `h_delta`. Status: approved. Tests: `test_hydrogenation_pattern_info.py`.
-- **Hydrogenation `path_end` PatternInfo.** Declares `adds="H"` and `dearomatizes=True` (capability); `merge_effects` resolves dearomatizes against `system_aromatic`. Alkene SMARTS keep span `dearomatizes=False` so aliphatic C=C→CC is not refused by the pattern-level “all dearomatizes” check when `loses_aromaticity` is empty. Status: approved.
+- **Hydrogenation `path_end` PatternInfo.** Declares `adds="H"` and `dearomatizes=True` (capability); `merge_effects` resolves dearomatizes against `system_aromatic`. Alkene SMARTS keep span `dearomatizes=False` so aliphatic C=C→CC is not refused by the pattern-level “all dearomatizes” check when `loses_aromaticity` is empty. The same check **skips** patterns whose span also adds H (path_end / alkene): those are gated by the adds-H filter instead, so aliphatic carbonyl path reduction (`CC=O`→`CCO`) is not refused. Status: approved.
 
 ## Schema proposals (not yet in PatternInfo)
 
@@ -62,8 +62,9 @@ on unique-edit miss) runs whenever site unique-edit is on — including with yie
 off, so a RuleSet can force children ``unique_csmi=False`` for cross-rule
 bubble-up without losing within-rule miss detection. Site unique-edit has no
 public off switch today; if one lands, check-off with it. ``product.xf.csmi``
-stays cached after first read; emission ``info["csmi"]`` is that frozenset.
-Status: approved.
+stays cached after first read. Emission identity for check/yield is
+``frozenset(p.xf.csmi for p in products)`` computed internally — not a
+``csmi`` field on ``info`` (callers use ``xf.csmi``). Status: approved.
 
 ## Schema in PatternInfo (approved)
 

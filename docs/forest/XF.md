@@ -1,9 +1,9 @@
 # `Mol.xf` — molecule accessor API
 
-`mol.xf` is the **public convenience API** for questions about a molecule in
-Metabolic Forest: canonical SMILES, SMARTS matches, rings, formula, pair-orbit
-keys, finishing products, and atom-trace queries. It is **not** the forest
-schema.
+`mol.xf` answers common questions about a molecule in Metabolic Forest:
+canonical SMILES, SMARTS matches, rings, formula, pair-orbit keys, finishing
+products, and atom-trace queries. Each access returns a short-lived facade over
+that mol; the methods and properties below are the stable contract for callers.
 
 Implementation: `Xf` / `XfTracing` in
 [`src/xenosite/forest/rdkitutil.py`](../../src/xenosite/forest/rdkitutil.py).
@@ -16,34 +16,20 @@ Prefer `mol.xf` over deprecated `AtomTracker`. Migration notes for 0.6 → 0.7:
 
 ---
 
-## `xf` vs `_forest`
+## Caching on `_forest`
 
-Each access to `mol.xf` **mints a fresh** `Xf` with a strong reference to that
-mol. Nothing is stored on the mol under the name `xf`, so facades cannot be
-copied between molecules. Temporary chains like
-`MolFromSmiles(...).xf.csmi` are safe.
+Each access to `mol.xf` mints a fresh `Xf` with a strong reference to that mol.
+Nothing is stored on the mol under the name `xf`, so facades cannot be copied
+between molecules. Temporary chains like `MolFromSmiles(...).xf.csmi` are safe.
 
-Answers and tracing state are **cached on** `mol._forest` — a private bag the
+Answers and tracing state are cached on `mol._forest` — private storage the
 facade installs lazily when a method needs it. Callers should use `xf`, not
-poke `_forest`.
+read or write `_forest` keys directly.
 
-The TypedDict layout of that bag (`Forest`, nested `Structure` / `AtomTrace`,
-…) is declared in
-[`src/xenosite/forest/records.py`](../../src/xenosite/forest/records.py). Link
-there when you need the shape of the cache. **Exact `_forest` field names and
-nesting are unstable** — they move as the library evolves. Stable contracts
-are the `xf` methods and properties below.
-
-| Layer | Role |
-| ----- | ---- |
-| `mol.xf` | Public accessor; mint-on-read |
-| `mol._forest` | Private cache / trace bag (do not rely on layout) |
-| `records.Forest` / `Structure` / `AtomTrace` | TypedDict map of that bag (for maintainers) |
-
-`has_forest` reports whether `_forest` is already present **without**
-installing one. Almost every other property installs an empty forest if
-missing. Wipe / constructor / reaction pieces return plain mols without a
-forest; re-enter with `mol.xf.forestmol` (or any query that attaches).
+`has_forest` reports whether `_forest` is already present without installing
+one. Almost every other property installs an empty bag if missing. Wipe /
+constructor / reaction pieces return plain mols without a forest; re-enter with
+`mol.xf.forestmol` (or any query that attaches).
 
 ---
 
@@ -93,9 +79,9 @@ _ = Chem.MolFromSmiles("CCO").xf.csmi               # attaches + caches
 
 ### Structure answers (cached)
 
-These fill keys under `_forest["cache"]` (the `Structure` TypedDict) on first
-use. After an in-place edit that changes bonding, call `clear_structure` (or
-finish via `of_products`, which clears for you).
+These fill keys under `_forest["cache"]` on first use. After an in-place edit
+that changes bonding, call `clear_structure` (or finish via `of_products`,
+which clears for you).
 
 | Member | Returns | Notes |
 | ------ | ------- | ----- |
@@ -118,9 +104,10 @@ hits = mol.xf.smarts_matches(Smarts("[#8:1]-[#6:2]"))
 # e.g. ({1: oxygen_idx, 2: carbon_idx}, ...)
 ```
 
-Emission identity in `metabolize` uses a frozenset of fragment `xf.csmi`
-values (`info["csmi"]`). Reading `product.xf.csmi` after finishing is cheap
-because the value is already cached.
+Emission identity in `metabolize` is `frozenset(p.xf.csmi for p in products)`
+(computed for unique-edit check / `unique_csmi` yield). There is no
+`info["csmi"]` — read each finished mol's `product.xf.csmi` (cached after
+first read).
 
 ### Pair-orbit keys
 
@@ -194,14 +181,28 @@ still calls `tracing._stamp()` on the root reactant.
 
 ## What not to do
 
-- Do not treat `mol.xf` as synonymous with the `Forest` TypedDict or as a
-  stable schema document.
-- Do not read or write `mol._forest[...]` in application code. Field layout
-  changes; `xf` is the contract.
+- Do not read or write `mol._forest[...]` in application code; field layout
+  changes as the library evolves.
 - Do not assign to `mol.xf` or try to copy an `Xf` instance onto another mol
   (read-only property; each access mints a new facade).
 - Do not keep a long-lived `xf` handle across edits that invalidate structure
   answers without `clear_structure` (or a fresh product from `of_products`).
+
+---
+
+## Internals
+
+Maintainers: the TypedDict layout of `_forest` (`Forest`, nested `Structure` /
+`AtomTrace`, …) is declared in
+[`src/xenosite/forest/records.py`](../../src/xenosite/forest/records.py). Exact
+field names and nesting are an unstable cache layout; prefer the `xf` surface
+above when writing application code.
+
+| Layer | Role |
+| ----- | ---- |
+| `mol.xf` | Public accessor; mint-on-read |
+| `mol._forest` | Private cache / trace bag |
+| `records.Forest` / `Structure` / `AtomTrace` | TypedDict map of that bag |
 
 ---
 
@@ -212,4 +213,4 @@ still calls `tracing._stamp()` on the root reactant.
 | [`MIGRATING_0.7.md`](MIGRATING_0.7.md) | 0.6 → 0.7 caller changes |
 | [`PAIR_ORBITS.md`](PAIR_ORBITS.md) | Pair-orbit unique-edit |
 | [`HEURISTICS.md`](HEURISTICS.md) | Find-path / filter policy |
-| [`records.py`](../../src/xenosite/forest/records.py) | `_forest` TypedDicts (`Forest`, `Structure`, `AtomTrace`) — unstable layout |
+| [`records.py`](../../src/xenosite/forest/records.py) | `_forest` TypedDicts — unstable cache layout |

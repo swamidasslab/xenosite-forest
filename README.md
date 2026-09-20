@@ -44,8 +44,8 @@ print(smiles)
 print(steps)
 
 # Enumerate hydroxylation products of propane
-for product, info in rules.Hydroxylation().metabolize(Chem.MolFromSmiles("CCC")):
-    print(info["site"], info["csmi"])
+for products, info in rules.Hydroxylation().metabolize(Chem.MolFromSmiles("CCC")):
+    print(info["site"], [p.xf.csmi for p in products])
 
 # Named Phase I ruleset
 print(sorted({rule.name for rule in PhaseOneRS}))

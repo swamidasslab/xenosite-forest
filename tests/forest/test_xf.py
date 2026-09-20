@@ -131,7 +131,8 @@ def test_metabolize_uses_of_products_and_xf_csmi():
     product = product_list[0]
     assert product.xf.tracing.active
     assert product.xf.tracing.depth == 1
-    assert info["csmi"] == frozenset({product.xf.csmi})
+    assert "csmi" not in info
+    assert product.xf.csmi
 
 
 def test_conjugation_products_are_terminal_and_not_reexpanded():

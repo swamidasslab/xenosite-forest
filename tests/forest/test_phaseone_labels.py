@@ -34,8 +34,14 @@ def test_phaseone_is_the_catalog_ruleset():
 
 def test_metabolize_calls_phaseone():
     mol = Chem.MolFromSmiles("CC")
-    direct = {info["csmi"] for _products, info in PhaseOne.metabolize(mol)}
-    wrapped = {info["csmi"] for _products, info in metabolize(mol)}
+    direct = {
+        frozenset(p.xf.csmi for p in products)
+        for products, _info in PhaseOne.metabolize(mol)
+    }
+    wrapped = {
+        frozenset(p.xf.csmi for p in products)
+        for products, _info in metabolize(mol)
+    }
     assert wrapped == direct
     assert frozenset({"CCO"}) in wrapped
 

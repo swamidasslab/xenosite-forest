@@ -81,11 +81,11 @@ mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
 
 # Single rule — yields (products, info); see docs/forest/MIGRATING_0.7.md
 for products, info in rules.QuinoneFormation().metabolize(mol):
-    print(info["site"], info["csmi"], [p.xf.csmi for p in products])
+    print(info["site"], [p.xf.csmi for p in products])
 
 # Ruleset (same yield shape)
 for products, info in PhaseOne().metabolize(mol):
-    print(info["rule"].name, info["site"], info["csmi"])
+    print(info["rule"].name, info["site"], [p.xf.csmi for p in products])
 ```
 
 ### Resolve and replay
@@ -130,11 +130,12 @@ from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
 for products, info in rules.QuinoneFormation().metabolize(mol):
-    print(info["site"], info["csmi"])
+    print(info["site"], [p.xf.csmi for p in products])
 ```
 
 `info["site"]` is atom indexes (typically a `frozenset`). Cleavage yields sibling
-mols in one `products` list; `info["csmi"]` is their frozenset.
+mols in one `products` list; read each fragment via `p.xf.csmi` (emission
+identity is the frozenset of those).
 
 ## Conjugation (Phase II)
 
@@ -204,7 +205,7 @@ from xenosite.forest import rules
 mol = Chem.MolFromSmiles("CCO")
 products, info = next(rules.Hydroxylation().metabolize(mol))
 product = products[0]
-print(info["csmi"], product.xf.csmi)
+print(product.xf.csmi)
 ```
 
 Prefer `mol.xf` for maps, formula, and atom_trace. See

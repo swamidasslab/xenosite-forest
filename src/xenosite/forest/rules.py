@@ -83,33 +83,6 @@ from xenosite.forest.records import (
 )
 
 
-class _LazyProductInfo(dict):
-    """Product ``info`` view. ``csmi`` is the emission frozenset of fragment CSMIs.
-
-    The hot path does not compute SMILES until ``info["csmi"]`` / yield dedup
-    reads each ``mol.xf.csmi`` (cached on ``structure["csmi"]``).
-    """
-
-    __slots__ = ("_mols",)
-
-    def __init__(self, data: dict[str, object], mols: Sequence[ForestMol]):
-        super().__init__(data)
-        self._mols = list(mols)
-
-    def __getitem__(self, key: str) -> object:
-        if key == "csmi":
-            return frozenset(m.xf.csmi for m in self._mols)
-        return super().__getitem__(key)
-
-    def get(self, key, default=None):  # type: ignore[override]
-        if key == "csmi":
-            return frozenset(m.xf.csmi for m in self._mols)
-        return super().get(key, default)
-
-    def __contains__(self, key: object) -> bool:
-        return key == "csmi" or super().__contains__(key)
-
-
 def _copy_when(raw: When | Mapping[str, int]) -> When:
     copied: When = {}
     mapno = raw.get("map")
@@ -269,9 +242,10 @@ class ReactionRule:
           depth of the site's index frame live under
           ``atom_trace["additions"][id]``. The change in formula lives
           under ``atom_trace["delta_formula"][id]``.
-        - Shares emission ``info["csmi"]``: the frozenset of fragment
-          canonical SMILES for that yield (``product.xf.csmi`` is still
-          each mol's own SMILES). Product CSMI has two roles: **check**
+        - Product SMILES live on each mol via ``product.xf.csmi`` (not on
+          ``info``). Emission identity for **check** / **yield** is
+          ``frozenset(p.xf.csmi for p in products)`` computed at yield from
+          those cached values — no ``csmi`` key on the info bag. **check**
           (always, while site unique-edit is on) warns
           ``SiteDeduplicationWarning`` when a later emission under the
           same ``(rule, pattern)`` repeats an earlier emission's frozenset
@@ -397,11 +371,7 @@ class ReactionRule:
                     continue
                 seen_yield.add(key)
 
-            i = cast(
-                ProductInfo,
-                _LazyProductInfo(dict(info), finished),
-            )
-            yield finished, i
+            yield finished, cast(ProductInfo, dict(info))
 
     def _top_site(self, site: Site, mol: Mol) -> Site:
         te = mol.xf.topol_equiv

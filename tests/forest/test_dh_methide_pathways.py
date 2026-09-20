@@ -73,9 +73,9 @@ def test_at_most_one_methide_end():
         opts = info.get("options") or {}
         ends = info.get("ends") or ()
         n_methide = sum(1 for end in ends if end.get("methide"))
-        assert n_methide <= 1, info["csmi"]
+        assert n_methide <= 1, frozenset(p.xf.csmi for p in products)
         if opts.get("methide"):
-            assert n_methide == 1, info["csmi"]
+            assert n_methide == 1, frozenset(p.xf.csmi for p in products)
         for product in products:
             assert product.xf.csmi != canon("C=c1ccccc1=C")
 

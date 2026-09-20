@@ -37,12 +37,13 @@ Live `ReactionRule.metabolize` /
 `RuleSet.metabolize` yield `(products, info)` — always a `list[Mol]`
 per emission (`src/xenosite/forest/rules.py` metabolize;
 `rulesets.py`). Non-cleavage: one-element list. Cleavage: all sibling
-fragments in that list. `info` is `ProductInfo` (`site`, `rule`,
-`options`, …); `info["csmi"]` is the emission **frozenset** of fragment
-canonical SMILES (aligns with unique-edit miss check). No
-`product_index` / `product_count`. Default `unique_csmi=True` drops a
-later emission with the same frozenset under the same `(rule, pattern)`;
-identical siblings inside one cleavage list are kept.
+fragments in that list. `info` is `ProductInfo` (= `SiteInfo`: `site`, `rule`,
+`options`, …). Product SMILES are **not** on `info` — use `product.xf.csmi`,
+or `frozenset(p.xf.csmi for p in products)` for emission identity (same `S`
+as unique-edit check / `unique_csmi` yield). No `product_index` /
+`product_count`. Default `unique_csmi=True` drops a later emission with the
+same frozenset under the same `(rule, pattern)`; identical siblings inside
+one cleavage list are kept.
 
 ```python
 from rdkit import Chem
@@ -51,7 +52,7 @@ from xenosite.forest.rules import Hydroxylation
 mol = Chem.MolFromSmiles("Oc1ccccc1")
 for products, info in Hydroxylation().metabolize(mol):
     # products: list[Mol] — len 1 here
-    print(info["site"], info["csmi"], products[0].xf.csmi)
+    print(info["site"], [p.xf.csmi for p in products])
 ```
 
 
@@ -60,7 +61,7 @@ for products, info in Hydroxylation().metabolize(mol):
 | Yield          | `(site, list[Mol])`                | `(list[Mol], info)`                            |
 | Site           | Often `(rule_name, frozenset[…])`  | Atom indexes only (`info["site"]`)             |
 | Cleavage       | Sibling mols in one list           | Sibling mols in one list                       |
-| Product SMILES | Caller computes                    | `info["csmi"]` (frozenset); each `mol.xf.csmi` |
+| Product SMILES | Caller computes                    | `product.xf.csmi` (emission: frozenset of those) |
 | Dedup knobs    | Topo-site + optional `only_unique` | `unique_csmi` (default `True`, emission-level) |
 
 
@@ -217,7 +218,9 @@ on GitHub (not exercised by CI).
 ## Quick checklist
 
 1. Change loops from `site, products` → `products, info` (still a list per emission).
-2. Read `info["site"]` / `info["csmi"]` (frozenset); drop `(rule_name, site)` unpacking.
+2. Read `info["site"]`; product SMILES via `product.xf.csmi` (or
+  `frozenset(p.xf.csmi for p in products)` for emission identity). Drop
+  `(rule_name, site)` unpacking — there is no `info["csmi"]`.
 3. Replace `include_sites` / tagging kwargs with `filter_sites` / `mol.xf`.
 4. Rename `SmartsReactionRule` / `.smarts` → `SmirksReactionRule` / `.smirks`.
 5. Expect `SiteDeduplicationWarning` on true unique-edit misses; cross-rule overlaps

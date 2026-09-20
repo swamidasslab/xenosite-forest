@@ -108,7 +108,8 @@ def test_azo_cleavage_keeps_sibling_fragments_in_one_list() -> None:
     products, info = rows[0]
     assert len(products) == 2
     assert [p.xf.csmi for p in products] == ["Nc1ccccc1", "Nc1ccccc1"]
-    assert info["csmi"] == frozenset({"Nc1ccccc1"})
+    assert "csmi" not in info
+    assert frozenset(p.xf.csmi for p in products) == frozenset({"Nc1ccccc1"})
 
 
 def test_unique_csmi_false_still_packs_cleavage_siblings() -> None:

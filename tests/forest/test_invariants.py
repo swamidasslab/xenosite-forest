@@ -78,9 +78,8 @@ def test_each_product_is_one_depth_below_its_parent():
         child = product._forest["atom_trace"]
         assert child["depth"] == parent_depth + 1
         assert child["formula"] == product.xf.formula
-        assert info["csmi"] == frozenset(
-            {Chem.MolToSmiles(product, isomericSmiles=False)}
-        )
+        assert product.xf.csmi == Chem.MolToSmiles(product, isomericSmiles=False)
+        assert "csmi" not in info
         rule = info["rule"]
         assert isinstance(rule, ReactionRule)
         assert rule.name == "Hydroxylation"
@@ -98,7 +97,10 @@ def test_canonical_smiles_are_not_repeated():
     _mol, _before, products = _pairs(
         RuleSet((Hydroxylation, Dealkylation), name="Forest"), "CC"
     )
-    keys = [_unique_csmi_key(info, info["csmi"]) for _products, info in products]
+    keys = [
+        _unique_csmi_key(info, frozenset(p.xf.csmi for p in products))
+        for products, info in products
+    ]
     assert len(keys) == len(set(keys))
 
 
@@ -168,9 +170,9 @@ def test_a_rule_is_itself_when_iterated_and_its_name_has_no_underscore():
     assert rule.name is not None and "_" not in rule.name
     called = list(rule(Chem.MolFromSmiles("CC")))
     direct = list(rule.metabolize(Chem.MolFromSmiles("CC")))
-    assert [info["csmi"] for _products, info in called] == [
-        info["csmi"] for _products, info in direct
-    ]
+    assert [
+        frozenset(p.xf.csmi for p in products) for products, _info in called
+    ] == [frozenset(p.xf.csmi for p in products) for products, _info in direct]
 
 
 def test_a_ruleset_iterates_its_children():

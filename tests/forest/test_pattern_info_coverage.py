@@ -23,6 +23,7 @@ from xenosite.forest.rules import (
     ReactionRule,
     _kekule_forms,
     _site_indexes,
+    _site_map_aromatic,
     _span,
     _when_matches,
     resolve_effect,
@@ -226,17 +227,29 @@ def _assert_resolution(
     # Declared outcome fields from the chosen possibility survive resolution.
     # breaks_ring / partner / partner_h may be filled by resolve_effect, so
     # they are not compared to the declared possibility here.
+    # dearomatizes on PatternInfo is capability: resolve_effect narrows it to
+    # whether a site_map atom is aromatic (same as ResonancePair merge).
     for key in (
         "adds",
         "removes",
         "cleaves",
         "leave_count",
         "methide",
-        "dearomatizes",
         "needs",
     ):
         if key in chosen:
             assert effect.get(key) == chosen[key], (key, effect.get(key), chosen[key])
+
+    if chosen.get("dearomatizes"):
+        assert effect.get("dearomatizes") == _site_map_aromatic(
+            context, mapped, site_map
+        ), (
+            "dearomatizes",
+            effect.get("dearomatizes"),
+            _site_map_aromatic(context, mapped, site_map),
+        )
+    elif "dearomatizes" in chosen:
+        assert effect.get("dearomatizes") is False
 
     when = chosen.get("when")
     if when is not None:

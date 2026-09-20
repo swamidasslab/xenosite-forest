@@ -2,20 +2,27 @@
 
 ## 2026-09-20
 
+- **Drop `info["csmi"]`.** No lazy/eager emission frozenset on ProductInfo
+  (zombie risk from retained mols; extra API). Callers use `product.xf.csmi`
+  or `frozenset(p.xf.csmi for p in products)`. Internal unique_csmi / check /
+  RuleSet still compute emission frozensets from products. `ProductInfo` =
+  `SiteInfo`. Docs: MIGRATING / HEURISTICS / XF / usage / README / CHANGELOG.
+
+- **WAE dearomatizes / hydrogenation1.** PatternInfo `dearomatizes` is
+  capability; coverage test asserts resolve vs `_site_map_aromatic`, not
+  declared==resolved. `filter_rules` all-dearomatizes refuse skips patterns
+  that also add H (path_end aliphatic `CC=O`→`CCO` keeps Hydrogenation).
+  MeOPhOH bill **180→226** (still ≪900); regression gate `<250`.
+
 - **`metabolize` list-yield restore.** Yield shape is again
   `(list[TracingMol], ProductInfo)` per emission (1-element non-cleavage;
   cleavage siblings together). Dropped `product_index` / `product_count`.
-  `info["csmi"]` is the emission frozenset (same `S` as check).
   `unique_csmi` drops duplicate *emissions*, not within-list sibling CSMIs.
-  RuleSet / bfs unpack lists; bfs nodes stay one mol. Docs: MIGRATING /
-  HEURISTICS / CHANGELOG / usage. Pyright forest **0**. Forest WAE:
-  **1604 passed / 9 failed** — failures are pre-existing on `591f678`
-  (`pattern_info` dearomatizes ×8, `test_hydrogenation1` OxygenReduction
-  vs Hydrogenation). Signature-related suite green.
+  RuleSet / bfs unpack lists; bfs nodes stay one mol.
 
 - **`XF.md`.** Full `docs/forest/XF.md` for `Mol.xf` (public accessor, not
   forest schema). Frames cache-into-`_forest` + link to `records.py`
-  TypedDicts as unstable layout. **Untracked / not in list-yield commit.**
+  TypedDicts as unstable layout. Committed `54b7ded`.
 
 - **H2H post Hydrogenation filter.** `uv run python tests/forest/bench_find_path_h2h.py` → live total **1.133s → 0.264s**. MeOPhOH→HQ **0.993s → 0.206s**, bill **898 → 180**, nd 69 → 28 (same 4-step plan). Eugenol bill 45→19; 2-MeO→1,2-NQ 43→7. `--larger` flat (live 0.269s). Artifacts: `bench_find_path_h2h_3way_post_filter.*`, `bench_find_path_h2h_larger_post_filter.*`. Docs: PERFORMANCE.md current numbers. Confirms dramatic speedup. **No commit.**
 

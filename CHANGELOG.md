@@ -22,8 +22,8 @@ Previous forest (0.6.x API): archive directory
   ``docs/forest/``.
 - **Breaking:** ``metabolize`` yields ``(products, info)`` where
   ``products`` is always a ``list[Mol]`` (one element for non-cleavage;
-  siblings for cleavage). ``info["csmi"]`` is the emission frozenset.
-  See the migration guide.
+  siblings for cleavage). Product SMILES via ``product.xf.csmi`` (no
+  ``info["csmi"]``). See the migration guide.
 - Reaction SMIRKS surfaces use ``Smirks`` / ``SmirksReactionRule`` naming
   (match-only SMARTS stay ``Smarts``).
 - Rules declare ``site_kind`` (``atom`` / ``bond`` / ``directed_bond`` /
