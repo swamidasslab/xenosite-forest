@@ -120,6 +120,7 @@ version-file = "src/xenosite/forest/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/xenosite"]
+# Archive ships for StepPlan/parity imports but is not supported API.
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -134,17 +135,26 @@ include = [
 
 [tool.pytest.ini_options]
 addopts = "--doctest-modules -n auto --timeout=120 --import-mode=importlib"
-# Collect from src (not src/xenosite/forest) so importlib resolves xenosite.forest.*
-# and xenosite stays a PEP 420 namespace package (no xenosite/__init__.py).
-testpaths = ["tests", "src"]
-pythonpath = ["src", "tests"]
+# Collect from src so importlib resolves xenosite.forest.* and xenosite stays
+# a PEP 420 namespace package (no xenosite/__init__.py).
+testpaths = ["tests/forest", "src/xenosite/forest"]
+pythonpath = ["src", "tests", "tests/_archive_forest"]
+# tests/_archive_forest is on path only so live ports can import example SMILES
+# modules (test_rules, …). Those tests are NOT collected (norecursedirs).
 consider_namespace_packages = true
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
-# Avoid collecting optional network helpers unless explicitly requested
-norecursedirs = [".git", ".venv", "build", "dist", ".hypothesis"]
+# Archived pre-swap forest + its tests stay out of the default gate.
+norecursedirs = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    ".hypothesis",
+    "_archive_forest",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
-    "ignore::xenosite.forest.unstable.UnstableWarning",
+    "ignore::xenosite._archive_forest.unstable.UnstableWarning",
 ]
 markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
@@ -153,7 +163,7 @@ markers = [
 
 [tool.coverage.run]
 source_pkgs = ["xenosite.forest"]
-omit = ["*/_version.py"]
+omit = ["*/_version.py", "*/_archive_forest/*"]
 
 [tool.coverage.report]
 skip_empty = true
@@ -161,41 +171,36 @@ show_missing = true
 
 [tool.pyright]
 include = [
-    "src/xenosite/refactor_poc",
+    "src/xenosite/forest",
 ]
 exclude = [
+    "src/xenosite/_archive_forest",
     "src/xenosite/refactor_poc/test.ipynb",
 ]
-# tests/refactor_poc stays out until its MolFromSmiles / TypedDict noise is
-# cleaned. Local and CI both use this include list.
-#
-# Untyped parameters error for POC scope (CI: `uv run pyright src/xenosite/refactor_poc`).
-# Argument / member / variable Unknown stay off: RDKit stubs and heterogeneous
-# forest trees still flood those. Forest and examples are not in include.
+# tests/forest stays out until its MolFromSmiles / TypedDict noise is cleaned.
+# Local and CI: `uv run pyright src/xenosite/forest`.
+# Untyped parameters error for the live forest tree. Argument / member /
+# variable Unknown stay off: RDKit stubs still flood those.
 reportMissingParameterType = "error"
 reportUnknownParameterType = "error"
 reportUntypedFunctionDecorator = "error"
 
-# POC only. Forest and examples stay out. test.ipynb is not Python source.
-# Top-level tests/test_*.py is the forest suite; nested tests/refactor_poc stays.
+# Live forest + its tests. Archive and examples stay out.
 [tool.ruff]
 target-version = "py310"
 line-length = 100
 src = ["src", "tests"]
 extend-exclude = [
-    "src/xenosite/forest",
+    "src/xenosite/_archive_forest",
+    "tests/_archive_forest",
     "examples",
     "src/xenosite/refactor_poc/test.ipynb",
     "tests/conftest.py",
-    "tests/phase1_helpers.py",
-    "tests/test_*.py",
 ]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I isort. Bugbear (B) is off: B905 wants
 # zip(..., strict=) and that is a behavior change, not a quiet rule.
 select = ["E", "W", "F", "I"]
-# PLC0414 flags `import name as name`. refactor_poc re-exports use that
-# form on purpose. PL stays unselected; ignore so a wider editor select
-# does not report it.
+# PLC0414 flags `import name as name`. Re-exports use that form on purpose.
 ignore = ["PLC0414"]

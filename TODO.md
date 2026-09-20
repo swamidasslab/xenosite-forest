@@ -8,7 +8,7 @@
 - xf: hang remaining helpers still free (`resonance_bond_maps`, MCS pairwise, `carry_forest` / split, `reordered_forest_labels`); drop thin shims `stamp_forest_labels` / `install_forest` / `ensure_forest` / `forest_trace` once tests use `mol.xf` only
 - Deferred: tautomer SMARTS matching / TautomerQuery (preferred direction; Status: not decided) — orthogonal to landed `TautomerRule` stub (`NotImplementedError`; see HEURISTICS)
 - Later: SMARTS least-common atoms first
-- refactor_poc: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)
+- forest: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)
 - Guided `and_cleave_plan` SMARTS: optional per-SMARTS flags naming atoms made dirty on match, so match-before/after deps are less leaky (fewer false precedes; less rely on apply-replay)
 - Rank ``PathOutcome`` hits by likelihood via ``xenosite-predict`` using cleavage-side bags (without enumerating side reactions) — not this pass
 - Guided-search heuristics from fuzz cases that hit ``max_expansions`` / miss under budget

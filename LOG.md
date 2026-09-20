@@ -2,10 +2,17 @@
 
 ## 2026-09-20
 
-- **Butadiene Hydrogenation false emits (regression, not progression).** Bisect: first bad `dd9c8ef` (pair-orbit / `alternating_paths`). Reactant `C=CC=C` (C4H6); rule Hydrogenation / ResonancePair.
-  - Invalid: `C=C=C=C` (C4H4) via path ends `(1,2)` — single-first alternating walk flips middle single→double (dehydrogenative cumulene). Invalid: `C=C=CC` (C4H6) via even bond-count walk — same formula as reactant, not hydrogenation.
-  - Valid: `C=CCC` / `CC=CC` (C4H8). DIVERGENCES already required omitting `C=C=CC`.
-  - Fix: `alternating_paths` double-first only (either endpoint may open); apply only odd bond-count paths. Not a restore of unique-edit dedup. Test: `test_butadiene_hydrogenation_includes_2_butene` asserts no cumulenes.
+- Package swap: archived pre-POC forest to `src/xenosite/_archive_forest/` (**read-only / locked**; CI excludes archive tests + lint). Promoted `refactor_poc` → `xenosite.forest`; tests → `tests/forest/`. `AtomTracker` facade kept, deprecated (prefer `mol.xf`). StepPlan still imported from archive.
+- H2H (`tests/forest/bench_find_path_h2h.py`): archive PhaseOneQF vs live PhaseOne — 9/10 both_ok, 1 poc_only (MeOPhOH→hydroxyQ); both_ok wall ~13×. See `src/xenosite/forest/PERFORMANCE.md`; raw `artifacts/bench_find_path_h2h_post_swap.out`.
+- Long fuzz: `HYPOTHESIS_PROFILE=long XENOSITE_FUZZ_EXAMPLES=200` on bfs/guided/phase1/and_cleave/find_path_phase1 fuzz — **18 passed** (~23s). Artifact: `artifacts/long_fuzz_post_swap.out`.
+- ResonancePair path fix (`516d66f`): lasting shared path chemistry (double-first + odd bond-count) — not butadiene-specific, not PatternInfo. No redesign this PR.
+
+## 2026-09-20
+
+- **Butadiene Hydrogenation false emits — chemistry bug, unmasked (not caused) by unique-edit.** Bisect surfaced at `dd9c8ef` because that commit’s unique-edit / path search changes stopped *hiding* bad products; the bug is Hydrogenation / ResonancePair path logic, independent of dedup. Reactant `C=CC=C` (C4H6).
+  - Invalid: `C=C=C=C` (C4H4) path ends `(1,2)` — single-first walk flips middle single→double. Invalid: `C=C=CC` (C4H6) even bond-count walk — not hydrogenation.
+  - Valid: `C=CCC` / `CC=CC` (C4H8).
+  - Fix: double-first `alternating_paths` (either endpoint); odd bond-count applies only. Do not restore bad dedup. Hard-fail test: `test_butadiene_hydrogenation_includes_2_butene`.
 
 ## 2026-09-20
 

@@ -86,7 +86,7 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[xenosite.org](https://xenosite.org)** — XenoSite models for sites of metabolism and reactivity
 - **[Source repository](https://github.com/swamidasslab/xenosite-forest)** — code, issues, and releases
 
-Import the package as `xenosite.forest`. `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be installed alongside this one.
+Import the package as `xenosite.forest`. The pre-swap implementation is archived at `src/xenosite/_archive_forest/` (read-only historical; not exercised by CI). `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be installed alongside this one.
 
 ## Citation
 
