@@ -88,3 +88,53 @@ The same writing on `S=C(O)c1ccccc1` is only old `O=C(OC1OC(C(=O)O)C(O)C(O)C1O)c
 On `N=C([O-])C` the alcohol pattern does not match. Only old: `CC(=O)OC1OC(C(=O)O)C(O)C(O)C1O`. Shared: none. `S=C([O-])C` and `P=C([O-])C` are the same only-old carboxylate.
 
 More correct. Not a problem in the proof of concept. Those strings replace the heteroatom with oxygen. A glucuronide of `N=C(O)-` or `S=C(O)-` keeps that atom. The pattern here matches `=[#8]` on an OH or an anion, so benzoate still gives the acyl glucuronide. An ester oxygen is not that site: the old product does not sanitize, and this pattern does not match it.
+
+## Hydrogenation of 1,3-butadiene
+
+The old class swaps bonds along a resonance path after the `C=C` SMARTS. The 1,4 swap is 2-butene. The same walk also writes 1,2-butadiene, which is still C4H6. This class runs the SMARTS only. It does not swap that path.
+
+- Reactant: `C=CC=C`
+- Only old: `CC=CC`, `C=C=CC`
+- Only new: none
+- Shared: `C=CCC`
+
+Ethene (`C=C`) and ethyne (`C#C`) do not hit that path. Both libraries yield `CC` and `C=C`.
+
+Problem. The proof of concept is less correct on 2-butene. `CC=CC` is C4H8, the 1,4-hydrogenation. `C=C=CC` is not a metabolite: it has the same formula as butadiene. The shared string is 1-butene, the one-bond reduction.
+
+## Dehydrogenation of ethenediol
+
+The old pair path writes glyoxal. Here the same ends are edited and the path is flipped, and the carbons come out as `[CH2]`. `O=[CH2][CH2]=O` does not sanitize, so glyoxal is dropped. The one-bond SMARTS still writes the ketene.
+
+- Reactant: `OC=CO`
+- Only old: `O=CC=O`
+- Only new: none
+- Shared: `O=C=CO`
+
+Ethanol (`CCO`) is one bond, not that path. Both libraries yield `CC=O` and `C=CO`.
+
+Problem. The proof of concept is less correct on glyoxal. `O=CC=O` is the dehydrogenation of both alcohols (C2H2O2). The path product does not sanitize. The shared string is hydroxyketene, the one-end SMARTS.
+
+## Nitrogen reduction of nitrosomethane
+
+The old nitroso SMARTS is `[#7D2:1]=[#8:2]>>([*:1].[*2])`. `[*2]` is not an atom map. The oxygen comes out as `*`. The pattern here is `[*:2]`, so the leaving group is oxygen.
+
+- Reactant: `CN=O`
+- Only old: `*`
+- Only new: `O`
+- Shared: `CN`
+
+Nitromethane (`C[N+](=O)[O-]`) does not hit that string. Both libraries yield `CN`, `CN=O`, and `O`.
+
+More correct. Not a problem in the proof of concept. `*` is not oxygen. The nitroso oxygen is the leaving group, and both libraries already emit the amine.
+
+## Dephosphorylation of methyl phosphate
+
+Substructure matching uniquifies the query. Maps 1, 4, and 5 are the same oxygen in the SMARTS, so one match is kept. That match cleaves the ester. The old reaction also cleaves a P-OH bond and writes water plus methyl phosphite.
+
+- Reactant: `COP(=O)(O)O`
+- Only old: `CO[PH](=O)O`, `O`
+- Only new: none
+- Shared: `CO`, `O=[PH](O)O`
+
+More correct. Not a problem in the proof of concept. Dephosphorylation takes the phosphate off the carbon. `CO[PH](=O)O` still has the methyl on phosphorus. Water is that P-OH cleavage, not the ester. The shared set is methanol and the phosphate fragment.
