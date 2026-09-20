@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- RuleSet was flattening nested sets, so a product chain kept only the outer set and the leaf. It now calls metabolize on each contained rule and appends itself on that product. PhaseOneRS hydroxylation of ethane is Hydroxylation, then StableOxygenation (`SO`), then PhaseOneRS.
+
+## 2026-09-19
+
 - Hydrogenation is a ResonancePairRule. Endpoint `[#6;!$(*#[#6]):1]` with edit `keep`. The path flip writes 2-butene (`CC=CC`) from `C=CC=C`. The even path that wrote 1,2-butadiene is not a pair, so `C=C=CC` stays only on the old side. Ethene and ethyne stay `CC` and `C=C`.
 - Ethenediol pair draft `O=[CH2][CH2]=O` failed `SANITIZE_PROPERTIES`. Clearing explicit H and sanitizing again yields glyoxal `O=CC=O`, which round-trips. Ethanol dehydrogenation is still the one-bond SMARTS (`CC=O`, `C=CO`).
 

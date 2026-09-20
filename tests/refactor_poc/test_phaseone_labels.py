@@ -43,7 +43,9 @@ def test_metabolize_calls_phaseone():
 def test_hydroxylation_label_is_the_chain_class_names():
     addition = _addition(PhaseOne, "CC", Hydroxylation)
 
-    assert reaction_labels(addition) == ("RuleSet", "Hydroxylation")
+    assert reaction_labels(addition) == ("Hydroxylation", "RuleSet")
+    assert type(addition["rules"][0]) is Hydroxylation
+    assert addition["rules"][-1] is PhaseOne
     assert reaction_labels(addition) == tuple(
         type(rule).__name__ for rule in addition["rules"]
     )
@@ -53,15 +55,17 @@ def test_hydroxylation_label_is_the_chain_class_names():
 def test_ruleset_class_name_is_on_the_chain_when_that_set_runs():
     addition = _addition(Dehydrogenation_PhaseOne, "CC", type(Dehydrogenation_PhaseOne.rules[0]))
 
-    assert reaction_labels(addition) == ("RuleSet", "Dehydrogenation")
-    assert addition["rules"][0].name == "DH"
+    assert reaction_labels(addition) == ("Dehydrogenation", "RuleSet")
+    assert type(addition["rules"][0]) is type(Dehydrogenation_PhaseOne.rules[0])
+    assert addition["rules"][-1] is Dehydrogenation_PhaseOne
+    assert addition["rules"][-1].name == "DH"
     assert "DH" not in reaction_labels(addition)
 
 
 def test_quinone_label_is_the_rule_on_the_chain():
     addition = _addition(PhaseOne, "c1ccccc1", QuinoneFormation)
 
-    assert reaction_labels(addition) == ("RuleSet", "QuinoneFormation")
+    assert reaction_labels(addition) == ("QuinoneFormation", "RuleSet")
     assert "Hydroxylation" not in reaction_labels(addition)
     assert "Dehydrogenation" not in reaction_labels(addition)
 
@@ -72,18 +76,36 @@ def test_quinone_label_is_the_rule_on_the_chain():
 def test_phaseoneqf_chain_includes_the_ruleset_class():
     addition = _addition(PhaseOneQF, "c1ccccc1", QuinoneFormation)
 
-    assert reaction_labels(addition) == ("RuleSet", "QuinoneFormation")
+    assert reaction_labels(addition) == ("QuinoneFormation", "RuleSet")
+    assert type(addition["rules"][0]) is QuinoneFormation
+    assert addition["rules"][-1] is PhaseOneQF
     assert [type(rule).__name__ for rule in PhaseOneQF].count("QuinoneFormation") == 1
 
 
 def test_epoxidation_label_is_not_a_look_ahead():
     addition = _addition(PhaseOne, "C=C", Epoxidation)
 
-    assert reaction_labels(addition) == ("RuleSet", "Epoxidation")
+    assert reaction_labels(addition) == ("Epoxidation", "RuleSet")
+
+
+def _leaf_names(rule):
+    if isinstance(rule, RuleSet):
+        names = []
+        for child in rule:
+            names.extend(_leaf_names(child))
+        return names
+    return [type(rule).__name__]
 
 
 def test_grouped_set_omits_deferred_rules():
-    names = [type(rule).__name__ for rule in PhaseOneRS]
+    assert [rule.longname for rule in PhaseOneRS] == [
+        "Dehydrogenation",
+        "Hydrolysis",
+        "Reduction",
+        "StableOxygenation",
+        "UnstableOxygenation",
+    ]
+    names = _leaf_names(PhaseOneRS)
     assert "Epoxidation" in names
     assert "NDealkylation" not in names
     assert "Tautomerization" not in names

@@ -26,16 +26,19 @@ from .rules import (
     ReductiveDehalogenation,
     SulfurOxidation,
     SulfurReduction,
+    ensure_tracing,
 )
 
 
 class RuleSet(ReactionRule):
     """Container of rules, and itself a rule.
 
-    Nested sets are flattened. Executing the outer set runs the leaves, and
-    the filters still see each leaf pattern (``span`` before a match,
-    resolved effect after). ``order_key`` only sorts children; it does not
-    wrap them.
+    Nested sets stay nested. This set calls :meth:`metabolize` on each
+    contained rule. That call's products already end with that rule. This
+    set then appends itself on that product, after that rule. The molecule
+    is not copied. The filters still see each leaf pattern (``span`` before
+    a match, resolved effect after). ``order_key`` only sorts children; it
+    does not wrap them.
     """
 
     def __init__(self, rules=(), name=None, longname=None):
@@ -43,9 +46,7 @@ class RuleSet(ReactionRule):
         for rule in rules:
             if isinstance(rule, type):
                 rule = rule()
-            if isinstance(rule, RuleSet):
-                contained.extend(rule.rules)
-            elif isinstance(rule, ReactionRule):
+            if isinstance(rule, ReactionRule):
                 contained.append(rule)
             else:
                 raise TypeError(
@@ -77,6 +78,48 @@ class RuleSet(ReactionRule):
                 filter_sites=filter_sites,
                 **kwargs,
             )
+
+    def metabolize(
+        self,
+        mol: Mol,
+        filter_rules=lambda rule, info: True,
+        filter_sites=lambda site, info: True,
+        unique_csmi=True,
+        order_key=None,
+        **kwargs,
+    ):
+        """Run each contained rule, then append this set on that product.
+
+        The contained rule, including a nested set, has already put itself
+        last on the product. This set is the next rule. The product object
+        is the one that rule yielded.
+        """
+
+        ensure_tracing(mol)
+        if self.is_terminal_product(mol):
+            return
+
+        rules = self.rules
+        if order_key is not None:
+            rules = tuple(sorted(rules, key=order_key))
+        seen = set()
+        for rule in rules:
+            for product, info in rule.metabolize(
+                mol,
+                filter_rules=filter_rules,
+                filter_sites=filter_sites,
+                unique_csmi=unique_csmi,
+                **kwargs,
+            ):
+                trace = product._forest["atom_trace"]
+                addition = trace["additions"][trace["transforms"][-1]]
+                addition["rules"] = tuple(addition["rules"]) + (self,)
+                if unique_csmi:
+                    csmi = info["csmi"]
+                    if csmi in seen:
+                        continue
+                    seen.add(csmi)
+                yield product, info
 
 
 # Phase I classes that already exist in rules.py. QuinoneFormation is included
