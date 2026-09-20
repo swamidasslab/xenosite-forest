@@ -67,12 +67,13 @@ Status: not approved.
 
 The old module (`phaseone.py`, `PhaseOneRS`, `PhaseOneQF`) is not what the
 poc calls. The capability stays. Quinone rules are composite look-aheads.
-Epoxidation is a complete subset of stable oxidation. N-dealkylation is a
-complete subset of unstable oxidation. That is what avoids rewalking the
-same chemistry and what explains which rule fired. A ruleset is still a
-rule. Easy look-aheads land on `canonical_plan`: Epoxidation →
-StableOxygenation at the same site; NDealkylation → UnstableOxygenation at
-the same site (not a multi-step invention). Status: approved.
+A ruleset is still a rule. Epoxidation sits inside StableOxygenation among
+peers; NDealkylation is its own forest ruleset (not UnstableOxygenation —
+that group is Dealkylation + OxidativeDehalogenation). Forest
+``phase1_steps`` for both leaves are degenerate singletons naming the leaf
+(``Epoxidation`` / ``NDealkylation``), not the group. Poc
+``canonical_plan`` matches that identity. Status: not approved for a
+group-name look-ahead on those leaves (misremembered; fixed).
 
 Old tests: `tests/test_phaseone.py`.
 

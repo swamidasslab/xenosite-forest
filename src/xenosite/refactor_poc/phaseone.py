@@ -5,9 +5,10 @@ rules that ran under ``atom_trace["additions"]``. :func:`reaction_labels`
 reads that chain. The label is each rule's initialization name. A ruleset
 with no name stays on the chain and contributes no label.
 
-Epoxidation and N-dealkylation report StableOxygenation /
-UnstableOxygenation via :meth:`~xenosite.refactor_poc.rules.ReactionRule.canonical_plan`
-at the same site. Tautomerization is not in these sets.
+Epoxidation and N-dealkylation keep identity canonical plans (forest
+``phase1_equivalent`` singletons). StableOxygenation / UnstableOxygenation
+here are group RuleSets that contain those leaves among peers.
+Tautomerization is not in these sets.
 """
 
 from __future__ import annotations
