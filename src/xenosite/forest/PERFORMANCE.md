@@ -13,8 +13,9 @@ resolve quickly as long plans.
 **Caps:** archive `MAX_MOLS=200` (harness yield stop; depth=4); live
 `max_nodes=800`. Tree: `feature/rule-refactor` @ `ba57d7e` (2026-09-20).
 Raw: `artifacts/bench_find_path_h2h_3way.out`. Images:
-[`performance_assets/`](performance_assets/) — xenopict `mark_atoms` circles +
-indices on reactants; products MCS-aligned with `align_to`.
+[`performance_assets/`](performance_assets/) — xenopict `mark_atoms` circles on
+**sites of metabolism only** (no atom-index labels); products MCS-aligned with
+`align_to`.
 
 ```bash
 uv run python tests/forest/bench_find_path_h2h.py
@@ -154,7 +155,7 @@ Same scannable layout — this is **chemistry reachability**, not a timed search
 
 | Reactant | Product |
 | --- | --- |
-| ![2-MeO-naph](performance_assets/meo2_naph_reactant.svg)<br>`COc1ccc2ccccc2c1` | ![1,4-NQ](performance_assets/nq14_from_2meo_product.svg)<br>`O=C1C=CC(=O)c2ccccc12` |
+| ![2-MeO-naph](performance_assets/meo2_naph_reactant_nopath.svg)<br>`COc1ccc2ccccc2c1` | ![1,4-NQ](performance_assets/nq14_from_2meo_product.svg)<br>`O=C1C=CC(=O)c2ccccc12` |
 
 | Method | Result | Wall | Work | Path length |
 | --- | --- | ---: | --- | ---: |

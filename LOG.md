@@ -2,6 +2,7 @@
 
 ## 2026-09-20
 
+- PERFORMANCE depictions: xenopict circles on **SOM only** (from find_path plan AtomRef origins); no atom-index labels; products still MCS-aligned.
 - PERFORMANCE.md three-way H2H (archive BFS/DFS vs live `find_path`): harness `MAX_MOLS=200` yield cap, no archive edits. Wins where both archive modes CAP — eugenol→allyl-Q (4 steps / 0.062s), dimethoxy-PEA→catechol (`&`, 0.015s), MeOPhOH→HQ (4 steps / 0.947s), TBA→aldehyde (22 HA, 0.017s). Retuned naphthalene to reachable **2-MeO→1,2-NQ** (3 steps / 0.075s; BFS early hit, DFS CAP). **2-MeO→1,4-NQ** documented as no PhaseOne path (frontier empty at nd=95, not budget) — not a find_path bug. Harness `tests/forest/bench_find_path_h2h.py`; raw `artifacts/bench_find_path_h2h_3way.out`. RDKit SVGs in `src/xenosite/forest/performance_assets/`.
 - PERFORMANCE assets: xenopict `mark_atoms` circles + atom indices on reactants; products MCS-aligned via `Xenopict.align_to`. Regenerator `performance_assets/_render.py`.
 
