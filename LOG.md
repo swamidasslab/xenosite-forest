@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- H2H `find_path`: forest `PhaseOneQF` vs poc `PhaseOne` (same Phase I+QF rule names; no conjugation). 6/7 product match. Hard TBA and acetate→catechol both hit; forest bills via plan linearizations (`site_applies` often 0, not idle). Poc miss: `OCc1ccccc1`→quinone (queue empties at 258 nodes / 1277 mol_edits; forest billed=62). Harness: `tests/refactor_poc/bench_find_path_h2h.py`.
+
 - Deferred: tautomer matching on SMARTS (match a tautomer of the pattern; infer the tautomerization on hit). Preferred direction only; not decided / not implemented. Wait for mature tests. Goal if pursued later: more robust matching without breaking change, new errors, or major slowdown.
 
 - Typed `span` as closed `Span` (`_SpanCore` total=True + optional partner/symbol/h/site_aromatic). Bare vs disagreeing branches are `T | tuple[T, ...]`. No type-level `object` left under `refactor_poc` / `tests/refactor_poc` (English “object” in docstrings only).
