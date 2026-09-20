@@ -149,6 +149,7 @@ bond–atom sites (ordered vs unordered as for unique-edit).
 
 Escape hatch for callers that need discovery: read ``discovered_site`` when
 present. Tests: ``test_canonical_emitted_sites.py``.
+Profile (same find_path cases as forest_copy): ~+7% wall when on.
 
 Status: approved (opt-in emission policy; HEURISTICS).
 
