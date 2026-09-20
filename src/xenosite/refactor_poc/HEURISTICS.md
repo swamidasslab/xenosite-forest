@@ -50,3 +50,17 @@ When the POC replaces the live library: archive old `xenosite.forest` for a whil
 ## Schema in PatternInfo (approved)
 
 - **``swap_group: str``** on `PatternInfo` (optional When override). Pair unique-edit: ends with equal non-empty ``swap_group`` → unordered orbit signature; else ordered by canonical ``name``. Set explicitly on ResonancePairRule endpoints (DH / QF use ``swap_group=name`` per role). Absent group → never swappable. Status: approved. Tests: `test_pair_signatures.py`.
+
+## TautomerRule (stub only)
+
+Status: not decided for chemistry / unique-edit; stub lands first.
+
+Forest ``Tautomerization`` extended alternating paths by one H-bearing
+neighbor and flipped bonds (net heavy-atom formula and H count unchanged;
+path swap, not ``RunReactants``). POC ``TautomerRule`` subclasses
+``ResonancePairRule``, is patternless, raises ``NotImplementedError`` from
+``metabolites``, and is not in PhaseOne. Orthogonal deferred work: tautomer
+*SMARTS matching* via RDKit ``TautomerQuery`` (preferred direction only;
+Status: not decided). When the rule is implemented, put ends/effects on
+``PatternInfo`` rather than a silent search branch. Docstring on the class
+and TODO.md carry the same split. Test: `test_tautomer_rule_stub.py`.

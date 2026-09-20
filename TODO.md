@@ -5,7 +5,7 @@
 - After MS1 is solid/tested: `find_path_to_MS2` same idea plus MS2 fragmentation rules to develop
 - Optimize `alternating_path`: quadratic because each BFS step copies the path; odd rings can leave the search (parity to the other side is fixed by whether the path skips parity), and those decomposed subproblems are then 2-colorable so all-pairs odd-distance BFS per anchor is not required
 - xf: hang remaining helpers still free (`resonance_bond_maps`, MCS pairwise, `carry_forest` / split, `reordered_forest_labels`); drop thin shims `stamp_forest_labels` / `install_forest` / `ensure_forest` / `forest_trace` once tests use `mol.xf` only
-- TautomerRule stub in rules.py (NotImplementedError); still deferred: tautomer SMARTS matching / TautomerQuery — separate from the rule stub
+- Deferred: tautomer SMARTS matching / TautomerQuery (preferred direction; Status: not decided) — orthogonal to landed `TautomerRule` stub (`NotImplementedError`; see HEURISTICS)
 - Later: SMARTS least-common atoms first
 - refactor_poc: phase I names still come from the search, not from `atom_trace["additions"][id]["phase1"]` (the field is reserved; the id, rules, effect, and formula delta are stored)
 - Guided `and_cleave_plan` SMARTS: optional per-SMARTS flags naming atoms made dirty on match, so match-before/after deps are less leaky (fewer false precedes; less rely on apply-replay)
