@@ -11,13 +11,12 @@ from __future__ import annotations
 
 import pytest
 
-from xenosite.refactor_poc.find_path import find_path
 from xenosite.refactor_poc.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.refactor_poc.rdkitutil import canon_smiles
 from xenosite.refactor_poc.rules import NitrogenOxidation
 from xenosite.refactor_poc.rulesets import PhaseOne
 
-from .helpers import canon
+from .helpers import canon, find_phaseone
 
 HISTIDINE = "NC(Cc1cnc[nH]1)C(=O)O"
 
@@ -27,7 +26,8 @@ def _plan_rules(outcome) -> list[str]:
 
 
 def _find(reactant: str, product: str, *, max_nodes: int = 200):
-    return list(find_path(reactant, product, max_nodes=max_nodes, max_paths=3))
+    # Default find_path ruleset is the tiny Poc catalog (4 leaves), not PhaseOne.
+    return find_phaseone(reactant, product, max_nodes=max_nodes, max_paths=3)
 
 
 def test_dehydrogenation_path():
@@ -44,8 +44,6 @@ def test_dealkylation1():
     assert _plan_rules(hits[0]) == ["Dealkylation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_dehydration1():
     hits = _find("CCO", "CC")
     assert hits
@@ -53,8 +51,6 @@ def test_dehydration1():
     assert _plan_rules(hits[0]) == ["Dehydration"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_dephosphorylation1():
     hits = _find("COP(=O)(O)O", "CO")
     assert hits
@@ -62,8 +58,6 @@ def test_dephosphorylation1():
     assert _plan_rules(hits[0]) == ["Dephosphorylation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_epoxidation1():
     hits = _find("C=C", "C1OC1")
     assert hits
@@ -71,8 +65,6 @@ def test_epoxidation1():
     assert _plan_rules(hits[0]) == ["Epoxidation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_epoxidation_opening1():
     hits = _find("C1OC1", "CCO")
     assert hits
@@ -96,8 +88,6 @@ def test_hydroxylation1():
     assert _plan_rules(hits[0]) == ["Hydroxylation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_hydrolysis1():
     hits = _find("O=C(O)C", "CC=O")
     assert hits
@@ -105,8 +95,6 @@ def test_hydrolysis1():
     assert _plan_rules(hits[0]) == ["Hydrolysis"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_nitrogen_oxidation1():
     hits = _find("CCN", "CCNO")
     assert hits
@@ -134,8 +122,6 @@ def test_nitrogen_reduction1():
     assert _plan_rules(hits[0]) == ["NitrogenReduction"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_oxidative_dehalogenation():
     hits = _find("CCCl", "CCO")
     assert hits
@@ -143,8 +129,6 @@ def test_oxidative_dehalogenation():
     assert _plan_rules(hits[0]) == ["OxidativeDehalogenation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_reductive_dehalogenation():
     hits = _find("CCCl", "CC")
     assert hits
@@ -152,8 +136,6 @@ def test_reductive_dehalogenation():
     assert _plan_rules(hits[0]) == ["ReductiveDehalogenation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_sulfur_oxidation():
     hits = _find("CCS", "CCSO")
     assert hits
@@ -170,8 +152,6 @@ def test_sulfur_reduction():
     assert _plan_rules(hits[0]) == ["SulfurReduction"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_histidine_phase1_does_not_emit_invalid_metabolites():
     mol = MolFromSmiles(HISTIDINE)
     assert mol is not None

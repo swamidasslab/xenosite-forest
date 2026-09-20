@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from rdkit.Chem.rdmolops import RemoveStereochemistry
 
+from xenosite.refactor_poc.find_path import find_path
 from xenosite.refactor_poc.rdkit_api import (
-    GetMolFrags,
     Mol,
     MolFromSmiles,
     MolToSmiles,
 )
+from xenosite.refactor_poc.rulesets import PhaseOne
 
 
 def canon(smiles_or_mol: Mol | str | None) -> str:
@@ -30,7 +31,11 @@ def canon(smiles_or_mol: Mol | str | None) -> str:
 
 
 def product_smiles(rule, reactant: str) -> set[str]:
-    """Canonical SMILES of every fragment a rule emits from ``reactant``."""
+    """Canonical SMILES of every product mol a rule emits from ``reactant``.
+
+    Production yields one connected mol per piece. A SMILES round-trip
+    matches historical aromatic canons; it does not split dotted products.
+    """
 
     mol = MolFromSmiles(reactant)
     assert mol is not None, reactant
@@ -38,18 +43,29 @@ def product_smiles(rule, reactant: str) -> set[str]:
     found: set[str] = set()
     for product, _info in rule.metabolize(mol):
         text = MolToSmiles(product)
+        assert "." not in text, text
         parsed = MolFromSmiles(text)
         if parsed is None:
             continue
-        for piece in GetMolFrags(parsed, asMols=True, sanitizeFrags=True):
-            found.add(canon(piece))
+        found.add(canon(parsed))
     return found
 
 
 def emits_product(rule, reactant: str, product: str) -> bool:
-    """True when ``rule`` emits a molecule matching ``product``."""
+    """True when ``rule`` emits a single-component mol matching ``product``."""
 
-    target = canon(product)
-    mol = MolFromSmiles(reactant)
-    assert mol is not None, reactant
-    return any(canon(pred) == target for pred, _info in rule.metabolize(mol))
+    return canon(product) in product_smiles(rule, reactant)
+
+
+def find_phaseone(reactant: str, product: str, *, max_nodes: int = 200, max_paths: int = 3):
+    """``find_path`` over catalog ``PhaseOne``, not the tiny default Poc set."""
+
+    return list(
+        find_path(
+            reactant,
+            product,
+            ruleset=PhaseOne,
+            max_nodes=max_nodes,
+            max_paths=max_paths,
+        )
+    )

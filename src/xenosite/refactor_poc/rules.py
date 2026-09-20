@@ -219,7 +219,7 @@ class ReactionRule:
 
         Every product:
 
-        - Is a sanitized mol with its own ``_forest``.
+        - Is a sanitized, connected mol with its own ``_forest``.
         - Has ``atom_trace["depth"]`` one greater than the parent.
         - Has ``atom_trace["formula"]`` equal to the atom counts and formal
           charge of that product, hydrogens included.
@@ -258,8 +258,19 @@ class ReactionRule:
             **kwargs,
         ):
             info = por.info
-            products = por.products
-            # print("INFO", info, len(products))
+            # react → split → trace. Cleavage pieces are separate mols before
+            # forest_trace; each fragment gets its own atom_trace from the
+            # parent (siblings are absent, not deleted from a shared pre-split
+            # trace). A dotted leftover is expanded here as a safety net.
+            products: list[Mol] = []
+            for raw in por.products:
+                pieces = list(sanitized_fragments(raw).pieces)
+                if not pieces:
+                    products = []
+                    break
+                products.extend(pieces)
+            if not products:
+                continue
 
             # Same canonical SMILES is one outcome. Two sites in one atom
             # class can still be different molecules (ortho quinone and para).
@@ -343,8 +354,9 @@ class ReactionRule:
         - ``info["rule"]`` is this rule. A containing ruleset is not
           substituted for it.
         - ``info["options"]`` is the one resolved effect at that site.
-        - ``products`` is a list of mols. A cleavage puts each fragment in
-          that list. It does not return one mol that is several pieces.
+        - ``products`` is a list of connected mols. Cleavage puts each
+          fragment in that list before :meth:`metabolize` runs
+          ``forest_trace``. It does not return one mol that is several pieces.
 
         ``filter_rules(rule, pattern_info)`` is called before a match and
         can see the pattern's ``span``. False means that pattern is skipped.
@@ -1047,7 +1059,12 @@ def react_at(
             if atom.GetIsotope() >= 8000:
                 atom.SetIsotope(0)
             atom.SetAtomMapNum(0)
-        products.append(rule._lift_forest_labels(mol, prod))
+        lifted = rule._lift_forest_labels(mol, prod)
+        # Forest clean: one connected mol per piece, never a dotted product.
+        pieces = list(sanitized_fragments(lifted, counters).pieces)
+        if not pieces:
+            return []
+        products.extend(pieces)
     return products
 
 

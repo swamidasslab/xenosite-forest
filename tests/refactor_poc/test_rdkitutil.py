@@ -150,3 +150,29 @@ def test_fragment_split_uses_pieces():
     assert split.pieces == (mol,)
     fragments = sanitized_fragments(mol)
     assert len(fragments.pieces) == 1
+
+
+def test_carry_forest_drops_sibling_records_and_clears_structure():
+    from xenosite.refactor_poc.rdkitutil import carry_forest, GetMolFrags
+    from xenosite.refactor_poc.rules import stamp_forest_labels
+
+    parent = stamp_forest_labels(Chem.MolFromSmiles("C.O"))
+    parent._forest["structure"]["csmi"] = "stale"
+    frags = list(GetMolFrags(parent, asMols=True, sanitizeFrags=False))
+    assert len(frags) == 2
+    a = carry_forest(parent, frags[0])
+    b = carry_forest(parent, frags[1])
+    assert a._forest is not b._forest
+    assert a._forest is not parent._forest
+    assert a._forest["structure"] == {}
+    assert b._forest["structure"] == {}
+    for frag in (a, b):
+        live = set(frag._forest["atom_trace"]["records"])
+        on_mol = {
+            atom.GetProp("forestLabel")
+            for atom in frag.GetAtoms()
+            if atom.HasProp("forestLabel")
+        }
+        assert live == on_mol
+        # Siblings are absent from this fragment's live records (split-before-trace).
+        assert not (set(parent._forest["atom_trace"]["records"]) - live) & live

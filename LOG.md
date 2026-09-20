@@ -2,6 +2,11 @@
 
 ## 2026-09-19
 
+- Cleavage products were yielded as dotted multi-component mols. Production now follows forest clean order: react → split connected components (`sanitized_fragments` / `carry_forest`) → `forest_trace` per fragment. No dotted yields. Anisole demethylation before: `O=CO.Oc1ccccc1` / `C=O.Oc1…` / `CO.Oc1…`; after: separate `Oc1ccccc1`, `O=CO`, `C=O`, `CO` (plus ring-opened singles).
+- Port harness: `emits_product` asserts single-component canons; `find_phaseone` uses catalog `PhaseOne`. Cleared 37 XPASS xfails (rules/phaseone/basic); remaining xfails are real chemical or wrong-rule-on-plan misses.
+
+## 2026-09-19
+
 - Ported forest correctness suites into `tests/refactor_poc/` (import example SMILES; no copies): `test_rules.py`, `test_quinone.py`, `test_basic.py`, `test_conjugates.py`, `test_ndealkylation.py`, `test_phaseone.py`. Helpers use `rdkit_api` types. Failures marked `@pytest.mark.xfail` + `@pytest.mark.regression` (no production fixes). Skipped: Tautomerization, `include_thiol` / `load_ruleset`, forest `clean` / `rxns=` surgery, net.py.
 - `pytest tests/refactor_poc -q`: 1009 passed, 146 xfailed.
 

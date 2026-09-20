@@ -842,10 +842,88 @@ def _sanitize_piece(frag: Mol) -> bool:
     return not SanitizeMol(frag, catchErrors=True)
 
 
-def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> FragmentSplit:
-    """Split, drop the dealkylation leaving group, sanitize.
+def carry_forest(src: Mol, dst: Mol) -> Mol:
+    """Deep-copy ``src._forest`` onto ``dst``, remapped by ``forestLabel``.
 
-    Empty pieces when any fragment fails. Callers read ``pieces``.
+    Prefer react → split → :func:`~xenosite.refactor_poc.rules.forest_trace`,
+    so fragments are usually untraced when split and tracing is installed per
+    piece. When ``src`` is already traced (copy / rare re-split), each call
+    still installs a new forest dict: live ``records`` keep only labels on
+    ``dst`` with the current index rewritten; cleavage siblings are dropped
+    from live records (not left with stale indices). Prior ``deletes`` are
+    copied only for same-size mols. Structure caches are cleared.
+    """
+
+    if not is_forest(src):
+        return dst
+
+    src_forest = get_forest(src)
+    child: Forest = {"structure": {}}
+
+    try:
+        same_size = src.GetNumAtoms() == dst.GetNumAtoms()
+    except Exception:
+        same_size = False
+
+    if same_size and "is_terminal_product" in src_forest:
+        child["is_terminal_product"] = src_forest["is_terminal_product"]
+
+    trace = src_forest.get("atom_trace")
+    if trace is not None and "records" in trace:
+        label_to_idx: dict[str, int] = {}
+        for atom in dst.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                continue
+            if atom.HasProp("forestLabel"):
+                label_to_idx[atom.GetProp("forestLabel")] = atom.GetIdx()
+
+        records: dict = {}
+        for tag, rec in trace["records"].items():
+            label = str(tag)
+            if label not in label_to_idx:
+                # Cleavage sibling / foreign — absent on this fragment.
+                continue
+            rec_copy = copy.deepcopy(rec)
+            idxs = rec_copy.get("idx")
+            if not idxs:
+                raise KeyError("idx")
+            depths = rec_copy.get("depth")
+            frame = int(trace["depth"])
+            if depths is None or frame not in depths:
+                raise KeyError(
+                    "atom_trace label %s has no idx at depth %s" % (tag, frame)
+                )
+            rec_copy["idx"] = list(idxs)
+            rec_copy["idx"][-1] = label_to_idx[label]
+            records[label] = rec_copy
+
+        carried = {
+            "records": records,
+            "deletes": (
+                copy.deepcopy(trace.get("deletes") or {}) if same_size else {}
+            ),
+            "transforms": list(trace.get("transforms") or []),
+            "additions": copy.deepcopy(trace.get("additions") or {}),
+            "delta_formula": copy.deepcopy(trace.get("delta_formula") or {}),
+            "depth": int(trace["depth"]),
+            "last_tag": int(trace["last_tag"]),
+            "next_transform": int(trace.get("next_transform") or 1),
+            "formula": {"counts": {}, "charge": 0},
+        }
+        child["atom_trace"] = carried  # type: ignore[typeddict-item]
+        held = _place_forest(dst, child)
+        carried["formula"] = molecule_formula(held)
+        child["structure"] = {}
+        return held
+
+    return _place_forest(dst, child)
+
+
+def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> FragmentSplit:
+    """Split, drop the dealkylation leaving group, sanitize, carry forest.
+
+    Each piece is a connected mol. Empty pieces when any fragment fails
+    sanitize. Callers read ``pieces``.
     """
 
     if isinstance(mol, RWMol):
@@ -858,12 +936,15 @@ def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> Fragm
         if not _sanitize_piece(frag):
             _bump(counters, "sanitize_dropped")
             return FragmentSplit(pieces=())
-        out.append(frag)
+        out.append(carry_forest(mol, frag))
     return FragmentSplit(pieces=tuple(out))
 
 
 def split_fragments(raw: Mol) -> FragmentSplit:
-    """One mol, or the fragments of a disconnected reaction product."""
+    """One mol, or the connected components of a disconnected product.
+
+    Carries forest onto each piece. Structure caches are cleared.
+    """
 
     try:
         groups = GetMolFrags(raw)
@@ -872,7 +953,7 @@ def split_fragments(raw: Mol) -> FragmentSplit:
     if len(groups) <= 1:
         return FragmentSplit(pieces=(raw,))
     frags = list(GetMolFrags(raw, asMols=True, sanitizeFrags=False)) or [raw]
-    return FragmentSplit(pieces=tuple(frags))
+    return FragmentSplit(pieces=tuple(carry_forest(raw, frag) for frag in frags))
 
 
 def _without_atoms(mol: Mol, drop: set[int]) -> tuple[NoForestMol, dict[int, int]]:

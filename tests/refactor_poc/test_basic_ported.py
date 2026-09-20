@@ -125,8 +125,6 @@ def test_matt_problem1():
     _dealk_sanitize("CC(C)CNS(=O)(=O)c1ccc(CCC(=O)Nc2ccc(Cl)cc2C)cc1")
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_matt_problem2():
     _dealk_sanitize("Oc1c(C(=O)Nc2cccnc2)c(=O)n2CCc3cccc1c23")
 

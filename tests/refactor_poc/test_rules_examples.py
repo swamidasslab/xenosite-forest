@@ -8,13 +8,11 @@ poc (see TODO.md / DROPPED.md). Conjugation examples keep full adducts
 from __future__ import annotations
 
 import pytest
-from rdkit.Chem.rdmolops import RemoveStereochemistry
 
 from test_rules import examples
 from xenosite.refactor_poc import rules as poc_rules
-from xenosite.refactor_poc.rdkit_api import MolFromSmiles
 
-from .helpers import canon
+from .helpers import emits_product
 
 _CONJUGATION = frozenset(
     {"Acetylation", "Glucuronidation", "Glutathionation", "Sulfation"}
@@ -29,46 +27,21 @@ _CASES = [
 
 # Filled after the first failing run. Do not weaken asserts.
 _XFAIL_IDS: frozenset[str] = frozenset({
-    'azosplitting-Reaction7673_72241_SR',
-    'benzodioxolereduction-Reaction112612_SRT',
-    'dealkylation-DealkyNextToSulfur_SR',
-    'dealkylation-Dealkylation_Ex1_SRT',
-    'dealkylation-Reaction3401_29363_Step2_aromatic_reactant',
-    'dealkylation-Reaction6127_23201_Metabolite_Dealkylation',
-    'dealkylation-Reaction8560_37327_SRT',
     'dealkylation-Reaction94457_SRT',
-    'dehydration-DehydrationEx1_SRT',
-    'dehydration-Reaction119294_SRT',
     'dehydration-Reaction7389_11214_Dehydration_SRT',
     'dehydration-Reaction7389_11214_Step2',
     'dehydrogenation-Reaction3183_3757_Already_Hydroxylated1_SRT',
     'dehydrogenation-Reaction3183_3757_Already_Hydroxylated2_SRT',
     'dephosphorylation-Dephosphorylation_SRT1',
-    'epoxidation-Reaction3401_29363_Step1',
-    'epoxidation-Reaction3401_29363_Step1_aromatic_product',
-    'epoxidation-Reaction3401_29363_Step1_kek_product',
-    'epoxideopening-Reaction77559_SRT',
-    'glucuronidation-AcetaminophenGlucuronide_SRT',
-    'glutathionation-Amitriptyline_Epoxide_GSH_Conjugation',
     'hydrogenation-BigMolHydrogenation_SRT',
     'hydrogenation-NAPQI_Reduction_SR',
     'hydrogenation-NAPQI_Reduction_SRT',
     'hydrogenation-Reaction1224_SRT',
-    'hydrolysis-HydrolyisEx1_SRT',
     'hydroxylation-Delavirdine_Hydroxylation',
-    'hydroxylation-Reaction54714_H_SRT',
-    'hydroxylation-Reaction54714_SRT',
     'hydroxylation-Reaction8492_99558_SRT',
-    'hydroxylation-Reaction_4051_70821_SRT',
-    'nitrogenoxidation-Reaction3183_3757_SulfurOxidation5_SRT',
-    'nitrogenoxidation-Reaction3183_3757_SulfurOxidation6_SRT',
     'nitrogenreduction-NitrogenReductionEx1_SRT',
-    'nitrogenreduction-Reaction1323_61994_SRT',
     'nitrogenreduction-Reaction375_38982_Step1',
     'nitrogenreduction-Reaction85420_SRT',
-    'oxidativedehalogenation-Reaction1176_11623_SRT',
-    'oxidativedehalogenation-Reaction1176_11623_SRT_DoubleBondOxygen',
-    'oxidativedehalogenation-Reaction1176_11623_SRT_SingleBondOxygen',
     'oxygenreduction-Reaction7389_11214_Reduction_SRT',
     'quinoneformation-Epoxidation_SR_Num',
     'quinoneformation-LongRangeQuinone_SRT',
@@ -79,7 +52,6 @@ _XFAIL_IDS: frozenset[str] = frozenset({
     'quinoneformation-Reaction7751_SRT',
     'quinoneformation-Reaction9370_SRT',
     'sulfation-Reaction_162_35034_SRT',
-    'sulfuroxidation-Reaction3183_3757_1Step_SRT',
     'sulfuroxidation-Reaction3183_3757_SulfurOxidation2_SRT',
     'sulfuroxidation-Reaction3183_3757_SulfurOxidation3_SRT',
     'sulfuroxidation-Reaction3183_3757_SulfurOxidation4_SRT',
@@ -130,13 +102,8 @@ def test_rule_emits_historical_product(rule, name, reactant, product):
     else:
         instance = cls()
 
-    target = canon(product)
-    mol = MolFromSmiles(reactant)
-    assert mol is not None, reactant
-    RemoveStereochemistry(mol)
-
-    for pred, _info in instance.metabolize(mol):
-        if canon(pred) == target:
-            return
+    # Historical product must appear as a yielded (single-component) mol.
+    if emits_product(instance, reactant, product):
+        return
 
     assert False, f"Failed to find {product} in {reactant} ({name})"

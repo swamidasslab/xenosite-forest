@@ -6,13 +6,11 @@ SMILES stay in ``test_quinone.examples``. One forest-known miss stays an xfail.
 from __future__ import annotations
 
 import pytest
-from rdkit.Chem.rdmolops import RemoveStereochemistry
 
 from test_quinone import examples
-from xenosite.refactor_poc.rdkit_api import MolFromSmiles
 from xenosite.refactor_poc.rules import QuinoneFormation
 
-from .helpers import canon
+from .helpers import emits_product
 
 _CASES = [(name, reactant, product, site) for name, reactant, product, site in examples]
 
@@ -116,13 +114,8 @@ def test_quinone_emits_historical_product(name, reactant, product, site):
             "Quinone formation does not open the fused N-alkyl oxazine ring"
         )
 
-    target = canon(product)
-    mol = MolFromSmiles(reactant)
-    assert mol is not None, reactant
-    RemoveStereochemistry(mol)
-
-    for pred, _info in QuinoneFormation().metabolize(mol):
-        if canon(pred) == target:
-            return
+    # Production yields one connected mol per cleavage piece.
+    if emits_product(QuinoneFormation(), reactant, product):
+        return
 
     assert False, f"Failed to find {product} in {reactant} ({name})"
