@@ -10,6 +10,29 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.7.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.0) - 2026-09-20
+
+### Deprecated
+
+- ``AtomTracker`` is deprecated; prefer ``mol.xf`` / ``mol.xf.tracing``
+  (see ``docs/forest/XF.md``). ([#16](https://github.com/swamidasslab/xenosite-forest/issues/16))
+
+### Added
+
+- ``xenosite.forest`` typing is at 100% coverage under the package pyright
+  gate (informative for callers). ([#18](https://github.com/swamidasslab/xenosite-forest/issues/18))
+
+### Changed
+
+- Metabolic Forest rewrite in ``xenosite.forest``. Previous forest (0.6.x API)
+  is the archive directory ``src/xenosite/_archive_forest/`` on GitHub.
+  ``metabolize`` yields ``(list[Mol], info)`` — see ``docs/forest/MIGRATING_0.7.md``. ([#15](https://github.com/swamidasslab/xenosite-forest/issues/15))
+- **Dependencies:** ``pynauty`` is now required (no longer optional). Needed
+  for the correct unique-edit / pair-orbit nauty backend (forest unique-edit
+  authority). RDKit/SMILES pair-orbit is not shipped as a product fallback. ([#17](https://github.com/swamidasslab/xenosite-forest/issues/17))
+- **Breaking:** Python **3.11+** is required (3.10 is no longer supported). ([#19](https://github.com/swamidasslab/xenosite-forest/issues/19))
+
+
 ## [Unreleased]
 
 Migration details: [`docs/forest/MIGRATING_0.7.md`](docs/forest/MIGRATING_0.7.md).
