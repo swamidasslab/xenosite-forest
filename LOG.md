@@ -2,6 +2,8 @@
 
 ## 2026-09-19
 
+- Deferred: tautomer matching on SMARTS (match a tautomer of the pattern; infer the tautomerization on hit). Preferred direction only; not decided / not implemented. Wait for mature tests. Goal if pursued later: more robust matching without breaking change, new errors, or major slowdown.
+
 - Typed `span` as closed `Span` (`_SpanCore` total=True + optional partner/symbol/h/site_aromatic). Bare vs disagreeing branches are `T | tuple[T, ...]`. No type-level `object` left under `refactor_poc` / `tests/refactor_poc` (English “object” in docstrings only).
 - Replaced other `object` sites with `ProductInfo`, `TraceInfo`, `PatternInfo`, `SiteInfo`, `EditCounters`, `SitesOn`, `SiteSignature`, `EffectField`, `phase1: None`. `GetMolFrags` frags args are `list[int] | None` / `list[list[int]] | None`.
 - pyright poc modules: 0 errors. `pytest tests/refactor_poc -q`: 674 passed. No `Any`.
