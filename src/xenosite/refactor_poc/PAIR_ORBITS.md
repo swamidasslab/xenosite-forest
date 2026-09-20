@@ -152,9 +152,13 @@ class BondAtomPairOrbitSignature(NamedTuple):
     Unique-edit key, not a Site. Each end is already directed bond→atom;
     ``ordered`` only decides whether the *two ends* are swappable
     (``swap_group``), not whether bond and atom roles swap.
+
+    ``pair_group`` is the **second-order** orbit of ``((b1,a1),(b2,a2))``
+    under nauty (see §3b). First-order end signatures alone are not enough.
     """
 
     ends: tuple[BondAtomOrbitSignature, BondAtomOrbitSignature]
+    pair_group: PairGroupId
     ordered: Literal[True, False]
 ```
 
@@ -168,6 +172,31 @@ Dehydrogenation declares the mode as data:
 
     unique_orbit: UniqueOrbit = "bond_atom"
 ```
+
+### 3b. Second-order orbit (required for ResonancePair)
+
+A directed composite site is ``s = (bond, atom)``. A ResonancePair selects
+two such sites ``((b1,a1), (b2,a2))``. Individual
+``BondAtomOrbitSignature`` values identify each site's *first-order* orbit;
+they do **not** identify the orbit of the *pair*.
+
+On benzene every endpoint ``(bond, atom)`` is equivalent (dihedral
+transitivity), so the old coarse key
+``(sig, sig, ordered=False)`` collapses:
+
+- A = adjacent bonds ``{(b0,a0),(b1,a1)}``
+- B = opposite bonds ``{(b0,a0),(b3,a3)}``
+- C = rotation of A
+
+Proof sketch: automorphisms preserve bond-line-graph distance, so
+distance-1 (A) ≠ distance-3 (B); rotation maps A ↔ C. Regression in
+``test_graph_isomorphism.py`` (same matrix as meta≠para ranks):
+``test_benzene_bond_atom_pair_needs_joint_orbit``.
+
+API: ``bond_atom_pair_orbits_from_nauty_generators(sites, generators,
+ordered=...)`` (closed site set required; ``endpoint_bond_atom_sites`` is
+closed). ``pair_orbit`` / ``unordered_bond_atom_pair`` /
+``ordered_bond_atom_pair`` attach the joint ``pair_group``.
 
 ---
 
@@ -230,7 +259,7 @@ def _nested_tables_from_groups(...) -> SitePairOrbitTables:
 | `AtomPairOrbitSignature` | atom–atom; `ordered` + `end_ranks` (`()` if unordered) |
 | `BondPairOrbitSignature` | bond–bond; same shape |
 | `BondAtomOrbitSignature` | one directed `(bond, atom)` unit |
-| `BondAtomPairOrbitSignature` | two bond–atom units (ResonancePair); own `ordered` |
+| `BondAtomPairOrbitSignature` | two bond–atom units + joint `pair_group` (ResonancePair) |
 
 ```487:545:src/xenosite/refactor_poc/records.py
 class AtomPairOrbitSignature(NamedTuple):
@@ -254,6 +283,7 @@ class BondAtomOrbitSignature(NamedTuple):
 
 class BondAtomPairOrbitSignature(NamedTuple):
     ends: tuple[BondAtomOrbitSignature, BondAtomOrbitSignature]
+    pair_group: PairGroupId
     ordered: Literal[True, False]
 
 
@@ -419,3 +449,10 @@ def test_atom_bond_ordered_equals_unordered_partition():
 - Narrowing SMARTS ≠ `swap_group` replacement for pair same-role couples.
 - Map-rank embeddings stay in `pair_site_signature` (QF dealkylate methyl vs
   benzyl). Formula bag key makes `HCl` ≡ `ClH`.
+- ``topol_equiv`` is RDKit ``CanonicalRankAtoms(..., breakTies=False)`` (CIP
+  ranks), **not** proven automorphism orbits. ``TRIVIAL_PAIR_GROUP`` is safe
+  only under the automorphism-orbit reading; treat as a cheap proxy caveat.
+- Stereo scope: sanitized ordinary organics with standard tetrahedral / E–Z;
+  enhanced stereo groups and nonstandard stereo are not fully represented.
+- Nauty graph is undirected — directed dative bonds are out of scope for the
+  metabolism corpus.

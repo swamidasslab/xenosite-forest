@@ -1048,8 +1048,8 @@ def bond_atom_pair_orbits_from_nauty_generators(
 
     for site in sites:
         for atom_map, bond_map in gen_list:
-            image = image_site(site, atom_map, bond_map)
-            if image not in site_set:
+            mapped_site = image_site(site, atom_map, bond_map)
+            if mapped_site not in site_set:
                 raise ValueError(
                     "bond_atom_sites is not closed under nauty automorphisms. "
                     "Compute on a closed superset, then filter the result."
@@ -1057,15 +1057,18 @@ def bond_atom_pair_orbits_from_nauty_generators(
 
     if ordered:
         candidates: list[BondAtomSitePair] = (
-            list(permutations(sites, 2))  # type: ignore[arg-type]
+            [cast(BondAtomSitePair, p) for p in permutations(sites, 2)]
             if distinct
-            else list(product(sites, repeat=2))  # type: ignore[arg-type]
+            else [cast(BondAtomSitePair, p) for p in product(sites, repeat=2)]
         )
     else:
         candidates = (
-            list(combinations(sites, 2))  # type: ignore[arg-type]
+            [cast(BondAtomSitePair, p) for p in combinations(sites, 2)]
             if distinct
-            else list(combinations_with_replacement(sites, 2))  # type: ignore[arg-type]
+            else [
+                cast(BondAtomSitePair, p)
+                for p in combinations_with_replacement(sites, 2)
+            ]
         )
 
     parent: dict[BondAtomSitePair, BondAtomSitePair] = {
@@ -1086,13 +1089,13 @@ def bond_atom_pair_orbits_from_nauty_generators(
     for candidate in candidates:
         left, right = candidate
         for atom_map, bond_map in gen_list:
-            image: BondAtomSitePair = (
+            imaged: BondAtomSitePair = (
                 image_site(left, atom_map, bond_map),
                 image_site(right, atom_map, bond_map),
             )
             if not ordered:
-                image = _sorted_composite_pair(image[0], image[1])
-            union(candidate, image)
+                imaged = _sorted_composite_pair(imaged[0], imaged[1])
+            union(candidate, imaged)
 
     raw: dict[BondAtomSitePair, list[BondAtomSitePair]] = defaultdict(list)
     for candidate in candidates:

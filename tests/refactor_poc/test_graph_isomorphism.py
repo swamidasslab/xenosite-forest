@@ -7,6 +7,10 @@ Invariant-backed (no pynauty required)
 --------------------------------------
 - ``test_benzene_meta_and_para_share_ranks_but_not_atom_pair_orbits``:
   negative case — same atom ranks, different isotope pair_group (meta ≠ para).
+- ``test_benzene_bond_atom_pair_needs_joint_orbit``:
+  negative case — individual bond–atom orbits collapse adjacent/opposite/
+  rotated placements; joint ``pair_group`` separates adjacent ≠ opposite and
+  equates rotation (second-order ResonancePair key).
 - ``test_atom_signature_shape_and_unordered``:
   signature is ``AtomPairOrbitSignature``; key(a,b)==key(b,a); stable across calls.
 - ``test_singleton_topeqiv_uses_trivial_pair_group``:
@@ -58,14 +62,19 @@ import pytest
 from xenosite.refactor_poc.graph_isomorphism import (
     TRIVIAL_PAIR_GROUP,
     _nested_tables_from_groups,
+    atom_bond_generators_nauty,
     atom_pair_orbit_isotope,
     atom_pair_orbit_key,
     atom_site_cip_key,
     bond_atom_orbit_isotope,
     bond_atom_orbit_key,
+    bond_atom_orbits_from_nauty_generators,
+    bond_atom_pair_orbit_key,
+    bond_atom_pair_orbits_from_nauty_generators,
     bond_pair_orbit_isotope,
     bond_pair_orbit_key,
     bond_site_cip_key,
+    endpoint_bond_atom_sites,
     incident_orders,
     orbit_group_cip_key,
     orbit_membership,
@@ -77,6 +86,7 @@ from xenosite.refactor_poc.rdkitutil import Mol, MolFromSmiles, cip_ids
 from xenosite.refactor_poc.records import (
     AtomPairOrbitSignature,
     BondAtomOrbitSignature,
+    BondAtomPairOrbitSignature,
     BondPairOrbitSignature,
     PairGroupId,
     TopoGroupId,
@@ -248,6 +258,71 @@ def test_benzene_bond_atom_isotope_separates_endpoint_classes():
     adjacent = bond_atom_orbit_isotope(mol, 0, 2)
     opposite = bond_atom_orbit_isotope(mol, 0, 3)
     assert len({endpoint, adjacent, opposite}) == 3
+
+
+def test_benzene_bond_atom_pair_needs_joint_orbit():
+    """Negative: two first-order bond–atom orbits collapse relative placement.
+
+    Same spirit as ``test_benzene_meta_and_para_share_ranks_but_not_atom_pair_orbits``:
+    a coarse key that ignores the joint orbit merges distinct chemistry.
+
+    On benzene every endpoint ``(bond, atom)`` is equivalent, so pairing two
+    first-order orbit ids cannot tell adjacent bonds from opposite bonds.
+    The joint ``pair_group`` must: adjacent ≠ opposite; rotation of adjacent
+    matches. Requires pynauty (nauty generators).
+    """
+
+    pytest.importorskip("pynauty")
+    mol = _mol("c1ccccc1")
+    generators = atom_bond_generators_nauty(mol, include_stereo=True)
+
+    def bond(i: int, j: int) -> int:
+        b = mol.GetBondBetweenAtoms(i, j)
+        assert b is not None
+        return b.GetIdx()
+
+    b01 = bond(0, 1)
+    b12 = bond(1, 2)
+    b23 = bond(2, 3)
+    b34 = bond(3, 4)
+
+    primitive = endpoint_bond_atom_sites(mol)
+    _, primitive_orbit = bond_atom_orbits_from_nauty_generators(
+        primitive, generators
+    )
+
+    # First-order transitive — this is why ends-only signatures fail.
+    assert primitive_orbit[(b01, 0)] == primitive_orbit[(b12, 1)]
+    assert primitive_orbit[(b01, 0)] == primitive_orbit[(b34, 3)]
+    assert bond_atom_orbit_key(mol, b01, 0) == bond_atom_orbit_key(mol, b12, 1)
+    assert bond_atom_orbit_key(mol, b01, 0) == bond_atom_orbit_key(mol, b34, 3)
+
+    def old_coarse_key(left, right):
+        return tuple(sorted((primitive_orbit[left], primitive_orbit[right])))
+
+    A = tuple(sorted(((b01, 0), (b12, 1))))  # adjacent bonds
+    B = tuple(sorted(((b01, 0), (b34, 3))))  # opposite bonds
+    C = tuple(sorted(((b23, 2), (b34, 3))))  # rotation of A
+
+    assert old_coarse_key(*A) == old_coarse_key(*B)
+    assert old_coarse_key(*A) == old_coarse_key(*C)
+
+    _, pair_lookup = bond_atom_pair_orbits_from_nauty_generators(
+        primitive, generators, ordered=False
+    )
+    assert pair_lookup[A] != pair_lookup[B]
+    assert pair_lookup[A] == pair_lookup[C]
+
+    # Unique-edit signature API carries the joint pair_group.
+    sig_a = bond_atom_pair_orbit_key(mol, A[0], A[1], ordered=False)
+    sig_b = bond_atom_pair_orbit_key(mol, B[0], B[1], ordered=False)
+    sig_c = bond_atom_pair_orbit_key(mol, C[0], C[1], ordered=False)
+    assert isinstance(sig_a, BondAtomPairOrbitSignature)
+    assert sig_a.ordered is False and sig_a.ends[0] == sig_a.ends[1]
+    assert sig_a.pair_group != sig_b.pair_group
+    assert sig_a.pair_group == sig_c.pair_group
+    assert sig_a != sig_b
+    assert sig_a == sig_c
 
 
 def test_naphthalene_hand_atom_pairs_distinct():

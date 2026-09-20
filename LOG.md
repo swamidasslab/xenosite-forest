@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- External PAIR_ORBITS review: second-order gap **valid**. `BondAtomPairOrbitSignature` now carries joint `pair_group` (orbit of `((b1,a1),(b2,a2))` under nauty). API: `bond_atom_pair_orbits_from_nauty_generators` + `bond_atom_orbits_from_nauty_generators` (closed site set); `endpoint_bond_atom_sites`; wired through `pair_orbit` / constructors. Benzene proof lives with the other wrong-coarse-key negatives in `test_graph_isomorphism.py` (`test_benzene_bond_atom_pair_needs_joint_orbit`: adjacent ≠ opposite, rotation matches; old ends-only key collapses). Skipped name/swap_group-default fixes (user not worried). Caveats: `topol_equiv` = CIP ranks not automorphism orbits; stereo / dative out of primary scope.
+
+## 2026-09-20
+
 - POC pyright: untyped parameters now **error** (`reportMissingParameterType`, `reportUnknownParameterType`, `reportUntypedFunctionDecorator` in `[tool.pyright]`). Scoped to `src/xenosite/refactor_poc` only (forest stays out). Argument/member/variable Unknown left off — RDKit stubs flood those (~670 with all unknown reports).
 - Typing tighten: `PairSiteSignature` / `SiteSignature` / `MapRankKey` / `PairRoleKey` in `records.py`; `pair_site_signature` returns NamedTuple; `forest_copy` / `copy_mutable` use `object`+TypeVar instead of `Any`; pynauty via `_NautyModule` Protocol; filter defaults are typed `_accept_all_*` helpers (not bare lambdas).
 - Before (old CI config): **3** errors (`atom_tracker` Mol|Mapping union). After settings+fixes: **0**. Mid-probe with new rules alone was ~201 before annotation pass.

@@ -6,13 +6,7 @@ import importlib.util
 
 import pytest
 
-from xenosite.refactor_poc.graph_isomorphism import (
-    all_site_pair_orbits_nauty,
-    atom_bond_generators_nauty,
-    bond_atom_orbits_from_nauty_generators,
-    bond_atom_pair_orbits_from_nauty_generators,
-    endpoint_bond_atom_sites,
-)
+from xenosite.refactor_poc.graph_isomorphism import all_site_pair_orbits_nauty
 from xenosite.refactor_poc.rdkitutil import MolFromSmiles
 
 pytestmark = pytest.mark.skipif(
@@ -79,53 +73,3 @@ def test_six_family_keys_present():
         "bond_bond_unordered",
         "bond_bond_ordered",
     }
-
-
-def test_benzene_pair_of_bond_atom_sites_needs_joint_orbit():
-    """Second-order: adjacent ≠ opposite pair of composite sites; rotation matches.
-
-    Individual bond–atom orbits are transitive on benzene endpoints, so the old
-    coarse key (two first-order orbit ids) collapses adjacent, opposite, and
-    rotated-adjacent placements. The joint pair orbit must separate adjacent
-    from opposite and identify the rotation.
-    """
-
-    mol = _mol("c1ccccc1")
-    generators = atom_bond_generators_nauty(mol, include_stereo=True)
-
-    def bond(i: int, j: int) -> int:
-        b = mol.GetBondBetweenAtoms(i, j)
-        assert b is not None
-        return b.GetIdx()
-
-    b01 = bond(0, 1)
-    b12 = bond(1, 2)
-    b23 = bond(2, 3)
-    b34 = bond(3, 4)
-
-    primitive = endpoint_bond_atom_sites(mol)
-    _, primitive_orbit = bond_atom_orbits_from_nauty_generators(
-        primitive, generators
-    )
-
-    assert primitive_orbit[(b01, 0)] == primitive_orbit[(b12, 1)]
-    assert primitive_orbit[(b01, 0)] == primitive_orbit[(b34, 3)]
-
-    def old_coarse_key(left, right):
-        return tuple(
-            sorted((primitive_orbit[left], primitive_orbit[right]))
-        )
-
-    A = tuple(sorted(((b01, 0), (b12, 1))))  # adjacent bonds
-    B = tuple(sorted(((b01, 0), (b34, 3))))  # opposite bonds
-    C = tuple(sorted(((b23, 2), (b34, 3))))  # rotation of A
-
-    assert old_coarse_key(*A) == old_coarse_key(*B)
-    assert old_coarse_key(*A) == old_coarse_key(*C)
-
-    _, pair_orbit = bond_atom_pair_orbits_from_nauty_generators(
-        primitive, generators, ordered=False
-    )
-
-    assert pair_orbit[A] != pair_orbit[B]
-    assert pair_orbit[A] == pair_orbit[C]
