@@ -60,6 +60,7 @@ dev = [
     "hypothesis>=6.168.0",
     "towncrier>=24.0",
     "pyright>=1.1.414",
+    "ruff>=0.16.8",
 ]
 
 [tool.towncrier]
@@ -156,3 +157,20 @@ show_missing = true
 
 [tool.pyright]
 include = ["src/xenosite/refactor_poc/records.py"]
+
+# POC only. Forest stays out. phaseone.py and test.ipynb stay out until the
+# class rewrite; do not lint-fix the old example.
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [
+    "src/xenosite/forest",
+    "src/xenosite/refactor_poc/phaseone.py",
+    "src/xenosite/refactor_poc/test.ipynb",
+]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort. Bugbear (B) is off: B905 wants
+# zip(..., strict=) and that is a behavior change, not a quiet rule.
+select = ["E", "W", "F", "I"]
