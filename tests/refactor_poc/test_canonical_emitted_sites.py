@@ -164,3 +164,78 @@ def test_opt_in_does_not_double_emit_hq():
     on = list(Dehydrogenation().metabolize(mol, canonical_emitted_sites=True))
     assert len(on) == len(off)
     assert {p.xf.csmi for p, _ in on} == {p.xf.csmi for p, _ in off}
+
+
+def test_lex_reps_read_from_parent_after_product_cache_clear():
+    """of_products / clear_structure wipe product cache; lex reps live on parent."""
+
+    from xenosite.refactor_poc.rdkitutil import (
+        copy_mol,
+        restamp_product_forest_last_layer,
+    )
+
+    parent = _mol("c1ccccc1")
+    parent = parent.xf.tracing._stamp()
+    tables = ensure_lexical_orbit_representatives(parent)
+    assert tables is not None
+    assert parent._forest["cache"].get("lexical_orbit_representatives") is tables
+
+    # Simulate a finished product whose structure cache was cleared.
+    product = copy_mol(parent)
+    product.xf.clear_structure()
+    assert product._forest["cache"] == {}
+
+    # Parent cache still intact.
+    assert ensure_lexical_orbit_representatives(parent) is tables
+
+    # Lookup via cleared child must pass parent= for the cache host.
+    via_parent = ensure_lexical_orbit_representatives(product, parent=parent)
+    assert via_parent is tables
+    assert product._forest["cache"] == {}  # child still empty
+
+    restamp_product_forest_last_layer(product, parent=parent)
+    assert product._forest["cache"] == {}
+    assert parent._forest["cache"].get("lexical_orbit_representatives") is tables
+
+
+def test_canonical_emission_after_of_products_still_sets_discovered_site():
+    """End-to-end: remap + restamp after of_products clear still works."""
+
+    mol = _mol("c1ccccc1")
+    tables = ensure_lexical_orbit_representatives(mol)
+    assert tables is not None
+
+    def only_non_lex(_mol, site, _info):
+        fs = _as_fs(site)
+        if len(fs) != 2:
+            return True
+        a, b = sorted(fs)
+        try:
+            rep = canonical_emitted_site(
+                (a, b),
+                tables.atom_atom_unordered,
+                kind="atom_atom",
+                ordered=False,
+            )
+        except KeyError:
+            return True
+        return (a, b) != rep
+
+    products = list(
+        QuinoneFormation().metabolize(
+            mol,
+            filter_sites=only_non_lex,
+            canonical_emitted_sites=True,
+        )
+    )
+    remapped = [info for _p, info in products if "discovered_site" in info]
+    assert remapped
+    for _p, info in products:
+        if "discovered_site" not in info:
+            continue
+        # Product cache was cleared; addition still records the split.
+        tid = _p._forest["atom_trace"]["transforms"][-1]
+        addition = _p._forest["atom_trace"]["additions"][tid]
+        assert "discovered_site" in addition
+        assert _p._forest.get("cache", {}).get("lexical_orbit_representatives") is None
+

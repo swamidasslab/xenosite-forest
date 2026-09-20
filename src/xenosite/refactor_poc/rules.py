@@ -330,7 +330,8 @@ class ReactionRule:
                 )
 
                 for p in finished:
-                    restamp_product_forest_last_layer(p)
+                    # of_products cleared product cache — lex reps live on parent.
+                    restamp_product_forest_last_layer(p, parent=mol)
 
             # Same (rule, pattern, product csmi) is one outcome. Two sites in
             # one atom class can still be different molecules (ortho / para).
@@ -1236,6 +1237,7 @@ class SmartsReactionRule(ReactionRule):
                             mapped,
                             site,
                             unique_orbit=unique_orbit,
+                            parent=context,
                         )
                         if remapped is None:
                             _bump(counters, "sites_skipped")
@@ -1846,6 +1848,7 @@ class ResonanceRule(SmartsReactionRule):
                         mapped,
                         site,
                         unique_orbit=unique_orbit,
+                        parent=context,
                     )
                     if remapped is None:
                         _bump(counters, "sites_skipped")
@@ -2055,6 +2058,7 @@ class ResonancePairRule(ResonanceRule):
                             unique_orbit=unique_orbit,
                             effect1=end1,
                             effect2=end2,
+                            parent=mol,
                         )
                         if remapped is None:
                             _bump(counters, "sites_skipped")

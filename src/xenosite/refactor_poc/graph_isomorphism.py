@@ -1631,7 +1631,8 @@ class LexicalOrbitRepresentatives(NamedTuple):
     """Concrete candidate → lex-smallest orbit member, by kind / orderedness.
 
     Built from nauty six-family groups plus bond_atom / bond_atom_pair orbits.
-    Cached on ``_forest["cache"]`` under :data:`_CACHE_LEX_REPS`.
+    Cached on the **parent** forest ``cache`` under :data:`_CACHE_LEX_REPS`
+    (not on products whose ``clear_structure`` wiped theirs).
     """
 
     atom_atom_unordered: LexicalRepTable
@@ -1724,8 +1725,16 @@ def canonical_emitted_site(
 
 def ensure_lexical_orbit_representatives(
     mol: Mol,
+    *,
+    parent: Mol | None = None,
 ) -> LexicalOrbitRepresentatives | None:
     """Materialize lex-rep tables from nauty families / bond_atom groups.
+
+    Cache lives on ``parent`` when given, otherwise on ``mol``. Use
+    ``parent=reactant`` when remapping a product whose ``of_products`` /
+    ``clear_structure`` wiped ``_forest["cache"]`` (including
+    ``lexical_orbit_representatives``). Orbit computation always runs on the
+    cache host — site indexes are in the reactant frame, not the product's.
 
     Returns ``None`` when nauty is unavailable (opt-in path then skips
     remapping and keeps discovery-order emission).
@@ -1734,14 +1743,15 @@ def ensure_lexical_orbit_representatives(
     if get_pair_orbit_backend() != "nauty" or not _pynauty_available():
         return None
 
-    structure = _structure(mol)
+    host = parent if parent is not None else mol
+    structure = _structure(host)
     cached = structure.get(_CACHE_LEX_REPS)
     if cached is not None:
         return cast(LexicalOrbitRepresentatives, cached)
 
-    families = all_site_pair_orbits_nauty(mol)
-    generators = atom_bond_generators_nauty(mol, include_stereo=True)
-    sites = endpoint_bond_atom_sites(mol)
+    families = all_site_pair_orbits_nauty(host)
+    generators = atom_bond_generators_nauty(host, include_stereo=True)
+    sites = endpoint_bond_atom_sites(host)
     ba_groups, _ = bond_atom_orbits_from_nauty_generators(sites, generators)
     ba_pair_u, _ = bond_atom_pair_orbits_from_nauty_generators(
         sites, generators, ordered=False
@@ -1943,18 +1953,21 @@ def canonicalize_smarts_match(
     site: frozenset[int],
     *,
     unique_orbit: UniqueOrbit = "atom_atom",
+    parent: Mol | None = None,
 ) -> tuple[dict[int, int], frozenset[int]] | None:
-    """Force a SMARTS match onto its lex orbit representative.
+    """Remap a SMARTS match onto its lex orbit representative for emission.
 
-    HEAD wiring (``SmartsReactionRule`` / ``ResonanceRule``): call **after**
-    ``filter_sites`` and unique-edit accept, so filters see the discovery
-    site; remapping only affects chemistry maps and the emitted ``site``
-    (with ``discovered_site`` when they differ). Returns ``None`` only when
-    a representative exists but no automorphism was found (caller should
-    skip the embedding). With no nauty tables, returns the input unchanged.
+    Call **after** ``filter_sites`` accepted the discovery site. Chemistry and
+    the emitted ``site`` key use the returned match; stash discovery indexes
+    on ``discovered_site`` when they differ. ``parent`` (when set) is the
+    cache host for lex-rep tables — required when ``mol`` is a work/product
+    copy whose forest cache was cleared. Returns ``None`` only when a
+    representative exists but no automorphism was found (skip). With no
+    nauty tables, returns the input unchanged.
     """
 
-    tables = ensure_lexical_orbit_representatives(mol)
+    host = parent if parent is not None else mol
+    tables = ensure_lexical_orbit_representatives(mol, parent=host)
     if tables is None:
         return dict(mapped), frozenset(site)
 
@@ -2018,15 +2031,18 @@ def canonicalize_pair_match(
     unique_orbit: UniqueOrbit = "atom_atom",
     effect1: Effect | None = None,
     effect2: Effect | None = None,
+    parent: Mol | None = None,
 ) -> tuple[dict[int, int], dict[int, int], int, int] | None:
-    """Force a ResonancePair match onto its lex orbit representative.
+    """Remap a ResonancePair match onto its lex orbit representative.
 
     Same contract as :func:`canonicalize_smarts_match`: remap after
     ``filter_sites`` accept for chemistry and the emitted ``site`` key.
-    ``None`` → skip embedding.
+    ``parent`` is the lex-rep cache host when ``mol``'s forest cache was
+    cleared. ``None`` → skip embedding.
     """
 
-    tables = ensure_lexical_orbit_representatives(mol)
+    host = parent if parent is not None else mol
+    tables = ensure_lexical_orbit_representatives(mol, parent=host)
     if tables is None:
         return dict(map1), dict(map2), site_a, site_b
 

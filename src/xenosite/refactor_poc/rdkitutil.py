@@ -947,19 +947,30 @@ def _reordered_forest_labels(mol: Mol) -> None:
     _restamp_start_labels(mol)
 
 
-def restamp_product_forest_last_layer(mol: Mol) -> None:
+def restamp_product_forest_last_layer(
+    product: Mol,
+    *,
+    parent: Mol | None = None,
+) -> None:
     """Rewrite the product's last ``atom_trace`` idx layer and restamp props.
 
-    Product-only: does not edit a parent mol. Use after opt-in canonical
-    emission remaps chemistry onto the lex representative (or after
-    ``RenumberAtoms`` on a product). Updates ``idx[-1]`` from current atom
-    positions via ``forestLabel``, then restamps CX ``atomLabel``.
+    Product-only: does not edit a parent mol. After ``of_products`` /
+    ``clear_structure``, the product's ``_forest["cache"]`` is empty — pass
+    ``parent`` so lex-rep tables are read from the reactant cache (never
+    rebuilt against the cleared child). Updates ``idx[-1]`` from current
+    atom positions via ``forestLabel``, then restamps CX ``atomLabel``.
     """
 
-    if not is_tracing(mol):
+    if parent is not None:
+        from xenosite.refactor_poc.graph_isomorphism import (
+            ensure_lexical_orbit_representatives,
+        )
+
+        ensure_lexical_orbit_representatives(parent, parent=parent)
+    if not is_tracing(product):
         return
-    _reordered_forest_labels(mol)
-    _write_forest_labels(mol)
+    _reordered_forest_labels(product)
+    _write_forest_labels(product)
 
 
 

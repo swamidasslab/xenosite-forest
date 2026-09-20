@@ -144,11 +144,16 @@ bond–atom sites (ordered vs unordered as for unique-edit).
    discovery indexes when they differ (SiteInfo, TraceAddition, TraceInfo).
 4. Product-only: parent mol indexes are not mutated. After remap, product
    forest last ``idx`` layer is restamped (``restamp_product_forest_last_layer``).
+   **`of_products` / ``clear_structure`` wipe the product's ``cache``** — lex-rep
+   tables are read from the **parent** (``parent=`` on
+   ``ensure_lexical_orbit_representatives`` / ``restamp_product_forest_last_layer``),
+   never rebuilt against the cleared child.
 5. Non-canonical embeddings are not separate products (unique-edit + chemistry
    at the rep).
 
 Escape hatch for callers that need discovery: read ``discovered_site`` when
-present. Tests: ``test_canonical_emitted_sites.py``.
+present. Tests: ``test_canonical_emitted_sites.py`` (includes
+parent-cache-after-clear).
 Profile (same find_path cases as forest_copy): ~+7% wall when on.
 
 Status: approved (opt-in emission policy; HEURISTICS).

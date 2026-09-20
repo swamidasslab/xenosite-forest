@@ -2,6 +2,14 @@
 
 ## 2026-09-20
 
+- Canonical emission: lex-rep cache is read from the **parent** after
+  `of_products` / `clear_structure` wipe the product's `_forest["cache"]`.
+  API: `ensure_lexical_orbit_representatives(..., parent=)`,
+  `restamp_product_forest_last_layer(..., parent=)`, canonicalize_* `parent=`.
+  Test: `test_lex_reps_read_from_parent_after_product_cache_clear`.
+
+## 2026-09-20
+
 - Opt-in canonical lex-orbit site emission (`canonical_emitted_sites` / env / `set_canonical_emitted_sites`; default off). After `filter_sites` accepts discovery, chemistry remaps to lex rep; emitted `site` = canonical; `discovered_site` escape hatch when they differ (SiteInfo + TraceAddition). Product-only last-layer restamp. Filters must not assume `site` == discovery. Helpers + tables in `graph_isomorphism`; wired SMARTS + ResonancePair. Docs: PAIR_ORBITS §5, HEURISTICS. Tests: `test_canonical_emitted_sites.py`.
 - Profile off vs on (`tests/refactor_poc/profile_canonical_emitted_sites.py`, same find_path cases as forest_copy): OFF wall **3.731s**, ON **4.001s**, Δ **+0.270s (+7.2%)**. Lex helpers on ON path: `ensure_lexical_orbit_representatives` cum ~5.2% (cache miss per work-copy forest), `canonicalize_smarts_match` ~4.6%, pair ~1.0%, automorphism negligible. Artifacts: `artifacts/canonical_emitted_sites_profile.{out,pstats,live.log}` (untracked).
 
