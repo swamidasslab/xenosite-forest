@@ -3,6 +3,7 @@
 ## 2026-09-20
 
 - PERFORMANCE.md three-way H2H (archive BFS/DFS vs live `find_path`): harness `MAX_MOLS=200` yield cap, no archive edits. Wins where both archive modes CAP — eugenol→allyl-Q (4 steps / 0.062s), dimethoxy-PEA→catechol (`&`, 0.015s), MeOPhOH→HQ (4 steps / 0.947s), TBA→aldehyde (22 HA, 0.017s). Retuned naphthalene to reachable **2-MeO→1,2-NQ** (3 steps / 0.075s; BFS early hit, DFS CAP). **2-MeO→1,4-NQ** documented as no PhaseOne path (frontier empty at nd=95, not budget) — not a find_path bug. Harness `tests/forest/bench_find_path_h2h.py`; raw `artifacts/bench_find_path_h2h_3way.out`. RDKit SVGs in `src/xenosite/forest/performance_assets/`.
+- PERFORMANCE assets: xenopict `mark_atoms` circles + atom indices on reactants; products MCS-aligned via `Xenopict.align_to`. Regenerator `performance_assets/_render.py`.
 
 - Package swap: archived pre-POC forest to `src/xenosite/_archive_forest/` (**read-only / locked**; CI excludes archive tests + lint). Promoted `refactor_poc` → `xenosite.forest`; tests → `tests/forest/`. `AtomTracker` facade kept, deprecated (prefer `mol.xf`). StepPlan still imported from archive.
 - Long fuzz: `HYPOTHESIS_PROFILE=long XENOSITE_FUZZ_EXAMPLES=200` on bfs/guided/phase1/and_cleave/find_path_phase1 fuzz — **18 passed** (~23s). Artifact: `artifacts/long_fuzz_post_swap.out`.

@@ -65,6 +65,7 @@ dev = [
     "towncrier>=24.0",
     "pyright>=1.1.414",
     "ruff>=0.16.8",
+    "xenopict",
 ]
 
 [tool.towncrier]
@@ -204,3 +205,6 @@ extend-exclude = [
 select = ["E", "W", "F", "I"]
 # PLC0414 flags `import name as name`. Re-exports use that form on purpose.
 ignore = ["PLC0414"]
+
+[tool.uv.sources]
+xenopict = { path = "../xenopict" }

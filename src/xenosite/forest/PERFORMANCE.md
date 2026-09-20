@@ -11,13 +11,13 @@ resolve quickly as long plans.
 | live `find_path` | `xenosite.forest` | PhaseOne | plan-guided `find_path` |
 
 **Caps:** archive `MAX_MOLS=200` (harness yield stop; depth=4); live
-`max_nodes=800`. Tree: `feature/rule-refactor` @ `5229542` (2026-09-20).
+`max_nodes=800`. Tree: `feature/rule-refactor` @ `7926916` (2026-09-20).
 Raw: `artifacts/bench_find_path_h2h_3way.out`. Images:
 [`performance_assets/`](performance_assets/).
 
 ```bash
 uv run python tests/forest/bench_find_path_h2h.py
-uv run python src/xenosite/forest/performance_assets/_render.py
+uv run python src/xenosite/forest/performance_assets/_render.py  # xenopict circles + MCS align
 ```
 
 Why BFS/DFS fail the cap: they expand **ordered** walks; *k* commuting edits
@@ -153,7 +153,7 @@ Same scannable layout — this is **chemistry reachability**, not a timed search
 
 | Reactant | Product |
 | --- | --- |
-| ![2-MeO-naph](performance_assets/meo2_naph_reactant.svg)<br>`COc1ccc2ccccc2c1` | ![1,4-NQ](performance_assets/nq14_product.svg)<br>`O=C1C=CC(=O)c2ccccc12` |
+| ![2-MeO-naph](performance_assets/meo2_naph_reactant.svg)<br>`COc1ccc2ccccc2c1` | ![1,4-NQ](performance_assets/nq14_from_2meo_product.svg)<br>`O=C1C=CC(=O)c2ccccc12` |
 
 | Method | Result | Wall | Work | Path length |
 | --- | --- | ---: | --- | ---: |
@@ -168,7 +168,7 @@ Demethylation → 2-naphthol; PhaseOne cannot strip that C2 aryl oxygen to make
 
 | Reactant | Product |
 | --- | --- |
-| ![1-MeO-naph](performance_assets/meo1_naph_reactant.svg)<br>`COc1cccc2ccccc12` | ![1,4-NQ](performance_assets/nq14_product.svg)<br>`O=C1C=CC(=O)c2ccccc12` |
+| ![1-MeO-naph](performance_assets/meo1_naph_reactant.svg)<br>`COc1cccc2ccccc12` | ![1,4-NQ](performance_assets/nq14_from_1meo_product.svg)<br>`O=C1C=CC(=O)c2ccccc12` |
 
 ---
 
