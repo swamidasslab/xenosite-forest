@@ -2,6 +2,19 @@
 
 ## 2026-09-20
 
+- **Python 3.14 support (post v0.7.0).** v0.7.0 test+release CI green on
+  main. Local `uv` 3.14.7: deps sync (rdkit 2026.3.5, pynauty, numpy);
+  forest suite **1616 passed**, 1 skipped, 2 xfailed. Added classifier,
+  README 3.11–3.14, CI matrices in `test.yml` / `release.yml`, towncrier
+  `changelog.d/20.added.md`. Not testing freethreaded **3.14t** in CI:
+  `rdkit` has no `cp314t` wheels (only `cp314`); `uv sync` fails. Numpy
+  installs on 3.14t; pynauty builds from sdist but re-enables the GIL on
+  import (`nautywrap`). Revisit when RDKit ships freethreaded wheels.
+- **uv vs Homebrew Python.** Prefer **uv-managed** CPython for this repo
+  (`uv python install` / `uv sync` / `astral-sh/setup-uv` in CI). Matches
+  CI and global-caches guidance; Homebrew `python@3.14` is fine as a
+  system interpreter but project envs should stay uv-pinned.
+
 - **`cleared_0_7` mark.** Baseline `v0.6.1`; marked the 28 hard rules-example xfails still open after the cleavage XPASS clear (`b2830ee` `_XFAIL_IDS`), now passing on live forest. Not the quinone `Reaction*` bulk. Still xfail: Glutathionation `epoxide_c` / `aziridine_c` pattern_info. `pytest -m cleared_0_7`: 28 passed.
 
 - **`test_distinct_signatures_distinct_product_sets[dh-aminophenol]` skip.**
