@@ -287,6 +287,8 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol
 
     return renumbered, csmi
 
+# need to asser this function ensure Mol atoms exactly matches the forest labels,
+# or throw error
 def _reordered_forest_labels(mol: ForestMol) -> None:
     if not is_tracing(mol):
         raise KeyError("atom_trace")
