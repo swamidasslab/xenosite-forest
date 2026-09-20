@@ -417,7 +417,7 @@ def test_leave_count_one_refuses_a_larger_leaving_fragment():
         "rule": NDealkylation(),
         "options": {"cleaves": True, "leave_count": 1},
         "rxn_num": 0,
-        "pattern": NDealkylation().smarts[0][1],
+        "pattern": NDealkylation().smirks[0][1],
     }
     assert not _site_could_help((1, 2), info, diff, mol)
     info_ok = dict(info, site=(2, 3), options={"cleaves": True, "leave_count": 1})

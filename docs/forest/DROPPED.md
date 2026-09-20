@@ -1,4 +1,6 @@
-This file lists what live ``xenosite.forest`` left out relative to the pre-swap archive. A listing is not approval.
+This file lists what live ``xenosite.forest`` left out relative to the
+previous forest in the archive directory (``src/xenosite/_archive_forest/``).
+A listing is not approval.
 Each entry has `Status: approved`, `not approved`, or `not decided`.
 `approved` means the cut is accepted for the long term.
 `not approved` means the capability comes back. The old shape may still change.

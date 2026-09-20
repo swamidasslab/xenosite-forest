@@ -159,6 +159,8 @@ filterwarnings = [
     "ignore::xenosite._archive_forest.unstable.UnstableWarning",
     # Deprecated AtomTracker facade: tests that call it use pytest.warns /
     # catch_warnings(ignore). Do not blanket-ignore DeprecationWarning.
+    # Cross-rule overlaps log INFO only (no RedundantRulesWarning); SiteDeduplicationWarning
+    # stays an error under this filterwarnings=error gate.
 ]
 markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",

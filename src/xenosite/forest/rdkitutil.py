@@ -96,12 +96,14 @@ from xenosite.forest.records import (
     McsResult,
     SiteInfo,
     SitePairOrbitTables,
+    Smarts,
+    Smirks,
     Structure,
 )
 
 DisableLog("rdApp.*")
 
-_REACTION_CACHE: dict[str, ChemicalReaction] = {}
+_REACTION_CACHE: dict[Smirks, ChemicalReaction] = {}
 _MolT = TypeVar("_MolT", bound=Mol)
 
 # Keys install_forest writes. is_tracing is true only when all of them are present.
@@ -536,7 +538,7 @@ class Xf:
 
         return sanitize_mol(self.mol)
 
-    def smarts_matches(self, smarts: str) -> tuple[dict[int, int], ...]:
+    def smarts_matches(self, smarts: Smarts) -> tuple[dict[int, int], ...]:
         """Cached substructure matches for ``smarts``, keyed by atom map."""
 
         return _smarts_matches(self.mol, smarts)
@@ -863,21 +865,21 @@ def rw_copy(mol: Mol) -> RWMol:
     return RWMol(Mol(mol))
 
 
-def reaction_from_smarts(smarts: str) -> ChemicalReaction:
-    """Parse a SMARTS reaction once. The cache is process-wide, not per mol."""
+def reaction_from_smirks(smirks: Smirks) -> ChemicalReaction:
+    """Parse a SMIRKS reaction once. The cache is process-wide, not per mol."""
 
-    rxn = _REACTION_CACHE.get(smarts)
+    rxn = _REACTION_CACHE.get(smirks)
     if rxn is None:
-        rxn = ReactionFromSmarts(smarts)
+        rxn = ReactionFromSmarts(smirks)
         rxn._setImplicitPropertiesFlag(False)
-        _REACTION_CACHE[smarts] = rxn
+        _REACTION_CACHE[smirks] = rxn
     return rxn
 
 
-def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[NoForestMol, ...], ...]:
+def run_reactants(smirks: Smirks, mol: Mol) -> tuple[tuple[NoForestMol, ...], ...]:
     """Run one cached reaction on ``mol``. Empty when RDKit refuses the run."""
 
-    reaction = reaction_from_smarts(smarts)
+    reaction = reaction_from_smirks(smirks)
     try:
         product_sets = reaction.RunReactants((mol,))
     except (RuntimeError, ValueError):
@@ -1480,7 +1482,7 @@ def _ring_membership(mol: Mol) -> dict[int, tuple[tuple[int, ...], ...]]:
     return structure["rings"]
 
 
-def _smarts_matches(mol: Mol, smarts: str) -> tuple[dict[int, int], ...]:
+def _smarts_matches(mol: Mol, smarts: Smarts) -> tuple[dict[int, int], ...]:
     cache = _structure(mol).setdefault("smarts_matches", {})
     if smarts not in cache:
         query = MolFromSmarts(smarts)

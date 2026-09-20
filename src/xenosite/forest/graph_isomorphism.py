@@ -41,7 +41,7 @@ from __future__ import annotations
 import importlib
 import os
 from collections import defaultdict
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from itertools import (
     combinations,
     permutations,
@@ -67,6 +67,7 @@ from xenosite.forest.records import (
     PairSiteInfo,
     PairSiteSignature,
     PatternInfo,
+    Site,
     SiteCipKey,
     SitePairCipKey,
     SitePairOrbitTables,
@@ -74,6 +75,7 @@ from xenosite.forest.records import (
     SmilesPairGroup,
     Structure,
     TopoGroupId,
+    _flat_ints,
 )
 
 # Legacy same-kind mode names used by unique-edit / forest cache tables.
@@ -989,11 +991,11 @@ def map_rank_key(
 
 
 def bond_rank_key(
-    ranks: Mapping[int, int], site: Collection[int]
+    ranks: Mapping[int, int], site: Site
 ) -> tuple[int, ...]:
     """Unordered bond ends as sorted topological ranks (``site_kind="bond"``)."""
 
-    return tuple(sorted(ranks[i] for i in site))
+    return tuple(sorted(ranks[i] for i in _flat_ints(site)))
 
 
 def formula_key(value: str | None) -> str:
@@ -1007,12 +1009,11 @@ def formula_key(value: str | None) -> str:
 def site_orbit(
     mol: Mol,
     mapped: Mapping[int, int],
-    site: Collection[int],
+    site: Site,
 ) -> PairOrbitSignature | None:
     """Unique-edit orbit field for a SMARTS site (atom–atom when ``len==2``)."""
 
-    fs = site if isinstance(site, frozenset) else frozenset(site)
-    return mol.xf.atom_pair_orbit_key(fs)
+    return mol.xf.atom_pair_orbit_key(frozenset(_flat_ints(site)))
 
 
 def pair_orbit(
@@ -1079,7 +1080,7 @@ def site_signature(
     work: Mol,
     mapped: Mapping[int, int],
     ranks: Mapping[int, int],
-    site: Collection[int],
+    site: Site,
     rxn_num: int,
     effect: Effect,
     *,
@@ -1087,13 +1088,15 @@ def site_signature(
 ) -> SiteSignature:
     """Dedup key. Last field is a pair-orbit signature, or ``None`` for one atom.
 
-    ``site_kind="bond"``: sorted site ranks (undirected ends — Epoxidation).
+    ``site_kind="bond"``: sorted site ranks (undirected ends — Epoxidation,
+    AzoSplitting). ``"atom_pair"`` SMARTS on ResonancePair rules (Hydrogenation
+    alkene/alkyne, Dehydrogenation one-bond) use the same undirected key —
+    pair-path emissions use :func:`pair_site_signature` instead.
     ``"directed_bond"`` / ``"atom"``: directed MapRankKey (Dealkylation map 1
-    is the oxygenated carbon). ``"atom_pair"`` is ResonancePair only and uses
-    :func:`pair_site_signature` instead.
+    is the oxygenated carbon).
     """
 
-    if site_kind == "bond":
+    if site_kind in ("bond", "atom_pair"):
         map_key = bond_rank_key(ranks, site)
     else:
         map_key = map_rank_key(ranks, mapped)
@@ -1485,33 +1488,40 @@ def select_rep_table(
     raise ValueError(f"Unknown kind: {kind}")
 
 
-def _remap_site(
-    site: Collection[int], atom_map: Mapping[int, int]
-) -> frozenset[int] | tuple[int, ...]:
-    """Apply ``atom_map`` to ``site``, preserving tuple vs frozenset."""
+def _remap_site(site: Site, atom_map: Sequence[int]) -> Site:
+    """Apply ``atom_map`` to ``site``, preserving Site container shape."""
 
-    remapped = tuple(int(atom_map[idx]) for idx in site)
+    if isinstance(site, int):
+        return int(atom_map[site])
     if isinstance(site, tuple):
-        return remapped
-    return frozenset(remapped)
+        return tuple(int(atom_map[idx]) for idx in site)
+    sample = next(iter(site), None)
+    if isinstance(sample, frozenset):
+        return frozenset(
+            frozenset(int(atom_map[idx]) for idx in item)
+            for item in site
+            if isinstance(item, frozenset)
+        )
+    return frozenset(
+        int(atom_map[idx]) for idx in site if isinstance(idx, int)
+    )
 
 
-def _copy_site(site: Collection[int]) -> frozenset[int] | tuple[int, ...]:
-    if isinstance(site, tuple):
-        return site
-    return frozenset(site)
+def _copy_site(site: Site) -> Site:
+    # frozenset / tuple / int are immutable; identity is a fine copy.
+    return site
 
 
 def _remap_match_via_auto(
     mol: Mol,
     mapped: Mapping[int, int],
-    site: Collection[int],
+    site: Site,
     candidate: OrbitCandidate,
     representative: OrbitCandidate,
     *,
     kind: OrbitKind,
     ordered: bool,
-) -> tuple[dict[int, int], frozenset[int] | tuple[int, ...]] | None:
+) -> tuple[dict[int, int], Site] | None:
     """Apply an automorphism taking ``candidate`` → ``representative`` to a match."""
 
     if candidate == representative:
@@ -1529,10 +1539,10 @@ def _remap_match_via_auto(
 def canonicalize_smarts_match(
     mol: Mol,
     mapped: Mapping[int, int],
-    site: Collection[int],
+    site: Site,
     *,
     parent: Mol | None = None,
-) -> tuple[dict[int, int], frozenset[int] | tuple[int, ...]] | None:
+) -> tuple[dict[int, int], Site] | None:
     """Remap a SMARTS match onto its lex orbit representative for emission.
 
     Call **after** ``filter_sites`` accepted the discovery site. Chemistry and
@@ -1543,8 +1553,8 @@ def canonicalize_smarts_match(
     representative exists but no automorphism was found (skip). With no
     nauty tables, returns the input unchanged.
 
-    Preserves ``tuple`` vs ``frozenset`` for the site container (directed_bond
-    emits ordered tuples; undirected bond emits frozensets).
+    Preserves Site container shape (``int`` / ``tuple`` / ``frozenset``;
+    directed_bond keeps ordered tuples; undirected bond keeps frozensets).
     """
 
     host = parent if parent is not None else mol
@@ -1552,9 +1562,10 @@ def canonicalize_smarts_match(
     if tables is None:
         return dict(mapped), _copy_site(site)
 
-    if len(site) == 1:
+    atoms = _flat_ints(site)
+    if len(atoms) == 1:
         # One-atom unique-edit: lex-smallest atom in the automorphism orbit.
-        site_atom = next(iter(site))
+        site_atom = next(iter(atoms))
         representative = cast(
             AtomSite,
             canonical_emitted_site(
@@ -1571,9 +1582,9 @@ def canonicalize_smarts_match(
             ordered=False,
         )
 
-    if len(site) == 2:
+    if len(atoms) == 2:
         # One-pattern two-atom sites use unordered atom–atom orbits.
-        left, right = sorted(site)
+        left, right = sorted(atoms)
         candidate = (left, right)
         representative = cast(
             AtomPairSite,

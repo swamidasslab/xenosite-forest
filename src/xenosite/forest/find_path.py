@@ -612,6 +612,16 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
     )
     if drops_h_only and not diff.h_loss and not diff.loses_aromaticity:
         return False
+    # Mirror of drops_h_only: a pattern that only adds H cannot help when no
+    # mapped atom needs more hydrogens. Reads span.adds vs h_delta — not a
+    # rule-name branch (Hydrogenation / OxygenReduction declare adds=H/HH).
+    adds_h_only = (
+        not can_cleave
+        and _any_span(span, "adds", lambda value: bool(value) and "H" in value, "")
+        and not _any_span(span, "removes", lambda value: bool(value), "")
+    )
+    if adds_h_only and not any(delta > 0 for delta in diff.h_delta.values()):
+        return False
     return True
 
 
@@ -717,6 +727,20 @@ def _site_could_help(
         loses_h = any(diff.h_delta.get(atom, 0) < 0 for atom in scope)
         if not loses_h and not (scope & set(diff.loses_aromaticity)):
             return False
+    # Symmetric to removes-H: adding H is only helpful where h_delta > 0.
+    # Do not use loses_aromaticity as an escape — reductive dearomatization
+    # clears that term in cost() while moving away from oxidative targets.
+    adds = effect.get("adds") or ""
+    if (
+        isinstance(adds, str)
+        and "H" in adds
+        and not _effect_adds_oxygen(effect)
+        and not effect.get("cleaves")
+    ):
+        scope = atoms | set(path_ends)
+        gains_h = any(diff.h_delta.get(atom, 0) > 0 for atom in scope)
+        if not gains_h:
+            return False
     return True
 
 
@@ -737,10 +761,10 @@ def _filters(diff: AtomDiff, enabled: bool) -> tuple[FilterRules, FilterSites]:
 
 def _rule_spans(rule: ReactionRule) -> list[Span]:
     spans: list[Span] = []
-    for group in (getattr(rule, "smarts", None), getattr(rule, "endpoints", None)):
+    for group in (getattr(rule, "smirks", None), getattr(rule, "endpoints", None)):
         if not group:
             continue
-        for _smarts, info in group:
+        for _pattern, info in group:
             span = info.get("span")
             if span is not None:
                 spans.append(span)
@@ -871,10 +895,10 @@ class _Walk:
 
 
 def _walk_priority(*, target_hit: bool, seq: int) -> tuple[int, int]:
-    """Heap key matching the old deque: hits first, then FIFO.
+    """Heap key: hits first, then FIFO. Lower is better.
 
-    Lower is better. The queue had no priority key before this; a richer key
-    from ``atom_diff`` / ``order_key`` is not decided (see docs/forest/HEURISTICS.md).
+    A richer key from ``atom_diff`` / ``order_key`` is not decided
+    (see docs/forest/HEURISTICS.md).
     """
 
     return (0 if target_hit else 1, seq)

@@ -83,21 +83,50 @@ def _flat_ints(site: Site) -> set[int]:
     return found
 
 
+# Chemistry string brands (NewType → still ``str`` at runtime).
+Smarts = NewType("Smarts", str)
+"""Substructure match pattern for RDKit ``MolFromSmarts``.
+
+Match-only: no reaction arrow. Used for endpoint queries and the reactant
+side of a :class:`Smirks` after ``split(">>")``.
+"""
+
+Smirks = NewType("Smirks", str)
+"""Reaction transform ``reactant>>product`` (SMIRKS / reaction SMARTS).
+
+Parsed by RDKit ``ReactionFromSmarts``. Rule ``smirks`` fields hold these;
+pair ``endpoints`` hold :class:`Smarts` instead.
+"""
+
 # Known atom indices only. AtomRef is a leaf, not a site by itself.
-# frozenset[int] is undirected two-atom / singleton sites; nested frozensets
-# are pair-of-pairs. ``tuple[int, ...]`` is directed_bond (map order).
-Site = int | tuple[int, ...] | frozenset[int] | frozenset[frozenset[int]]
+# site_kind → arm: atom → AtomSite; bond → BondSite; atom_pair → AtomPairSite
+# (same frozenset[int], different semantics); directed_bond discovery →
+# DirectedBondSite; pair-of-pairs → BondPairSite.
+AtomSite: TypeAlias = int
+DirectedBondSite: TypeAlias = tuple[int, ...]
+BondSite: TypeAlias = frozenset[int]
+AtomPairSite: TypeAlias = frozenset[int]
+BondPairSite: TypeAlias = frozenset[frozenset[int]]
+Site: TypeAlias = (
+    AtomSite | DirectedBondSite | BondSite | AtomPairSite | BondPairSite
+)
 
 # Same nesting as Site. Top-level single deferred atom is AtomRef only
 # (bare int belongs to Site). Nested leaves may be int or AtomRef.
-FutureSite = (
-    AtomRef
-    | tuple[int | AtomRef, ...]
-    | frozenset[int | AtomRef]
-    | frozenset[frozenset[int | AtomRef]]
+FutureAtomSite: TypeAlias = AtomRef
+FutureDirectedBondSite: TypeAlias = tuple[int | AtomRef, ...]
+FutureBondSite: TypeAlias = frozenset[int | AtomRef]
+FutureAtomPairSite: TypeAlias = frozenset[int | AtomRef]
+FutureBondPairSite: TypeAlias = frozenset[frozenset[int | AtomRef]]
+FutureSite: TypeAlias = (
+    FutureAtomSite
+    | FutureDirectedBondSite
+    | FutureBondSite
+    | FutureAtomPairSite
+    | FutureBondPairSite
 )
 
-AnySite = Site | FutureSite
+AnySite: TypeAlias = Site | FutureSite
 
 
 class Formula(TypedDict):
@@ -244,8 +273,8 @@ class _SiteInfoCore(TypedDict):
     discovered_site: NotRequired[Site]
 
 
-class SmartsSiteInfo(_SiteInfoCore):
-    """Bag from :meth:`SmartsReactionRule.metabolites` and
+class SmirksSiteInfo(_SiteInfoCore):
+    """Bag from :meth:`SmirksReactionRule.metabolites` and
     :meth:`ResonanceRule.metabolites` for ``filter_sites``.
     """
 
@@ -262,10 +291,10 @@ class PairSiteInfo(_SiteInfoCore):
     path_ends: frozenset[int]
 
 
-SiteInfo: TypeAlias = SmartsSiteInfo | PairSiteInfo
+SiteInfo: TypeAlias = SmirksSiteInfo | PairSiteInfo
 
 
-class SmartsProductInfo(SmartsSiteInfo):
+class SmirksProductInfo(SmirksSiteInfo):
     """``SiteInfo`` after :meth:`ReactionRule.metabolize` adds product fields."""
 
     product_index: int
@@ -281,7 +310,7 @@ class PairProductInfo(PairSiteInfo):
     csmi: str
 
 
-ProductInfo: TypeAlias = SmartsProductInfo | PairProductInfo
+ProductInfo: TypeAlias = SmirksProductInfo | PairProductInfo
 
 
 class TraceInfo(TypedDict, total=False):
@@ -306,8 +335,8 @@ class TraceInfo(TypedDict, total=False):
 SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
 # Emitted Site shape (atom-index frozenset). Class data on ReactionRule —
 # not Generic[SiteT] (shared emit path + heterogeneous RuleSets erase the param;
-# pyright cannot enforce frozenset size). Replaces UniqueOrbit / bond_atom.
-# Distinct from graph_isomorphism.SiteKind (atom/bond marks for orbits).
+# pyright cannot enforce frozenset size). Distinct from
+# graph_isomorphism.SiteKind (atom/bond marks for orbits).
 # ``"atom"`` singleton; ``"bond"`` undirected bond (two adjacent atoms);
 # ``"directed_bond"`` bond Site with directed map ranks (Dealkylation);
 # ``"atom_pair"`` ResonancePair path/ends only — never on plain SMARTS rules.
@@ -476,9 +505,8 @@ class EndParents(NamedTuple):
 #   - ``ordered=True``: ends have distinct roles; ``end_ranks`` holds site
 #     topeqiv ranks in canonical ``PatternInfo.name`` order.
 #
-# Atom–atom / bond–bond only. Directed bond–atom UniqueOrbit was never a Site
-# pattern and was retired (see docs/forest/DROPPED.md). Constructors:
-# ``unordered_*`` / ``ordered_*`` in ``graph_isomorphism``.
+# Atom–atom / bond–bond only. Constructors: ``unordered_*`` / ``ordered_*``
+# in ``graph_isomorphism``. (Directed bond–atom UniqueOrbit: DROPPED.md.)
 
 TopoGroupId = NewType("TopoGroupId", int)
 """Topological equivalence class id (atom topeqiv or bond class). Not an atom index."""
@@ -597,7 +625,7 @@ class Structure(TypedDict, total=False):
     topol_equiv: dict[int, int]
     csmi: str
     formula: Formula
-    smarts_matches: dict[str, tuple[dict[int, int], ...]]
+    smarts_matches: dict[Smarts, tuple[dict[int, int], ...]]
     resonance_bonds: tuple[dict[tuple[int, int], float], ...]
     kekule_parents: KekuleParents
     conjugated_systems: tuple[frozenset[int], ...]

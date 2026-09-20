@@ -2,7 +2,7 @@
 
 Source of truth at HEAD: `graph_isomorphism.py` + signature types in `records.py`.
 Rule chemistry stays in `rules.py` (thin call sites). HEURISTICS Status: approved
-for `swap_group` / nauty six-family. DH uses `site_kind="atom_pair"` atom-pair Sites (not bond_atom).
+for `swap_group` / nauty six-family. DH uses `site_kind="atom_pair"` atom-pair Sites.
 
 This doc is for another agent. Facts only. Do **not** claim novelty for
 “automorphisms on pairs” — that construction is classical (see References).
@@ -30,10 +30,11 @@ Two layers (do not conflate — HEURISTICS):
 
 1. **Site unique-edit** — topological ranks + pair-orbit signature. Equivalent
    embeddings of the *same* edit share one key before `RunReactants`.
-2. **Product csmi dedup** (`unique_csmi`) — drops site topology; keys
-   `(rule name, PatternInfo.name | SMARTS, product csmi)`. A drop emits
-   `CsmiDedupWarning` (generic, once-per-message) plus an INFO log with
-   substrate / rule / site.
+2. **Product csmi** — **check** (emission frozenset of fragment CSMIs + site
+   ranks → `SiteDeduplicationWarning` on unique-edit miss; no drop) vs **yield**
+   (`unique_csmi`: drop duplicate `(rule, pattern, csmi)` fragments). RuleSet
+   forces child yield off; parent yield across different child rules logs
+   INFO (kept/dropped rule + shared CSMI), not a Warning.
 
 Pair orbits refine (1) when atom ranks alone are not enough. Classic negative:
 benzene meta vs para share ranks but not atom–atom orbits
@@ -76,8 +77,7 @@ Dehydrogenation declares ``site_kind = "atom_pair"`` and ``sites_on = "atom_pair
 One-bond SMARTS emit **both** bond endpoints (``site_map=(1, 2)``). Path
 emissions are already the two end atoms. Unique-edit uses unordered
 ``AtomPairOrbitSignature`` (ordered when ``swap_group`` / PatternInfo names
-differ). Directed ``bond_atom`` UniqueOrbit / ``BondAtomOrbitSignature`` was
-never an intended Site pattern and was retired (DROPPED approved).
+differ).
 
 Site shape is class data on ``ReactionRule``
 (``site_kind: Literal["atom", "bond", "directed_bond", "atom_pair"]``), not
@@ -212,9 +212,9 @@ Also: benzene meta share orbit, meta ≠ para. Suites: `test_pair_signatures.py`
 | `rdkitutil.py` | `restamp_product_forest_last_layer` (product-only) |
 | Tests §5 / §6 | Orbits, signatures, DH, six-family, `test_canonical_emitted_sites.py` |
 
-Do **not** revive directed bond–atom UniqueOrbit. Do **not** replace
-`swap_group` with SMARTS narrowing for same-role ResonancePair couples.
-Do **not** make ``ReactionRule`` a ``Generic[SiteT]``.
+Do **not** replace `swap_group` with SMARTS narrowing for same-role
+ResonancePair couples. Do **not** make ``ReactionRule`` a ``Generic[SiteT]``.
+(Directed bond–atom UniqueOrbit is DROPPED — see ``DROPPED.md``.)
 
 ---
 

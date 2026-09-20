@@ -16,10 +16,12 @@ BFS/DFS miss under ``MAX_MOLS`` while live find_path returns a long plan fast.
 
 Re-run:
   uv run python tests/forest/bench_find_path_h2h.py
+  uv run python tests/forest/bench_find_path_h2h.py --larger
 """
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 import time
@@ -42,6 +44,8 @@ warnings.filterwarnings("ignore", category=UserWarning, module="xenosite._archiv
 ROOT = Path(__file__).resolve().parents[2]
 ART_OUT = ROOT / "artifacts" / "bench_find_path_h2h_3way.out"
 ART_LIVE = ROOT / "artifacts" / "bench_find_path_h2h_3way.live.log"
+ART_OUT_LARGER = ROOT / "artifacts" / "bench_find_path_h2h_larger.out"
+ART_LIVE_LARGER = ROOT / "artifacts" / "bench_find_path_h2h_larger.live.log"
 
 # Shared archive yield cap. Large enough that a short path can appear; small
 # enough that multi-edit ordering blow-up hits the cap instead of hanging.
@@ -82,6 +86,42 @@ CASES: list[tuple[str, str, str]] = [
         "2-MeO-naph→1,2-NQ",
         "COc1ccc2ccccc2c1",
         "O=C1C(=O)c2ccccc2C=C1",
+    ),
+]
+
+# Larger substrates (HA≈19–26) from path-outcome / substrate_library cases.
+# Flat wall on the mid-size set is dominated by MeOPhOH; here archive CAP cost
+# per mol rises with frontier size while live stays plan-cheap.
+LARGER_CASES: list[tuple[str, str, str]] = [
+    # test_path / test_path_outcome_hard: crowded bis-N-dealk → dialdehyde
+    (
+        "tBu-bis-ND→dialdehyde",
+        "CN(C)Cc1ccc(CN(C)Cc2ccc(C(C)(C)C)cc2)cc1",
+        "O=Cc1ccc(C=O)cc1",
+    ),
+    # test_path_outcome_hard: macrocycle ring-open then cleave
+    (
+        "macrocycle-ND→aminoK",
+        "C1CCCCCCNC2CCCC(CC2)NCCCC1",
+        "NC1CCCC(=O)CC1",
+    ),
+    # test_path_outcome_hard: three equivalent benzyl arms → PhCHO
+    (
+        "tribenzyl→PhCHO",
+        "N(Cc1ccccc1)(Cc1ccccc1)Cc1ccccc1",
+        "O=Cc1ccccc1",
+    ),
+    # substrate_library largest: one hydroxylation on a 26-HA scaffold
+    (
+        "triPh-butyl→OH",
+        "c1ccccc1CCCCc2ccccc2CCCCc3ccccc3",
+        "Oc1ccccc1CCCCc2ccccc2CCCCc3ccccc3",
+    ),
+    # dual O-dealk on a larger diaryl scaffold (ordering CAP like dimethoxy-PEA)
+    (
+        "MeO-diphenyl→catechol",
+        "COc1ccc(Cc2ccc(OC)cc2)cc1",
+        "Oc1ccc(Cc2ccc(O)cc2)cc1",
     ),
 ]
 
@@ -238,9 +278,21 @@ def _fmt_live(r: LiveResult) -> str:
     )
 
 
-def main() -> int:
-    ART_OUT.parent.mkdir(parents=True, exist_ok=True)
-    live_f = ART_LIVE.open("w")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--larger",
+        action="store_true",
+        help="Use LARGER_CASES (HA≈19–26) and write *_larger artifacts",
+    )
+    args = parser.parse_args(argv)
+
+    cases = LARGER_CASES if args.larger else CASES
+    out_path = ART_OUT_LARGER if args.larger else ART_OUT
+    live_path = ART_LIVE_LARGER if args.larger else ART_LIVE
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    live_f = live_path.open("w")
     lines: list[str] = []
     sha = _git_sha()
 
@@ -250,7 +302,8 @@ def main() -> int:
         live_f.flush()
         lines.append(msg)
 
-    log(f"find_path H2H 3-way  sha={sha}")
+    mode = "larger mols" if args.larger else "mid-size"
+    log(f"find_path H2H 3-way  ({mode})  sha={sha}")
     log(
         f"archive: PhaseOneQF bfs/dfs enum  depth={ARCHIVE_DEPTH}  "
         f"MAX_MOLS={MAX_MOLS} (harness yield cap)"
@@ -261,14 +314,14 @@ def main() -> int:
     )
     log("archive path length = reaction hops on the metabolite walk")
     log("live path length    = len(plan.steps) on PathOutcome")
-    log(f"live log: {ART_LIVE}")
+    log(f"live log: {live_path}")
     log()
 
     rows: list[tuple[str, str, ArchiveResult, ArchiveResult, LiveResult]] = []
-    for i, (label, reactant, target) in enumerate(CASES, 1):
+    for i, (label, reactant, target) in enumerate(cases, 1):
         target_c = canon_smiles(Chem.MolFromSmiles(target))
         ha = Chem.MolFromSmiles(reactant).GetNumHeavyAtoms()
-        log(f"[{i}/{len(CASES)}] {label}  (reactant heavy atoms={ha}) ...")
+        log(f"[{i}/{len(cases)}] {label}  (reactant heavy atoms={ha}) ...")
         log(f"  reactant={reactant}")
         log(f"  product ={target}")
         log("  archive bfs...")
@@ -325,6 +378,17 @@ def main() -> int:
     n_d = sum(1 for _, _, _, dr, _ in rows if dr.valid)
     n_l = sum(1 for _, _, _, _, lr in rows if lr.valid)
     log(f"Valid hits: bfs={n_b}/{len(rows)}  dfs={n_d}/{len(rows)}  live={n_l}/{len(rows)}")
+    if rows:
+        live_secs = [lr.seconds for _, _, _, _, lr in rows]
+        bfs_secs = [br.seconds for _, _, br, _, _ in rows]
+        log(
+            f"Live wall range: {min(live_secs):.3f}s–{max(live_secs):.3f}s  "
+            f"(max/min={max(live_secs) / max(min(live_secs), 1e-9):.1f}×)"
+        )
+        log(
+            f"BFS wall range:  {min(bfs_secs):.3f}s–{max(bfs_secs):.3f}s  "
+            f"(max/min={max(bfs_secs) / max(min(bfs_secs), 1e-9):.1f}×)"
+        )
     log()
     log("Metric definitions:")
     log(f"  MAX_MOLS={MAX_MOLS}        archive metabolite yield cap (harness)")
@@ -335,8 +399,8 @@ def main() -> int:
     log("  Conjugation is not in PhaseOneQF / PhaseOne.")
 
     body = "\n".join(lines) + "\n"
-    ART_OUT.write_text(body)
-    log(f"wrote {ART_OUT}")
+    out_path.write_text(body)
+    log(f"wrote {out_path}")
     live_f.close()
     return 0
 

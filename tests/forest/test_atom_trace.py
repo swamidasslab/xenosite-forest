@@ -18,7 +18,7 @@ from xenosite.forest.find_path import bfs, dfs
 from xenosite.forest.rules import (
     Hydroxylation,
     ReactionRule,
-    SmartsReactionRule,
+    SmirksReactionRule,
     describe,
 )
 from xenosite.forest.rulesets import PhaseOne
@@ -26,7 +26,7 @@ from xenosite.forest.rulesets import PhaseOne
 _SKIP = frozenset(
     {
         "ReactionRule",
-        "SmartsReactionRule",
+        "SmirksReactionRule",
         "ResonanceRule",
         "ResonancePairRule",
         "ConjugationRule",
@@ -143,8 +143,8 @@ def test_restamp_does_not_rewrite_history():
     assert before == after
 
 
-class _CarbonToOxygen(SmartsReactionRule):
-    smarts = (("[C:1]Cl>>[O:1].[Cl:2]", describe(site_map=1, adds="")),)
+class _CarbonToOxygen(SmirksReactionRule):
+    smirks = (("[C:1]Cl>>[O:1].[Cl:2]", describe(site_map=1, adds="")),)
 
     def __init__(self):
         super().__init__(name="CarbonToOxygen")

@@ -1,7 +1,8 @@
 # Divergences
 
-Canonical-SMILES disagreements between live ``xenosite.forest`` and the archived
-pre-swap library (``xenosite._archive_forest``). A listing is the record. It is not permission to drop a real
+Canonical-SMILES disagreements between live ``xenosite.forest`` and the
+previous forest in the archive directory
+(``src/xenosite/_archive_forest/``). A listing is the record. It is not permission to drop a real
 metabolite the old code emits, and it is not permission to hide a product
 only the new code emits. Sites may differ when `topol_equiv` puts them in
 the same atom class. Order does not matter.
@@ -59,17 +60,17 @@ Dibenzothiophene (`c1ccc2c(c1)sc1ccccc12`): only new `[O-][s+]1c2ccccc2c2ccccc21
 
 More correct. Not a problem in live forest. ResonanceRule picks the Kekulé parent that matches the S–C single implied by the SMARTS, so live forest emits the S-oxide the old one-Kekulé walk misses. Thiophene has no second writing, and both libraries emit `[O-][s+]1cccc1`. Dibenzothiophene is the same miss.
 
-## No global Kekulé loop on SmartsReactionRule
+## No global Kekulé loop on SmirksReactionRule
 
-Status: documented (shipped on PR #15)
+Status: documented
 
-Plain `SmartsReactionRule.metabolites` no longer fans out over `_kekule_forms(mol)`. Matching and unique-edit run on the input (usually aromatic) mol. Rules that need a specific Kekulé bond order for `RunReactants` are `ResonanceRule` subclasses: aromatic-matching SMARTS (`=,:` / `-,:`), then `_reactant_parent` selects the assignment whose maps 1–2 match the SMARTS-implied order (`_smarts_mapped_bond_order`). Unique-edit `incident_orders` stay on the aromatic parent so Kekulé 1.0↔2.0 flips do not split equivalent sites (phenol Hydroxylation: 0 CSMI). Reparented: Dealkylation, NDealkylation, AzoSplitting, ThiopheneSulfurOxidation, NitrogenReduction (hydroxylamine). Antipattern note: HEURISTICS (not approved to revive).
+Plain `SmirksReactionRule.metabolites` does not fan out over `_kekule_forms(mol)`. Matching and unique-edit run on the input (usually aromatic) mol. Rules that need a specific Kekulé bond order for `RunReactants` are `ResonanceRule` subclasses: aromatic-matching SMARTS (`=,:` / `-,:`), then `_reactant_parent` selects the assignment whose maps 1–2 match the SMARTS-implied order (`_smirks_mapped_bond_order`). Unique-edit `incident_orders` stay on the aromatic parent. ResonanceRule examples: Dealkylation, NDealkylation, AzoSplitting, ThiopheneSulfurOxidation, NitrogenReduction (hydroxylamine). Antipattern: HEURISTICS (not approved to revive).
 
 ## Epoxidation bond site / undirected map ranks
 
-Status: documented (shipped on PR #15)
+Status: documented
 
-Epoxidation is `site_kind="bond"` (`site_map=(1, 2)`). Directed `MapRankKey` split phenol ortho-meta `{2,3}` `((1,4),(2,2))` vs `{5,6}` `((1,2),(2,4))` while `incident_orders`, orbit, and product CSMI matched — 2 CSMI warnings. `bond_rank_key` = sorted site ranks `(2,4)` merges them; phenol keeps 3 regioisomers / 0 CSMI. Dealkylation is `site_kind="directed_bond"` (ordered map ranks) so anisole ring-open regioisomers are not collapsed. Residual WAE CSMI may remain on other rules (Hydrogenation / Dealkylation / OxidativeDehalogenation / peers).
+Epoxidation is `site_kind="bond"` (`site_map=(1, 2)`); unique-edit uses undirected `bond_rank_key`. Dealkylation is `site_kind="directed_bond"` (ordered map ranks) so ring-open regioisomers stay distinct. See HEURISTICS site-kind taxonomy.
 
 ## Arene-oxide methyl sulfone
 
@@ -112,9 +113,7 @@ The class is a ResonancePairRule. The one-bond SMARTS writes 1-butene. The pair 
 
 Ethene (`C=C`) and ethyne (`C#C`) do not hit that path. Both libraries yield `CC` and `C=C`.
 
-More correct to omit `C=C=CC`. It is still C4H6, the same formula as butadiene, not a hydrogenation. `CC=CC` is C4H8, the 1,4 product, and it is shared.
-
-**Bug note (unmasked by dd9c8ef unique-edit, fixed):** Hydrogenation / ResonancePair path search could start on a *single* bond and apply even bond-count walks, falsely emitting `C=C=C=C` (C4H4, path ends `(1,2)`) and `C=C=CC` (C4H6). Unique-edit dedup had been *masking* those false emits by suppressing them — the chemistry bug is independent of dedup. Fix: double-first paths only (either endpoint may hold the opening double) and odd bond-count walks only. Do not “fix” by restoring bad dedup.
+More correct to omit `C=C=CC`. It is still C4H6, the same formula as butadiene, not a hydrogenation. `CC=CC` is C4H8, the 1,4 product, and it is shared. Live ResonancePair paths are double-first and odd bond-count only (no cumulene false emits).
 
 ## Dehydrogenation of ethenediol
 
@@ -166,11 +165,11 @@ This approval is the one-site case. Two-site edits do not collapse both ends to 
 
 ## Product csmi dedup vs archived site+product identity
 
-Status: not decided (RuleSet cross-rule); rule-level key approved
+Status: approved (rule-level key + RuleSet cross-rule redundant warning)
 
-The archived library's `metabolize` with `only_emit_topologically_distinct_sites` keys `(rule name, topo ranks, product SMILES set)` — site topology stays in the product-emit signature. Live forest splits that into two layers (see `HEURISTICS.md`): unique-edit keeps ranks + pair orbit; `unique_csmi` on `ReactionRule` keys `(rule name, PatternInfo.name | SMARTS, product csmi)` and drops site topology. Same product from two sites of one rule is one yield when the pattern token matches; overlapping SMARTS that share a product need partitioned data (e.g. Dealkylation C–C alcohol is `#6H0` vs `#6h`; Hydroxylation is `#6h1` vs `#6h2,#6h3`; Glutathionation epoxide/aziridine substituted-carbon patterns are `#6H0`), not archived-style site+product cross-collapse.
+The archived library's `metabolize` with `only_emit_topologically_distinct_sites` keys `(rule name, topo ranks, product SMILES set)` — site topology stays in the product-emit signature. Live forest splits that into two layers (see `HEURISTICS.md`): unique-edit keeps ranks + pair orbit; `unique_csmi` on `ReactionRule` keys `(rule name, PatternInfo.name | SMARTS, product csmi)` and drops site topology (`SiteDeduplicationWarning` on miss). Same product from two sites of one rule is one yield when the pattern token matches; overlapping SMARTS that share a product need partitioned data (e.g. Dealkylation C–C alcohol is `#6H0` vs `#6h`; Hydroxylation is `#6h1` vs `#6h2,#6h3`; Glutathionation epoxide/aziridine substituted-carbon patterns are `#6H0`), not archived-style site+product cross-collapse.
 
-`RuleSet.metabolize` now uses the same `_unique_csmi_key` as `ReactionRule`, so two child rules that share a product structure both emit. The archive keeps a separate seen per child rule as well; the remaining divergence is site topology in the archived emit signature, not cross-rule csmi merging.
+`RuleSet.metabolize` keys by product CSMI across different child rules: first rule wins; a later different rule with the same CSMI is dropped and logged at INFO (kept/dropped rule + CSMI). Same-rule multi-pattern same-CSMI yields may still both emit. Archive divergence remains site topology in the emit signature, not silent cross-rule merging without a log.
 
 ## Residual same-product multi-pattern emissions
 

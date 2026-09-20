@@ -38,8 +38,8 @@ from .rules import (
     SulfurReduction,
     _accept_all_rules,
     _accept_all_sites,
-    _report_csmi_dedup_drop,
-    _unique_csmi_key,
+    _report_redundant_rules_drop,
+    _rule_dedup_name,
 )
 
 
@@ -135,27 +135,38 @@ class RuleSet(ReactionRule):
         rules = self.rules
         if order_key is not None:
             rules = tuple(sorted(rules, key=order_key))
-        # Same product key as ReactionRule: (rule name, name|SMARTS, csmi).
-        # Different rules / patterns that share a structure both emit.
-        seen: set[tuple[str, str | None, str]] = set()
+        # Children: yield off (``unique_csmi=False``) so alternate rules /
+        # nested sets bubble up; leaf check still runs. This set's own yield
+        # (caller ``unique_csmi``) is the cross-child CSMI layer — outermost
+        # caller setting applies at each RuleSet that was asked to uniquify.
+        # Cross-rule same CSMI → INFO (not SiteDeduplicationWarning).
+        # Same rule, different PatternInfo tokens may still both emit.
+        seen_csmi: dict[str, str] = {}
         for rule in rules:
             for product, info in rule.metabolize(
                 mol,
                 filter_rules=filter_rules,
                 filter_sites=filter_sites,
-                unique_csmi=unique_csmi,
                 **kwargs,
+                unique_csmi=False,
             ):
                 trace = product._forest["atom_trace"]
                 addition = trace["additions"][trace["transforms"][-1]]
                 addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
                     product_csmi = product.xf.csmi
-                    key = _unique_csmi_key(info, product_csmi)
-                    if key in seen:
-                        _report_csmi_dedup_drop(mol, info, product_csmi)
+                    rule_name = _rule_dedup_name(info["rule"])
+                    kept = seen_csmi.get(product_csmi)
+                    if kept is not None and kept != rule_name:
+                        _report_redundant_rules_drop(
+                            mol,
+                            kept_rule=kept,
+                            dropped_info=info,
+                            product_csmi=product_csmi,
+                        )
                         continue
-                    seen.add(key)
+                    if kept is None:
+                        seen_csmi[product_csmi] = rule_name
                 yield product, info
 
 

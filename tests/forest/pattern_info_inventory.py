@@ -18,7 +18,7 @@ from xenosite.forest.rules import (
     ReactionRule,
     ResonancePairRule,
     ResonanceRule,
-    SmartsReactionRule,
+    SmirksReactionRule,
 )
 from xenosite.forest.rulesets import RuleSet
 
@@ -30,7 +30,7 @@ from xenosite.forest.rulesets import RuleSet
 PATTERNLESS_REACTION_RULE_BASES: frozenset[type[ReactionRule]] = frozenset(
     {
         ReactionRule,
-        SmartsReactionRule,
+        SmirksReactionRule,
         ResonanceRule,
         ResonancePairRule,
         RuleSet,
@@ -87,10 +87,10 @@ def instantiate_rule(cls: type[ReactionRule]) -> ReactionRule:
 def patterns_on(
     rule: ReactionRule,
 ) -> list[tuple[str, str, PatternInfo]]:
-    """``(group, smarts, info)`` for ``smarts`` and ``endpoints``."""
+    """``(group, pattern, info)`` for ``smirks`` and ``endpoints``."""
 
     rows: list[tuple[str, str, PatternInfo]] = []
-    for group in ("smarts", "endpoints"):
+    for group in ("smirks", "endpoints"):
         for smarts, info in getattr(rule, group, ()) or ():
             rows.append((group, smarts, info))
     return rows

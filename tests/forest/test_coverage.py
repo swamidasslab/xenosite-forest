@@ -48,7 +48,7 @@ def _fragments(rule, smiles, pattern):
 
 def _pattern(rule, smarts):
     groups = []
-    for name in ("smarts", "endpoints"):
+    for name in ("smirks", "endpoints"):
         group = getattr(rule, name, None)
         if group:
             groups.extend(group)

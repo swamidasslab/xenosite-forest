@@ -14,7 +14,7 @@ import warnings
 import pytest
 from rdkit import Chem
 
-from xenosite.forest.rules import CsmiDedupWarning, Epoxidation
+from xenosite.forest.rules import SiteDeduplicationWarning, Epoxidation
 
 
 @pytest.mark.parametrize(
@@ -28,9 +28,9 @@ from xenosite.forest.rules import CsmiDedupWarning, Epoxidation
 )
 def test_epoxidation_unique_edit_no_csmi(smiles: str, n_keep: int) -> None:
     with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", CsmiDedupWarning)
+        warnings.simplefilter("always", SiteDeduplicationWarning)
         products = list(Epoxidation().metabolize(Chem.MolFromSmiles(smiles)))
-    csmi = [w for w in caught if issubclass(w.category, CsmiDedupWarning)]
+    csmi = [w for w in caught if issubclass(w.category, SiteDeduplicationWarning)]
     assert not csmi, f"{smiles}: unexpected CSMI drops {[str(w.message) for w in csmi]}"
     assert len(products) == n_keep
     for _product, info in products:
@@ -40,5 +40,5 @@ def test_epoxidation_unique_edit_no_csmi(smiles: str, n_keep: int) -> None:
 def test_epoxidation_declares_bond_site() -> None:
     rule = Epoxidation()
     assert rule.site_kind == "bond"
-    _smarts, pattern = rule.smarts[0]
+    _smirks, pattern = rule.smirks[0]
     assert pattern.get("site_map") == (1, 2)

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         InitializedAtomTrace,
         SiteInfo,
         SitePairOrbitTables,
+        Smarts,
         TracingForest,
     )
 
@@ -185,7 +186,7 @@ if TYPE_CHECKING:
             self, backend: Literal["nauty", "smiles", "none"] | None = None
         ) -> SitePairOrbitTables | None: ...
         def sanitize(self) -> int: ...
-        def smarts_matches(self, smarts: str) -> tuple[dict[int, int], ...]: ...
+        def smarts_matches(self, smarts: Smarts) -> tuple[dict[int, int], ...]: ...
         def of_products(
             self,
             product_or_product_list: Mol | Sequence[Mol],

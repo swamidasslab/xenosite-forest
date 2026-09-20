@@ -1,7 +1,8 @@
 """Enumerate metabolite structures with Metabolic Forest reaction rules.
 
-The pre-swap implementation lives in ``xenosite._archive_forest`` for a
-while (parity / H2H / StepPlan apply). Prefer ``mol.xf`` over ``AtomTracker``.
+The previous forest implementation lives under
+``xenosite._archive_forest`` (archive directory on GitHub). Prefer
+``mol.xf`` over ``AtomTracker``. See ``docs/forest/MIGRATING_0.7.md``.
 """
 
 try:

@@ -44,8 +44,8 @@ print(smiles)
 print(steps)
 
 # Enumerate hydroxylation products of propane
-for site, products in rules.Hydroxylation().metabolites(Chem.MolFromSmiles("CCC")):
-    print(site, [Chem.MolToSmiles(p) for p in products])
+for product, info in rules.Hydroxylation().metabolize(Chem.MolFromSmiles("CCC")):
+    print(info["site"], info["csmi"])
 
 # Named Phase I ruleset
 print(sorted({rule.name for rule in PhaseOneRS}))
@@ -81,6 +81,7 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 
 - **[Rulesets and papers](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/rulesets.md)** — every built-in ruleset, Rainbow colors, and publication BibTeX
 - **[Usage](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/usage.md)** — public API and pathway search
+- **[Migrating to 0.7.0](docs/forest/MIGRATING_0.7.md)** — `metabolize` yield shape and other breaking changes
 - **[xenosite-predict notes](docs/xenosite-predict.md)** — RDKit 2026 valence caches and DNA/CN conjugation vs GSH (downstream adapters)
 - **[Path-search performance](docs/forest/PERFORMANCE.md)** — archive BFS/DFS vs live `find_path` head-to-head
 - **[Heuristics / divergences / dropped](docs/forest/)** — design notes (`HEURISTICS`, `DIVERGENCES`, `DROPPED`, `PAIR_ORBITS`)
@@ -88,7 +89,12 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[xenosite.org](https://xenosite.org)** — XenoSite models for sites of metabolism and reactivity
 - **[Source repository](https://github.com/swamidasslab/xenosite-forest)** — code, issues, and releases
 
-Import the package as `xenosite.forest`. The pre-swap implementation is archived at `src/xenosite/_archive_forest/` (read-only historical; not exercised by CI). `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be installed alongside this one.
+Import the package as `xenosite.forest`. The previous forest implementation
+is the archive directory [`src/xenosite/_archive_forest/`](src/xenosite/_archive_forest/)
+on GitHub (not exercised by CI). See
+[`docs/forest/MIGRATING_0.7.md`](docs/forest/MIGRATING_0.7.md) for 0.7 API
+changes. `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can
+be installed alongside this one.
 
 ## Citation
 

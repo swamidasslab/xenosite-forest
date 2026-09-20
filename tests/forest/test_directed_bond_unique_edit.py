@@ -19,7 +19,7 @@ from rdkit import Chem
 from xenosite.forest.graph_isomorphism import bond_rank_key, map_rank_key
 from xenosite.forest.rdkitutil import MolFromSmiles
 from xenosite.forest.rules import (
-    CsmiDedupWarning,
+    SiteDeduplicationWarning,
     Dealkylation,
     NDealkylation,
     ResonanceRule,
@@ -43,7 +43,7 @@ def test_anisole_directed_bond_keeps_ring_open_regioisomers() -> None:
         warnings.simplefilter("always")
         products = list(rule.metabolize(mol))
     assert not [
-        w for w in caught if issubclass(w.category, CsmiDedupWarning)
+        w for w in caught if issubclass(w.category, SiteDeduplicationWarning)
     ], "anisole Dealkylation should not CSMI-drop under directed_bond"
     assert not caught, f"unexpected warnings on default anisole Dealk: {caught}"
 
@@ -114,7 +114,7 @@ def test_ndealkylation_pyridine_frozenset_site_directed_discovered() -> None:
         warnings.simplefilter("always")
         products = list(NDealkylation().metabolize(mol))
     assert not [
-        w for w in caught if issubclass(w.category, CsmiDedupWarning)
+        w for w in caught if issubclass(w.category, SiteDeduplicationWarning)
     ]
     assert not caught, f"unexpected warnings on pyridine NDealk: {caught}"
     csmi = {Chem.MolToSmiles(p) for p, _info in products}

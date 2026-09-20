@@ -82,10 +82,10 @@ def test_each_product_is_one_depth_below_its_parent():
 
 
 def test_canonical_smiles_are_not_repeated():
-    """RuleSet ``unique_csmi`` keys ``(rule, PatternInfo.name|SMARTS, csmi)``.
+    """Emitted ``_unique_csmi_key`` values are unique under RuleSet metabolize.
 
-    Same structure from two rules or patterns may both emit; duplicates under
-    one key must not.
+    Per-rule keys still include pattern tokens. RuleSet drops only when a
+    *different* child rule repeats a product CSMI (INFO log, yield drop).
     """
 
     from xenosite.forest.rules import _unique_csmi_key
@@ -119,7 +119,7 @@ def test_a_new_atom_points_at_one_addition_record():
     assert names == ("Hydroxylation", "Forest")
     assert addition["name"] == "Hydroxylation"
     # Ethane carbons are h=3 → pattern ``h2`` (partitioned from ``h`` / h1).
-    assert addition["pattern"] is Hydroxylation.smarts[1][1]
+    assert addition["pattern"] is Hydroxylation.smirks[1][1]
     assert addition["depth"] == 0
     delta = trace["delta_formula"][transform_id]
     for element, change in delta["counts"].items():

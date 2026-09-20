@@ -52,7 +52,7 @@ from xenosite.forest.rdkitutil import (
     move_charge_with_bonds,
     parent_for_bond,
     parents_for_ends,
-    reaction_from_smarts,
+    reaction_from_smirks,
     resonance_bond_maps,
     run_reactants,
     rw_copy,
@@ -73,7 +73,9 @@ from xenosite.forest.records import (
     RuleSiteKind,
     SiteInfo,
     SitesOn,
-    SmartsSiteInfo,
+    Smarts,
+    SmirksSiteInfo,
+    Smirks,
     Span,
     TraceAddition,
     TraceInfo,
@@ -267,11 +269,16 @@ class ReactionRule:
           under ``atom_trace["delta_formula"][id]``.
         - Reads ``info["csmi"]`` (or ``product.xf.csmi``)
           as the canonical SMILES of that product; computed on demand and
-          cached on the product forest. With ``unique_csmi`` (default), the
-          key is ``(rule name, PatternInfo.name | SMARTS, product csmi)`` —
-          site topology is not part of it. Prefers ``info["pattern"]["name"]``;
-          falls back to the SMARTS string for that pattern. Pair emissions
-          without a pattern use ``None`` for the middle field.
+          cached on the product forest. Product CSMI has two roles: **check**
+          (always, while site unique-edit is on) warns ``SiteDeduplicationWarning``
+          when a later emission under the same ``(rule, pattern)`` repeats an
+          earlier emission's frozenset of fragment CSMIs *and* matching site
+          ranks (unique-edit miss); **yield** (only when ``unique_csmi``,
+          default on) drops duplicate ``(rule, pattern, csmi)`` fragments from
+          the stream. Check does not imply drop; ``unique_csmi=False`` still
+          checks but yields every fragment after site unique-edit. Yield keys
+          prefer ``info["pattern"]["name"]``, else the SMARTS string; pair
+          emissions without a pattern use ``None`` for the middle field.
 
         ``filter_rules(mol, rule, pattern_info)`` sees the pattern before a
         match. ``filter_sites(mol, site, info)`` sees the **discovery** site
@@ -307,9 +314,15 @@ class ReactionRule:
         # Maps must not be present for CanonicalRankAtoms or SMARTS matching.
         self._clear_atom_maps(mol)
 
-        # Product layer: (rule name, PatternInfo.name | SMARTS, csmi).
+        # Yield layer (unique_csmi): (rule, PatternInfo.name | SMARTS, csmi).
         # Site topology lives only in unique-edit upstream.
-        seen: set[tuple[str, str | None, str]] = set()
+        seen_yield: set[tuple[str, str | None, str]] = set()
+        # Check layer: keepers are (emission CSMI frozenset, site ranks) under
+        # (rule, pattern). Same S + equal ranks → SiteDeduplicationWarning (miss).
+        # Check always runs (site unique-edit is on); does not imply drop.
+        seen_emissions: dict[
+            tuple[str, str | None], list[tuple[frozenset[str], tuple[int, ...]]]
+        ] = {}
 
         for por in self.metabolites(
             mol,
@@ -347,18 +360,35 @@ class ReactionRule:
                     # of_products cleared product cache — lex reps live on parent.
                     restamp_product_forest_last_layer(p, parent=mol)
 
-            # Same (rule, pattern, product csmi) is one outcome. Two sites in
-            # one atom class can still be different molecules (ortho / para).
+            # Cached xf.csmi after of_products — one read per fragment.
+            fragment_csmis = [p.xf.csmi for p in finished]
+            emission_csmi = frozenset(fragment_csmis)
+            site_ranks = _site_ranks_for_csmi_warn(info, mol)
+            rule_pat = (
+                _rule_dedup_name(info["rule"]),
+                _pattern_dedup_token(info),
+            )
+            prior = seen_emissions.setdefault(rule_pat, [])
+            if any(
+                emission_csmi == kept_s and site_ranks == kept_r
+                for kept_s, kept_r in prior
+            ):
+                # Unique-edit miss: same emission set + ranks as a keeper.
+                _report_csmi_dedup_drop(
+                    mol, info, next(iter(emission_csmi))
+                )
+            else:
+                # Quiet unequal-rank iso / leaving-group / cleavage siblings.
+                prior.append((emission_csmi, site_ranks))
+
             for n, p in enumerate(finished):
                 assert p.xf.tracing.active
 
                 if unique_csmi:
-                    product_csmi = p.xf.csmi
-                    key = _unique_csmi_key(info, product_csmi)
-                    if key in seen:
-                        _report_csmi_dedup_drop(mol, info, product_csmi)
+                    key = _unique_csmi_key(info, fragment_csmis[n])
+                    if key in seen_yield:
                         continue
-                    seen.add(key)
+                    seen_yield.add(key)
 
                 i = cast(
                     ProductInfo,
@@ -946,6 +976,10 @@ def resolve_effect(mol: Mol, mapped: Mapping[int, int], info: PatternInfo) -> Ef
     """Narrow ``info`` to the one effect this match actually is.
 
     Uses the caller's mol, not a kekulé copy: aromatic flags must still be set.
+
+    ``dearomatizes`` on PatternInfo is capability (same as ResonancePair ends).
+    The resolved ``options["dearomatizes"]`` is true only when a site-map atom
+    is aromatic — mirroring ``merge_effects(..., system_aromatic)``.
     """
 
     possibilities = info.get("possibilities") or (_as_effect({}),)
@@ -974,7 +1008,26 @@ def resolve_effect(mol: Mol, mapped: Mapping[int, int], info: PatternInfo) -> Ef
         effect["partner_h"] = partner.GetTotalNumHs()
     if effect.get("cleaves"):
         effect["breaks_ring"] = _cleavage_breaks_ring(mol, mapped, site_map)
+    if effect.get("dearomatizes"):
+        effect["dearomatizes"] = _site_map_aromatic(mol, mapped, site_map)
     return effect
+
+
+def _site_map_aromatic(
+    mol: Mol, mapped: Mapping[int, int], site_map: int | tuple[int, ...]
+) -> bool:
+    """True when any PatternInfo ``site_map`` atom is aromatic on ``mol``."""
+
+    maps: tuple[int, ...]
+    if isinstance(site_map, int):
+        maps = (site_map,)
+    else:
+        maps = tuple(site_map)
+    for mapno in maps:
+        idx = mapped.get(mapno)
+        if isinstance(idx, int) and mol.GetAtomWithIdx(idx).GetIsAromatic():
+            return True
+    return False
 
 
 def _cleavage_breaks_ring(
@@ -1047,8 +1100,8 @@ def _split_smarts_or(body: str) -> list[str]:
     return parts
 
 
-def _isotope_smarts(smarts: str, pin: tuple[int, ...]) -> str:
-    """Restrict a SMARTS reaction to the pinned maps.
+def _isotope_smirks(smirks: Smirks, pin: tuple[int, ...]) -> Smirks:
+    """Restrict a SMIRKS reaction to the pinned maps.
 
     The matched atoms are stamped with isotope ``8000 + map number``. The
     isotope is applied to the whole atom query, so an OR list does not keep
@@ -1072,19 +1125,19 @@ def _isotope_smarts(smarts: str, pin: tuple[int, ...]) -> str:
         body = ",".join(part + "&" + str(isotope) + "*" for part in parts)
         return "[" + body + ":" + match.group(2) + "]"
 
-    rewritten = re.sub(r"\[([^\[\]]*):(\d+)\]", repl, smarts)
-    return _isotope_atoms_first(rewritten, wanted)
+    rewritten = re.sub(r"\[([^\[\]]*):(\d+)\]", repl, smirks)
+    return _isotope_atoms_first(Smirks(rewritten), wanted)
 
 
-def _isotope_atoms_first(smarts: str, pin: set[int]) -> str:
+def _isotope_atoms_first(smirks: Smirks, pin: set[int]) -> Smirks:
     """Put each isotope-bearing reactant atom before the others."""
 
-    if ">>" not in smarts or not pin:
-        return smarts
-    reactant, product = smarts.split(">>", 1)
+    if ">>" not in smirks or not pin:
+        return smirks
+    reactant, product = smirks.split(">>", 1)
     query = MolFromSmarts(reactant)
     if query is None:
-        return smarts
+        return smirks
     pinned = [
         idx
         for _mapno, idx in sorted(
@@ -1094,15 +1147,21 @@ def _isotope_atoms_first(smarts: str, pin: set[int]) -> str:
         )
     ]
     if not pinned:
-        return smarts
+        return smirks
     rest = [idx for idx in range(query.GetNumAtoms()) if idx not in set(pinned)]
     order = pinned + rest
     if order == list(range(query.GetNumAtoms())):
-        return smarts
+        return smirks
     rewritten = MolToSmarts(RenumberAtoms(query, order))
     if MolFromSmarts(rewritten) is None:
-        return smarts
-    return rewritten + ">>" + product
+        return smirks
+    return Smirks(rewritten + ">>" + product)
+
+
+def _reactant_smarts(smirks: Smirks) -> Smarts:
+    """Match-only reactant side of a :class:`Smirks`."""
+
+    return Smarts(smirks.split(">>", 1)[0])
 
 
 def _site_indexes(
@@ -1135,12 +1194,12 @@ def _site_indexes(
 
 
 def _present_site_info(
-    info: SmartsSiteInfo,
+    info: SmirksSiteInfo,
     emit_site: Site,
     discovery: Site,
     *,
     site_kind: RuleSiteKind,
-) -> SmartsSiteInfo:
+) -> SmirksSiteInfo:
     """Yield-only presentation of ``site`` / ``discovered_site``.
 
     Unique-edit ``seen`` must already have keyed on ``discovery`` (directed
@@ -1171,14 +1230,14 @@ def _present_site_info(
 
 
 def react_at(
-    rule: SmartsReactionRule,
-    smarts: str,
+    rule: SmirksReactionRule,
+    smirks: Smirks,
     mol: Mol,
     mapped: Mapping[int, int],
     counters: EditCounters | None = None,
     pin: tuple[int, ...] | None = None,
 ) -> list[Mol]:
-    """Run ``smarts`` on one match. One call is one ``mol_edits``.
+    """Run ``smirks`` on one match. One call is one ``mol_edits``.
 
     ``pin`` is the pattern's map numbers. Each of those atoms is stamped.
     Absent ``pin`` stamps every mapped atom, which is the same list.
@@ -1196,7 +1255,7 @@ def react_at(
     for mapno in chosen:
         stamped.GetAtomWithIdx(mapped[mapno]).SetIsotope(8000 + mapno)
     try:
-        product_sets = run_reactants(_isotope_smarts(smarts, chosen), stamped)
+        product_sets = run_reactants(_isotope_smirks(smirks, chosen), stamped)
     except (RuntimeError, ValueError):
         return []
     if not product_sets:
@@ -1217,27 +1276,28 @@ def react_at(
     return products
 
 
-class SmartsReactionRule(ReactionRule):
-    """Performs reactions specified by SMARTS.
+class SmirksReactionRule(ReactionRule):
+    """Performs reactions specified by SMIRKS (reaction SMARTS).
 
-    Each entry is ``(smarts, options)`` with :class:`PatternInfo` options.
-    Matches are filtered before ``RunReactants``. One SMARTS is applied once
-    per topological site; a later SMARTS with the same formula effect still runs.
+    Each entry is ``(smirks, options)`` with :class:`PatternInfo` options.
+    Values are :class:`~xenosite.forest.records.Smirks` (``reactant>>product``).
+    Matches are filtered before ``RunReactants``. One SMIRKS is applied once
+    per topological site; a later SMIRKS with the same formula effect still runs.
     """
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = ()
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = ()
 
-    rxns: list[tuple[str, ChemicalReaction, PatternInfo]]
+    rxns: list[tuple[Smirks, ChemicalReaction, PatternInfo]]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         super().__init__(*args, **kwargs)
 
         self.rxns = [
-            (smarts, self._smarts2rxns(smarts, **kwargs), opt)
-            for smarts, opt in self.smarts
+            (smirks, self._smirks2rxns(smirks, **kwargs), opt)
+            for smirks, opt in self.smirks
         ]
-        patterns = [opt for _smarts, _rxn, opt in self.rxns]
+        patterns = [opt for _smirks, _rxn, opt in self.rxns]
         endpoints = getattr(self, "endpoints", ()) or ()
         patterns.extend(opt for _smarts, opt in endpoints)
         _assign_pattern_names(patterns)
@@ -1271,17 +1331,17 @@ class SmartsReactionRule(ReactionRule):
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
 
-        for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
+        for rxn_num, (smirks, _rxn, pattern) in enumerate(self.rxns):
             if not filter_rules(live, self, pattern):
                 continue
 
-            reactant = smarts.split(">>", 1)[0]
+            reactant = _reactant_smarts(smirks)
             for mapped in mol.xf.smarts_matches(reactant):
                 site = _site_indexes(mapped, pattern, site_kind=self.site_kind)
                 if not site:
                     continue
                 effect = resolve_effect(context, mapped, pattern)
-                info: SmartsSiteInfo = {
+                info: SmirksSiteInfo = {
                     "site": site,
                     "rule": self,
                     "options": effect,
@@ -1329,7 +1389,7 @@ class SmartsReactionRule(ReactionRule):
                         info = {**info, "site": emit_site}
                 products = react_at(
                     self,
-                    smarts,
+                    smirks,
                     mol,
                     emit_mapped,
                     counters,
@@ -1349,14 +1409,14 @@ class SmartsReactionRule(ReactionRule):
                 )
                 yield ProductsOfReaction(info=info, products=products)
 
-    def _smarts2rxns(
+    def _smirks2rxns(
         self,
-        smarts: str,
+        smirks: Smirks,
         use_implicit_properties: bool = False,
         **kwargs: Any,
     ) -> ChemicalReaction:
-        """Converts SMARTS reactions to RDKit reactions."""
-        return reaction_from_smarts(smarts)
+        """Converts SMIRKS reactions to RDKit reactions."""
+        return reaction_from_smirks(smirks)
 
     # TODO: should this method be moved to library? Needed by this class,
     # but isn't specific to its quirks.
@@ -1485,11 +1545,9 @@ def alternating_paths(
 
     The first bond must be double from one endpoint (then alternate). Either
     endpoint may hold that opening double — try ``start→end`` and
-    ``end→start``, and orient results ``start→end``. Do **not** start on a
-    single bond: that is a Hydrogenation / ResonancePair chemistry bug
-    (butadiene ``(1,2)`` → ``C=C=C=C`` / C4H4), independent of unique-edit
-    dedup (see DIVERGENCES). A longer odd route that leaves a shared atom
-    on the other bond is still kept (node expanded once per needed bond order).
+    ``end→start``, and orient results ``start→end``. Paths start on a double
+    only (not a single). Keep longer odd routes that leave a shared atom on
+    the other bond (node expanded once per needed bond order).
     """
 
     if start == end or start not in neighbors or end not in neighbors:
@@ -1593,7 +1651,7 @@ def _pattern_dedup_token(info: SiteInfo) -> str | None:
     for entry in getattr(rule, "endpoints", ()) or ():
         if len(entry) >= 2 and entry[1] is pattern:
             return entry[0]
-    for entry in getattr(rule, "smarts", ()) or ():
+    for entry in getattr(rule, "smirks", ()) or ():
         if len(entry) >= 2 and entry[1] is pattern:
             return entry[0]
     return None
@@ -1611,8 +1669,31 @@ def _unique_csmi_key(info: SiteInfo, csmi: str) -> tuple[str, str | None, str]:
     return (rule_name, _pattern_dedup_token(info), csmi)
 
 
-class CsmiDedupWarning(UserWarning):
-    """Product csmi dedup dropped a duplicate that unique-edit / orbit missed."""
+def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:
+    """Topological ranks of the emission site (for SiteDeduplicationWarning gating).
+
+    Directed discovery tuples keep map order; frozenset sites are sorted.
+    Matching ranks on a full-duplicate CSMI drop means unique-edit should have
+    merged the embeddings; unequal ranks are product isomorphism only.
+    """
+
+    ranks = mol.xf.topol_equiv
+    site = info.get("discovered_site", info.get("site"))
+    if isinstance(site, int):
+        return (int(ranks[site]),)
+    if isinstance(site, tuple):
+        return tuple(int(ranks[i]) for i in site)
+    if isinstance(site, frozenset):
+        return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
+    return ()
+
+
+class SiteDeduplicationWarning(UserWarning):
+    """Unique-edit miss: later emission repeats a keeper's CSMI set + site ranks."""
+
+
+def _rule_dedup_name(rule: object) -> str:
+    return getattr(rule, "name", None) or type(rule).__name__
 
 
 def _csmi_dedup_warning_message(rule_name: str) -> str:
@@ -1629,13 +1710,12 @@ _logger = logging.getLogger(__name__)
 
 
 def _report_csmi_dedup_drop(substrate: Mol, info: SiteInfo, product_csmi: str) -> None:
-    """Warn once-per-rule (generic) and log INFO detail when ``unique_csmi`` drops."""
+    """Warn once-per-rule (generic) and log INFO on a unique-edit miss check hit."""
 
-    rule = info["rule"]
-    rule_name = getattr(rule, "name", None) or type(rule).__name__
+    rule_name = _rule_dedup_name(info["rule"])
     warnings.warn(
         _csmi_dedup_warning_message(rule_name),
-        CsmiDedupWarning,
+        SiteDeduplicationWarning,
         stacklevel=2,
     )
     _logger.info(
@@ -1644,6 +1724,32 @@ def _report_csmi_dedup_drop(substrate: Mol, info: SiteInfo, product_csmi: str) -
         rule_name,
         info.get("site"),
         _pattern_dedup_token(info),
+        product_csmi,
+    )
+
+
+def _report_redundant_rules_drop(
+    substrate: Mol,
+    *,
+    kept_rule: str,
+    dropped_info: SiteInfo,
+    product_csmi: str,
+) -> None:
+    """INFO when a later child rule repeats an earlier child's product CSMI.
+
+    Overlapping coverage is expected on some substrates; not a unique-edit /
+    ``SiteDeduplicationWarning`` miss. No ``warnings.warn`` on this path.
+    """
+
+    dropped_rule = _rule_dedup_name(dropped_info["rule"])
+    _logger.info(
+        "Redundant rules drop: substrate=%s kept_rule=%s dropped_rule=%s "
+        "site=%s pattern=%s product=%s",
+        substrate.xf.csmi,
+        kept_rule,
+        dropped_rule,
+        dropped_info.get("site"),
+        _pattern_dedup_token(dropped_info),
         product_csmi,
     )
 
@@ -1875,8 +1981,8 @@ def _kekule_cache(mol: Mol) -> KekuleParents:
     return cache
 
 
-def _smarts_mapped_bond_order(
-    smarts: str, left_map: int = 1, right_map: int = 2
+def _smirks_mapped_bond_order(
+    smirks: Smirks, left_map: int = 1, right_map: int = 2
 ) -> float | None:
     """Bond order the reactant SMARTS asks for between two atom maps.
 
@@ -1885,7 +1991,7 @@ def _smarts_mapped_bond_order(
     missing.
     """
 
-    reactant = smarts.split(">>", 1)[0]
+    reactant = _reactant_smarts(smirks)
     query = MolFromSmarts(reactant)
     if query is None:
         return None
@@ -1906,7 +2012,7 @@ def _reactant_parent(
     mol: Mol,
     mapped: dict[int, int],
     cache: KekuleParents,
-    smarts: str | None = None,
+    smirks: Smirks | None = None,
 ) -> Mol | None:
     """Kekulé parent whose bond orders match an aromatic hit. Else ``mol``.
 
@@ -1927,8 +2033,8 @@ def _reactant_parent(
     end = mol.GetAtomWithIdx(bond.GetEndAtomIdx())
     if bond.GetIsAromatic():
         order = 2.0
-        if smarts is not None:
-            implied = _smarts_mapped_bond_order(smarts)
+        if smirks is not None:
+            implied = _smirks_mapped_bond_order(smirks)
             if implied is not None:
                 order = implied
     elif begin.GetIsAromatic() or end.GetIsAromatic():
@@ -1942,7 +2048,7 @@ def _reactant_parent(
     return mol if parent is None else parent
 
 
-class ResonanceRule(SmartsReactionRule):
+class ResonanceRule(SmirksReactionRule):
     """Match once on the aromatic parent, then react on a cached kekulé parent.
 
     The reactant SMARTS should match aromatic bonds (``=,:``, ``-,:``, or
@@ -1961,7 +2067,7 @@ class ResonanceRule(SmartsReactionRule):
         context_mol: Mol | None = None,
         **kwargs: Any,
     ) -> Generator[ProductsOfReaction, None, None]:
-        """Same contract as :meth:`SmartsReactionRule.metabolites`.
+        """Same contract as :meth:`SmirksReactionRule.metabolites`.
 
         SMARTS runs once on this mol (patterns should match aromatic bonds).
         A hit picks the cached Kekulé parent where maps 1–2 have the bond order
@@ -1981,16 +2087,16 @@ class ResonanceRule(SmartsReactionRule):
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
 
-        for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
+        for rxn_num, (smirks, _rxn, pattern) in enumerate(self.rxns):
             if not filter_rules(live, self, pattern):
                 continue
-            reactant = smarts.split(">>", 1)[0]
+            reactant = _reactant_smarts(smirks)
             for mapped in mol.xf.smarts_matches(reactant):
                 site = _site_indexes(mapped, pattern, site_kind=self.site_kind)
                 if not site:
                     continue
                 effect = resolve_effect(context, mapped, pattern)
-                info: SmartsSiteInfo = {
+                info: SmirksSiteInfo = {
                     "site": site,
                     "rule": self,
                     "options": effect,
@@ -2001,7 +2107,7 @@ class ResonanceRule(SmartsReactionRule):
                 if not filter_sites(live, site, info):
                     _bump(counters, "sites_skipped")
                     continue
-                work = _reactant_parent(mol, mapped, cache, smarts)
+                work = _reactant_parent(mol, mapped, cache, smirks)
                 if work is None:
                     _bump(counters, "sites_skipped")
                     continue
@@ -2041,13 +2147,13 @@ class ResonanceRule(SmartsReactionRule):
                         }
                     else:
                         info = {**info, "site": emit_site}
-                    work = _reactant_parent(mol, emit_mapped, cache, smarts)
+                    work = _reactant_parent(mol, emit_mapped, cache, smirks)
                     if work is None:
                         _bump(counters, "sites_skipped")
                         continue
                 products = react_at(
                     self,
-                    smarts,
+                    smirks,
                     work,
                     emit_mapped,
                     counters,
@@ -2080,7 +2186,7 @@ class ResonancePairRule(ResonanceRule):
     Hydroxylation does not use this. It is a one-atom SMARTS reaction.
     """
 
-    endpoints: tuple[tuple[str, PatternInfo], ...] = ()
+    endpoints: tuple[tuple[Smarts, PatternInfo], ...] = ()
     systems: str = "conjugated"
 
     def metabolites(
@@ -2168,9 +2274,7 @@ class ResonancePairRule(ResonanceRule):
             # Enumerate every anchor pair (not BFS-odd graph distance alone):
             # a shorter even walk must not hide a longer odd alternating path
             # (rings). Apply only odd bond-count paths below — even-length
-            # walks are not valid ResonancePair flips (butadiene → C=C=CC
-            # C4H6; chemistry bug unmasked when unique-edit dedup stopped
-            # hiding it — see DIVERGENCES).
+            # walks are not valid ResonancePair flips.
             for start, end in itertools.combinations(sorted(anchors), 2):
                 combos: list[
                     tuple[
@@ -2377,7 +2481,7 @@ class ResonancePairRule(ResonanceRule):
                             yield ProductsOfReaction(info=preview, products=fresh)
 
 
-class Hydroxylation(SmartsReactionRule):
+class Hydroxylation(SmirksReactionRule):
     """Adds a hydroxyl to carbon.
 
     Patterns partition by H count so the same product is not emitted twice
@@ -2391,16 +2495,16 @@ class Hydroxylation(SmartsReactionRule):
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'c1ccccc1')
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6h1:1]>>[*:1]O",
+            Smirks("[#6h1:1]>>[*:1]O"),
             describe(
                 *branches(({"map": 1, "z": 6, "h": 1},), adds="O", removes="H"),
                 name="h",
             ),
         ),
         (
-            "[#6h2,#6h3:1]>>[*:1]O",
+            Smirks("[#6h2,#6h3:1]>>[*:1]O"),
             describe(
                 *branches(
                     ({"map": 1, "z": 6, "h": 2}, {"map": 1, "z": 6, "h": 3}),
@@ -2435,17 +2539,17 @@ class Dehydrogenation(ResonancePairRule):
     site_kind: RuleSiteKind = "atom_pair"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccc(O)cc1')
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#16v4:1]-[#8H1:2]>>[*:1]=[*:2]",
+            Smirks("[#16v4:1]-[#8H1:2]>>[*:1]=[*:2]"),
             describe(removes="HH", name="sulfoxide", site_map=(1, 2)),
         ),
         (
-            "[#6h:1]-[#8H1:2]>>[*:1]=[*:2]",
+            Smirks("[#6h:1]-[#8H1:2]>>[*:1]=[*:2]"),
             describe(removes="HH", partner="O", name="alcohol", site_map=(1, 2)),
         ),
         (
-            "[#6h:1]-[#7D1H2,#7D2H1:2]>>[*:1]=[*:2]",
+            Smirks("[#6h:1]-[#7D1H2,#7D2H1:2]>>[*:1]=[*:2]"),
             describe(
                 *branches(
                     ({"map": 2, "z": 7, "h": 2}, {"map": 2, "z": 7, "h": 1}),
@@ -2456,7 +2560,7 @@ class Dehydrogenation(ResonancePairRule):
             ),
         ),
         (
-            "[#6h:1]-[#6D1H3,#6D2H2,#6D3H1:2]>>[*:1]=[*:2]",
+            Smirks("[#6h:1]-[#6D1H3,#6D2H2,#6D3H1:2]>>[*:1]=[*:2]"),
             describe(
                 *branches(
                     (
@@ -2472,9 +2576,9 @@ class Dehydrogenation(ResonancePairRule):
         ),
     )
 
-    endpoints: tuple[tuple[str, PatternInfo], ...] = (
+    endpoints: tuple[tuple[Smarts, PatternInfo], ...] = (
         (
-            "[#6:1]-[#8H:2]",
+            Smarts("[#6:1]-[#8H:2]"),
             describe(
                 removes="H",
                 partner="O",
@@ -2485,7 +2589,7 @@ class Dehydrogenation(ResonancePairRule):
             ),
         ),
         (
-            "[#6:1]-[#7D1H2,#7D2H1:2]",
+            Smarts("[#6:1]-[#7D1H2,#7D2H1:2]"),
             describe(
                 *branches(
                     ({"map": 2, "z": 7, "h": 2}, {"map": 2, "z": 7, "h": 1}),
@@ -2499,7 +2603,7 @@ class Dehydrogenation(ResonancePairRule):
             ),
         ),
         (
-            "[#6:1]-[#6D1H3,#6D2H2,#6D3H1:2]",
+            Smarts("[#6:1]-[#6D1H3,#6D2H2,#6D3H1:2]"),
             describe(
                 *branches(
                     (
@@ -2547,9 +2651,9 @@ class QuinoneFormation(ResonancePairRule):
 
         return quinone_canonical_plan(mol, info)
 
-    endpoints: tuple[tuple[str, PatternInfo], ...] = (
+    endpoints: tuple[tuple[Smarts, PatternInfo], ...] = (
         (
-            "[#6R:1][#8H,#7D1H2,#7D2H1,#6D1H3,#6D2H2,#6D3H1:2]",
+            Smarts("[#6R:1][#8H,#7D1H2,#7D2H1,#6D1H3,#6D2H2,#6D3H1:2]"),
             describe(
                 *branches(
                     (
@@ -2577,7 +2681,7 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
         (
-            "[#6D2H1;R:1]",
+            Smarts("[#6D2H1;R:1]"),
             describe(
                 adds="O",
                 removes="H",
@@ -2589,7 +2693,7 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
         (
-            "[#6H0R:1]-[F,Cl,Br,I:2]",
+            Smarts("[#6H0R:1]-[F,Cl,Br,I:2]"),
             describe(
                 *branches(
                     (
@@ -2608,7 +2712,7 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
         (
-            "[#6H0R:1][#7D3:2]",
+            Smarts("[#6H0R:1][#7D3:2]"),
             describe(
                 partner="N",
                 dearomatizes=True,
@@ -2619,7 +2723,7 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
         (
-            "[#6R:1][#7,#8:2][#6:3]",
+            Smarts("[#6R:1][#7,#8:2][#6:3]"),
             describe(
                 *branches(
                     ({"map": 2, "z": 7}, {"map": 2, "z": 8}),
@@ -2661,9 +2765,9 @@ class Dealkylation(ResonanceRule):
     _example_substrates: tuple[str, ...] = ('CCO', 'COc1ccccc1')
 
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
+            Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="OO", cleaves=True),
                 site_map=(1, 2),
@@ -2671,7 +2775,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+            Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2679,7 +2783,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2687,7 +2791,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
+            Smirks("[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="OO", cleaves=True),
                 site_map=(1, 2),
@@ -2695,7 +2799,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+            Smirks("[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2703,7 +2807,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            Smirks("[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2711,7 +2815,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+            Smirks("[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2719,7 +2823,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            Smirks("[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2727,7 +2831,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6H0:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+            Smirks("[#6H0:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
                 site_map=(1, 2),
@@ -2737,7 +2841,7 @@ class Dealkylation(ResonanceRule):
         (
             # H0 only: [#6] would also match [#6h] and double-emit the same
             # alcohol under unique_csmi (distinct PatternInfo names, same csmi).
-            "[#6H0:1][#6:2]>>(O-[*:1].[*:2])",
+            Smirks("[#6H0:1][#6:2]>>(O-[*:1].[*:2])"),
             describe(
                 adds="O",
                 cleaves=True,
@@ -2747,7 +2851,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6h:1][#6:2]>>(O-[*:1].[*:2])",
+            Smirks("[#6h:1][#6:2]>>(O-[*:1].[*:2])"),
             describe(
                 *branches(
                     (
@@ -2764,7 +2868,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#6h:1][#6:2]>>(O=[*:1].[*:2])",
+            Smirks("[#6h:1][#6:2]>>(O=[*:1].[*:2])"),
             describe(
                 *branches(
                     (
@@ -2781,7 +2885,7 @@ class Dealkylation(ResonanceRule):
             ),
         ),
         (
-            "[#8H1:3]-[#6:1]-[#7,#8,#16:2]>>([*:3]=[*:1].[*:2])",
+            Smirks("[#8H1:3]-[#6:1]-[#7,#8,#16:2]>>([*:3]=[*:1].[*:2])"),
             describe(
                 *branches(_whens(2, (7, 8, 16)), removes="H", cleaves=True),
                 site_map=(1, 2),
@@ -2792,12 +2896,12 @@ class Dealkylation(ResonanceRule):
 
 
 def _ndealk(
-    smarts: str, leave_count: int | None, name: str, **effect: Any
-) -> tuple[str, PatternInfo]:
+    smirks: Smirks, leave_count: int | None, name: str, **effect: Any
+) -> tuple[Smirks, PatternInfo]:
     """One N-dealkylation pattern. ``leave_count`` is the named leaving atoms."""
 
     return (
-        smarts,
+        smirks,
         describe(
             cleaves=True,
             partner="N",
@@ -2833,34 +2937,34 @@ class NDealkylation(ResonanceRule):
     _example_substrates: tuple[str, ...] = ("CCN", "CN(C)C", "c1ccncc1")
 
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         _ndealk(
-            "[#6H3:1][#7:2]>>([*:2].[*:1](=O)O)",
+            Smirks("[#6H3:1][#7:2]>>([*:2].[*:1](=O)O)"),
             1,
             "methyl_carboxylic",
             adds="OO",
         ),
-        _ndealk("[#6H3:1][#7:2]>>([*:2].[*:1]=O)", 1, "methyl_carbonyl", adds="O"),
-        _ndealk("[#6H3:1][#7:2]>>([*:2].[*:1]-O)", 1, "methyl_alcohol", adds="O"),
+        _ndealk(Smirks("[#6H3:1][#7:2]>>([*:2].[*:1]=O)"), 1, "methyl_carbonyl", adds="O"),
+        _ndealk(Smirks("[#6H3:1][#7:2]>>([*:2].[*:1]-O)"), 1, "methyl_alcohol", adds="O"),
         _ndealk(
-            "[#6H2:1][#7:2]>>([*:2].[*:1](=O)O)",
+            Smirks("[#6H2:1][#7:2]>>([*:2].[*:1](=O)O)"),
             None,
             "methylene_carboxylic",
             adds="OO",
         ),
         _ndealk(
-            "[#6H2:1][#7:2]>>([*:2].[*:1]=O)", None, "methylene_carbonyl", adds="O"
+            Smirks("[#6H2:1][#7:2]>>([*:2].[*:1]=O)"), None, "methylene_carbonyl", adds="O"
         ),
         _ndealk(
-            "[#6H2:1][#7:2]>>([*:2].[*:1]-O)", None, "methylene_alcohol", adds="O"
+            Smirks("[#6H2:1][#7:2]>>([*:2].[*:1]-O)"), None, "methylene_alcohol", adds="O"
         ),
-        _ndealk("[#6H1:1][#7:2]>>([*:2].[*:1]=O)", None, "methine_carbonyl", adds="O"),
-        _ndealk("[#6H1:1][#7:2]>>([*:2].[*:1]-O)", None, "methine_alcohol", adds="O"),
+        _ndealk(Smirks("[#6H1:1][#7:2]>>([*:2].[*:1]=O)"), None, "methine_carbonyl", adds="O"),
+        _ndealk(Smirks("[#6H1:1][#7:2]>>([*:2].[*:1]-O)"), None, "methine_alcohol", adds="O"),
         _ndealk(
-            "[#6H0:1][#7:2]>>([*:2].[*:1]-O)", None, "quaternary_alcohol", adds="O"
+            Smirks("[#6H0:1][#7:2]>>([*:2].[*:1]-O)"), None, "quaternary_alcohol", adds="O"
         ),
         _ndealk(
-            "[#8H1:3]-[#6:1]-[#7:2]>>([*:3]=[*:1].[*:2])",
+            Smirks("[#8H1:3]-[#6:1]-[#7:2]>>([*:3]=[*:1].[*:2])"),
             None,
             "hemiaminal",
             removes="H",
@@ -2881,15 +2985,15 @@ class AzoSplitting(ResonanceRule):
     _example_substrates: tuple[str, ...] = ('N=Nc1ccccc1',)
 
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#7:1]=,:[#7:2]>>[*:1].[*:2]",
+            Smirks("[#7:1]=,:[#7:2]>>[*:1].[*:2]"),
             describe(cleaves=True, partner="N", site_map=(1, 2), name="azo"),
         ),
     )
 
 
-class BenzodioxoleReduction(SmartsReactionRule):
+class BenzodioxoleReduction(SmirksReactionRule):
     """Cleaves both C-O bonds of the methylene in a 1,3-dioxole.
 
     That carbon is the whole leaving piece, and the pattern names it, so
@@ -2901,9 +3005,9 @@ class BenzodioxoleReduction(SmartsReactionRule):
     _example_substrates: tuple[str, ...] = ('c1ccc2c(c1)OCO2',)
 
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
+            Smirks("[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])"),
             describe(
                 cleaves=True,
                 partner="O",
@@ -2915,7 +3019,7 @@ class BenzodioxoleReduction(SmartsReactionRule):
     )
 
 
-class NitroaromaticReduction(SmartsReactionRule):
+class NitroaromaticReduction(SmirksReactionRule):
     """Cleaves one N-O of a nitro group on a ring carbon, leaving the nitroso.
 
     That oxygen is the whole leaving piece, and both patterns name it, so
@@ -2927,9 +3031,9 @@ class NitroaromaticReduction(SmartsReactionRule):
     _example_substrates: tuple[str, ...] = ('[O-][N+](=O)c1ccccc1',)
 
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#8-1:1]-[#7+1:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
+            Smirks("[#8-1:1]-[#7+1:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]"),
             describe(
                 cleaves=True,
                 partner="N",
@@ -2939,7 +3043,7 @@ class NitroaromaticReduction(SmartsReactionRule):
             ),
         ),
         (
-            "[#8:1]-[#7:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
+            Smirks("[#8:1]-[#7:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]"),
             describe(
                 cleaves=True,
                 partner="N",
@@ -2963,9 +3067,9 @@ class ThiopheneSulfurOxidation(ResonanceRule):
     _example_substrates: tuple[str, ...] = ('c1ccsc1',)
 
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
+            Smirks("[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]"),
             describe(adds="O", symbol="S", name="thiophene_s_oxide"),
         ),
     )
@@ -2974,7 +3078,7 @@ class ThiopheneSulfurOxidation(ResonanceRule):
 _HALIDE = (9, 17, 35, 53, 85)
 
 
-class Dephosphorylation(SmartsReactionRule):
+class Dephosphorylation(SmirksReactionRule):
     """Cleaves an ester O-P bond of a phosphate. The oxygen stays on the organic fragment.
 
     Map 1 must be the carbon-bound oxygen. Plain P-OH matches are excluded so
@@ -2986,10 +3090,12 @@ class Dephosphorylation(SmartsReactionRule):
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('COP(=O)(O)O',)
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>"
-            "[*:1].[*:2](=[*:3])([*:4])[*:5]",
+            Smirks(
+                "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>"
+                "[*:1].[*:2](=[*:3])([*:4])[*:5]"
+            ),
             describe(
                 *branches(_whens(2, (15,)), cleaves=True), name="phosphate_ester"
             ),
@@ -2997,35 +3103,35 @@ class Dephosphorylation(SmartsReactionRule):
     )
 
 
-class EpoxideOpening(SmartsReactionRule):
+class EpoxideOpening(SmirksReactionRule):
     """Opens an epoxide. One pattern only rearranges bonds; the other also adds OH."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('C1OC1', 'c1ccccc1C1CO1')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])",
+            Smirks("[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])"),
             describe(adds="", name="rearrange"),
         ),
         (
-            "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1]O)",
+            Smirks("[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1]O)"),
             describe(adds="O", name="hydrate"),
         ),
     )
 
 
-class Hydrolysis(SmartsReactionRule):
+class Hydrolysis(SmirksReactionRule):
     """Cleaves the single bond of a carboxylic derivative. One pattern also adds O."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CC(=O)OC',)
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])",
+            Smirks("[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])"),
             describe(
                 *branches(
                     _whens(3, (7, 8, 16)),
@@ -3038,7 +3144,7 @@ class Hydrolysis(SmartsReactionRule):
             ),
         ),
         (
-            "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2].[*:3])",
+            Smirks("[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2].[*:3])"),
             describe(
                 *branches(
                     _whens(3, (7, 8, 16)),
@@ -3052,16 +3158,16 @@ class Hydrolysis(SmartsReactionRule):
     )
 
 
-class Dehydration(SmartsReactionRule):
+class Dehydration(SmirksReactionRule):
     """Drops an OH, or a carbonyl oxygen, off carbon or nitrogen."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO',)
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
+            Smirks("[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]"),
             describe(
                 *branches(
                     ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
@@ -3073,11 +3179,11 @@ class Dehydration(SmartsReactionRule):
             ),
         ),
         (
-            "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
+            Smirks("[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]"),
             describe(removes="OH", cleaves=True, partner="O", name="beta_elimination"),
         ),
         (
-            "[#6,#7:1]=[#8:2]>>[*:1].[*:2]",
+            Smirks("[#6,#7:1]=[#8:2]>>[*:1].[*:2]"),
             describe(
                 *branches(
                     ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
@@ -3102,26 +3208,39 @@ class Hydrogenation(ResonancePairRule):
     ``partner``: that field is the methide alkyl, and a carbon partner
     would drop this path.
     Heavy-atom formula is unchanged (``adds`` is ``HH``).
+
+    ``path_end`` declares ``dearomatizes=True`` (capability): the path flip on
+    an aromatic system is a dearomatizing reduction. ``merge_effects`` resolves
+    that against ``system_aromatic``, same as Dehydrogenation / QF ends.
+    ``filter_sites`` then reads ``options["adds"]`` / ``dearomatizes`` against
+    ``atom_diff`` — not a Hydrogenation-named branch.
     """
 
     phase1_sites_on = "atoms"
     sites_on = "atom_pairs"
     site_kind: RuleSiteKind = "atom_pair"
     _example_substrates: tuple[str, ...] = ('C=C', 'C#C')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6:1]#[#6:2]>>[*:1]=[*:2]",
+            Smirks("[#6:1]#[#6:2]>>[*:1]=[*:2]"),
             describe(adds="HH", name="alkyne", site_map=(1, 2)),
         ),
         (
-            "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
+            Smirks("[#6:1]=,:[#6:2]>>[*:1]-[*:2]"),
+            # Span ``dearomatizes`` is capability for filter_rules. Leaving it
+            # false here: aliphatic C=C→CC must not be refused when the target
+            # has no loses_aromaticity. Aromatic one-bond hits still add HH;
+            # ``filter_sites`` reads adds vs h_delta. Path dearomatizing
+            # reductions are the ``path_end`` capability below.
             describe(adds="HH", name="alkene", site_map=(1, 2)),
         ),
     )
-    endpoints: tuple[tuple[str, PatternInfo], ...] = (
+    endpoints: tuple[tuple[Smarts, PatternInfo], ...] = (
         (
-            "[*:1]",
-            describe(adds="H", edit="keep", name="path_end"),
+            Smarts("[*:1]"),
+            # Adds H (reduction). Capability to dearomatize on aromatic
+            # systems; merge_effects resolves against system_aromatic.
+            describe(adds="H", dearomatizes=True, edit="keep", name="path_end"),
         ),
     )
 
@@ -3161,7 +3280,7 @@ class TautomerRule(ResonancePairRule):
     name = "TautomerRule"
     longname = "Tautomerization"
     endpoints = ()
-    smarts = ()
+    smirks = ()
 
     def metabolites(self, mol: Mol, *args: Any, **kwargs: Any):  # type: ignore[override]
         raise NotImplementedError(
@@ -3182,52 +3301,52 @@ class NitrogenReduction(ResonanceRule):
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCNO', '[O-][N+](=O)c1ccccc1')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
+            Smirks("[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])"),
             describe(removes="O", cleaves=True, partner="O", name="nitro_charged"),
         ),
         (
-            "[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
+            Smirks("[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])"),
             describe(removes="O", cleaves=True, partner="O", name="nitro_anion"),
         ),
         (
-            "[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])",
+            Smirks("[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])"),
             describe(removes="O", cleaves=True, partner="O", name="nitro_neutral"),
         ),
         (
-            "[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])",
+            Smirks("[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])"),
             describe(removes="OO", cleaves=True, partner="O", name="nitro_to_amine"),
         ),
         (
-            "[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])",
+            Smirks("[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])"),
             describe(removes="OO", cleaves=True, partner="O", name="nitro_both"),
         ),
         (
-            "[#7:1]-,:[#8:2]>>([*:1].[*:2])",
+            Smirks("[#7:1]-,:[#8:2]>>([*:1].[*:2])"),
             describe(removes="O", cleaves=True, partner="O", name="hydroxylamine"),
         ),
         (
-            "[#7D2:1]=[#8:2]>>([*:1].[*:2])",
+            Smirks("[#7D2:1]=[#8:2]>>([*:1].[*:2])"),
             describe(removes="O", cleaves=True, partner="O", name="nitroso"),
         ),
         (
-            "[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])",
+            Smirks("[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])"),
             describe(removes="OO", cleaves=True, partner="O", name="nitro_both_any"),
         ),
     )
 
 
-class OxygenReduction(SmartsReactionRule):
+class OxygenReduction(SmirksReactionRule):
     """Turns C=O / N=O into a single bond, or cleaves a peroxide."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CC(=O)OC', 'CC=O')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#8:1]=[#6,#7:2]>>[*:1]-[*:2]",
+            Smirks("[#8:1]=[#6,#7:2]>>[*:1]-[*:2]"),
             describe(
                 *branches(
                     ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
@@ -3237,23 +3356,23 @@ class OxygenReduction(SmartsReactionRule):
             ),
         ),
         (
-            "[#8:1]-[#8:2]>>[*:1].[*:2]",
+            Smirks("[#8:1]-[#8:2]>>[*:1].[*:2]"),
             describe(cleaves=True, partner="O", name="peroxide"),
         ),
     )
 
 # TODO: In chemistry (not current smarts), can ReductiveDehalogenation ever work on
 # an aromatic bond? If so, maybe this should be a ResonanceRule.
-class ReductiveDehalogenation(SmartsReactionRule):
+class ReductiveDehalogenation(SmirksReactionRule):
     """Cleaves a carbon-halogen bond. The second pattern also makes a double bond."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCCl', 'Clc1ccccc1')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3266,7 +3385,7 @@ class ReductiveDehalogenation(SmartsReactionRule):
             ),
         ),
         (
-            "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3281,24 +3400,24 @@ class ReductiveDehalogenation(SmartsReactionRule):
     )
 
 
-class SulfurReduction(SmartsReactionRule):
+class SulfurReduction(SmirksReactionRule):
     """Cleaves S=O, S-S, and S-C / S-O single bonds."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CS(=O)C', 'CCSO')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#16:1]=[#8:2]>>[*:1].[*:2]",
+            Smirks("[#16:1]=[#8:2]>>[*:1].[*:2]"),
             describe(removes="O", cleaves=True, partner="O", name="sulfoxide"),
         ),
         (
-            "[#16:1]-[#16:2]>>[*:1].[*:2]",
+            Smirks("[#16:1]-[#16:2]>>[*:1].[*:2]"),
             describe(cleaves=True, partner="S", name="disulfide"),
         ),
         (
-            "[#16:1]-[#6,#8:2]>>[*:1].[*:2]",
+            Smirks("[#16:1]-[#6,#8:2]>>[*:1].[*:2]"),
             describe(
                 *branches(({"map": 2, "z": 6},), cleaves=True),
                 *branches(({"map": 2, "z": 8},), cleaves=True, removes="O"),
@@ -3329,9 +3448,9 @@ class Epoxidation(ResonanceRule):
     sites_on = "bonds"
     site_kind: RuleSiteKind = "bond"
     _example_substrates: tuple[str, ...] = ('C=C', 'c1ccccc1')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6:1]=,:[#6,#7:2]>>[*:1]1-[*:2][O]1",
+            Smirks("[#6:1]=,:[#6,#7:2]>>[*:1]1-[*:2][O]1"),
             describe(
                 *branches(
                     ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
@@ -3344,39 +3463,39 @@ class Epoxidation(ResonanceRule):
     )
 
 
-class SulfurOxidation(SmartsReactionRule):
+class SulfurOxidation(SmirksReactionRule):
     """Adds oxygen to divalent or tetravalent sulfur (S-oxide, S-OH, or S=O)."""
 
     phase1_sites_on = "atoms"
     sites_on = "atoms"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCS', 'CSC')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#16;v2,v4:1]>>[*&H0&+:1][O-]",
+            Smirks("[#16;v2,v4:1]>>[*&H0&+:1][O-]"),
             describe(adds="O", symbol="S", name="zwitterion"),
         ),
         (
-            "[#16;v2,v4:1]>>[*:1][O]",
+            Smirks("[#16;v2,v4:1]>>[*:1][O]"),
             describe(adds="O", symbol="S", name="hydroxy"),
         ),
         (
-            "[#16;v2,v4:1]>>[*:1]=O",
+            Smirks("[#16;v2,v4:1]>>[*:1]=O"),
             describe(adds="O", symbol="S", name="oxo"),
         ),
     )
 
 
-class NitrogenOxidation(SmartsReactionRule):
+class NitrogenOxidation(SmirksReactionRule):
     """N-H to hydroxylamine, primary amine to nitroso, or tertiary N to N-oxide."""
 
     phase1_sites_on = "atoms"
     sites_on = "atoms"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCN', 'CN(C)C')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#7v3h:1]>>[*:1]O",
+            Smirks("[#7v3h:1]>>[*:1]O"),
             describe(
                 *branches(
                     ({"map": 1, "z": 7, "h": 1}, {"map": 1, "z": 7, "h": 2}),
@@ -3386,26 +3505,26 @@ class NitrogenOxidation(SmartsReactionRule):
             ),
         ),
         (
-            "[#7v3H2:1]>>[*:1]=O",
+            Smirks("[#7v3H2:1]>>[*:1]=O"),
             describe(adds="O", h=2, symbol="N", name="nitroso"),
         ),
         (
-            "[#7v3H0:1]>>[*&H0&+:1][O-]",
+            Smirks("[#7v3H0:1]>>[*&H0&+:1][O-]"),
             describe(adds="O", h=0, symbol="N", name="n_oxide"),
         ),
     )
 
 
-class OxidativeDehalogenation(SmartsReactionRule):
+class OxidativeDehalogenation(SmirksReactionRule):
     """Replaces a carbon-bound halogen with OH, carbonyl, or a carboxylic acid."""
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCCl', 'Clc1ccccc1')
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3419,7 +3538,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
             ),
         ),
         (
-            "[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3433,7 +3552,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
             ),
         ),
         (
-            "[#9,#17,#35,#53,#85:1]-[#6H2:2]>>[*:1].[*:2](O)=O",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6H2:2]>>[*:1].[*:2](O)=O"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3447,7 +3566,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
             ),
         ),
         (
-            "[#9,#17,#35,#53,#85:1]-[#6:2][#6H1:3]>>[*:2](O)[*:3]-[*:1]",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2][#6H1:3]>>[*:2](O)[*:3]-[*:1]"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3459,7 +3578,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
             ),
         ),
         (
-            "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3473,7 +3592,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
             ),
         ),
         (
-            "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]",
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3546,7 +3665,7 @@ def _apply_star_conjugate(mol: Mol, label: str | None = None) -> Mol:
     return collapsed
 
 
-class ConjugationRule(SmartsReactionRule):
+class ConjugationRule(SmirksReactionRule):
     """Attaches an acetyl and, by default, collapses that group to ``*``.
 
     ``as_star`` and ``star_label`` belong on this class. ``Protein``,
@@ -3562,9 +3681,9 @@ class ConjugationRule(SmartsReactionRule):
     is_terminal_rule: bool = True
     as_star: bool = True
     star_label: str | None = None
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
+            Smirks("[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]"),
             describe(
                 *branches(_whens(1, (7, 8, 16)), adds="CCO", removes="H"),
                 pin=(1,),
@@ -3644,9 +3763,9 @@ class Sulfation(ConjugationRule):
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6:1][#8H1:2]>>[*:1][*:2]S(=O)(=O)O",
+            Smirks("[#6:1][#8H1:2]>>[*:1][*:2]S(=O)(=O)O"),
             describe(
                 *branches(
                     _whens(1, (6,)),
@@ -3660,8 +3779,10 @@ class Sulfation(ConjugationRule):
         ),
         (
             # Epoxide on a cyclohexadiene opens to a methyl sulfone.
-            "[#6:1]1=[#6:2][#6:3]2[#8:7][#6:4]2[#6:5]=[#6:6]1>>"
-            "[*:1]1=[*:2][*:3]=[*:4](-S(C)(=O)(=O))[*:5]=[*:6]1",
+            Smirks(
+                "[#6:1]1=[#6:2][#6:3]2[#8:7][#6:4]2[#6:5]=[#6:6]1>>"
+                "[*:1]1=[*:2][*:3]=[*:4](-S(C)(=O)(=O))[*:5]=[*:6]1"
+            ),
             describe(adds="CSO", removes="O", site_map=4, name="epoxide_methyl_sulfone"),
         ),
     )
@@ -3678,9 +3799,9 @@ class Glucuronidation(ConjugationRule):
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#8H1:1][#6:2]>>O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2])1",
+            Smirks("[#8H1:1][#6:2]>>O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2])1"),
             describe(
                 *branches(
                     _whens(2, (6,)),
@@ -3693,8 +3814,10 @@ class Glucuronidation(ConjugationRule):
             ),
         ),
         (
-            "[#8H1,#8-:1][#6:2](=[#8:3])[#6:4]>>"
-            "O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1",
+            Smirks(
+                "[#8H1,#8-:1][#6:2](=[#8:3])[#6:4]>>"
+                "O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1"
+            ),
             describe(adds="CCCCCCOOOOOO", site_map=1, name="carboxylate"),
         ),
     )
@@ -3721,23 +3844,26 @@ class Glutathionation(ConjugationRule):
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('C=C', 'C1OC1')
 
-    smarts: tuple[tuple[str, PatternInfo], ...] = (
+    smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            "[#6H1:1]1[#8:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            Smirks("[#6H1:1]1[#8:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]")),
             describe(adds=_GSH_ADDS, site_map=1, name="epoxide_ch"),
         ),
         (
-            "[#6H2:1]1[#8:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            Smirks("[#6H2:1]1[#8:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]")),
             describe(adds=_GSH_ADDS, site_map=1, name="epoxide_ch2"),
         ),
         (
             # H0 only: bare [#6]([!#1]) also matches [#6H1] with a substituent
             # (e.g. styrene oxide) and double-emits the same GSH adduct.
-            "[#6H0:1]([!#1:4])1[#8:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
+            Smirks(
+                "[#6H0:1]([!#1:4])1[#8:2][#6:3]1>>"
+                + _gsh("[*:1]([*:4])[*:3][*:2]")
+            ),
             describe(adds=_GSH_ADDS, site_map=1, name="epoxide_c"),
         ),
         (
-            "[#6:1][#9,#17,#35,#53:2]>>" + _gsh("[*:1]"),
+            Smirks("[#6:1][#9,#17,#35,#53:2]>>" + _gsh("[*:1]")),
             describe(
                 *branches(
                     _whens(2, (9, 17, 35, 53)),
@@ -3750,15 +3876,18 @@ class Glutathionation(ConjugationRule):
             ),
         ),
         (
-            "[#16h1:1]>>" + _gsh("[*:1]"),
+            Smirks("[#16h1:1]>>" + _gsh("[*:1]")),
             describe(adds=_GSH_ADDS, removes="H", site_map=1, name="thiol"),
         ),
         (
-            "[#6H2:1]=[#6:2]>>" + _gsh("[*:1]-[*:2]"),
+            Smirks("[#6H2:1]=[#6:2]>>" + _gsh("[*:1]-[*:2]")),
             describe(adds=_GSH_ADDS, site_map=1, name="alkene"),
         ),
         (
-            "[#6H1:1]=[#6:2][#6:3]=[#8,#7:4]>>" + _gsh("[*:1][*:2]=[*:3][*:4]"),
+            Smirks(
+                "[#6H1:1]=[#6:2][#6:3]=[#8,#7:4]>>"
+                + _gsh("[*:1][*:2]=[*:3][*:4]")
+            ),
             describe(
                 *branches(_whens(4, (8, 7)), site_map=1, adds=_GSH_ADDS),
                 site_map=1,
@@ -3766,28 +3895,33 @@ class Glutathionation(ConjugationRule):
             ),
         ),
         (
-            "[#6;H1,H2:1]=[#8:2]>>" + _gsh("[*:1]([*:2])"),
+            Smirks("[#6;H1,H2:1]=[#8:2]>>" + _gsh("[*:1]([*:2])")),
             describe(adds=_GSH_ADDS, site_map=1, name="carbonyl"),
         ),
         (
-            "[#6H1:1]1[#7:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            Smirks("[#6H1:1]1[#7:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]")),
             describe(adds=_GSH_ADDS, site_map=1, name="aziridine_ch"),
         ),
         (
-            "[#6H2:1]1[#7:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]"),
+            Smirks("[#6H2:1]1[#7:2][#6:3]1>>" + _gsh("[*:1][*:3][*:2]")),
             describe(adds=_GSH_ADDS, site_map=1, name="aziridine_ch2"),
         ),
         (
             # H0 only: same partition as epoxide_c (see above).
-            "[#6H0:1]([!#1:4])1[#7:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
+            Smirks(
+                "[#6H0:1]([!#1:4])1[#7:2][#6:3]1>>"
+                + _gsh("[*:1]([*:4])[*:3][*:2]")
+            ),
             describe(adds=_GSH_ADDS, site_map=1, name="aziridine_c"),
         ),
         (
-            "[#6:1][#8:2]S(=O)(=O)>>" + _gsh("[*:1]"),
+            Smirks("[#6:1][#8:2]S(=O)(=O)>>" + _gsh("[*:1]")),
             describe(adds=_GSH_ADDS, site_map=1, name="mesylate"),
         ),
         (
-            "[#7:1]=[#6:2]=[#8,#16:3]>>" + _gsh("[*:2](=[*:3])[*:1]"),
+            Smirks(
+                "[#7:1]=[#6:2]=[#8,#16:3]>>" + _gsh("[*:2](=[*:3])[*:1]")
+            ),
             describe(
                 *branches(_whens(3, (8, 16)), site_map=1, adds=_GSH_ADDS),
                 site_map=1,
