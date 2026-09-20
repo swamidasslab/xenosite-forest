@@ -102,6 +102,8 @@ Ethene (`C=C`) and ethyne (`C#C`) do not hit that path. Both libraries yield `CC
 
 More correct to omit `C=C=CC`. It is still C4H6, the same formula as butadiene, not a hydrogenation. `CC=CC` is C4H8, the 1,4 product, and it is shared.
 
+**Regression note (dd9c8ef, fixed):** loosening alternating search to start on a *single* bond (and applying even bond-count walks) falsely emitted `C=C=C=C` (C4H4, site/path ends `(1,2)`) and `C=C=CC` (C4H6). Fix: double-first paths only (either endpoint may hold the opening double) and odd bond-count walks only — path definition, not molecule-specific dedup.
+
 ## Dehydrogenation of ethenediol
 
 The pair path writes glyoxal. The draft was `O=[CH2][CH2]=O` and failed sanitization. Clearing those explicit hydrogens and sanitizing again yields `O=CC=O`. That gap is closed. The one-bond SMARTS still writes the ketene.

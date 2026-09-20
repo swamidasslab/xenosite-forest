@@ -92,12 +92,18 @@ def test_ethene_and_ethyne_hydrogenation_match_old():
 
 
 def test_butadiene_hydrogenation_includes_2_butene():
-    """1,4-hydrogenation is 2-butene. 1,2-butadiene is still only the old walk."""
+    """1,4-hydrogenation is 2-butene. Cumulenes are false emits, not hydrogenation.
+
+    Regression (dd9c8ef): single-first alternating paths and even bond-count
+    walks emitted ``C=C=C=C`` (C4H4) and ``C=C=CC`` (C4H6). Real products are
+    C4H8 only. See DIVERGENCES § Hydrogenation of 1,3-butadiene.
+    """
 
     old = _old(OldHydrogenation(), "C=CC=C")
     new = _new(Hydrogenation(), "C=CC=C")
     assert new == {"C=CCC", "CC=CC"}
     assert "C=C=CC" not in new
+    assert "C=C=C=C" not in new
     assert old - new == _OLD_CUMULENE
     assert new - old == set()
 

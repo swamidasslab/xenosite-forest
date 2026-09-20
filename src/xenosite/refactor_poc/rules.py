@@ -1382,7 +1382,7 @@ def alternating_path(
     end: int,
     neighbors: Mapping[int, Sequence[int]],
 ) -> list[int] | None:
-    """Shortest alternating path. Either end may hold the double bond."""
+    """Shortest double-first alternating path. Either end may hold the opening double."""
 
     paths = alternating_paths(bond_map, start, end, neighbors)
     if not paths:
@@ -1396,24 +1396,32 @@ def alternating_paths(
     end: int,
     neighbors: Mapping[int, Sequence[int]],
 ) -> list[list[int]]:
-    """Every alternating path the phase search can reach.
+    """Every double-first alternating path between ``start`` and ``end``.
 
-    A node is expanded once per bond order it still needs, so this is not
-    every simple walk. It does keep a longer route that leaves a shared
-    atom on the other bond. Either phase may start.
+    The first bond must be double from one endpoint (then alternate). Either
+    endpoint may hold that opening double — try ``start→end`` and
+    ``end→start``, and orient results ``start→end``. Do **not** start on a
+    single bond: that flips the wrong way for edit=keep hydrogenation and
+    invents cumulenes (butadiene ``(1,2)`` → ``C=C=C=C`` / C4H4; see
+    DIVERGENCES). A longer odd route that leaves a shared atom on the other
+    bond is still kept (node expanded once per needed bond order).
     """
 
     if start == end or start not in neighbors or end not in neighbors:
         return []
     found: list[list[int]] = []
     seen_paths: set[tuple[int, ...]] = set()
-    for first in (2.0, 1.0):
-        for path in _alternating_from(bond_map, start, end, neighbors, first):
-            key = tuple(path)
+    for origin, target, reverse in (
+        (start, end, False),
+        (end, start, True),
+    ):
+        for path in _alternating_from(bond_map, origin, target, neighbors, 2.0):
+            oriented = list(reversed(path)) if reverse else path
+            key = tuple(oriented)
             if key in seen_paths:
                 continue
             seen_paths.add(key)
-            found.append(path)
+            found.append(oriented)
     return found
 
 
@@ -1978,8 +1986,11 @@ class ResonancePairRule(ResonanceRule):
         for system in systems:
             anchors = [atom for atom in hits if atom in system]
             neighbors = system_neighbors(mol, system)
-            # Graph distance is not the alternating path. A shorter even
-            # walk must not drop a longer odd alternating path.
+            # Enumerate every anchor pair (not BFS-odd graph distance alone):
+            # a shorter even walk must not hide a longer odd alternating path
+            # (rings). Apply only odd bond-count alternating paths below —
+            # even paths are still C₄H₆-style formula on hydrogenation and
+            # are not pair flips (see DIVERGENCES butadiene; dd9c8ef regression).
             for start, end in itertools.combinations(sorted(anchors), 2):
                 combos: list[
                     tuple[
@@ -2148,7 +2159,11 @@ class ResonancePairRule(ResonanceRule):
                                     paths.append((parent, path))
                             paths.sort(key=lambda item: len(item[1]))
                             path_cache[path_key] = paths
-                    paths = path_cache[path_key]
+                    paths = [
+                        item
+                        for item in path_cache[path_key]
+                        if (len(item[1]) - 1) % 2 == 1
+                    ]
                     if not paths:
                         continue
                     if rings is None and (

@@ -2,6 +2,13 @@
 
 ## 2026-09-20
 
+- **Butadiene Hydrogenation false emits (regression, not progression).** Bisect: first bad `dd9c8ef` (pair-orbit / `alternating_paths`). Reactant `C=CC=C` (C4H6); rule Hydrogenation / ResonancePair.
+  - Invalid: `C=C=C=C` (C4H4) via path ends `(1,2)` — single-first alternating walk flips middle single→double (dehydrogenative cumulene). Invalid: `C=C=CC` (C4H6) via even bond-count walk — same formula as reactant, not hydrogenation.
+  - Valid: `C=CCC` / `CC=CC` (C4H8). DIVERGENCES already required omitting `C=C=CC`.
+  - Fix: `alternating_paths` double-first only (either endpoint may open); apply only odd bond-count paths. Not a restore of unique-edit dedup. Test: `test_butadiene_hydrogenation_includes_2_butene` asserts no cumulenes.
+
+## 2026-09-20
+
 - `find_path` / `bfs` / `dfs` splat `**kwargs` to metabolites/metabolize (e.g. `canonical_emitted_sites`). POC fuzz draws the flag with Hypothesis `st.booleans()` / `data.draw` and passes explicit kwargs — no env, no custom flip helpers. Flaky suites stay default-off; hardcoding `True` there is a future option only (PAIR_ORBITS §5, TODO).
 - Dropped `XENOSITE_CANONICAL_EMITTED_SITES` and `set_canonical_emitted_sites` / process override. Opt-in is explicit kwargs only. Docs: PAIR_ORBITS §5, HEURISTICS.
 
