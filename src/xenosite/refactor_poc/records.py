@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypeAlias, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    NamedTuple,
+    NewType,
+    Protocol,
+    TypeAlias,
+    TypedDict,
+)
 
 if TYPE_CHECKING:
     # rules.py imports Effect, PatternInfo, SiteInfo, and When from this module.
@@ -401,6 +409,75 @@ class EndParents(NamedTuple):
     same_system: bool
 
 
+# --- Pair-orbit unique-edit signatures (graph_isomorphism) ---
+#
+# Signature shape: ((ga, gb), pair_group_id).
+# ``pair_group_id`` is a sequential int (``PairGroupId``) from CIP-sorted
+# orbit membership tuples, or ``TRIVIAL_PAIR_GROUP`` when either end is a
+# singleton topeqiv class. Never a bare atom/bond index.
+
+TopoGroupId = NewType("TopoGroupId", int)
+"""Topological equivalence class id (atom topeqiv or bond class). Not an atom index."""
+
+PairGroupId = NewType("PairGroupId", int)
+"""Orbit id numbered 0..n-1 by CIP-sorted membership. Not an atom index."""
+
+# Sorted for atom–atom and bond–bond; (bond_group, atom_group) for bond–atom.
+AtomGroupPair: TypeAlias = tuple[TopoGroupId, TopoGroupId]
+BondGroupPair: TypeAlias = tuple[TopoGroupId, TopoGroupId]
+BondAtomGroupPair: TypeAlias = tuple[TopoGroupId, TopoGroupId]
+
+# Recipe-level keys (partitioning / profiling). Tables and signatures use
+# ``PairGroupId``. Orbit membership is always a sorted tuple of index pairs.
+SmilesPairGroup: TypeAlias = str
+NautyPairGroup: TypeAlias = tuple[tuple[int, int], ...]
+OrbitMembership: TypeAlias = tuple[tuple[int, int], ...]
+
+# CIP sort-key shapes (atom before bond by convention):
+#   atom site:  ("atom", cip)
+#   bond site:  ("bond", cip_lo, cip_hi)   # sorted endpoint CIPs
+#   site pair:  sorted (site_a, site_b) for same-kind; (bond, atom) for bond_atom
+#   group:      sorted tuple of site-pair keys → numbered to PairGroupId
+AtomSiteCipKey: TypeAlias = tuple[Literal["atom"], int]
+BondSiteCipKey: TypeAlias = tuple[Literal["bond"], int, int]
+SiteCipKey: TypeAlias = AtomSiteCipKey | BondSiteCipKey
+SitePairCipKey: TypeAlias = tuple[SiteCipKey, SiteCipKey]
+OrbitGroupCipKey: TypeAlias = tuple[SitePairCipKey, ...]
+
+
+class AtomPairOrbitSignature(NamedTuple):
+    """Unique-edit key for an unordered atom pair: ``(ga, gb)`` + pair orbit."""
+
+    groups: AtomGroupPair
+    pair_group: PairGroupId
+
+
+class BondPairOrbitSignature(NamedTuple):
+    """Unique-edit key for an unordered bond pair."""
+
+    groups: BondGroupPair
+    pair_group: PairGroupId
+
+
+class BondAtomOrbitSignature(NamedTuple):
+    """Unique-edit key for a (bond, atom) pair. ``groups`` is (bond, atom)."""
+
+    groups: BondAtomGroupPair
+    pair_group: PairGroupId
+
+
+PairOrbitSignature: TypeAlias = (
+    AtomPairOrbitSignature | BondPairOrbitSignature | BondAtomOrbitSignature
+)
+
+# Forest nested tables: (ga, gb) -> {(end_a, end_b): pair_group_id}
+PairOrbitSlice: TypeAlias = dict[tuple[int, int], PairGroupId]
+PairOrbitByGroups: TypeAlias = dict[tuple[TopoGroupId, TopoGroupId], PairOrbitSlice]
+SitePairOrbitTables: TypeAlias = dict[
+    Literal["atom_atom", "bond_bond", "bond_atom"], PairOrbitByGroups
+]
+
+
 class Structure(TypedDict, total=False):
     """Cache filled in later. ``total`` is false because each key is filled in later.
 
@@ -421,6 +498,11 @@ class Structure(TypedDict, total=False):
     rings: dict[int, tuple[tuple[int, ...], ...]]
     mcs_matches: dict[str, McsResult]
     mcs_targets: dict[str, McsResult]
+    site_pair_orbits_nauty: SitePairOrbitTables
+    site_pair_orbits_smiles: SitePairOrbitTables
+    bond_topeqiv: dict[int, int]
+    cip_ids: tuple[int, ...]
+    cip_ids_stereo: tuple[int, ...]
 
 
 class Forest(TypedDict, total=False):

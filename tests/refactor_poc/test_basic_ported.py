@@ -7,8 +7,6 @@ constant from the forest suite (imported, not copied).
 
 from __future__ import annotations
 
-import collections
-
 import pytest
 from rdkit.Chem.rdmolops import SanitizeMol
 
@@ -20,11 +18,9 @@ from xenosite.refactor_poc.rules import (
     Dehydrogenation,
     Epoxidation,
     EpoxideOpening,
+    _unique_csmi_key,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
-
-from .helpers import canon
-
 
 def test_epoxide_opening_aromatic():
     hits = list(
@@ -148,15 +144,17 @@ def test_matt_problem4():
 
 
 def test_unique_metabolites():
-    metabolite_registry: dict = collections.defaultdict(set)
+    """``unique_csmi`` key is ``(rule, PatternInfo.name|SMARTS, csmi)``.
+
+    Not forest's site+product cross-collapse: two patterns may share a site
+    when their products differ; the same product must not repeat under one
+    pattern token.
+    """
+
+    seen: set[tuple[str, str | None, str]] = set()
     rmol = MolFromSmiles(nevirapine)
     for product, info in Dealkylation().metabolize(rmol):
-        site = info["site"]
-        if isinstance(site, int):
-            site_key = (site,)
-        else:
-            site_key = tuple(sorted(site))
-        key = frozenset(["Dealkylation", *site_key])
-        canonical = {canon(product)}
-        assert not canonical.issubset(metabolite_registry[key])
-        metabolite_registry[key].update(canonical)
+        key = _unique_csmi_key(info, product.xf.csmi)
+        assert key not in seen
+        seen.add(key)
+    assert seen

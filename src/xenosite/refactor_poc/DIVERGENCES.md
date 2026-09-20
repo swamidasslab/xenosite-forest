@@ -139,3 +139,21 @@ The pattern now requires map 1 to be carbon-bound (`[#8;$([#8][#6]):1]`), so uni
 - New / shared: `CO`, `O=[PH](O)O`
 
 More correct. Dephosphorylation takes the phosphate off the carbon.
+
+## Symmetry-equivalent sites
+
+Status: approved
+
+Poc collapses symmetry-equivalent sites. The unique-edit signature uses atom rank (`topol_equiv`), so equivalent carbons are one edit. Forest emits every atom index. This is intentional, not a regression to fix.
+
+Neutral. The metabolite structure is the same either way. The reported site is one atom of the class, not the full orbit. Switching the signature to atom index would match forest's indices and would change what a unique edit is. That change is not wanted.
+
+This approval is the one-site case. Two-site edits do not collapse both ends to rank. The signature also carries the unordered atom-pair orbit key from `graph_isomorphism` (isotope marks by default, or pynauty when that package imports; see `HEURISTICS.md`). A check of the old both-ends rank keys (benzene, naphthalene, the xylenes, biphenyl, diphenylmethane, diphenyl ether, aniline dimer, triethylamine, hydroquinone, resorcinol, and the SMARTS rules whose site has two atoms) found no signature that grouped two matches and then emitted two different products. Incident bond orders split ortho from para. That check is not a proof that both-ends rank is enough: benzene meta and para share a rank key.
+
+## Product csmi dedup vs forest site+product identity
+
+Status: not decided (RuleSet cross-rule); rule-level key approved
+
+Forest `metabolize` with `only_emit_topologically_distinct_sites` keys `(rule name, topo ranks, product SMILES set)` — site topology stays in the product-emit signature. Poc splits that into two layers (see `HEURISTICS.md`): unique-edit keeps ranks + pair orbit; `unique_csmi` on `ReactionRule` keys `(rule name, PatternInfo.name | SMARTS, product csmi)` and drops site topology. Same product from two sites of one rule is one yield when the pattern token matches; overlapping SMARTS that share a product need partitioned data (e.g. Dealkylation C–C alcohol is `#6H0` vs `#6h`), not forest-style site+product cross-collapse.
+
+`RuleSet.metabolize` now uses the same `_unique_csmi_key` as `ReactionRule`, so two child rules that share a product structure both emit. Forest keeps a separate seen per child rule as well; the remaining divergence is site topology in forest's emit signature, not cross-rule csmi merging.

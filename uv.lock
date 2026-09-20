@@ -1181,6 +1181,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pynauty"
+version = "2.8.8.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/23/0f7ac6e39e60c8a7ae385cc8da372d7d1608c087f8d5fa9d99e6bb130466/pynauty-2.8.8.1.tar.gz", hash = "sha256:454d3b0e605d649d13478afb090daef4a152f15c4a337a391fe69fded7e683f2", size = 2328874, upload-time = "2024-06-06T18:12:07.442Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/63/bd34818a92c7ee76f4af4049b3a22c8e65b9535c33e793d31ddffaec9455/pynauty-2.8.8.1-cp312-cp312-manylinux_2_39_x86_64.whl", hash = "sha256:2d9c7e23000137434dc8a0301779d891868f76c17bcbcafd2b5cc27a9636ab32", size = 194801, upload-time = "2024-06-06T18:12:04.291Z" },
+]
+
+[[package]]
 name = "pyright"
 version = "1.1.414"
 source = { registry = "https://pypi.org/simple" }
@@ -1439,6 +1448,9 @@ network = [
 predict = [
     { name = "xenosite-predict", marker = "python_full_version >= '3.11'" },
 ]
+pynauty = [
+    { name = "pynauty" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1458,11 +1470,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "networkx", marker = "extra == 'network'", specifier = ">=3.2.1" },
+    { name = "pynauty", marker = "extra == 'pynauty'" },
     { name = "rdkit", specifier = ">=2022.3.3" },
     { name = "tqdm", marker = "extra == 'network'", specifier = ">=4.66.0" },
     { name = "xenosite-predict", marker = "python_full_version >= '3.11' and extra == 'predict'", specifier = ">=0.4.2" },
 ]
-provides-extras = ["network", "predict"]
+provides-extras = ["network", "predict", "pynauty"]
 
 [package.metadata.requires-dev]
 dev = [

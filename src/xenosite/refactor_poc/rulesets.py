@@ -35,6 +35,7 @@ from .rules import (
     ReductiveDehalogenation,
     SulfurOxidation,
     SulfurReduction,
+    _unique_csmi_key,
 )
 
 
@@ -122,7 +123,9 @@ class RuleSet(ReactionRule):
         rules = self.rules
         if order_key is not None:
             rules = tuple(sorted(rules, key=order_key))
-        seen: set[str] = set()
+        # Same product key as ReactionRule: (rule name, name|SMARTS, csmi).
+        # Different rules / patterns that share a structure both emit.
+        seen: set[tuple[str, str | None, str]] = set()
         for rule in rules:
             for product, info in rule.metabolize(
                 mol,
@@ -135,10 +138,10 @@ class RuleSet(ReactionRule):
                 addition = trace["additions"][trace["transforms"][-1]]
                 addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
-                    csmi = product.xf.csmi
-                    if csmi in seen:
+                    key = _unique_csmi_key(info, product.xf.csmi)
+                    if key in seen:
                         continue
-                    seen.add(csmi)
+                    seen.add(key)
                 yield product, info
 
 

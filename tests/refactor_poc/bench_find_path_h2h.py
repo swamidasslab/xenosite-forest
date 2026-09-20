@@ -29,6 +29,7 @@ import sys
 import time
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 
 from rdkit import Chem
 
@@ -40,6 +41,10 @@ from xenosite.refactor_poc.rdkitutil import canon_smiles
 from xenosite.refactor_poc.rulesets import PhaseOne
 
 warnings.filterwarnings("ignore", category=UserWarning, module="xenosite.forest")
+
+ROOT = Path(__file__).resolve().parents[2]
+ART_OUT = ROOT / "artifacts" / "bench_find_path_h2h_after_xf.out"
+ART_LIVE = ROOT / "artifacts" / "bench_find_path_h2h_after_xf.live.log"
 
 # Shared ceilings: high enough for hard cases; not a contest target.
 FOREST_MAX_EXPANSIONS = 200
@@ -80,6 +85,7 @@ class SideResult:
     product: str | None
     seconds: float
     work: dict
+    valid: bool  # hit and product canonically equals target
 
 
 def _forest_product(outcome) -> str | None:
@@ -89,7 +95,13 @@ def _forest_product(outcome) -> str | None:
     return canon_smi(last) if last else None
 
 
-def run_forest(reactant: str, target: str) -> SideResult:
+def _valid_product(product: str | None, target_c: str) -> bool:
+    """Correctness gate: a hit counts only when the product is the target."""
+
+    return product is not None and product == target_c
+
+
+def run_forest(reactant: str, target: str, target_c: str) -> SideResult:
     counters = PathSearchCounters()
     t0 = time.perf_counter()
     hits = list(
@@ -104,8 +116,9 @@ def run_forest(reactant: str, target: str) -> SideResult:
     )
     elapsed = time.perf_counter() - t0
     product = _forest_product(hits[0]) if hits else None
+    hit = bool(hits)
     return SideResult(
-        hit=bool(hits),
+        hit=hit,
         product=product,
         seconds=elapsed,
         work={
@@ -117,10 +130,11 @@ def run_forest(reactant: str, target: str) -> SideResult:
             "billed": counters.billed(),
             "budget_exhausted": counters.budget_exhausted,
         },
+        valid=_valid_product(product, target_c) if hit else False,
     )
 
 
-def run_poc(reactant: str, target: str) -> SideResult:
+def run_poc(reactant: str, target: str, target_c: str) -> SideResult:
     counters = PathCounters()
     t0 = time.perf_counter()
     hits = list(
@@ -135,8 +149,11 @@ def run_poc(reactant: str, target: str) -> SideResult:
     )
     elapsed = time.perf_counter() - t0
     product = hits[0].smiles if hits else None
+    if product is not None:
+        product = canon_smiles(product)
+    hit = bool(hits)
     return SideResult(
-        hit=bool(hits),
+        hit=hit,
         product=product,
         seconds=elapsed,
         work={
@@ -147,7 +164,29 @@ def run_poc(reactant: str, target: str) -> SideResult:
             "sites_skipped": counters.sites_skipped,
             "billed": counters.billed,
         },
+        valid=_valid_product(product, target_c) if hit else False,
     )
+
+
+def _gate(fr: SideResult, pr: SideResult) -> str:
+    """Classify correctness for speed celebration.
+
+    both_ok       — both hit with product == target (speed comparable)
+    poc_only_ok   — poc valid; forest miss/EXH/invalid (poc win, note separately)
+    forest_only_ok — forest valid; poc miss/invalid (poc regression)
+    invalid_hit   — a side claimed hit but product != target
+    both_miss     — neither found a valid path
+    """
+
+    if fr.valid and pr.valid:
+        return "both_ok"
+    if pr.valid and not fr.valid:
+        return "poc_only_ok"
+    if fr.valid and not pr.valid:
+        return "forest_only_ok"
+    if (fr.hit and not fr.valid) or (pr.hit and not pr.valid):
+        return "invalid_hit"
+    return "both_miss"
 
 
 def _fmt_side(label: str, r: SideResult) -> str:
@@ -184,100 +223,140 @@ def _forest_idle(r: SideResult) -> bool:
 
 
 def main() -> int:
+    ART_OUT.parent.mkdir(parents=True, exist_ok=True)
+    live = ART_LIVE.open("w")
+    lines: list[str] = []
+
+    def log(msg: str = "") -> None:
+        print(msg, flush=True)
+        live.write(msg + "\n")
+        live.flush()
+        lines.append(msg)
+
     want = canon_smiles
-    print("find_path H2H  forest=PhaseOneQF  poc=PhaseOne")
-    print(
+    log("find_path H2H  forest=PhaseOneQF  poc=PhaseOne  (after xf)")
+    log(
         "ceilings: forest max_expansions=%s  poc max_nodes=%s  max_paths=%s"
         % (FOREST_MAX_EXPANSIONS, POC_MAX_NODES, MAX_PATHS)
     )
-    print(
+    log(
         "comparable: mol_edits (ed) / rule_expansions (re) / nodes (nd) / wall_s"
     )
-    print(
+    log(
         "billed units differ: forest=lin+site_applies; poc=mol_edits+nodes"
     )
-    print(flush=True)
+    log(
+        "correctness gate: valid = hit AND product canonically equals target"
+    )
+    log(f"live log: {ART_LIVE}")
+    log()
     rows = []
     for i, (label, reactant, target) in enumerate(CASES, 1):
         target_c = want(Chem.MolFromSmiles(target))
-        print("[%s/%s] %s ..." % (i, len(CASES), label), flush=True)
-        print("  forest...", flush=True)
-        fr = run_forest(reactant, target)
-        print(
-            "    %s hit=%s product=%s" % (_fmt_side("forest", fr), fr.hit, fr.product),
-            flush=True,
+        log("[%s/%s] %s ..." % (i, len(CASES), label))
+        log("  forest...")
+        fr = run_forest(reactant, target, target_c)
+        log(
+            "    %s hit=%s valid=%s product=%s"
+            % (_fmt_side("forest", fr), fr.hit, fr.valid, fr.product)
         )
         if _forest_idle(fr) and not fr.hit:
-            print("    WARN: forest idle (billed=0, no hit)", flush=True)
-        print("  poc...", flush=True)
-        pr = run_poc(reactant, target)
-        print(
-            "    %s hit=%s product=%s" % (_fmt_side("poc", pr), pr.hit, pr.product),
-            flush=True,
+            log("    WARN: forest idle (billed=0, no hit)")
+        log("  poc...")
+        pr = run_poc(reactant, target, target_c)
+        log(
+            "    %s hit=%s valid=%s product=%s"
+            % (_fmt_side("poc", pr), pr.hit, pr.valid, pr.product)
         )
 
-        match = False
-        if fr.hit and pr.hit and fr.product and pr.product:
-            match = fr.product == pr.product == target_c
-        rows.append((label, reactant, target_c, fr, pr, match))
-        print("  match=%s  target=%s" % (match, target_c), flush=True)
-        print(flush=True)
+        gate = _gate(fr, pr)
+        match = fr.valid and pr.valid and fr.product == pr.product == target_c
+        rows.append((label, reactant, target_c, fr, pr, match, gate))
+        log("  gate=%s  match=%s  target=%s" % (gate, match, target_c))
+        log()
 
-    print("=" * 130)
-    print(
-        "%-24s  %-55s  %-40s  %s"
-        % (
-            "case",
-            "forest ed/re/nd bill(L+sa) / s",
-            "poc ed/re/nd bill(ed+nd) / s",
-            "match",
-        )
+    log("=" * 140)
+    log(
+        "%-24s  %-12s  %8s  %8s  %-55s  %-40s"
+        % ("case", "gate", "forest_s", "poc_s", "forest ed/re/nd", "poc ed/re/nd")
     )
-    print("-" * 130)
-    for label, _r, _target_c, fr, pr, match in rows:
-        fcell = "ed=%s re=%s nd=%s b=%s(L=%s sa=%s) %.2fs" % (
+    log("-" * 140)
+    forest_total = poc_total = 0.0
+    both_ok_f = both_ok_p = 0.0
+    n_both_ok = n_poc_only = n_forest_only = n_invalid = n_miss = 0
+    for label, _r, _target_c, fr, pr, match, gate in rows:
+        forest_total += fr.seconds
+        poc_total += pr.seconds
+        if gate == "both_ok":
+            n_both_ok += 1
+            both_ok_f += fr.seconds
+            both_ok_p += pr.seconds
+        elif gate == "poc_only_ok":
+            n_poc_only += 1
+        elif gate == "forest_only_ok":
+            n_forest_only += 1
+        elif gate == "invalid_hit":
+            n_invalid += 1
+        else:
+            n_miss += 1
+        fcell = "ed=%s re=%s nd=%s b=%s(L=%s sa=%s)%s%s" % (
             fr.work["mol_edits"],
             fr.work["rule_expansions"],
             fr.work["nodes"],
             fr.work["billed"],
             fr.work["linearizations"],
             fr.work["site_applies"],
-            fr.seconds,
+            " EXH" if fr.work.get("budget_exhausted") else "",
+            " miss" if not fr.hit else ("" if fr.valid else " INVALID"),
         )
-        if fr.work.get("budget_exhausted"):
-            fcell += " EXH"
-        if not fr.hit:
-            fcell += " miss"
-        pcell = "ed=%s re=%s nd=%s b=%s %.2fs" % (
+        pcell = "ed=%s re=%s nd=%s b=%s%s" % (
             pr.work["mol_edits"],
             pr.work["rule_expansions"],
             pr.work["nodes"],
             pr.work["billed"],
-            pr.seconds,
+            " miss" if not pr.hit else ("" if pr.valid else " INVALID"),
         )
-        if not pr.hit:
-            pcell += " miss"
-        print("%-24s  %-55s  %-40s  %s" % (label, fcell, pcell, match))
-    print("=" * 130)
-    print()
-    print("Metric definitions:")
-    print("  mol_edits (ed)     both: accepted reaction apply / overlay")
-    print("  rule_expansions    both: frontier rule metabolize/enumerate")
-    print("  nodes (nd)         poc queue pops; forest nodes_enqueued")
-    print("  forest billed      linearizations_applied + site_applies")
-    print("                     (sa often 0 on guided; lin is the real work)")
-    print("  poc billed         mol_edits + nodes")
-    print("  Conjugation is not in PhaseOneQF / PhaseOne.")
-    n_match = sum(1 for *_, m in rows if m)
-    n_both = sum(1 for *_, fr, pr, _m in rows if fr.hit and pr.hit)
-    n_poc = sum(1 for *_, fr, pr, _m in rows if pr.hit)
-    print(
-        "  both hit: %s/%s   poc hit: %s/%s   products match when both: %s/%s"
-        % (n_both, len(rows), n_poc, len(rows), n_match, len(rows))
+        log(
+            "%-24s  %-12s  %8.3f  %8.3f  %-55s  %-40s"
+            % (label, gate, fr.seconds, pr.seconds, fcell, pcell)
+        )
+    log("=" * 140)
+    log()
+    log("Totals: forest=%.3fs  poc=%.3fs  (all cases)" % (forest_total, poc_total))
+    if n_both_ok:
+        speedup = both_ok_f / both_ok_p if both_ok_p > 0 else float("inf")
+        log(
+            "Speed (both_ok only, n=%s): forest=%.3fs  poc=%.3fs  ratio=%.2fx"
+            % (n_both_ok, both_ok_f, both_ok_p, speedup)
+        )
+    log(
+        "Gates: both_ok=%s  poc_only_ok=%s  forest_only_ok=%s  "
+        "invalid_hit=%s  both_miss=%s"
+        % (n_both_ok, n_poc_only, n_forest_only, n_invalid, n_miss)
     )
-    idle = [label for label, _r, _t, fr, _pr, _m in rows if _forest_idle(fr)]
+    log()
+    log("Metric definitions:")
+    log("  mol_edits (ed)     both: accepted reaction apply / overlay")
+    log("  rule_expansions    both: frontier rule metabolize/enumerate")
+    log("  nodes (nd)         poc queue pops; forest nodes_enqueued")
+    log("  forest billed      linearizations_applied + site_applies")
+    log("                     (sa often 0 on guided; lin is the real work)")
+    log("  poc billed         mol_edits + nodes")
+    log("  Conjugation is not in PhaseOneQF / PhaseOne.")
+    log(
+        "  Speed celebration only on both_ok; poc_only_ok noted separately "
+        "(forest EXH/miss)."
+    )
+    idle = [label for label, _r, _t, fr, _pr, _m, _g in rows if _forest_idle(fr)]
     if idle:
-        print("  IDLE forest cases (invalid for H2H): %s" % ", ".join(idle))
+        log("  IDLE forest cases (invalid for H2H): %s" % ", ".join(idle))
+    body = "\n".join(lines) + "\n"
+    ART_OUT.write_text(body)
+    log(f"wrote {ART_OUT}")
+    live.close()
+    if n_forest_only or n_invalid:
+        return 1
+    if idle:
         return 2
     return 0
 

@@ -82,11 +82,19 @@ def test_each_product_is_one_depth_below_its_parent():
 
 
 def test_canonical_smiles_are_not_repeated():
+    """RuleSet ``unique_csmi`` keys ``(rule, PatternInfo.name|SMARTS, csmi)``.
+
+    Same structure from two rules or patterns may both emit; duplicates under
+    one key must not.
+    """
+
+    from xenosite.refactor_poc.rules import _unique_csmi_key
+
     _mol, _before, products = _pairs(
         RuleSet((Hydroxylation, Dealkylation), name="Poc"), "CC"
     )
-    smiles = [info["csmi"] for _product, info in products]
-    assert len(smiles) == len(set(smiles))
+    keys = [_unique_csmi_key(info, info["csmi"]) for _product, info in products]
+    assert len(keys) == len(set(keys))
 
 
 def test_a_new_atom_points_at_one_addition_record():

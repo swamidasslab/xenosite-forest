@@ -1,15 +1,12 @@
 """Port of ``tests/test_phaseone.py`` pathway cases onto poc ``find_path``.
 
 Each case asks for the same reactant→product chemistry. Plan site sets stay
-asserted when the forest suite named them; mark deferred bugs with
-``xfail`` + ``regression``. Histidine validity uses poc ``PhaseOne`` /
-``NitrogenOxidation``. Forest ``clean`` / ``bfs`` APIs and rule ``rxns=``
-surgery are skipped (unfinished / different surface).
+asserted when the forest suite named them. Histidine validity uses poc
+``PhaseOne`` / ``NitrogenOxidation``. Forest ``clean`` / ``bfs`` APIs and
+rule ``rxns=`` surgery are skipped (unfinished / different surface).
 """
 
 from __future__ import annotations
-
-import pytest
 
 from xenosite.refactor_poc.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.refactor_poc.rdkitutil import canon_smiles
@@ -72,8 +69,6 @@ def test_epoxidation_opening1():
     assert _plan_rules(hits[0]) == ["EpoxideOpening"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_hydrogenation1():
     hits = _find("CC=O", "CCO")
     assert hits
@@ -104,8 +99,7 @@ def test_nitrogen_oxidation1():
     assert _plan_rules(hits[0]) == ["NitrogenOxidation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
+# progression: N-oxide dehydration to the amine is found.
 def test_dehydration2():
     hits = _find("CCNO", "CCN")
     assert hits
@@ -113,8 +107,7 @@ def test_dehydration2():
     assert _plan_rules(hits[0]) == ["Dehydration"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
+# progression: nitro to nitroso is found as NitrogenReduction.
 def test_nitrogen_reduction1():
     reactant = "[O-]-[N+](C1=CC=C(O1)C=NN2C(=O)NC(=O)C2)=O"
     product = "N(C1=CC=C(O1)C=NN2C(=O)NC(=O)C2)=O"
@@ -145,8 +138,6 @@ def test_sulfur_oxidation():
     assert _plan_rules(hits[0]) == ["SulfurOxidation"]
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
 def test_sulfur_reduction():
     hits = _find("CCSO", "CCS")
     assert hits
@@ -167,8 +158,7 @@ def test_histidine_phase1_does_not_emit_invalid_metabolites():
     assert invalid == []
 
 
-@pytest.mark.xfail(reason="poc deferred bug")
-@pytest.mark.regression
+# progression: histidine N-oxidation matches the valid SMILES set.
 def test_histidine_nitrogen_oxidation_is_chemically_valid():
     mol = MolFromSmiles(HISTIDINE)
     assert mol is not None

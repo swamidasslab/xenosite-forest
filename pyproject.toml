@@ -38,6 +38,10 @@ network = [
 predict = [
     "xenosite-predict>=0.4.2; python_version >= '3.11'",
 ]
+# Pair-orbit oracle. Tests skip when it is not installed. Not a default dependency.
+pynauty = [
+    "pynauty",
+]
 
 [project.urls]
 Homepage = "https://xenosite.org"

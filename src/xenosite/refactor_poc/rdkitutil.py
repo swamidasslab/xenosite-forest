@@ -122,9 +122,13 @@ class XfTracing:
     parent as :class:`Xf`. Trace state lives on the forest.
 
     Read-only queries (no underscore): ``active``, ``depth``, ``atom_origin``,
-    ``atom_indices``, ``atom_added_by``. These answer questions about the
-    installed atom trace without exposing ``forestLabel`` tags or transform
-    ids.
+    ``atom_indices``, ``atom_depths``, ``atom_root``, ``atom_added_by``,
+    ``removed_roots``. These answer questions about the installed atom trace
+    without exposing ``forestLabel`` tags or transform ids.
+
+    ``atom_origin`` is the earliest index in the record (an added atom's
+    birth index). ``atom_root`` is the depth-0 index, or None when the atom
+    was created later. ``removed_roots`` are depth-0 indexes that left.
 
     Plumbing mutators (underscore): ``_ensure``, ``_stamp``, ``_install``,
     ``_trace``. Downstream code should prefer ``mol.xf.of_products`` over
@@ -172,6 +176,48 @@ class XfTracing:
         if not idxs:
             return None
         return tuple(int(i) for i in idxs)
+
+    def atom_depths(self, idx: int) -> tuple[int, ...] | None:
+        """Depth frames parallel to :meth:`atom_indices`.
+
+        None when the parent is untraced or the atom has no record.
+        """
+
+        record = self._atom_record(idx)
+        if record is None:
+            return None
+        depths = record.get("depth")
+        if not depths:
+            return None
+        return tuple(int(d) for d in depths)
+
+    def atom_root(self, idx: int) -> int | None:
+        """Depth-0 index of atom ``idx``, or None if it was created later.
+
+        Distinct from :meth:`atom_origin`, which is the earliest recorded
+        index even for an atom that did not exist on the reactant.
+        """
+
+        depths = self.atom_depths(idx)
+        indices = self.atom_indices(idx)
+        if depths is None or indices is None or 0 not in depths:
+            return None
+        return indices[depths.index(0)]
+
+    def removed_roots(self) -> frozenset[int]:
+        """Depth-0 indexes that are no longer in the molecule."""
+
+        mol = self.mol
+        if not is_tracing(mol):
+            return frozenset()
+        out: set[int] = set()
+        for record in mol._forest["atom_trace"]["deletes"].values():
+            depths = record.get("depth") or []
+            idxs = record.get("idx") or []
+            if not depths or not idxs or 0 not in depths:
+                continue
+            out.add(int(idxs[list(depths).index(0)]))
+        return frozenset(out)
 
     def atom_origin(self, idx: int) -> int | None:
         """Earliest recorded index for atom ``idx``, or None if unknown."""
@@ -301,10 +347,12 @@ class Xf:
 
     Public surface: ``has_forest``, ``forestmol``, ``csmi``, ``forest``, ``is_terminal``,
     ``clear_structure``, ring / conjugate / ``topol_equiv`` / ``formula`` /
-    ``sanitize`` / ``smarts_matches``, and ``of_products``. Tracing nest:
+    ``sanitize`` / ``smarts_matches``, pair-orbit
+    (``atom_pair_orbit_key`` / ``bond_pair_orbit_key`` / ``bond_atom_orbit_key`` /
+    ``site_pair_orbits`` / ``pair_orbit_backend``), and ``of_products``. Tracing nest:
     ``active`` / ``depth`` / ``atom_origin`` / ``atom_indices`` /
-    ``atom_added_by``, plus underscored ``_stamp`` / ``_ensure`` / ``_install``
-    / ``_trace``.
+    ``atom_depths`` / ``atom_root`` / ``atom_added_by`` / ``removed_roots``,
+    plus underscored ``_stamp`` / ``_ensure`` / ``_install`` / ``_trace``.
     """
 
     __slots__ = ("_mol",)
@@ -406,6 +454,68 @@ class Xf:
         """Heavy-atom counts, total hydrogens, and formal charge (cached)."""
 
         return molecule_formula(self.mol)
+
+    @property
+    def pair_orbit_backend(self) -> Literal["nauty", "smiles", "none"]:
+        """Resolved pair-orbit backend (override / env / auto). Process-wide."""
+
+        from xenosite.refactor_poc.graph_isomorphism import get_pair_orbit_backend
+
+        return get_pair_orbit_backend()
+
+    @classmethod
+    def set_pair_orbit_backend(
+        cls, backend: Literal["nauty", "smiles", "none"] | None
+    ) -> None:
+        """Set process-wide pair-orbit backend, or ``None`` to clear override."""
+
+        from xenosite.refactor_poc.graph_isomorphism import set_pair_orbit_backend
+
+        set_pair_orbit_backend(backend)
+
+    def atom_pair_orbit_key(
+        self, site: frozenset[int]
+    ) -> AtomPairOrbitSignature | None:
+        """Unique-edit atom-pair signature; caches tables on forest structure."""
+
+        from xenosite.refactor_poc.graph_isomorphism import atom_pair_orbit_key
+
+        return atom_pair_orbit_key(_require_forest(self.mol), site)
+
+    def bond_pair_orbit_key(
+        self, bonds: frozenset[int]
+    ) -> BondPairOrbitSignature | None:
+        """Unique-edit bond-pair signature; caches tables on forest structure."""
+
+        from xenosite.refactor_poc.graph_isomorphism import bond_pair_orbit_key
+
+        return bond_pair_orbit_key(_require_forest(self.mol), bonds)
+
+    def bond_atom_orbit_key(
+        self, bond_idx: int, atom_idx: int
+    ) -> BondAtomOrbitSignature:
+        """Unique-edit bond–atom signature; caches tables on forest structure."""
+
+        from xenosite.refactor_poc.graph_isomorphism import bond_atom_orbit_key
+
+        return bond_atom_orbit_key(_require_forest(self.mol), bond_idx, atom_idx)
+
+    def site_pair_orbits(
+        self, backend: Literal["nauty", "smiles", "none"] | None = None
+    ) -> SitePairOrbitTables | None:
+        """Nested pair-orbit tables on ``structure``, or ``None`` for ``none``.
+
+        Default backend is the resolved process-wide setting. Pass
+        ``backend="smiles"`` to opt into RDKit isotope tables; ``"nauty"`` for
+        pynauty. Forest keys: ``site_pair_orbits_nauty`` /
+        ``site_pair_orbits_smiles``.
+        """
+
+        from xenosite.refactor_poc.graph_isomorphism import (
+            ensure_site_pair_orbit_tables,
+        )
+
+        return ensure_site_pair_orbit_tables(_require_forest(self.mol), backend)
 
     def sanitize(self) -> int:
         """Sanitize a copy and cache the RDKit status code. Does not edit parent."""
@@ -583,6 +693,36 @@ def sanitize_catch(mol: Mol) -> int:
     return int(SanitizeMol(mol, catchErrors=True))
 
 
+def cip_ids(mol: Mol, *, include_stereo: bool = False) -> tuple[int, ...]:
+    """Per-atom CIP / topological ranks. Not uniquified (``breakTies=False``).
+
+    Same signal as ``topol_equiv`` when ``include_stereo`` is false. With
+    stereo, ``includeChirality=True``. Index ``i`` is the rank of atom ``i``.
+    """
+
+    structure = _structure(mol)
+    cache_key = "cip_ids_stereo" if include_stereo else "cip_ids"
+    cached = structure.get(cache_key)
+    if cached is not None:
+        return cast(tuple[int, ...], cached)
+
+    sanitized = Mol(mol)
+    sanitize_mol(sanitized)
+    ranks = tuple(
+        int(r)
+        for r in CanonicalRankAtoms(
+            sanitized,
+            includeChirality=include_stereo,
+            breakTies=False,
+        )
+    )
+    if include_stereo:
+        structure["cip_ids_stereo"] = ranks
+    else:
+        structure["cip_ids"] = ranks
+    return ranks
+
+
 def _topol_equiv(mol: Mol) -> dict[int, int]:
     """Map each atom index to its topological class. The same dict on a hit."""
 
@@ -590,16 +730,8 @@ def _topol_equiv(mol: Mol) -> dict[int, int]:
     if "topol_equiv" in structure:
         return structure["topol_equiv"]
 
-    sanitized = Mol(mol)
-    sanitize_mol(sanitized)
-
-    classes = {
-        atom.GetIdx(): rank
-        for atom, rank in zip(
-            mol.GetAtoms(),
-            CanonicalRankAtoms(sanitized, includeChirality=False, breakTies=False),
-        )
-    }
+    ranks = cip_ids(mol, include_stereo=False)
+    classes = {atom.GetIdx(): ranks[atom.GetIdx()] for atom in mol.GetAtoms()}
     structure["topol_equiv"] = classes
     return classes
 
@@ -968,15 +1100,24 @@ def _bond_order_sums(mol: Mol) -> dict[int, float]:
     }
 
 
-def move_charge_with_bonds(mol: Mol, before: dict[int, float]) -> None:
+def move_charge_with_bonds(
+    mol: Mol,
+    before: dict[int, float],
+    aromatic: set[int] | None = None,
+) -> None:
     """Move formal charge when a bond-order flip would leave it behind.
 
     The oxygen whose bond order rose by one loses a negative charge. The
     oxygen whose bond order fell gains it. A neutral carbon keeps charge 0
     and moves hydrogen instead, because that hydrogen has to travel with
     the bond.
+
+    A neutral aromatic atom is already the right charge. Kekulizing its
+    1.5-order bonds is not a flip that should mint ``[n-]`` or ``[n+]``.
+    Charged atoms still follow the bond, including a nitro oxygen.
     """
 
+    aromatic = aromatic or set()
     for atom in mol.GetAtoms():
         old = before.get(atom.GetIdx())
         if old is None:
@@ -985,8 +1126,11 @@ def move_charge_with_bonds(mol: Mol, before: dict[int, float]) -> None:
         delta = int(round(new - old))
         if delta == 0:
             continue
-        if atom.GetAtomicNum() == 6 and atom.GetFormalCharge() == 0:
+        neutral = atom.GetFormalCharge() == 0
+        if neutral and atom.GetAtomicNum() == 6:
             _shift_hydrogens(atom, -delta)
+        elif neutral and atom.GetIdx() in aromatic:
+            continue
         else:
             atom.SetFormalCharge(atom.GetFormalCharge() + delta)
 
@@ -1044,6 +1188,7 @@ def _write_assignment(
     if not place(0):
         return None
     before = _bond_order_sums(mol)
+    aromatic = {atom.GetIdx() for atom in mol.GetAtoms() if atom.GetIsAromatic()}
     rw = RWMol(Mol(mol))
     written: dict[tuple[int, int], float] = {}
     for left, right in bonds:
@@ -1056,29 +1201,50 @@ def _write_assignment(
         written[_bond_key(left, right)] = 2.0 if is_double else 1.0
     for atom in atoms:
         rw.GetAtomWithIdx(atom).SetIsAromatic(False)
-    move_charge_with_bonds(rw, before)
+    move_charge_with_bonds(rw, before, aromatic)
     return rw.GetMol(), written
 
 
-def ensure_kekule_parents(
-    mol: Mol,
-    left: int,
-    right: int,
-    cache: KekuleParents,
-) -> tuple[int, ...]:
-    """One parent per assignment of the system that contains ``(left, right)``.
+def aromatic_parent_atoms(mol: Mol, start: int, end: int) -> frozenset[int] | None:
+    """Aromatic atoms of the conjugated component that holds both ends.
 
-    Other conjugated systems stay aromatic. Writes ``cache``. Does not read
-    or write ``mol._forest``. Returns the parent indexes of that system.
+    A biaryl single bond does not join two rings, and an exocyclic amide is
+    not aromatic, so neither is kekulized with this ring. None when the ends
+    do not share that component.
     """
 
+    atoms, _bonds = _conjugated_component(mol, start)
+    if end not in atoms:
+        return None
+    aromatic = frozenset(
+        index for index in atoms if mol.GetAtomWithIdx(index).GetIsAromatic()
+    )
+    if start not in aromatic or end not in aromatic or len(aromatic) < 2:
+        return None
+    return aromatic
+
+
+def _bonds_within(mol: Mol, atoms: frozenset[int]) -> frozenset[tuple[int, int]]:
+    """Bonds whose ends are both in ``atoms``. The system's own edges."""
+
+    bonds: set[tuple[int, int]] = set()
+    for bond in mol.GetBonds():
+        left = bond.GetBeginAtomIdx()
+        right = bond.GetEndAtomIdx()
+        if left in atoms and right in atoms:
+            bonds.add(_bond_key(left, right))
+    return frozenset(bonds)
+
+
+def _store_assignments(
+    mol: Mol,
+    atoms: frozenset[int],
+    bonds: frozenset[tuple[int, int]],
+    cache: KekuleParents,
+) -> tuple[int, ...]:
+    """One parent per kekulé assignment of ``atoms``. Cached on that atom set."""
+
     parents, orders, systems, by_order = _kekule_slots(cache)
-    atoms, bonds = _conjugated_component(mol, left)
-    seed = _bond_key(left, right)
-    if seed not in bonds and mol.GetBondBetweenAtoms(left, right) is not None:
-        bonds = frozenset((*bonds, seed))
-        if right not in atoms:
-            atoms = frozenset((*atoms, right))
     held = systems.get(atoms)
     if held is not None:
         return held
@@ -1104,6 +1270,27 @@ def ensure_kekule_parents(
     found = tuple(indexes)
     systems[atoms] = found
     return found
+
+
+def ensure_kekule_parents(
+    mol: Mol,
+    left: int,
+    right: int,
+    cache: KekuleParents,
+) -> tuple[int, ...]:
+    """One parent per assignment of the system that contains ``(left, right)``.
+
+    Other conjugated systems stay aromatic. Writes ``cache``. Does not read
+    or write ``mol._forest``. Returns the parent indexes of that system.
+    """
+
+    atoms, bonds = _conjugated_component(mol, left)
+    seed = _bond_key(left, right)
+    if seed not in bonds and mol.GetBondBetweenAtoms(left, right) is not None:
+        bonds = frozenset((*bonds, seed))
+        if right not in atoms:
+            atoms = frozenset((*atoms, right))
+    return _store_assignments(mol, atoms, bonds, cache)
 
 
 def parent_for_bond(
@@ -1137,13 +1324,35 @@ def _ensure_atoms(mol: Mol, atom: int, cache: KekuleParents) -> frozenset[int]:
     return atoms
 
 
-def parents_for_ends(mol: Mol, start: int, end: int, cache: KekuleParents) -> EndParents:
+def parents_for_ends(
+    mol: Mol,
+    start: int,
+    end: int,
+    cache: KekuleParents,
+    atoms: frozenset[int] | None = None,
+) -> EndParents:
     """Parents covering ``start`` and ``end``.
 
-    Same conjugated system: that system's assignments. Different systems:
-    each system's assignments, not a product of every system. Does not read
-    or write ``mol._forest``.
+    ``atoms``, when given, is the system the caller already chose (an
+    aromatic component, or a conjugated one). Assignments stay inside that
+    set, so an exocyclic amide is not rewritten just because a ring carbon
+    touches it. Without ``atoms``, each end's conjugated component is used.
+
+    Same system: that system's assignments. Different systems: each system's
+    assignments, not a product of every system. Does not read or write
+    ``mol._forest``.
     """
+
+    if atoms is not None:
+        bonds = _bonds_within(mol, atoms)
+        if not bonds:
+            return EndParents(parents=(), same_system=True)
+        indexes = _store_assignments(mol, atoms, bonds, cache)
+        parents = cache.get("parents") or []
+        return EndParents(
+            parents=tuple(parents[index] for index in indexes),
+            same_system=True,
+        )
 
     start_atoms = _ensure_atoms(mol, start, cache)
     end_atoms = _ensure_atoms(mol, end, cache)

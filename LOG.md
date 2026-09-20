@@ -1,5 +1,73 @@
 # Lab log
 
+## 2026-09-20
+
+- PatternInfo coverage audit: tests check names, reactant SMARTS parse, span==`_span(possibilities)`, when branches, `resolve_effect` selection, and declared survival of adds/removes/cleaves/leave_count/methide/dearomatizes/needs. Gaps (TODO): product SMARTS, `pin`, `skip_same_rings`/`edit` behavior, resolve-filled `breaks_ring`/`partner`/`partner_h`. RuleSet `unique_csmi` aligned to `_unique_csmi_key`; invariant test updated.
+
+## 2026-09-20
+
+- Hydroxylation `h2` PatternInfo: widened reactant SMARTS `[#6h2:1]` → `[#6h2,#6h3:1]` so declared `when h=3` can resolve (RDKit `h2` is exactly two H; docstring/when already meant two or three). Cleared `_UNREACHABLE` xfail in `test_pattern_info_coverage.py`; updated `test_coverage.py` smarts string. Dropped matching TODO line. Suite: **191 passed**, when-branches **135/135**.
+
+## 2026-09-20
+
+- PatternInfo / ``when`` coverage test: `tests/refactor_poc/test_pattern_info_coverage.py`. **190** possibility cases (135 with ``when``, 55 without); **134/135** when-branches hit with covering mols from `SUBSTRATE_LIBRARY` + local extras (At/I, hemiaminals, aziridines, arene oxide, etc.). **1 strict xfail**: `Hydroxylation/h2` poss ``h=3`` unreachable under reactant ``[#6h2:1]`` (exactly two H; docstring says at least two). Assertions: pattern parses, site maps resolve, ``resolve_effect`` selects that possibility. Suite: 190 passed, 1 xfailed. Code-path leftovers in ``_when_matches``/``resolve_effect``: missing-map ``idx is None``, and ``chosen is None`` fallback (no current SMARTS leaves all whens false). `guided_path.py` / `test.ipynb` untouched.
+
+## 2026-09-20
+
+- Named all 98 PatternInfo entries in `rules.py` with chemically meaningful names (unique within each rule; cross-rule reuse OK). Replaced auto-numbered interim leftovers. Test: `tests/refactor_poc/test_pattern_names.py` (names present + unique within rule). Removed TODO line for distinct PatternInfo names. `guided_path.py` / `test.ipynb` untouched.
+
+## 2026-09-20
+
+- Measured `refactor_poc` coverage (`tests/refactor_poc`, pytest-cov + branch): **84.0%** Cover (lines+branches), **87.5%** statements (2999/3428). Worst Cover%: `canonical_plan.py` 77.2%, `rules.py` 81.5% (most misses: 167), `graph_isomorphism.py` 82.9%, `rdkitutil.py` 83.8%. Reports: `artifacts/poc_coverage.txt`, `artifacts/poc_coverage_html/`. Suite had 4 pre-existing failures; no production edits.
+
+## 2026-09-20
+
+- `test_unique_metabolites` (nevirapine Dealkylation): root cause was overlapping C–C alcohol SMARTS `[#6:1]` and `[#6h:1]` emitting the same product; `unique_csmi` kept both because PatternInfo auto-names differ. Forest hid this via site+product cross-collapse. Fix: narrow first pattern to `[#6H0:1]` (partition by H count, same as N/O/S rows). Test now asserts `_unique_csmi_key` uniqueness, not site-keyed registry. `guided_path.py` / `test.ipynb` untouched.
+
+## 2026-09-20
+
+- TODO / HEURISTICS cleanup: dropped PhaseOne-omits-conjugations line (not a todo). Bond–atom orbits for Dehydrogenation → Status: decided (approved); recipe/`bond_atom_orbit_key` exist, unique-edit still unwired (short TODO kept). Chemical-gap line removed after recheck: no xfails in `tests/refactor_poc`; `test_phaseone_ported` hydrogenation (`CC=O`→`CCO` as Hydrogenation) + sulfur ox/red; GSH Michael/aziridine; `test_rules_examples` LongRangeQuinone / Raloxifene / sulfation / sulfur oxidations / already-hydroxylated DH / dealkylation94457 all pass (115/115 rules_examples; 14 named quinone LongRange/Trimethoprim cases pass). Prior orbit work already landed: `unique_csmi` key `(rule, PatternInfo.name|SMARTS, csmi)`, xf pair-orbit API, nauty default when pynauty imports. `guided_path.py` / `test.ipynb` untouched. Note: `test_unique_metabolites` still fails (Dealkylation duplicate product at one site) — outside the chemical-gap list.
+
+## 2026-09-20
+
+- Verified `unique_csmi` product dedup: `ReactionRule.metabolize` was csmi-only within a rule (no site topology); aligned key to `(rule name, product csmi)` — same yields. `RuleSet.metabolize` still merges by csmi alone across rules (`test_canonical_smiles_are_not_repeated`); left unchanged pending whether that cross-rule merge is wanted. Two-layer story recorded in `HEURISTICS.md` / `DIVERGENCES.md`. `guided_path.py` / `test.ipynb` untouched.
+
+## 2026-09-20
+
+- Pair-orbit ``PairGroupId`` is now sequential ``NewType`` int ``0..n-1`` (not SMILES/frozenset). CIP keys via ``cip_ids`` = ``CanonicalRankAtoms(..., breakTies=False)`` (stereo optional). Tuple shapes: atom ``("atom", cip)``; bond ``("bond", cip_lo, cip_hi)`` (sorted endpoints); group membership = sorted tuple of index pairs by those keys (atom before bond); groups numbered by sorting membership CIP keys (index membership tie-break). Nauty and isotope tables agree on partitions and ids. Tests: 15 passed, 1 skipped. ``guided_path.py`` / ``test.ipynb`` untouched.
+
+## 2026-09-20
+
+- Pair-orbit signatures typed in `records.py`: `TopoGroupId` (NewType), `PairGroupId`, `AtomPairOrbitSignature` / `BondPairOrbitSignature` / `BondAtomOrbitSignature`. Unique-edit last field is `AtomPairOrbitSignature | None`. Forest nested tables `mode -> (ga,gb) -> {(a,b): pair_group}`. Tests: 14 passed, 1 skipped (isotope dispatcher branch when pynauty present); pynauty oracle ran. Profile `artifacts/pair_orbit_profile.out`: wall ~0.94s / 11 mols; `marked_site_pair_smiles` tottime 0.23s; `site_pair_orbits_nauty` 0.10s / cum 0.44s; `site_pair_orbits_smiles` tottime 0.02s / cum 0.28s. Nauty batch ≪ isotope batch on drug-like sizes (e.g. diphenhydramine-like 0.003s vs 0.079s).
+
+## 2026-09-20
+
+- Unified site-pair orbits in `graph_isomorphism.py` from share: `site_pair_orbits_smiles` / `site_pair_orbits_nauty` return `atom_atom`, `bond_bond`, and `bond_atom` together. Nauty tables cached up front on `forest["structure"]["site_pair_orbits_nauty"]`. RDKit tables on `site_pair_orbits_smiles`, materialized only for multi–multi topeqiv pairs; singleton ends use tagged `("site", ...)` without paying for the table. QuinoneFormation / two-atom SMARTS still `atom_pair_orbit_key`. `bond_atom_orbit_key` hook only; Dehydrogenation unwired.
+
+## 2026-09-20
+
+- Atom-pair and bond-pair orbit recipes live in `graph_isomorphism.py` (was `pair_orbit.py`). Atom: `atom_pair_orbit_isotope` / `atom_pair_orbit_pynauty`. Bond: `bond_pair_orbit_isotope` (endpoint membership isotopes; min of both orientations) / `bond_pair_orbit_pynauty`. No bond–atom mixed recipe in the share. QuinoneFormation / two-atom SMARTS unique-edit still uses `atom_pair_orbit_key`. Dehydrogenation not switched to bond-pair keys. Self-match recipe not implemented.
+
+## 2026-09-20
+
+- Two-site unique-edit key is the unordered pair orbit, in its own signature field (not a rank int). Default: `pair_orbit_isotope` (isotope 999 on both atoms, isomeric canonical SMILES). Optional: `pair_orbit_pynauty` when `pynauty` imports (colored generators, union-find). Self-match automorphisms were not implemented. Benzene meta and para share a both-ends rank key and are different isotope orbits. HEURISTICS status: approved.
+
+## 2026-09-19
+
+- Two-site unique-edit collapse stays `Status: not decided`. One-site rank collapse stays. A group id must not be a bare int in an atom-index slot. Checked current both-ends rank signatures on benzene, naphthalene, xylenes, biphenyl, diphenylmethane, and the two-atom SMARTS rules: no group contained two matches with different products.
+
+## 2026-09-19
+
+- Quinone kekulé parents stay on the aromatic atoms of the conjugated component (`aromatic_parent_atoms`). A biaryl bond does not join rings, and an exocyclic amide is not rewritten with the ring. Neutral aromatic atoms no longer take a formal charge when 1.5-order bonds are kekulized (`move_charge_with_bonds`); charged atoms, including nitro oxygen, still follow the bond.
+- That cleared 76 historical xfails (quinone examples, several rule examples, N-oxide dehydration, nitro reduction, histidine N-oxidation, furfural GSH). They are ordinary passes, marked `# progression:`. The old xpass `test_dehydration2` is one of those. `pytest tests/refactor_poc`: 1191 passed, 1 skipped (Sulfation has no product on its example), 28 xfailed. `pyright` on touched poc modules: 0 errors.
+- `xf.tracing` gained `atom_depths`, `atom_root` (depth-0 index, or None if created later), and `removed_roots`. Tests: `tests/refactor_poc/test_atom_trace.py`. Fuzz ports (invariants, not forest recipe replay): `test_guided_path_fuzz.py`, `test_find_path_phase1_plan_fuzz.py`, `test_phase1_steps_fuzz.py`, `test_and_cleave_plan_fuzz.py`, `test_bfs_fuzz.py`.
+- Still open: long-range imine quinones (`LongRangeQuinone`, fluoro-aminobenzimidazole, two large empty scaffolds, raloxifene-like); `CC=O`→`CCO` is OxygenReduction in the search while forest names it Hydrogenation (pair end declares `partner` C, so the site filter drops it); `CCSO` S–O cleavage emits `CC`+`OS` instead of `CCS`; GSH Michael / aziridine SOM gaps; sulfation example emits nothing.
+
+## 2026-09-19
+
+- **Profile after xf / no-canonicalize / lazy csmi** (`artifacts/poc_find_path_profile_after_xf.out`): wall 1.12s (was 1.98s). `cannonicalize_order` cum=0 (gone from hot path). `copy.deepcopy` cum=0.387s / ~35% of wall (was ~1.17s / ~59%) — remaining deepcopy is solely `_apply_forest_trace` atom_trace copy (478 calls), not renumber. HydroxyQ case 1.02s (was 1.81s).
+- **H2H after xf** (`artifacts/bench_find_path_h2h_after_xf.out`): gate=`valid` = hit ∧ product==target. both_ok=9/10, poc_only_ok=1 (MeOPhOH→hydroxyQ; forest EXH), forest_only_ok=0, invalid_hit=0. Totals forest 4.57s / poc 0.67s. Speed on both_ok only: forest 2.43s / poc 0.14s ≈ **17.8×**. No correctness regressions vs forest on shared hits.
+
 ## 2026-09-19
 
 - **xf redesign (mint-on-read)**: `Mol.xf` is a read-only monkey-patched property; each access mints a new `Xf` with a **strong** parent ref (no stored xf, no weakref, no copy-between-mols). Forest attaches lazily via `_require_forest`; `has_forest` reports wipe without installing; `forestmol` is the typed `Mol` → `ForestMol` bridge. `wipe_forest` is the honest wipe → `NoForestMol`.

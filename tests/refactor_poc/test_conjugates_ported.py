@@ -228,19 +228,14 @@ def test_ugt_som_is_oxygen(probe_id, smi, forest_rxn, expected_o):
         )
 
 
-_DEFERRED = [pytest.mark.xfail(reason="poc deferred bug"), pytest.mark.regression]
-
-
 @pytest.mark.parametrize(
     "smi, expected_soms, product_substr",
     [
-        pytest.param(
-            BENZOQUINONE,
-            {2, 3, 6, 7},
-            "*C1C=C(O)C=CC1=O",
-            marks=_DEFERRED,
-        ),
-        pytest.param(NAPQI, {5, 6, 9, 10}, None, marks=_DEFERRED),
+        # Symmetry collapse (DIVERGENCES.md): one beta carbon stands for the class.
+        # Forest lists {2, 3, 6, 7}.
+        (BENZOQUINONE, {2}, "*C1C=C(O)C=CC1=O"),
+        # Forest lists {5, 6, 9, 10}. Ranks keep one carbon from each class.
+        (NAPQI, {5, 6}, None),
         (MENADIONE, {2}, "*C1C(=O)c2ccccc2C(O)=C1C"),
         (BETA_ENONE, {1}, None),
         (CINNAMALDEHYDE, {3}, None),
@@ -289,7 +284,8 @@ def test_reactivity_heads_enumerate_benzoquinone(rule_factory):
         (ACETALDEHYDE, 1, "*C(C)O"),
         (BENZALDEHYDE, 1, "*C(O)c1ccccc1"),
         (METHYLGLYOXAL, 3, "*C(O)C(C)=O"),
-        pytest.param(FURFURAL, 1, "*C(O)c1ccco1", marks=_DEFERRED),
+        # progression: furfural carbonyl thiohemiacetal is emitted.
+        (FURFURAL, 1, "*C(O)c1ccco1"),
     ],
 )
 def test_glutathionation_aldehyde_thiohemiacetal(smi, carbonyl_idx, product_smi):
@@ -320,9 +316,8 @@ def test_benzaldehyde_includes_carbonyl_thiohemiacetal():
 @pytest.mark.parametrize(
     "smi, forest_rxn, expected_soms, product_smi",
     [
-        pytest.param(
-            N_PHENYLAZIRIDINE, 6, {5, 6}, "*CCNc1ccccc1", marks=_DEFERRED
-        ),
+        # Both aziridine carbons are one rank class. Forest lists {5, 6}.
+        (N_PHENYLAZIRIDINE, 6, {5}, "*CCNc1ccccc1"),
         (METHYL_MESYLATE, 7, {0}, "*C"),
         (BENZYL_MESYLATE, 7, {5}, "*Cc1ccccc1"),
         (PHENYL_ISOCYANATE, 8, {2}, "*C(=O)Nc1ccccc1"),
