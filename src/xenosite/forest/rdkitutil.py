@@ -85,7 +85,6 @@ from xenosite.forest.rdkit_api import (
 )
 from xenosite.forest.records import (
     AtomPairOrbitSignature,
-    BondAtomOrbitSignature,
     BondPairOrbitSignature,
     EditCounters,
     EndParents,
@@ -372,7 +371,7 @@ class Xf:
     Public surface: ``has_forest``, ``forestmol``, ``csmi``, ``forest``, ``is_terminal``,
     ``clear_structure``, ring / conjugate / ``topol_equiv`` / ``formula`` /
     ``sanitize`` / ``smarts_matches``, pair-orbit
-    (``atom_pair_orbit_key`` / ``bond_pair_orbit_key`` / ``bond_atom_orbit_key`` /
+    (``atom_pair_orbit_key`` / ``bond_pair_orbit_key`` /
     ``site_pair_orbits`` / ``pair_orbit_backend``), and ``of_products``. Tracing nest:
     ``active`` / ``depth`` / ``atom_origin`` / ``atom_indices`` /
     ``atom_depths`` / ``atom_root`` / ``atom_added_by`` / ``removed_roots``,
@@ -514,15 +513,6 @@ class Xf:
         from xenosite.forest.graph_isomorphism import bond_pair_orbit_key
 
         return bond_pair_orbit_key(_require_forest(self.mol), bonds)
-
-    def bond_atom_orbit_key(
-        self, bond_idx: int, atom_idx: int
-    ) -> BondAtomOrbitSignature:
-        """Unique-edit bond–atom signature; caches tables on forest structure."""
-
-        from xenosite.forest.graph_isomorphism import bond_atom_orbit_key
-
-        return bond_atom_orbit_key(_require_forest(self.mol), bond_idx, atom_idx)
 
     def site_pair_orbits(
         self, backend: Literal["nauty", "smiles", "none"] | None = None

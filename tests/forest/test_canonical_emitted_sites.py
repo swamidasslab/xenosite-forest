@@ -77,7 +77,7 @@ def test_canonicalize_smarts_match_maps_non_lex_to_rep():
     non = next(m for m in ortho if m != rep)
     mapped = {1: non[0], 2: non[1]}
     out = canonicalize_smarts_match(
-        mol, mapped, frozenset(non), unique_orbit="atom_atom"
+        mol, mapped, frozenset(non)
     )
     assert out is not None
     emit_mapped, emit_site = out
@@ -99,7 +99,7 @@ def test_canonicalize_smarts_match_singleton_atom_to_lex_rep():
     assert non != lex
     mapped = {1: non}
     out = canonicalize_smarts_match(
-        mol, mapped, frozenset({non}), unique_orbit="atom_atom"
+        mol, mapped, frozenset({non})
     )
     assert out is not None
     emit_mapped, emit_site = out

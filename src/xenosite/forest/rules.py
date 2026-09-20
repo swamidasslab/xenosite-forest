@@ -22,7 +22,6 @@ from xenosite.forest.canonical_plan import (
 from xenosite.forest.forest_copy import copy_mutable
 from xenosite.forest.graph_isomorphism import (
     SiteSignature,
-    UniqueOrbit,
     canonical_emitted_sites_requested,
     canonicalize_pair_match,
     canonicalize_smarts_match,
@@ -69,6 +68,7 @@ from xenosite.forest.records import (
     PatternInfo,
     ProductInfo,
     Site,
+    SiteArity,
     SiteInfo,
     SitesOn,
     SmartsSiteInfo,
@@ -77,9 +77,6 @@ from xenosite.forest.records import (
     TraceInfo,
     When,
 )
-
-# Unique-edit orbit mode on a rule (data, not a search branch).
-# UniqueOrbit / SiteSignature live in graph_isomorphism (re-exported above).
 
 
 class _LazyProductInfo(dict):
@@ -165,9 +162,10 @@ class ReactionRule:
     name: str | None
     longname: str | None
     sites_on: SitesOn | None = None
-    # Unique-edit pair orbit: ``atom_atom`` (default) or ``bond_atom``
-    # (Dehydrogenation one-bond SMARTS / paired end bonds). Data on the rule.
-    unique_orbit: UniqueOrbit = "atom_atom"
+    # Emitted Site cardinality (atom-index frozenset). Class data — not
+    # Generic[SiteT] (heterogeneous RuleSets erase the param; pyright cannot
+    # enforce frozenset size). ``1`` singleton; ``2`` unordered atom pair.
+    site_arity: SiteArity = 1
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -1191,7 +1189,6 @@ class SmartsReactionRule(ReactionRule):
         _bump(counters, "rule_expansions")
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
-        unique_orbit = cast(UniqueOrbit, getattr(self, "unique_orbit", "atom_atom"))
 
         for work in _kekule_forms(mol):
             for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
@@ -1224,7 +1221,6 @@ class SmartsReactionRule(ReactionRule):
                         site,
                         rxn_num,
                         effect,
-                        unique_orbit=unique_orbit,
                     )
                     if signature in seen:
                         _bump(counters, "sites_skipped")
@@ -1236,7 +1232,6 @@ class SmartsReactionRule(ReactionRule):
                             context,
                             mapped,
                             site,
-                            unique_orbit=unique_orbit,
                             parent=context,
                         )
                         if remapped is None:
@@ -1809,7 +1804,6 @@ class ResonanceRule(SmartsReactionRule):
         cache = _kekule_cache(mol)
         seen: set[SiteSignature] = set()
         ranks = context.xf.topol_equiv
-        unique_orbit = cast(UniqueOrbit, getattr(self, "unique_orbit", "atom_atom"))
 
         for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
             if not filter_rules(live, self, pattern):
@@ -1843,7 +1837,6 @@ class ResonanceRule(SmartsReactionRule):
                     site,
                     rxn_num,
                     effect,
-                    unique_orbit=unique_orbit,
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
@@ -1855,7 +1848,6 @@ class ResonanceRule(SmartsReactionRule):
                         context,
                         mapped,
                         site,
-                        unique_orbit=unique_orbit,
                         parent=context,
                     )
                     if remapped is None:
@@ -1977,7 +1969,6 @@ class ResonancePairRule(ResonanceRule):
             return
 
         ranks = mol.xf.topol_equiv
-        unique_orbit = cast(UniqueOrbit, getattr(self, "unique_orbit", "atom_atom"))
         seen: set[tuple] = set()
         rings: dict[int, tuple[tuple[int, ...], ...]] | None = None
         cache: KekuleParents | None = None
@@ -2049,7 +2040,6 @@ class ResonancePairRule(ResonanceRule):
                         info1,
                         info2,
                         preview,
-                        unique_orbit=unique_orbit,
                     )
                     if signature in seen:
                         _bump(counters, "sites_skipped")
@@ -2067,7 +2057,6 @@ class ResonancePairRule(ResonanceRule):
                             site_b,
                             info1,
                             info2,
-                            unique_orbit=unique_orbit,
                             effect1=end1,
                             effect2=end2,
                             parent=mol,
@@ -2211,6 +2200,7 @@ class Hydroxylation(SmartsReactionRule):
 
     phase1_sites_on = "atom_hydrogen"
     sites_on = "atom_hydrogen"
+    site_arity: SiteArity = 1
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2245,23 +2235,24 @@ class Dehydrogenation(ResonancePairRule):
     sees the branch the two atoms selected, including whether the path
     actually dearomatizes.
 
-    Unique-edit uses ``bond_atom`` orbits (the C–X bond plus the site atom).
-    Pair-path ends with the same PatternInfo role are unordered; different
-    roles (phenol vs amine) are ordered so ``(a,b)`` ≠ ``(b,a)``.
+    Sites are unordered atom pairs (``site_arity=2``): one-bond SMARTS emit
+    both bond endpoints; path emissions are the two end atoms. Unique-edit
+    uses atom–atom pair orbits. Same PatternInfo role → unordered; different
+    roles (phenol vs amine) → ordered so ``(a,b)`` ≠ ``(b,a)``.
     """
 
-    unique_orbit: UniqueOrbit = "bond_atom"
     phase1_sites_on = "atom_hydrogen"
-    sites_on = "atom_hydrogen"
+    sites_on = "atom_pairs"
+    site_arity: SiteArity = 2
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#16v4:1]-[#8H1:2]>>[*:1]=[*:2]",
-            describe(removes="HH", name="sulfoxide"),
+            describe(removes="HH", name="sulfoxide", site_map=(1, 2)),
         ),
         (
             "[#6h:1]-[#8H1:2]>>[*:1]=[*:2]",
-            describe(removes="HH", partner="O", name="alcohol"),
+            describe(removes="HH", partner="O", name="alcohol", site_map=(1, 2)),
         ),
         (
             "[#6h:1]-[#7D1H2,#7D2H1:2]>>[*:1]=[*:2]",
@@ -2271,6 +2262,7 @@ class Dehydrogenation(ResonancePairRule):
                     removes="HH",
                 ),
                 name="amine",
+                site_map=(1, 2),
             ),
         ),
         (
@@ -2285,6 +2277,7 @@ class Dehydrogenation(ResonancePairRule):
                     removes="HH",
                 ),
                 name="alkyl",
+                site_map=(1, 2),
             ),
         ),
     )
@@ -2355,6 +2348,8 @@ class QuinoneFormation(ResonancePairRule):
     """
 
     systems = "conjugated"
+    sites_on = "atom_pairs"
+    site_arity: SiteArity = 2
 
     def canonical_plan(self, mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
         """Hydroxylations for missing oxygens, then one dehydrogenation."""
@@ -2464,6 +2459,9 @@ class Dealkylation(SmartsReactionRule):
 
     The site is both atoms of the broken bond.
     """
+    sites_on = "bonds"
+    site_arity: SiteArity = 2
+
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2626,6 +2624,9 @@ class NDealkylation(SmartsReactionRule):
     UnstableOxygenation in forest is Dealkylation + OxidativeDehalogenation;
     NDealkylation has its own ruleset.
     """
+    sites_on = "bonds"
+    site_arity: SiteArity = 2
+
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         _ndealk(
@@ -2669,6 +2670,9 @@ class AzoSplitting(SmartsReactionRule):
     stays None. ``breaks_ring`` is filled from the cleaved bond. A ring N=N
     and an open azo are the same pattern; a filter reads ``breaks_ring``.
     """
+    sites_on = "bonds"
+    site_arity: SiteArity = 2
+
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2685,6 +2689,9 @@ class BenzodioxoleReduction(SmartsReactionRule):
     ``leave_count`` is 1. ``breaks_ring`` is filled from one cleaved bond.
     Both bonds are in that ring. A filter reads ``leave_count``.
     """
+    sites_on = "bonds"
+    site_arity: SiteArity = 2
+
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2707,6 +2714,9 @@ class NitroaromaticReduction(SmartsReactionRule):
     ``leave_count`` is 1. ``breaks_ring`` is filled from the cleaved bond.
     A filter reads ``leave_count``.
     """
+    sites_on = "bonds"
+    site_arity: SiteArity = 2
+
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2738,6 +2748,9 @@ class ThiopheneSulfurOxidation(SmartsReactionRule):
     The pattern adds oxygen and names no leaving atom, so ``leave_count``
     stays None. It does not cleave. A filter reads ``adds``.
     """
+    sites_on = "atoms"
+    site_arity: SiteArity = 1
+
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -2760,6 +2773,7 @@ class Dephosphorylation(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>"
@@ -2776,6 +2790,7 @@ class EpoxideOpening(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6:1]1[#8:2][#6:3]1>>([*:2][*:3][*:1])",
@@ -2793,6 +2808,7 @@ class Hydrolysis(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])",
@@ -2827,6 +2843,7 @@ class Dehydration(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
@@ -2873,15 +2890,16 @@ class Hydrogenation(ResonancePairRule):
     """
 
     phase1_sites_on = "atoms"
-    sites_on = "atoms"
+    sites_on = "atom_pairs"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6:1]#[#6:2]>>[*:1]=[*:2]",
-            describe(adds="HH", name="alkyne"),
+            describe(adds="HH", name="alkyne", site_map=(1, 2)),
         ),
         (
             "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
-            describe(adds="HH", name="alkene"),
+            describe(adds="HH", name="alkene", site_map=(1, 2)),
         ),
     )
     endpoints: tuple[tuple[str, PatternInfo], ...] = (
@@ -2919,6 +2937,9 @@ class TautomerRule(ResonancePairRule):
     prefer data on ``PatternInfo`` / endpoints over a silent search branch
     (see docs/forest/HEURISTICS.md).
     """
+    sites_on = "atom_pairs"
+    site_arity: SiteArity = 2
+
 
     name = "TautomerRule"
     longname = "Tautomerization"
@@ -2940,6 +2961,7 @@ class NitrogenReduction(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
@@ -2981,6 +3003,7 @@ class OxygenReduction(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#8:1]=[#6,#7:2]>>[*:1]-[*:2]",
@@ -3005,6 +3028,7 @@ class ReductiveDehalogenation(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]",
@@ -3040,6 +3064,7 @@ class SulfurReduction(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#16:1]=[#8:2]>>[*:1].[*:2]",
@@ -3077,6 +3102,7 @@ class Epoxidation(ResonanceRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6:1]=,:[#6,#7:2]>>[*:1]1-[*:2][O]1",
@@ -3096,6 +3122,7 @@ class SulfurOxidation(SmartsReactionRule):
 
     phase1_sites_on = "atoms"
     sites_on = "atoms"
+    site_arity: SiteArity = 1
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#16;v2,v4:1]>>[*&H0&+:1][O-]",
@@ -3117,6 +3144,7 @@ class NitrogenOxidation(SmartsReactionRule):
 
     phase1_sites_on = "atoms"
     sites_on = "atoms"
+    site_arity: SiteArity = 1
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#7v3h:1]>>[*:1]O",
@@ -3144,6 +3172,7 @@ class OxidativeDehalogenation(SmartsReactionRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
+    site_arity: SiteArity = 2
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
@@ -3295,6 +3324,9 @@ class ConjugationRule(SmartsReactionRule):
     A filter reads that. This reaction does not cleave. Products are
     terminal (``is_terminal_rule``): conjugation ends further expansion.
     """
+    sites_on = "atoms"
+    site_arity: SiteArity = 1
+
 
     is_terminal_rule: bool = True
     as_star: bool = True

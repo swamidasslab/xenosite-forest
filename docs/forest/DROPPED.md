@@ -5,6 +5,18 @@ Each entry has `Status: approved`, `not approved`, or `not decided`.
 `not decided` means it is absent for now and nobody has accepted that.
 Do not delete entries. Change the status in the same commit that decides.
 
+
+## Directed bond–atom UniqueOrbit (`bond_atom`)
+
+Status: approved.
+
+POC unique-edit framed Dehydrogenation as directed `(bond, atom)` keys
+(`BondAtomOrbitSignature` / `BondAtomPairOrbitSignature`,
+`unique_orbit="bond_atom"`). That was never an intended Site pattern — Sites
+stay atom-index frozensets. Live forest uses ``site_arity=2`` unordered
+atom pairs (one-bond: both endpoints; path: two ends). Class data
+``site_arity`` / ``sites_on`` replaces UniqueOrbit; not ``Generic[SiteT]``.
+
 ## PathContext and its MCS bookkeeping
 
 Status: not decided.

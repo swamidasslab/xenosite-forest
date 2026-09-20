@@ -81,7 +81,6 @@ def run_signature_walk(mol) -> None:
         for j in range(i + 1, nb):
             gi.bond_pair_orbit_key(mol, frozenset({i, j}))
         for a in range(n):
-            gi.bond_atom_orbit_key(mol, i, a)
 
 
 def run_named_single_pair(mol) -> None:
@@ -100,9 +99,7 @@ def run_named_single_pair(mol) -> None:
             if HAS_PYNAUTY:
                 gi.bond_pair_orbit_pynauty(mol, i, j)
         for a in range(min(n, 6)):
-            gi.bond_atom_orbit_isotope(mol, i, a)
             if HAS_PYNAUTY:
-                gi.bond_atom_orbit_pynauty(mol, i, a)
 
 
 def main() -> int:
@@ -159,7 +156,6 @@ def main() -> int:
     stats_focus.sort_stats("tottime")
     stats_focus.print_stats(
         "graph_isomorphism|site_pair_orbits|atom_pair_orbit|bond_pair_orbit|"
-        "bond_atom_orbit|marked_site_pair"
     )
 
     body = (

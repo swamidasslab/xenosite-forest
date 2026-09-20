@@ -1,16 +1,15 @@
-"""Dehydrogenation unique-edit: bond_atom orbits + ordered vs unordered ends."""
+"""Dehydrogenation unique-edit: unordered atom-pair sites + ordered vs unordered ends."""
 
 from __future__ import annotations
 
 from xenosite.forest.graph_isomorphism import (
-    bond_atom_orbit_key,
     ends_swappable,
     pair_orbit,
     pair_site_signature,
     resolved_swap_group,
 )
 from xenosite.forest.rdkitutil import MolFromSmiles
-from xenosite.forest.records import BondAtomOrbitSignature, BondAtomPairOrbitSignature
+from xenosite.forest.records import AtomPairOrbitSignature
 from xenosite.forest.rules import Dehydrogenation, QuinoneFormation
 
 
@@ -20,9 +19,12 @@ def _mol(smi: str):
     return mol
 
 
-def test_dehydrogenation_declares_bond_atom_unique_orbit():
-    assert Dehydrogenation.unique_orbit == "bond_atom"
-    assert QuinoneFormation.unique_orbit == "atom_atom"
+def test_dehydrogenation_declares_atom_pair_site_arity():
+    assert Dehydrogenation.site_arity == 2
+    assert Dehydrogenation.sites_on == "atom_pairs"
+    assert QuinoneFormation.site_arity == 2
+    assert QuinoneFormation.sites_on == "atom_pairs"
+    assert not hasattr(Dehydrogenation, "unique_orbit")
 
 
 def test_hydroquinone_pair_emits_once_not_per_resonance_parent():
@@ -51,7 +53,6 @@ def test_end_roles_swappable_vs_ordered():
     assert resolved_swap_group(amine) == "amine_end"
     assert ends_swappable(phenol, phenol)
     assert not ends_swappable(phenol, amine)
-    # QF: distinct names are never swappable; same add_carbonyl_o is.
     add_o = next(i for _, i in QuinoneFormation.endpoints if i.get("name") == "add_carbonyl_o")
     std = next(i for _, i in QuinoneFormation.endpoints if i.get("name") == "single_to_double")
     assert ends_swappable(add_o, add_o)
@@ -84,11 +85,9 @@ def test_asymmetric_pair_orbit_is_name_ordered_not_arg_ordered():
         frozenset({site_a, site_b}),
         i1,
         i2,
-        unique_orbit="bond_atom",
     )
-    assert isinstance(orbit, BondAtomPairOrbitSignature)
+    assert isinstance(orbit, AtomPairOrbitSignature)
     assert orbit.ordered is True
-    assert all(isinstance(x, BondAtomOrbitSignature) for x in orbit.ends)
     reversed_orbit = pair_orbit(
         mol,
         map2,
@@ -98,9 +97,7 @@ def test_asymmetric_pair_orbit_is_name_ordered_not_arg_ordered():
         frozenset({site_a, site_b}),
         i2,
         i1,
-        unique_orbit="bond_atom",
     )
-    # Same chemical pairing → identical signature under argument swap.
     assert orbit == reversed_orbit
 
 
@@ -119,7 +116,6 @@ def test_symmetric_pair_orbit_is_unordered():
         frozenset({site_a, site_b}),
         phenol,
         phenol,
-        unique_orbit="bond_atom",
     )
     right = pair_orbit(
         mol,
@@ -130,26 +126,28 @@ def test_symmetric_pair_orbit_is_unordered():
         frozenset({site_a, site_b}),
         phenol,
         phenol,
-        unique_orbit="bond_atom",
     )
     assert left == right
-    assert isinstance(left, BondAtomPairOrbitSignature)
+    assert isinstance(left, AtomPairOrbitSignature)
     assert left.ordered is False
 
 
-def test_one_bond_alcohol_uses_bond_atom_orbit_key():
-    """SMARTS alcohol DH: site is one carbon; unique-edit carries bond_atom."""
+def test_one_bond_alcohol_emits_both_bond_endpoints():
+    """SMARTS alcohol DH: site is both C and O (unordered atom pair)."""
 
     mol = _mol("CCO")
     dh = Dehydrogenation()
-    alcohol = [r for r in dh.metabolites(mol) if r.info.get("pattern", {}).get("name") == "alcohol"]
+    alcohol = [
+        r for r in dh.metabolites(mol) if r.info.get("pattern", {}).get("name") == "alcohol"
+    ]
     assert alcohol
-    # Bond between C(map1) and O(map2); site atom is map1 carbon.
+    site = alcohol[0].info["site"]
+    assert len(site) == 2
     mapped = mol.xf.smarts_matches("[#6h:1]-[#8H1:2]")[0]
-    bond = mol.GetBondBetweenAtoms(mapped[1], mapped[2])
-    assert bond is not None
-    sig = bond_atom_orbit_key(mol, bond.GetIdx(), mapped[1])
-    assert isinstance(sig, BondAtomOrbitSignature)
+    assert site == frozenset({mapped[1], mapped[2]})
+    sig = mol.xf.atom_pair_orbit_key(site)
+    assert isinstance(sig, AtomPairOrbitSignature)
+    assert sig.ordered is False
 
 
 def test_pair_site_signature_order_invariant_for_asymmetric():
@@ -177,7 +175,6 @@ def test_pair_site_signature_order_invariant_for_asymmetric():
         i_a,
         i_b,
         por.info,
-        unique_orbit="bond_atom",
     )
     sig_ba = pair_site_signature(
         mol,
@@ -189,7 +186,6 @@ def test_pair_site_signature_order_invariant_for_asymmetric():
         i_b,
         i_a,
         por.info,
-        unique_orbit="bond_atom",
     )
     assert sig_ab == sig_ba
     assert ends_swappable(phenol, phenol)

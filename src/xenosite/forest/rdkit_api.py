@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, overload
 if TYPE_CHECKING:
     from xenosite.forest.records import (
         AtomPairOrbitSignature,
-        BondAtomOrbitSignature,
         BondPairOrbitSignature,
         Forest,
         Formula,
@@ -182,9 +181,6 @@ if TYPE_CHECKING:
         def bond_pair_orbit_key(
             self, bonds: frozenset[int]
         ) -> BondPairOrbitSignature | None: ...
-        def bond_atom_orbit_key(
-            self, bond_idx: int, atom_idx: int
-        ) -> BondAtomOrbitSignature: ...
         def site_pair_orbits(
             self, backend: Literal["nauty", "smiles", "none"] | None = None
         ) -> SitePairOrbitTables | None: ...

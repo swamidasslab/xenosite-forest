@@ -1,54 +1,13 @@
 """Pair-orbit validation: invariants + hand cases + optional pynauty oracle.
 
-Validation matrix (what each test proves)
-=========================================
+Invariant-backed (no pynauty required): benzene meta≠para atom–atom orbits;
+signature shapes; TRIVIAL_PAIR_GROUP; forest cache; bond-pair hand sizes;
+naphthalene hand pairs; quinone ortho/para unique-edit.
 
-Invariant-backed (no pynauty required)
---------------------------------------
-- ``test_benzene_meta_and_para_share_ranks_but_not_atom_pair_orbits``:
-  negative case — same atom ranks, different isotope pair_group (meta ≠ para).
-- ``test_benzene_bond_atom_pair_needs_joint_orbit``:
-  negative case — individual bond–atom orbits collapse adjacent/opposite/
-  rotated placements; joint ``pair_group`` separates adjacent ≠ opposite and
-  equates rotation (second-order ResonancePair key).
-- ``test_atom_signature_shape_and_unordered``:
-  signature is ``AtomPairOrbitSignature``; key(a,b)==key(b,a); stable across calls.
-- ``test_singleton_topeqiv_uses_trivial_pair_group``:
-  either end size-1 → ``TRIVIAL_PAIR_GROUP``; no smiles/nauty table materialization.
-- ``test_multi_multi_materializes_forest_cache_once``:
-  both ends multi → forest nested cache; second call reuses same table object;
-  ``pair_group`` is sequential ``PairGroupId``.
-- ``test_benzene_bond_pairs_split_adjacent_skip_opposite``:
-  hand bond-pair orbit sizes on benzene (3, 6, 6).
-- ``test_benzene_bond_atom_isotope_separates_endpoint_classes``:
-  bond–atom hand classes (endpoint / adjacent / opposite).
-- ``test_naphthalene_hand_atom_pairs_distinct``:
-  chemically clear 1–2 / 1–4 / 1–5 / 1–8 style pairs get distinct isotope ids
-  when they are different orbits.
-- ``test_partition_property_fixed_group_pair``:
-  for fixed (ga,gb), every unordered pair gets a pair_group_id; equal ids iff
-  isotope keys agree.
-- ``test_bond_pair_and_bond_atom_signature_shapes``:
-  NamedTuple types / unordered bond pairs / bond–atom ordered by kind.
-- ``test_cip_sort_key_shapes_atom_before_bond``:
-  atom / bond / pair / group membership are sorted tuples; atom before bond.
-- ``test_quinone_unique_edit_keeps_ortho_and_para``:
-  integration — QuinoneFormation emits both ortho and para products on benzene.
+Oracle-backed (pynauty): isotope vs nauty partitions and PairGroupIds for
+atom–atom / bond–bond; nauty cache fills both same-kind modes up front.
 
-Oracle-backed (pynauty; skip only if import fails after optional install)
-------------------------------------------------------------------------
-- ``test_oracle_isotope_vs_pynauty_partitions``:
-  atom–atom / bond–bond / bond–atom orbit partitions agree on several mols.
-- ``test_oracle_canonical_pair_group_ids_agree``:
-  when partitions agree, sequential CIP-numbered ``PairGroupId`` values agree
-  across isotope and nauty tables.
-- ``test_nauty_cache_fills_all_modes_up_front``:
-  first multi-multi query fills nested nauty tables for all three modes.
-
-Dispatcher-branch (depends on whether pynauty is installed)
------------------------------------------------------------
-- ``test_dispatcher_uses_isotope_pair_group_when_pynauty_absent``:
-  skipped when pynauty is present (dispatcher prefers nauty).
+Dispatcher: isotope path when pynauty absent.
 """
 
 from __future__ import annotations
@@ -62,19 +21,12 @@ import pytest
 from xenosite.forest.graph_isomorphism import (
     TRIVIAL_PAIR_GROUP,
     _nested_tables_from_groups,
-    atom_bond_generators_nauty,
     atom_pair_orbit_isotope,
     atom_pair_orbit_key,
     atom_site_cip_key,
-    bond_atom_orbit_isotope,
-    bond_atom_orbit_key,
-    bond_atom_orbits_from_nauty_generators,
-    bond_atom_pair_orbit_key,
-    bond_atom_pair_orbits_from_nauty_generators,
     bond_pair_orbit_isotope,
     bond_pair_orbit_key,
     bond_site_cip_key,
-    endpoint_bond_atom_sites,
     incident_orders,
     orbit_group_cip_key,
     orbit_membership,
@@ -85,8 +37,6 @@ from xenosite.forest.graph_isomorphism import (
 from xenosite.forest.rdkitutil import Mol, MolFromSmiles, cip_ids
 from xenosite.forest.records import (
     AtomPairOrbitSignature,
-    BondAtomOrbitSignature,
-    BondAtomPairOrbitSignature,
     BondPairOrbitSignature,
     PairGroupId,
     TopoGroupId,
@@ -230,8 +180,6 @@ def test_cip_sort_key_shapes_atom_before_bond():
     pair_key = site_pair_cip_key(mol, cip, "atom_atom", (0, 3))
     assert pair_key == tuple(sorted((atom_site_cip_key(cip, 0), atom_site_cip_key(cip, 3))))
 
-    ba_key = site_pair_cip_key(mol, cip, "bond_atom", (0, 3))
-    assert ba_key == (bond_site_cip_key(mol, cip, 0), atom_site_cip_key(cip, 3))
 
     membership = orbit_membership(mol, cip, "atom_atom", [(3, 0), (1, 2)])
     assert isinstance(membership, tuple)
@@ -252,77 +200,8 @@ def test_benzene_bond_pairs_split_adjacent_skip_opposite():
     assert _group_sizes(groups) == [3, 6, 6]
 
 
-def test_benzene_bond_atom_isotope_separates_endpoint_classes():
-    mol = _mol("c1ccccc1")
-    endpoint = bond_atom_orbit_isotope(mol, 0, 0)
-    adjacent = bond_atom_orbit_isotope(mol, 0, 2)
-    opposite = bond_atom_orbit_isotope(mol, 0, 3)
-    assert len({endpoint, adjacent, opposite}) == 3
 
 
-def test_benzene_bond_atom_pair_needs_joint_orbit():
-    """Negative: two first-order bond–atom orbits collapse relative placement.
-
-    Same spirit as ``test_benzene_meta_and_para_share_ranks_but_not_atom_pair_orbits``:
-    a coarse key that ignores the joint orbit merges distinct chemistry.
-
-    On benzene every endpoint ``(bond, atom)`` is equivalent, so pairing two
-    first-order orbit ids cannot tell adjacent bonds from opposite bonds.
-    The joint ``pair_group`` must: adjacent ≠ opposite; rotation of adjacent
-    matches. Requires pynauty (nauty generators).
-    """
-
-    pytest.importorskip("pynauty")
-    mol = _mol("c1ccccc1")
-    generators = atom_bond_generators_nauty(mol, include_stereo=True)
-
-    def bond(i: int, j: int) -> int:
-        b = mol.GetBondBetweenAtoms(i, j)
-        assert b is not None
-        return b.GetIdx()
-
-    b01 = bond(0, 1)
-    b12 = bond(1, 2)
-    b23 = bond(2, 3)
-    b34 = bond(3, 4)
-
-    primitive = endpoint_bond_atom_sites(mol)
-    _, primitive_orbit = bond_atom_orbits_from_nauty_generators(
-        primitive, generators
-    )
-
-    # First-order transitive — this is why ends-only signatures fail.
-    assert primitive_orbit[(b01, 0)] == primitive_orbit[(b12, 1)]
-    assert primitive_orbit[(b01, 0)] == primitive_orbit[(b34, 3)]
-    assert bond_atom_orbit_key(mol, b01, 0) == bond_atom_orbit_key(mol, b12, 1)
-    assert bond_atom_orbit_key(mol, b01, 0) == bond_atom_orbit_key(mol, b34, 3)
-
-    def old_coarse_key(left, right):
-        return tuple(sorted((primitive_orbit[left], primitive_orbit[right])))
-
-    A = tuple(sorted(((b01, 0), (b12, 1))))  # adjacent bonds
-    B = tuple(sorted(((b01, 0), (b34, 3))))  # opposite bonds
-    C = tuple(sorted(((b23, 2), (b34, 3))))  # rotation of A
-
-    assert old_coarse_key(*A) == old_coarse_key(*B)
-    assert old_coarse_key(*A) == old_coarse_key(*C)
-
-    _, pair_lookup = bond_atom_pair_orbits_from_nauty_generators(
-        primitive, generators, ordered=False
-    )
-    assert pair_lookup[A] != pair_lookup[B]
-    assert pair_lookup[A] == pair_lookup[C]
-
-    # Unique-edit signature API carries the joint pair_group.
-    sig_a = bond_atom_pair_orbit_key(mol, A[0], A[1], ordered=False)
-    sig_b = bond_atom_pair_orbit_key(mol, B[0], B[1], ordered=False)
-    sig_c = bond_atom_pair_orbit_key(mol, C[0], C[1], ordered=False)
-    assert isinstance(sig_a, BondAtomPairOrbitSignature)
-    assert sig_a.ordered is False and sig_a.ends[0] == sig_a.ends[1]
-    assert sig_a.pair_group != sig_b.pair_group
-    assert sig_a.pair_group == sig_c.pair_group
-    assert sig_a != sig_b
-    assert sig_a == sig_c
 
 
 def test_naphthalene_hand_atom_pairs_distinct():
@@ -358,20 +237,6 @@ def test_partition_property_fixed_group_pair():
     assert set(by_sig) == {PairGroupId(0), PairGroupId(1), PairGroupId(2)}
 
 
-def test_bond_pair_and_bond_atom_signature_shapes():
-    mol = _mol("c1ccccc1")
-    bp = bond_pair_orbit_key(mol, frozenset({0, 3}))
-    assert isinstance(bp, BondPairOrbitSignature)
-    assert bp.ordered is False
-    assert bp.end_ranks == ()
-    assert isinstance(bp.pair_group, int)
-    assert bond_pair_orbit_key(mol, frozenset({3, 0})) == bp
-    assert bond_pair_orbit_key(mol, frozenset({0})) is None
-    ba = bond_atom_orbit_key(mol, 0, 3)
-    assert isinstance(ba, BondAtomOrbitSignature)
-    ba2 = bond_atom_orbit_key(mol, 0, 2)
-    assert ba.groups[0] == ba2.groups[0]  # same bond group
-    assert ba.pair_group != ba2.pair_group
 
 
 def test_quinone_unique_edit_keeps_ortho_and_para():
@@ -408,7 +273,6 @@ def test_dispatcher_uses_isotope_pair_group_when_pynauty_absent():
     bsig = bond_pair_orbit_key(mol, frozenset({0, 3}))
     assert bsig is not None
     assert isinstance(bsig.pair_group, int)
-    assert isinstance(bond_atom_orbit_key(mol, 0, 3).pair_group, int)
 
 
 # ---------------------------------------------------------------------------
@@ -429,9 +293,7 @@ def _orbit_partition_isotope(mol: Mol, mode: str) -> set[frozenset[tuple[int, in
                 tuple(sorted((i, j)))
             )
     else:
-        for b in range(mol.GetNumBonds()):
-            for a in range(mol.GetNumAtoms()):
-                groups[bond_atom_orbit_isotope(mol, b, a)].append((b, a))
+        raise ValueError(mode)
     return {frozenset(v) for v in groups.values()}
 
 
@@ -439,7 +301,7 @@ def test_oracle_isotope_vs_pynauty_partitions():
     pytest.importorskip("pynauty")
     for smiles in _ORACLE_MOLSMILES:
         mol = _mol(smiles)
-        for mode in ("atom_atom", "bond_bond", "bond_atom"):
+        for mode in ("atom_atom", "bond_bond"):
             if mode == "bond_bond" and mol.GetNumBonds() < 2:
                 continue
             smiles_sets = _orbit_partition_isotope(mol, mode)
@@ -458,7 +320,7 @@ def test_oracle_canonical_pair_group_ids_agree():
         nauty_orbits = site_pair_orbits_nauty(mol)
         smiles_tables = _nested_tables_from_groups(mol, smiles_orbits)
         nauty_tables = _nested_tables_from_groups(mol, nauty_orbits)
-        for mode in ("atom_atom", "bond_bond", "bond_atom"):
+        for mode in ("atom_atom", "bond_bond"):
             if mode == "bond_bond" and mol.GetNumBonds() < 2:
                 continue
             assert {frozenset(g) for g in smiles_orbits[mode]} == {
@@ -481,18 +343,27 @@ def test_nauty_cache_fills_all_modes_up_front():
     sig = atom_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(sig, AtomPairOrbitSignature)
     cached = mol._forest["cache"]["site_pair_orbits_nauty"]
-    assert set(cached) == {"atom_atom", "bond_bond", "bond_atom"}
+    assert set(cached) == {"atom_atom", "bond_bond"}
     bp = bond_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(bp, BondPairOrbitSignature)
     assert bp.pair_group == cached["bond_bond"][bp.groups][tuple(sorted((0, 3)))]
-    ba = bond_atom_orbit_key(mol, 0, 3)
-    assert ba.pair_group == cached["bond_atom"][ba.groups][(0, 3)]
 
 
-def test_unified_batch_helpers_still_cover_three_modes():
+def test_bond_pair_signature_shape():
+    mol = _mol("c1ccccc1")
+    bp = bond_pair_orbit_key(mol, frozenset({0, 3}))
+    assert isinstance(bp, BondPairOrbitSignature)
+    assert bp.ordered is False
+    assert bp.end_ranks == ()
+    assert isinstance(bp.pair_group, int)
+    assert bond_pair_orbit_key(mol, frozenset({3, 0})) == bp
+    assert bond_pair_orbit_key(mol, frozenset({0})) is None
+
+
+def test_unified_batch_helpers_cover_same_kind_modes():
     mol = _mol("c1ccccc1")
     orbits = site_pair_orbits_smiles(mol)
-    assert set(orbits) == {"atom_atom", "bond_bond", "bond_atom"}
+    assert set(orbits) == {"atom_atom", "bond_bond"}
     assert all(isinstance(g, tuple) for g in orbits["atom_atom"])
     assert _group_sizes({i: list(g) for i, g in enumerate(orbits["atom_atom"])}) == [
         3,

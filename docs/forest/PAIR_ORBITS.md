@@ -2,7 +2,7 @@
 
 Source of truth at HEAD: `graph_isomorphism.py` + signature types in `records.py`.
 Rule chemistry stays in `rules.py` (thin call sites). HEURISTICS Status: approved
-for `swap_group` / nauty six-family / DH `unique_orbit="bond_atom"`.
+for `swap_group` / nauty six-family. DH uses `site_arity=2` atom-pair Sites (not bond_atom).
 
 This doc is for another agent. Facts only. Do **not** claim novelty for
 “automorphisms on pairs” — that construction is classical (see References).
@@ -15,11 +15,10 @@ We computed automorphism generators of labeled molecular graphs using
 nauty/Traces and derived equivalence classes as induced group orbits on typed
 site sets, ordered tuples, and unordered subsets. Orbits on ordered pairs are
 classically termed *orbitals*; we extended this construction recursively to
-pairs of directed bond–atom sites.
+unordered atom–atom sites (and bond–bond for bond Sites).
 
 Cite McKay–Piperno and Sharp after that sentence. Chemistry-facing novelty (if
-any) is typed sites, directed bond–atom keys, recursive composite-site
-orbiting, and stable canonical emission — not the group action on pairs.
+any) is typed sites, swap_group ordered/unordered, and stable canonical emission — not the group action on pairs.
 
 ---
 
@@ -69,36 +68,18 @@ ordered. QF same-name pairs unordered; cross-role ordered.
 
 ---
 
-## 3. Bond–atom: directed, not a Site
+## 3. Dehydrogenation: atom-pair Sites
 
-Bond role ≠ atom role. A bond–atom unique-edit key is **directed** `(bond, atom)`.
-It is **not** a `Site` definition.
+Dehydrogenation declares ``site_arity = 2`` and ``sites_on = "atom_pairs"``.
+One-bond SMARTS emit **both** bond endpoints (``site_map=(1, 2)``). Path
+emissions are already the two end atoms. Unique-edit uses unordered
+``AtomPairOrbitSignature`` (ordered when ``swap_group`` / PatternInfo names
+differ). Directed ``bond_atom`` UniqueOrbit / ``BondAtomOrbitSignature`` was
+never an intended Site pattern and was retired (DROPPED approved).
 
-One directed unit captures **both** topological site identity (orbit
-`groups` + `pair_group`) **and** edit direction (bond vs atom role). Direction
-is part of the edit's isomorphism class — not a separate Site field.
-
-Dehydrogenation declares `unique_orbit = "bond_atom"` as data.
-
-### 3b. Second-order orbit (ResonancePair)
-
-A directed composite site is `s = (bond, atom)`. A ResonancePair selects two
-such sites `((b1,a1), (b2,a2))`. Individual `BondAtomOrbitSignature` values
-identify each site's *first-order* orbit; they do **not** identify the orbit
-of the *pair*.
-
-On benzene every endpoint `(bond, atom)` is equivalent, so an ends-only key
-collapses adjacent vs opposite placements. Joint orbit lives on
-`BondAtomPairOrbitSignature.pair_group`.
-
-API: `endpoint_bond_atom_sites` (closed),
-`bond_atom_orbits_from_nauty_generators`,
-`bond_atom_pair_orbits_from_nauty_generators(..., ordered=...)`.
-Wired through `pair_orbit` / `unordered_bond_atom_pair` /
-`ordered_bond_atom_pair`. Regression:
-`test_benzene_bond_atom_pair_needs_joint_orbit`.
-
----
+Site shape is class data on ``ReactionRule`` (``site_arity: Literal[1, 2]``),
+not ``Generic[SiteT]`` — shared emit path + heterogeneous RuleSets erase a
+type param; pyright cannot enforce frozenset cardinality.
 
 ## 4. Types
 
@@ -106,16 +87,12 @@ Wired through `pair_orbit` / `unordered_bond_atom_pair` /
 |------|------|
 | `AtomPairOrbitSignature` | atom–atom; `ordered` + `end_ranks` |
 | `BondPairOrbitSignature` | bond–bond; same shape |
-| `BondAtomOrbitSignature` | one directed `(bond, atom)` unit |
-| `BondAtomPairOrbitSignature` | two bond–atom units + joint `pair_group` |
 
 Assembly: `site_orbit` / `pair_orbit` → `site_signature` /
 `pair_site_signature`. Public xf: `atom_pair_orbit_key` /
-`bond_pair_orbit_key` / `bond_atom_orbit_key` / `site_pair_orbits` /
+`bond_pair_orbit_key` / `site_pair_orbits` /
 `pair_orbit_backend`. Env: `XENOSITE_PAIR_ORBIT_BACKEND` ∈
 `{nauty, smiles, none}`.
-
-Legacy three-mode tables flip cross-kind to `(bond, atom)` for unique-edit.
 
 ---
 
@@ -129,7 +106,7 @@ No env or process-wide toggle.
 Lex-smallest concrete member of each nauty orbit
 (``LexicalOrbitRepresentatives`` on forest ``cache``); relative to current
 RDKit indexing. Kinds: **singleton atom**, atom–atom, bond–bond, directed
-bond–atom, pair of bond–atom sites (ordered vs unordered as for unique-edit).
+atom–atom / bond–bond (ordered vs unordered as for unique-edit).
 One-atom unique-edit remaps onto the lex-smallest atom in its automorphism
 orbit the same way pairs do.
 
@@ -178,19 +155,13 @@ Prefer `uv run` with pynauty (nauty default when importable).
 Hydroquinone `Oc1ccc(O)cc1` + Dehydrogenation → one pair unique-edit, one
 quinone (`test_hydroquinone_dh_one_signature_one_quinone`).
 
-### B. Phenol C–O+O ≠ C–O+C
+### B. Ethanol one-bond site is both endpoints
 
-Same C–O bond; site atom O vs C → distinct `BondAtomOrbitSignature`
-(`bond_atom_orbit_key`).
+`CCO` alcohol DH emits ``frozenset({C, O})``; unique-edit is unordered
+atom–atom.
 
-### C. Ethane either C same
-
-`CC`: bond + carbon 0 equals bond + carbon 1 under automorphism.
-
-Also: benzene meta share orbit, meta ≠ para; benzene bond–atom pairs need
-joint orbit (§3b). Suites: `test_pair_signatures.py`,
-`test_dh_bond_atom_unique_edit.py`, `test_nauty_six_family_orbits.py`,
-`test_graph_isomorphism.py`.
+Also: benzene meta share orbit, meta ≠ para. Suites: `test_pair_signatures.py`,
+`test_dh_atom_pair_unique_edit.py`, `test_graph_isomorphism.py`.
 
 ---
 
@@ -219,12 +190,13 @@ joint orbit (§3b). Suites: `test_pair_signatures.py`,
 |----------|----------------|
 | `graph_isomorphism.py` | Generators, six families, tables, TRIVIAL, swap helpers, signatures, lex-rep opt-in |
 | `records.py` | `swap_group`, signature NamedTuples, `SiteInfo.discovered_site` |
-| `rules.py` | Thin call sites; DH `unique_orbit="bond_atom"`; post-filter canonical remap (SMARTS + ResonancePair) |
+| `rules.py` | Thin call sites; DH `site_arity=2`; post-filter canonical remap (SMARTS + ResonancePair) |
 | `rdkitutil.py` | `restamp_product_forest_last_layer` (product-only) |
 | Tests §5 / §6 | Orbits, signatures, DH, six-family, `test_canonical_emitted_sites.py` |
 
-Do **not** invent a Site field for bond-vs-atom direction. Do **not** replace
+Do **not** revive directed bond–atom UniqueOrbit. Do **not** replace
 `swap_group` with SMARTS narrowing for same-role ResonancePair couples.
+Do **not** make ``ReactionRule`` a ``Generic[SiteT]``.
 
 ---
 

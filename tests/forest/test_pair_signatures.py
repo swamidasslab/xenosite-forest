@@ -28,8 +28,7 @@ from xenosite.forest.graph_isomorphism import (
 )
 from xenosite.forest.rdkitutil import MolFromSmiles
 from xenosite.forest.records import (
-    BondAtomOrbitSignature,
-    BondAtomPairOrbitSignature,
+    AtomPairOrbitSignature,
     PatternInfo,
 )
 from xenosite.forest.rules import Dehydrogenation, QuinoneFormation
@@ -57,7 +56,6 @@ def _pair_product_csmi(rule, mol) -> dict[tuple, frozenset[str]]:
 
     ranks = mol.xf.topol_equiv
     by_sig: dict[tuple, set[str]] = defaultdict(set)
-    mode = getattr(rule, "unique_orbit", "atom_atom")
     for row in rule.metabolites(mol):
         info = row.info
         if "ends" not in info or "end_maps" not in info:
@@ -79,7 +77,6 @@ def _pair_product_csmi(rule, mol) -> dict[tuple, frozenset[str]]:
             i1,
             i2,
             info,
-            unique_orbit=mode,
         )
         for product in row.products:
             by_sig[sig].add(product.xf.csmi)
@@ -189,7 +186,6 @@ def test_unordered_orbit_invariant_to_argument_order():
         site,
         phenol,
         phenol,
-        unique_orbit="bond_atom",
     )
     right = pair_orbit(
         mol,
@@ -200,13 +196,11 @@ def test_unordered_orbit_invariant_to_argument_order():
         site,
         phenol,
         phenol,
-        unique_orbit="bond_atom",
     )
     assert left == right
-    assert isinstance(left, BondAtomPairOrbitSignature)
+    assert isinstance(left, AtomPairOrbitSignature)
     assert left.ordered is False
-    assert len(left.ends) == 2
-    assert all(isinstance(x, BondAtomOrbitSignature) for x in left.ends)
+    assert left.end_ranks == ()
 
 
 def test_ordered_orbit_canonical_name_order_invariant_to_args():
@@ -226,15 +220,15 @@ def test_ordered_orbit_canonical_name_order_invariant_to_args():
     assert {i_a["name"], i_b["name"]} == {"phenol_end", "amine_end"}
     site = frozenset({a, b})
     ab = pair_orbit(
-        mol, map1, map2, a, b, site, i_a, i_b, unique_orbit="bond_atom"
+        mol, map1, map2, a, b, site, i_a, i_b
     )
     ba = pair_orbit(
-        mol, map2, map1, b, a, site, i_b, i_a, unique_orbit="bond_atom"
+        mol, map2, map1, b, a, site, i_b, i_a
     )
     assert ab == ba
-    assert isinstance(ab, BondAtomPairOrbitSignature)
+    assert isinstance(ab, AtomPairOrbitSignature)
     assert ab.ordered is True
-    assert all(isinstance(x, BondAtomOrbitSignature) for x in ab.ends)
+    assert len(ab.end_ranks) == 2
 
 
 def test_ordered_signature_invariant_to_argument_order():
@@ -260,7 +254,6 @@ def test_ordered_signature_invariant_to_argument_order():
         i_a,
         i_b,
         por.info,
-        unique_orbit="bond_atom",
     )
     sig_ba = pair_site_signature(
         mol,
@@ -272,7 +265,6 @@ def test_ordered_signature_invariant_to_argument_order():
         i_b,
         i_a,
         por.info,
-        unique_orbit="bond_atom",
     )
     assert sig_ab == sig_ba
 
@@ -304,7 +296,6 @@ def test_swapped_sites_different_ordered_signature():
         info_for(a),
         info_for(b),
         por.info,
-        unique_orbit="bond_atom",
     )
     sig_crossed = pair_site_signature(
         mol,
@@ -316,7 +307,6 @@ def test_swapped_sites_different_ordered_signature():
         info_for(a, crossed=True),
         info_for(b, crossed=True),
         por.info,
-        unique_orbit="bond_atom",
     )
     assert sig_real != sig_crossed
 
@@ -422,7 +412,6 @@ def test_fuzz_signature_order_invariance_on_emissions(rule_cls, smiles):
     mol = _mol(smiles)
     ranks = mol.xf.topol_equiv
     rule = rule_cls()
-    mode = getattr(rule, "unique_orbit", "atom_atom")
     for row in rule.metabolites(mol):
         info = row.info
         if "end_maps" not in info:
@@ -432,10 +421,10 @@ def test_fuzz_signature_order_invariance_on_emissions(rule_cls, smiles):
         i1 = _info_for_map(rule, mol, map1, a)
         i2 = _info_for_map(rule, mol, map2, b)
         sig = pair_site_signature(
-            mol, ranks, map1, map2, a, b, i1, i2, info, unique_orbit=mode
+            mol, ranks, map1, map2, a, b, i1, i2, info
         )
         flipped = pair_site_signature(
-            mol, ranks, map2, map1, b, a, i2, i1, info, unique_orbit=mode
+            mol, ranks, map2, map1, b, a, i2, i1, info
         )
         assert sig == flipped, (i1.get("name"), i2.get("name"), smiles)
 
