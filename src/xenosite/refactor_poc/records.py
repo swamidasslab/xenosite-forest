@@ -506,11 +506,17 @@ class Structure(TypedDict, total=False):
 
 
 class Forest(TypedDict, total=False):
-    """The molecule's ``_forest``. ``total`` is false because each key is filled in later."""
+    """The molecule's ``_forest``. ``total`` is false because each key is filled in later.
+
+    ``start_labels`` maps depth-0 atom index → CX ``atomLabel`` captured when the
+    forest is first established. Stamp/check restamps those props onto the
+    surviving start atoms so reaction finishing cannot drop them.
+    """
 
     structure: Structure
     atom_trace: AtomTrace
     is_terminal_product: bool
+    start_labels: dict[int, str]
 
 
 class UntracedForest(TypedDict, total=False):
@@ -518,6 +524,7 @@ class UntracedForest(TypedDict, total=False):
 
     structure: Structure
     is_terminal_product: bool
+    start_labels: dict[int, str]
 
 
 class TracingForest(TypedDict):
@@ -525,3 +532,4 @@ class TracingForest(TypedDict):
 
     structure: Structure
     atom_trace: InitializedAtomTrace
+

@@ -47,7 +47,7 @@ import ast
 import copy
 from collections import defaultdict, deque
 from collections.abc import Iterable, Sequence
-from typing import TypeGuard, TypeVar, cast, overload
+from typing import Literal, TypeGuard, TypeVar, cast, overload
 
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
@@ -76,6 +76,9 @@ from xenosite.refactor_poc.rdkit_api import (
     TracingMol,
 )
 from xenosite.refactor_poc.records import (
+    AtomPairOrbitSignature,
+    BondAtomOrbitSignature,
+    BondPairOrbitSignature,
     EditCounters,
     EndParents,
     Forest,
@@ -85,6 +88,7 @@ from xenosite.refactor_poc.records import (
     KekuleParents,
     McsResult,
     SiteInfo,
+    SitePairOrbitTables,
     Structure,
 )
 
@@ -311,11 +315,21 @@ class XfTracing:
 
         Implementation lives in :mod:`xenosite.refactor_poc.rules`. Prefer
         ``reactant.xf.of_products(...)`` over calling this directly.
+
+        After the rule-side apply, this facade copies the reactant's
+        ``start_labels`` onto the product forest and restamps CX
+        ``atomLabel`` so finishing stays transparent to rules / search.
         """
 
         from xenosite.refactor_poc.rules import _apply_forest_trace
 
-        return _apply_forest_trace(reactant, self.mol, info, executed=executed)
+        result = _apply_forest_trace(reactant, self.mol, info, executed=executed)
+        parent = _read_forest(reactant)
+        held = _read_forest(self.mol)
+        if parent is not None and held is not None and "start_labels" in parent:
+            held["start_labels"] = copy.deepcopy(parent["start_labels"])
+        _restamp_start_labels(self.mol)
+        return result
 
     def _atom_record(self, idx: int):
         """Resolve the trace record for ``idx`` via forestLabel."""
@@ -565,25 +579,72 @@ class Xf:
         return finished
 
 
+def _capture_start_labels(mol: ForestMol) -> None:
+    """Snapshot CX ``atomLabel`` once when the forest is first established.
+
+    An empty dict is stored so a later clear cannot be mistaken for "not
+    yet captured" and re-read from a stripped work copy.
+    """
+
+    forest = mol._forest
+    if "start_labels" in forest:
+        return
+    labels: dict[int, str] = {}
+    for atom in mol.GetAtoms():
+        if atom.HasProp("atomLabel"):
+            labels[int(atom.GetIdx())] = atom.GetProp("atomLabel")
+    forest["start_labels"] = labels
+
+
+def _restamp_start_labels(mol: Mol) -> None:
+    """Rewrite captured start ``atomLabel`` props onto current start atoms."""
+
+    forest = _read_forest(mol)
+    if forest is None:
+        return
+    start_labels = forest.get("start_labels")
+    if not start_labels:
+        return
+    if is_tracing(mol):
+        for record in mol._forest["atom_trace"]["records"].values():
+            depths = record.get("depth") or []
+            idxs = record.get("idx") or []
+            if not depths or not idxs or 0 not in depths:
+                continue
+            root = int(idxs[list(depths).index(0)])
+            label = start_labels.get(root)
+            if label is None:
+                continue
+            mol.GetAtomWithIdx(int(idxs[-1])).SetProp("atomLabel", label)
+        return
+    for root, label in start_labels.items():
+        if root < 0 or root >= mol.GetNumAtoms():
+            continue
+        mol.GetAtomWithIdx(int(root)).SetProp("atomLabel", label)
+
+
 def _write_forest_labels(mol: TracingMol) -> None:
+    _capture_start_labels(mol)
     for tag, record in mol._forest["atom_trace"]["records"].items():
         idxs = record.get("idx")
         if not idxs:
             raise KeyError("idx")
         mol.GetAtomWithIdx(idxs[-1]).SetProp("forestLabel", tag)
+    _restamp_start_labels(mol)
 
 
 def _require_forest(mol: Mol) -> ForestMol:
     """Install an empty forest when missing. Same object as :class:`ForestMol`.
 
     The only place forest presence is coerced. ``mol.xf.forestmol`` and
-    :func:`ensure_forest` call this.
+    :func:`ensure_forest` call this. Captures start-atom ``atomLabel`` once.
     """
 
     if is_forest(mol):
         return mol
     mol._forest = {"structure": {}}
     assert is_forest(mol)
+    _capture_start_labels(mol)
     return mol
 
 
@@ -865,6 +926,7 @@ def _reordered_forest_labels(mol: Mol) -> None:
             if "idx" not in record:
                 raise KeyError("idx")
             record["idx"][-1] = index
+    _restamp_start_labels(mol)
 
 
 
@@ -1443,6 +1505,8 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
 
     src_forest = src._forest
     child: Forest = {"structure": {}}
+    if "start_labels" in src_forest:
+        child["start_labels"] = copy.deepcopy(src_forest["start_labels"])
 
     try:
         same_size = src.GetNumAtoms() == dst.GetNumAtoms()
@@ -1498,9 +1562,12 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
         held = _place_forest(dst, child)
         carried["formula"] = molecule_formula(held)
         child["structure"] = {}
+        _restamp_start_labels(held)
         return held
 
-    return _place_forest(dst, child)
+    held = _place_forest(dst, child)
+    _restamp_start_labels(held)
+    return held
 
 
 def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> FragmentSplit:

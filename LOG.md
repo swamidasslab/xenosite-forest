@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Contract: CX ``atomLabel`` on input start atoms is preserved. Captured once into ``_forest["start_labels"]`` (depth-0 idx → label) on forest establish; restamped from ``_write_forest_labels`` / ``_reordered_forest_labels`` / ``XfTracing._trace`` / ``carry_forest``. No rules/find_path call-site changes. Red before fix: missing ``start_labels``, cleared label not restored, hydroxylation site atom dropped ``alpha``. Test: `tests/refactor_poc/test_start_atom_labels.py` (3 passed).
+
+## 2026-09-20
+
 - Pattern emit-name uniqueness meta-test: `test_emitable_names_unique_within_each_reaction_rule` walks all concrete `ReactionRule` subclasses via `pattern_info_inventory` (skips `PATTERNLESS_REACTION_RULE_BASES`). Collects `PatternInfo.name` plus optional future `When["name"]` via `emitable_pattern_names` / `optional_when_name`. No within-rule collisions. when→name still HEURISTICS Status: not decided; hook documented. Suite: pattern_names + pattern_info_coverage **193 passed**, 2 xfailed.
 
 ## 2026-09-20
