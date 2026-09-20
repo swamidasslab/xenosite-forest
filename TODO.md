@@ -1,7 +1,6 @@
 # TODO
 
 - find_path: `seen` blocks re-enqueue by child CSMI but chemistry (`mol_edits`) still runs first — MeOPhOH residual bill≈176 is mostly Dealkylation re-attempts into already-seen products (see PERFORMANCE / meophoh_retrace)
-- **Gate (PR #15 / pre-v0.7.0):** do not merge or tag v0.7.0 until `bond_atom` is gone, DH uses atom-pair Sites, `site_kind` (`atom`/`bond`/`directed_bond`/`atom_pair`) + `_example_substrates` + `test_site_kind` are green, and PAIR_ORBITS/HEURISTICS/LOG docs match
 - Expand each rule's `_example_substrates` so examples cover all patterns/whens (meta-test currently only checks site_kind shape)
 
 - Later (optional): hardcode `canonical_emitted_sites=True` on flaky forest tests (topo / guided gold / path hard / unique-edit) if lex site identity helps — fuzz already draws the flip via Hypothesis

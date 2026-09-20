@@ -33,8 +33,9 @@ Previous forest (0.6.x API): archive directory
   Within-rule unique-edit misses still raise ``SiteDeduplicationWarning``.
 - ``find_path`` closers distinguish Hydrogenation (adds H) from
   Dehydrogenation (removes H).
-- **``pynauty`` is required** for unique-edit / pair orbits (nauty backend
-  only). No RDKit/SMILES pair-orbit product backend.
+- **Dependencies:** ``pynauty`` is now required (no longer optional). Needed
+  for the correct unique-edit / pair-orbit nauty backend (forest unique-edit
+  authority). RDKit/SMILES pair-orbit is not shipped as a product fallback.
 
 ### Deprecated
 
@@ -47,6 +48,8 @@ Previous forest (0.6.x API): archive directory
 - Pair-orbit unique-edit (``swap_group``) for ResonancePair ends.
 - ``mol.xf.tracing`` helpers for AtomTracker migration: ``depths()``,
   ``index_at``, ``added_indices``, ``root_map``.
+- ``xenosite.forest`` typing is at 100% coverage under the package
+  pyright gate (informative for callers).
 
 
 ## [0.6.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.1) - 2026-09-19
