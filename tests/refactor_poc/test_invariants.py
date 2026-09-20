@@ -118,7 +118,8 @@ def test_a_new_atom_points_at_one_addition_record():
     names = tuple(getattr(item, "name", item) for item in addition["rules"])
     assert names == ("Hydroxylation", "Poc")
     assert addition["name"] == "Hydroxylation"
-    assert addition["pattern"] is Hydroxylation.smarts[0][1]
+    # Ethane carbons are h=3 → pattern ``h2`` (partitioned from ``h`` / h1).
+    assert addition["pattern"] is Hydroxylation.smarts[1][1]
     assert addition["depth"] == 0
     delta = trace["delta_formula"][transform_id]
     for element, change in delta["counts"].items():

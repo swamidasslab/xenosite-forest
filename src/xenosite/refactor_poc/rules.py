@@ -2000,9 +2000,10 @@ class ResonancePairRule(ResonanceRule):
 class Hydroxylation(SmartsReactionRule):
     """Adds a hydroxyl to carbon.
 
-    Both patterns add OH and remove one H. ``[#6h]`` is h=1, 2, or 3;
-    ``[#6h2,#6h3]`` is the subset with two or three hydrogens. The match
-    records which of those the atom actually is.
+    Patterns partition by H count so the same product is not emitted twice
+    under ``unique_csmi`` (distinct ``PatternInfo.name``, same csmi). ``h`` is
+    exactly one hydrogen; ``h2`` is the widened ``[#6h2,#6h3]`` OR for two or
+    three. ``when`` records which branch the atom actually is.
     """
 
     phase1_sites_on = "atom_hydrogen"
@@ -2010,17 +2011,9 @@ class Hydroxylation(SmartsReactionRule):
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
-            "[#6h:1]>>[*:1]O",
+            "[#6h1:1]>>[*:1]O",
             describe(
-                *branches(
-                    (
-                        {"map": 1, "z": 6, "h": 1},
-                        {"map": 1, "z": 6, "h": 2},
-                        {"map": 1, "z": 6, "h": 3},
-                    ),
-                    adds="O",
-                    removes="H",
-                ),
+                *branches(({"map": 1, "z": 6, "h": 1},), adds="O", removes="H"),
                 name="h",
             ),
         ),
@@ -3201,7 +3194,9 @@ class Glutathionation(ConjugationRule):
             describe(adds=_GSH_ADDS, site_map=1, name="epoxide_ch2"),
         ),
         (
-            "[#6:1]([!#1:4])1[#8:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
+            # H0 only: bare [#6]([!#1]) also matches [#6H1] with a substituent
+            # (e.g. styrene oxide) and double-emits the same GSH adduct.
+            "[#6H0:1]([!#1:4])1[#8:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
             describe(adds=_GSH_ADDS, site_map=1, name="epoxide_c"),
         ),
         (
@@ -3246,7 +3241,8 @@ class Glutathionation(ConjugationRule):
             describe(adds=_GSH_ADDS, site_map=1, name="aziridine_ch2"),
         ),
         (
-            "[#6:1]([!#1:4])1[#7:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
+            # H0 only: same partition as epoxide_c (see above).
+            "[#6H0:1]([!#1:4])1[#7:2][#6:3]1>>" + _gsh("[*:1]([*:4])[*:3][*:2]"),
             describe(adds=_GSH_ADDS, site_map=1, name="aziridine_c"),
         ),
         (

@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Hydroxylation double-emit fixed: partition `h` → `[#6h1]` (when h=1) and keep `h2` → `[#6h2,#6h3]` (when h=2,3). Ethane → one `CCO` under `unique_csmi`. Same antipattern on Glutathionation: `epoxide_c` / `aziridine_c` narrowed to `#6H0` (bare `#6`([!#1]) nested `#6H1` with substituent). Residual multi-name same-csmi cases (distinct cleavage fragments, dual nitro writings, pair vs SMARTS, glucuronidation) documented in DIVERGENCES.md. when→name left as HEURISTICS Schema proposal Status: not decided (no silent branch). Possibilities 188 / when-branches 133. Focused suite 269 passed, 2 xfailed.
+
+## 2026-09-20
+
 - Hard fuzz ports for `refactor_poc`: new `tests/refactor_poc/test_path_outcome_hard.py` (11 cases from forest `test_path_outcome_hard.py` — macrocycle opens/allows, multi-N-dealk linearizations, impossible early abort, asymmetric MCS arms, E/Z terbinafine, bipiperidinyl opens, metal/dialdehyde budgets). Adapted to poc `PathOutcome` / `PathCounters` / `max_nodes` (no `budget_exhausted`). Tribenzyl asserts one topol orbit (approved symmetry collapse in DIVERGENCES). Strengthened `test_bfs_fuzz.py` with drug-crasher corpus + generated SMILES via DFS (BFS on large PhaseOne frontiers timed out). Suite: path_outcome_hard + bfs_fuzz + prior soft fuzz **29 passed**. No production code changes; no xfails.
 
 ## 2026-09-20

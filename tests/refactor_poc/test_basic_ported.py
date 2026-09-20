@@ -18,6 +18,7 @@ from xenosite.refactor_poc.rules import (
     Dehydrogenation,
     Epoxidation,
     EpoxideOpening,
+    Hydroxylation,
     _unique_csmi_key,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
@@ -158,3 +159,15 @@ def test_unique_metabolites():
         assert key not in seen
         seen.add(key)
     assert seen
+
+
+def test_hydroxylation_partitions_h_count():
+    """``h`` / ``h2`` do not both emit the same alcohol (ethane → one ``CCO``)."""
+
+    products = list(Hydroxylation().metabolize(MolFromSmiles("CC")))
+    assert [p.xf.csmi for p, _ in products] == ["CCO"]
+    assert products[0][1]["pattern"].get("name") == "h2"
+
+    aryl = list(Hydroxylation().metabolize(MolFromSmiles("c1ccccc1")))
+    assert {p.xf.csmi for p, _ in aryl} == {"Oc1ccccc1"}
+    assert all(info["pattern"].get("name") == "h" for _, info in aryl)

@@ -59,10 +59,10 @@ def test_nested_phaseone_ruleset_keeps_the_inner_set_on_the_chain():
     from xenosite.refactor_poc.phaseone import reaction_labels
 
     assert reaction_labels(addition) == ("Hydroxylation", "SO")
-    assert addition["pattern"] is Hydroxylation.smarts[0][1]
+    assert addition["pattern"] is Hydroxylation.smarts[1][1]
     pattern = addition["pattern"]
     assert pattern is not None
-    assert pattern.get("name") == "h"
+    assert pattern.get("name") == "h2"
     assert addition["pattern"] not in rules
 
 
@@ -79,4 +79,4 @@ def test_unnamed_ruleset_stays_on_the_chain_and_emits_no_name():
     from xenosite.refactor_poc.phaseone import reaction_labels
 
     assert reaction_labels(addition) == ("Hydroxylation",)
-    assert addition["pattern"] is Hydroxylation.smarts[0][1]
+    assert addition["pattern"] is Hydroxylation.smarts[1][1]

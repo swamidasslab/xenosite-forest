@@ -154,6 +154,19 @@ This approval is the one-site case. Two-site edits do not collapse both ends to 
 
 Status: not decided (RuleSet cross-rule); rule-level key approved
 
-Forest `metabolize` with `only_emit_topologically_distinct_sites` keys `(rule name, topo ranks, product SMILES set)` — site topology stays in the product-emit signature. Poc splits that into two layers (see `HEURISTICS.md`): unique-edit keeps ranks + pair orbit; `unique_csmi` on `ReactionRule` keys `(rule name, PatternInfo.name | SMARTS, product csmi)` and drops site topology. Same product from two sites of one rule is one yield when the pattern token matches; overlapping SMARTS that share a product need partitioned data (e.g. Dealkylation C–C alcohol is `#6H0` vs `#6h`), not forest-style site+product cross-collapse.
+Forest `metabolize` with `only_emit_topologically_distinct_sites` keys `(rule name, topo ranks, product SMILES set)` — site topology stays in the product-emit signature. Poc splits that into two layers (see `HEURISTICS.md`): unique-edit keeps ranks + pair orbit; `unique_csmi` on `ReactionRule` keys `(rule name, PatternInfo.name | SMARTS, product csmi)` and drops site topology. Same product from two sites of one rule is one yield when the pattern token matches; overlapping SMARTS that share a product need partitioned data (e.g. Dealkylation C–C alcohol is `#6H0` vs `#6h`; Hydroxylation is `#6h1` vs `#6h2,#6h3`; Glutathionation epoxide/aziridine substituted-carbon patterns are `#6H0`), not forest-style site+product cross-collapse.
 
 `RuleSet.metabolize` now uses the same `_unique_csmi_key` as `ReactionRule`, so two child rules that share a product structure both emit. Forest keeps a separate seen per child rule as well; the remaining divergence is site topology in forest's emit signature, not cross-rule csmi merging.
+
+## Residual same-product multi-pattern emissions
+
+Status: documented (not a forest parity bug)
+
+A library scan still finds reactant/product pairs that appear under more than one `PatternInfo.name` of the same rule. Those are not H-count nesting of the Hydroxylation kind. Categories:
+
+- **Distinct edits, shared cleavage fragment.** Dealkylation / NDealkylation methyl(ene) alcohol vs carbonyl vs carboxylic oxygenate the carbon side differently; the heteroatom-side fragment can be the same molecule, and each fragment is its own `unique_csmi` yield. Dehydration alcohol vs beta-elimination both leave water. OxidativeDehalogenation alcohol vs carboxylic share the halide piece.
+- **Dual nitro writings.** NitroaromaticReduction and NitrogenReduction keep charged and neutral (and multi-O) patterns so both RDKit nitro forms fire; products can coincide.
+- **Pair path vs one-bond SMARTS.** Hydrogenation ResonancePairRule emissions (no pattern token) often match the alkene SMARTS product.
+- **Conjugation site choice.** Glucuronidation alcohol vs carboxylate on a carboxylic acid can share an acyl glucuronide when both patterns match.
+
+Full non-overlap is not required. Partition when two patterns implement the same edit on overlapping applicability (H-count nesting, or `#6` vs `#6h` / `#6H0`). Leave chemically distinct edits alone.

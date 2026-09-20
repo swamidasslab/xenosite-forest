@@ -61,7 +61,7 @@ def _pattern(rule, smarts):
 @pytest.mark.parametrize(
     ("reactant", "rule_cls", "target", "smarts"),
     [
-        ("c1ccccc1", Hydroxylation, "Oc1ccccc1", "[#6h:1]>>[*:1]O"),
+        ("c1ccccc1", Hydroxylation, "Oc1ccccc1", "[#6h1:1]>>[*:1]O"),
         ("CCC", Hydroxylation, "CC(O)C", "[#6h2,#6h3:1]>>[*:1]O"),
         (
             "COc1ccccc1",
