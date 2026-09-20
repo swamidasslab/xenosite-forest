@@ -41,7 +41,7 @@ from __future__ import annotations
 import importlib
 import os
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from itertools import (
     combinations,
     permutations,
@@ -989,7 +989,7 @@ def map_rank_key(
 
 
 def bond_rank_key(
-    ranks: Mapping[int, int], site: frozenset[int]
+    ranks: Mapping[int, int], site: Collection[int]
 ) -> tuple[int, ...]:
     """Unordered bond ends as sorted topological ranks (``site_kind="bond"``)."""
 
@@ -1007,11 +1007,12 @@ def formula_key(value: str | None) -> str:
 def site_orbit(
     mol: Mol,
     mapped: Mapping[int, int],
-    site: frozenset[int],
+    site: Collection[int],
 ) -> PairOrbitSignature | None:
     """Unique-edit orbit field for a SMARTS site (atom–atom when ``len==2``)."""
 
-    return mol.xf.atom_pair_orbit_key(site)
+    fs = site if isinstance(site, frozenset) else frozenset(site)
+    return mol.xf.atom_pair_orbit_key(fs)
 
 
 def pair_orbit(
@@ -1078,7 +1079,7 @@ def site_signature(
     work: Mol,
     mapped: Mapping[int, int],
     ranks: Mapping[int, int],
-    site: frozenset[int],
+    site: Collection[int],
     rxn_num: int,
     effect: Effect,
     *,
@@ -1484,20 +1485,37 @@ def select_rep_table(
     raise ValueError(f"Unknown kind: {kind}")
 
 
+def _remap_site(
+    site: Collection[int], atom_map: Mapping[int, int]
+) -> frozenset[int] | tuple[int, ...]:
+    """Apply ``atom_map`` to ``site``, preserving tuple vs frozenset."""
+
+    remapped = tuple(int(atom_map[idx]) for idx in site)
+    if isinstance(site, tuple):
+        return remapped
+    return frozenset(remapped)
+
+
+def _copy_site(site: Collection[int]) -> frozenset[int] | tuple[int, ...]:
+    if isinstance(site, tuple):
+        return site
+    return frozenset(site)
+
+
 def _remap_match_via_auto(
     mol: Mol,
     mapped: Mapping[int, int],
-    site: frozenset[int],
+    site: Collection[int],
     candidate: OrbitCandidate,
     representative: OrbitCandidate,
     *,
     kind: OrbitKind,
     ordered: bool,
-) -> tuple[dict[int, int], frozenset[int]] | None:
+) -> tuple[dict[int, int], frozenset[int] | tuple[int, ...]] | None:
     """Apply an automorphism taking ``candidate`` → ``representative`` to a match."""
 
     if candidate == representative:
-        return dict(mapped), frozenset(site)
+        return dict(mapped), _copy_site(site)
     auto = automorphism_to_representative(
         mol, candidate, representative, kind=kind, ordered=ordered
     )
@@ -1505,17 +1523,16 @@ def _remap_match_via_auto(
         return None
     atom_map, _bond_map = auto
     new_mapped = remap_mapped_atoms(mapped, atom_map)
-    new_site = frozenset(int(atom_map[idx]) for idx in site)
-    return new_mapped, new_site
+    return new_mapped, _remap_site(site, atom_map)
 
 
 def canonicalize_smarts_match(
     mol: Mol,
     mapped: Mapping[int, int],
-    site: frozenset[int],
+    site: Collection[int],
     *,
     parent: Mol | None = None,
-) -> tuple[dict[int, int], frozenset[int]] | None:
+) -> tuple[dict[int, int], frozenset[int] | tuple[int, ...]] | None:
     """Remap a SMARTS match onto its lex orbit representative for emission.
 
     Call **after** ``filter_sites`` accepted the discovery site. Chemistry and
@@ -1525,12 +1542,15 @@ def canonicalize_smarts_match(
     copy whose forest cache was cleared. Returns ``None`` only when a
     representative exists but no automorphism was found (skip). With no
     nauty tables, returns the input unchanged.
+
+    Preserves ``tuple`` vs ``frozenset`` for the site container (directed_bond
+    emits ordered tuples; undirected bond emits frozensets).
     """
 
     host = parent if parent is not None else mol
     tables = ensure_lexical_orbit_representatives(mol, parent=host)
     if tables is None:
-        return dict(mapped), frozenset(site)
+        return dict(mapped), _copy_site(site)
 
     if len(site) == 1:
         # One-atom unique-edit: lex-smallest atom in the automorphism orbit.
@@ -1574,7 +1594,7 @@ def canonicalize_smarts_match(
             ordered=False,
         )
 
-    return dict(mapped), frozenset(site)
+    return dict(mapped), _copy_site(site)
 
 
 def canonicalize_pair_match(

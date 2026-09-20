@@ -56,8 +56,8 @@ Status: done. Pre-swap tree is `xenosite._archive_forest` (read-only). Live publ
 `RuleSiteKind`: ``"atom"`` | ``"bond"`` | ``"directed_bond"`` | ``"atom_pair"``.
 
 - **``atom``** — singleton Site; unique-edit uses directed `MapRankKey` `((mapno, rank), …)`.
-- **``bond``** — undirected bond (two adjacent atoms). Unique-edit first field is sorted site ranks (`bond_rank_key`). Epoxidation phenol ortho-meta `((1,4),(2,2))` vs `((1,2),(2,4))` → both `(2,4)`; `incident_orders` / orbit already matched. AzoSplitting too.
-- **``directed_bond``** — bond Site shape (`len==2`) but unique-edit keeps directed MapRankKey because map 1 is chemically distinct (Dealkylation / NDealkylation oxygenate map 1; Benzodioxole / Nitroaromatic similarly). Undirected ranks wrongly collapse anisole ring-open regioisomers (`C=CC(=CC=CO)OC` vs `C=CC=C(C=CO)OC`).
+- **``bond``** — undirected bond frozenset (two adjacent atoms). Unique-edit first field is sorted site ranks (`bond_rank_key`). Epoxidation phenol ortho-meta `((1,4),(2,2))` vs `((1,2),(2,4))` → both `(2,4)`; `incident_orders` / orbit already matched. AzoSplitting too.
+- **``directed_bond``** — ordered tuple of atom indexes in ``site_map`` order (`len==2`); unique-edit keeps directed MapRankKey because map 1 is chemically distinct (Dealkylation / NDealkylation oxygenate map 1; Benzodioxole / Nitroaromatic similarly). Undirected frozenset / ranks wrongly collapse anisole ring-open regioisomers (`C=CC(=CC=CO)OC` vs `C=CC=C(C=CO)OC`).
 - **``atom_pair``** — ResonancePair ends only (DH / QF / Hydrogenation / TautomerRule stub). Never on plain SMARTS. Pair unique-edit stays `pair_site_signature` + `swap_group`.
 
 Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`, `test_parity.py` (anisole dealk).

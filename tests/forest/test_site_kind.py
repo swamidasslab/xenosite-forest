@@ -5,10 +5,10 @@ produce metabolites). Expand those lists later so they cover all
 patterns/whens — see TODO.md.
 
 Taxonomy:
-- ``atom`` — singleton
-- ``bond`` — undirected bond (sorted site ranks in unique-edit)
-- ``directed_bond`` — bond Site, directed MapRankKey (Dealkylation)
-- ``atom_pair`` — ResonancePair ends only
+- ``atom`` — singleton frozenset
+- ``bond`` — undirected bond frozenset (sorted site ranks in unique-edit)
+- ``directed_bond`` — ordered tuple of atom indexes (map order)
+- ``atom_pair`` — ResonancePair ends only (frozenset)
 """
 
 from __future__ import annotations
@@ -90,5 +90,15 @@ def test_site_kind_matches_emitted_sites(rule_cls: type[ReactionRule]) -> None:
                 f"{rule_cls.__name__} site_kind={kind!r} but "
                 f"{smiles!r} emitted site={site!r} (len {len(site)})"
             )
+            if kind == "directed_bond":
+                assert isinstance(site, tuple), (
+                    f"{rule_cls.__name__} directed_bond must emit tuple, "
+                    f"got {type(site).__name__}: {site!r}"
+                )
+            else:
+                assert isinstance(site, frozenset), (
+                    f"{rule_cls.__name__} site_kind={kind!r} must emit frozenset, "
+                    f"got {type(site).__name__}: {site!r}"
+                )
             saw_any = True
     assert saw_any

@@ -84,8 +84,8 @@ def _flat_ints(site: Site) -> set[int]:
 
 
 # Known atom indices only. AtomRef is a leaf, not a site by itself.
-# frozenset[int] is a two-atom site; nested frozensets are pair-of-pairs.
-# Trace storage may keep a sorted tuple of the same indexes.
+# frozenset[int] is undirected two-atom / singleton sites; nested frozensets
+# are pair-of-pairs. ``tuple[int, ...]`` is directed_bond (map order).
 Site = int | tuple[int, ...] | frozenset[int] | frozenset[frozenset[int]]
 
 # Same nesting as Site. Top-level single deferred atom is AtomRef only

@@ -83,7 +83,8 @@ Site shape is class data on ``ReactionRule``
 (``site_kind: Literal["atom", "bond", "directed_bond", "atom_pair"]``), not
 ``Generic[SiteT]`` — shared emit path + heterogeneous RuleSets erase a type
 param; pyright cannot enforce frozenset cardinality. ``"bond"`` is undirected
-SMARTS bond Sites (Epoxidation); ``"directed_bond"`` keeps ordered map ranks
+SMARTS bond Sites (Epoxidation, frozenset); ``"directed_bond"`` emits an
+ordered atom-index tuple and keeps ordered map ranks
 (Dealkylation); ``"atom_pair"`` is ResonancePair ends only.
 
 ## 4. Types

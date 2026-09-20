@@ -82,7 +82,7 @@ def test_ndealkylation_pyridine_ring_open_and_no_csmi() -> None:
     assert "N=CC=CC=CO" in csmi
     assert "N=CC=CC=C=O" in csmi
     for _p, info in products:
-        assert len(info["site"]) == 2
-        assert any(
-            mol.GetAtomWithIdx(i).GetAtomicNum() == 7 for i in info["site"]
-        )
+        site = info["site"]
+        assert isinstance(site, tuple), site
+        assert len(site) == 2
+        assert any(mol.GetAtomWithIdx(i).GetAtomicNum() == 7 for i in site)

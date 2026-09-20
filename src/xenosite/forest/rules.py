@@ -164,11 +164,11 @@ class ReactionRule:
     name: str | None
     longname: str | None
     sites_on: SitesOn | None = None
-    # Emitted Site shape (atom-index frozenset). Class data — not
-    # Generic[SiteT] (heterogeneous RuleSets erase the param; pyright cannot
-    # enforce frozenset size). ``"atom"`` singleton; ``"bond"`` undirected
-    # bond; ``"directed_bond"`` bond with ordered map ranks; ``"atom_pair"``
-    # ResonancePair ends only.
+    # Emitted Site shape. Class data — not Generic[SiteT] (heterogeneous
+    # RuleSets erase the param; pyright cannot enforce container size).
+    # ``"atom"`` singleton frozenset; ``"bond"`` undirected frozenset;
+    # ``"directed_bond"`` ordered tuple (map order); ``"atom_pair"``
+    # ResonancePair ends only (frozenset).
     site_kind: RuleSiteKind = "atom"
     # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
     # TODO: expand so examples cover all patterns/whens on this rule.
@@ -370,7 +370,8 @@ class ReactionRule:
         if isinstance(site, int):
             return te[site]
         if isinstance(site, tuple):
-            return frozenset(int(te[s]) for s in site)
+            # Preserve map order for directed_bond emission.
+            return tuple(int(te[s]) for s in site)
         if isinstance(site, frozenset):
             nested: list[frozenset[int]] = []
             flat: list[int] = []
@@ -1084,16 +1085,30 @@ def _isotope_atoms_first(smarts: str, pin: set[int]) -> str:
     return rewritten + ">>" + product
 
 
-def _site_indexes(mapped: Mapping[int, int], pattern: PatternInfo) -> frozenset[int]:
-    """Atom indexes the pattern calls the site. Defaults to map 1."""
+def _site_indexes(
+    mapped: Mapping[int, int],
+    pattern: PatternInfo,
+    *,
+    site_kind: RuleSiteKind = "atom",
+) -> Site:
+    """Atom indexes the pattern calls the site. Defaults to map 1.
+
+    ``directed_bond`` keeps ``site_map`` order as a tuple (map 1 first when
+    that is the chemically distinct end). Other kinds emit a frozenset
+    (undirected ``bond`` / singleton ``atom``).
+    """
 
     key = pattern.get("site_map", 1)
     if isinstance(key, (list, tuple)):
-        idxs = [mapped[k] for k in key if k in mapped]
+        idxs = tuple(mapped[k] for k in key if k in mapped)
     elif key in mapped:
-        idxs = [mapped[key]]
+        idxs = (mapped[key],)
     else:
-        idxs = list(mapped.values())
+        idxs = tuple(mapped.values())
+    if not idxs:
+        return () if site_kind == "directed_bond" else frozenset()
+    if site_kind == "directed_bond":
+        return idxs
     return frozenset(idxs)
 
 
@@ -1204,7 +1219,7 @@ class SmartsReactionRule(ReactionRule):
 
             reactant = smarts.split(">>", 1)[0]
             for mapped in mol.xf.smarts_matches(reactant):
-                site = _site_indexes(mapped, pattern)
+                site = _site_indexes(mapped, pattern, site_kind=self.site_kind)
                 if not site:
                     continue
                 effect = resolve_effect(context, mapped, pattern)
@@ -1904,7 +1919,7 @@ class ResonanceRule(SmartsReactionRule):
                 continue
             reactant = smarts.split(">>", 1)[0]
             for mapped in mol.xf.smarts_matches(reactant):
-                site = _site_indexes(mapped, pattern)
+                site = _site_indexes(mapped, pattern, site_kind=self.site_kind)
                 if not site:
                     continue
                 effect = resolve_effect(context, mapped, pattern)
@@ -2557,10 +2572,11 @@ def _whens(mapno: int, atomic_nums: Sequence[int]) -> tuple[When, ...]:
 class Dealkylation(ResonanceRule):
     """Cleaves a C-N, C-O, C-S, or C-C bond and oxygenates the carbon side.
 
-    The site is both atoms of the broken bond. Aromatic hits react on the
-    Kekulé parent where that bond is single (SMARTS-implied order).
-    ``site_kind="directed_bond"``: unique-edit keeps directed MapRankKey
-    because map 1 is the carbon that receives oxygen.
+    The site is both atoms of the broken bond as an ordered tuple
+    (map 1 = oxygenated carbon, map 2 = heteroatom partner). Aromatic hits
+    react on the Kekulé parent where that bond is single (SMARTS-implied
+    order). ``site_kind="directed_bond"``: unique-edit keeps directed
+    MapRankKey because map 1 is chemically distinct.
     """
     sites_on = "bonds"
     site_kind: RuleSiteKind = "directed_bond"
@@ -2725,8 +2741,8 @@ class NDealkylation(ResonanceRule):
 
     Aromatic C–N hits (e.g. pyridine ring-open) match on the aromatic parent
     and react on the Kekulé parent where that bond is single — same parenting
-    as :class:`Dealkylation`. ``site_kind="directed_bond"``: map 1 is the
-    carbon that receives oxygen.
+    as :class:`Dealkylation`. ``site_kind="directed_bond"``: emitted site is
+    an ordered ``(carbon, nitrogen)`` tuple (map 1 = oxygenated carbon).
 
     Forest ``phase1_steps`` is a degenerate singleton naming this rule; the
     default :meth:`canonical_plan` matches that (not UnstableOxygenation).
