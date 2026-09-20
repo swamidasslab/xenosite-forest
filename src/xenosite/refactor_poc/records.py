@@ -430,10 +430,21 @@ class EndParents(NamedTuple):
 
 # --- Pair-orbit unique-edit signatures (graph_isomorphism) ---
 #
-# Signature shape: ((ga, gb), pair_group_id).
+# Core shape: (groups=(ga, gb), pair_group_id).
 # ``pair_group_id`` is a sequential int (``PairGroupId``) from CIP-sorted
 # orbit membership tuples, or ``TRIVIAL_PAIR_GROUP`` when either end is a
 # singleton topeqiv class. Never a bare atom/bond index.
+#
+# Ordered vs unordered is **tagged on the type**, not only which nauty family
+# was queried. ``ordered`` is part of NamedTuple equality:
+#   - ``ordered=False``: ends are swappable (shared resolved ``swap_group``);
+#     ``end_ranks`` is ``()``.
+#   - ``ordered=True``: ends have distinct roles; ``end_ranks`` holds site
+#     topeqiv ranks in canonical ``PatternInfo.name`` order (atom/bond pairs).
+# Bond–atom units stay directed ``(bond, atom)``; a *pair* of those units for
+# ResonancePair unique-edit is :class:`BondAtomPairOrbitSignature` with its
+# own ``ordered`` flag (sorted ends when unordered; name order when ordered).
+# Constructors: ``unordered_*`` / ``ordered_*`` in ``graph_isomorphism``.
 
 TopoGroupId = NewType("TopoGroupId", int)
 """Topological equivalence class id (atom topeqiv or bond class). Not an atom index."""
@@ -465,28 +476,45 @@ OrbitGroupCipKey: TypeAlias = tuple[SitePairCipKey, ...]
 
 
 class AtomPairOrbitSignature(NamedTuple):
-    """Unique-edit key for an unordered atom pair: ``(ga, gb)`` + pair orbit."""
+    """Atom–atom unique-edit orbit. ``ordered`` is part of equality."""
 
     groups: AtomGroupPair
     pair_group: PairGroupId
+    ordered: Literal[True, False]
+    end_ranks: tuple[int, ...]  # () if unordered; (ra, rb) name-order if ordered
 
 
 class BondPairOrbitSignature(NamedTuple):
-    """Unique-edit key for an unordered bond pair."""
+    """Bond–bond unique-edit orbit. ``ordered`` is part of equality."""
 
     groups: BondGroupPair
     pair_group: PairGroupId
+    ordered: Literal[True, False]
+    end_ranks: tuple[int, ...]  # () if unordered; (ra, rb) name-order if ordered
 
 
 class BondAtomOrbitSignature(NamedTuple):
-    """Unique-edit key for a (bond, atom) pair. ``groups`` is (bond, atom)."""
+    """Directed (bond, atom) orbit unit. ``groups`` is (bond_group, atom_group).
+
+    Pair unique-edit for two such ends uses :class:`BondAtomPairOrbitSignature`.
+    """
 
     groups: BondAtomGroupPair
     pair_group: PairGroupId
 
 
+class BondAtomPairOrbitSignature(NamedTuple):
+    """Two bond_atom ends (ResonancePair unique-edit). ``ordered`` in equality."""
+
+    ends: tuple[BondAtomOrbitSignature, BondAtomOrbitSignature]
+    ordered: Literal[True, False]
+
+
 PairOrbitSignature: TypeAlias = (
-    AtomPairOrbitSignature | BondPairOrbitSignature | BondAtomOrbitSignature
+    AtomPairOrbitSignature
+    | BondPairOrbitSignature
+    | BondAtomOrbitSignature
+    | BondAtomPairOrbitSignature
 )
 
 # Forest nested tables: (ga, gb) -> {(end_a, end_b): pair_group_id}

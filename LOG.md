@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Pair-orbit unique-edit: ordered vs unordered now **tagged on the type**. `AtomPairOrbitSignature` / `BondPairOrbitSignature` carry `ordered: Literal[True, False]` + `end_ranks` (empty when unordered; name-order ranks when ordered). `BondAtomOrbitSignature` stays one directed (bond, atom) unit; ResonancePair dual ends are `BondAtomPairOrbitSignature(ends, ordered)`. Constructors: `unordered_*` / `ordered_*` / `unordered_bond_atom_pair` / `ordered_bond_atom_pair` in `graph_isomorphism`. Theory helpers (`resolved_swap_group`, `ends_swappable`, `map_rank_key`, `pair_orbit`, `site_signature`, `pair_site_signature`, …) moved out of `rules` — thin call sites pass `unique_orbit` as data. Suites: pair_signatures + dh_bond_atom + graph_isomorphism **46 passed**, 2 skipped; pyright clean on touched modules.
+
+## 2026-09-20
+
 - ``swap_group`` default = ``name``: dropped redundant ``swap_group=name`` annotations on DH/QF/H endpoints. ``_resolved_swap_group`` is When → PatternInfo → ``name``. Explicit field only when grouping differs from ``name``. Schema comments on PatternInfo/When in `records.py`. Tests assert resolved default, not stored key. Path-budget Hydrogenation unordered still holds via name default (no annotation).
 
 ## 2026-09-20

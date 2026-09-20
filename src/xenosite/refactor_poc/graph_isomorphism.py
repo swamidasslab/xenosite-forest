@@ -22,8 +22,14 @@ Unique-edit pair signature::
 
     ((ga, gb), pair_group_id)
 
+Ordered vs unordered for ResonancePair unique-edit reads
+:func:`resolved_swap_group` (When → PatternInfo → ``name``). Map-rank
+embeddings and formula bags live here too; rule chemistry stays in
+``rules`` / ``records``.
+
 Public access is ``mol.xf.atom_pair_orbit_key`` / ``bond_pair_orbit_key`` /
-``bond_atom_orbit_key`` / ``site_pair_orbits`` / ``pair_orbit_backend``.
+``bond_atom_orbit_key`` / ``site_pair_orbits`` / ``pair_orbit_backend``,
+plus :func:`site_signature` / :func:`pair_site_signature`.
 """
 
 from __future__ import annotations
@@ -33,7 +39,7 @@ import os
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from itertools import combinations, permutations, product
-from typing import Any, Final, Literal, cast
+from typing import Any, Final, Literal, TypeAlias, cast
 
 from xenosite.refactor_poc.rdkit_api import AssignStereochemistry, Mol, MolToSmiles
 from xenosite.refactor_poc.rdkitutil import cip_ids
@@ -41,14 +47,18 @@ from xenosite.refactor_poc.records import (
     AtomPairOrbitSignature,
     AtomSiteCipKey,
     BondAtomOrbitSignature,
+    BondAtomPairOrbitSignature,
     BondPairOrbitSignature,
     BondSiteCipKey,
+    Effect,
     NautyPairGroup,
     OrbitGroupCipKey,
     OrbitMembership,
     PairGroupId,
     PairOrbitByGroups,
     PairOrbitSignature,
+    PairSiteInfo,
+    PatternInfo,
     SiteCipKey,
     SitePairCipKey,
     SitePairOrbitTables,
@@ -73,6 +83,21 @@ MarkedSite = tuple[SiteKind, int]
 # callable, but not the default when pynauty is absent (does not improve speed).
 # Unique-edit prefers nauty; isotope is not the source of truth for groups.
 PairOrbitBackend = Literal["nauty", "smiles", "none"]
+# Unique-edit orbit mode declared on a rule (data; read here, not branched).
+UniqueOrbit: TypeAlias = Literal["atom_atom", "bond_atom"]
+
+# Dedup key for one SMARTS site across Kekulé forms / equivalent carbons.
+# Last field: pair-orbit signature, or None for a one-atom site without bond_atom.
+SiteSignature: TypeAlias = tuple[
+    tuple[tuple[int, int], ...],
+    tuple[tuple[int, int, float], ...],
+    int,
+    str | None,
+    str | None,
+    bool,
+    bool,
+    PairOrbitSignature | None,
+]
 
 PAIR_MODES: dict[PairMode, tuple[SiteKind, SiteKind]] = {
     "atom_atom": ("atom", "atom"),
@@ -551,7 +576,7 @@ def bond_atom_orbit_pynauty(
 def atom_pair_orbit_key(
     mol: Mol, site: frozenset[int]
 ) -> AtomPairOrbitSignature | None:
-    """``AtomPairOrbitSignature(groups, pair_group)`` for a two-atom site."""
+    """Unordered ``AtomPairOrbitSignature`` for a two-atom site."""
 
     if len(site) != 2:
         return None
@@ -565,7 +590,7 @@ def atom_pair_orbit_key(
 def bond_pair_orbit_key(
     mol: Mol, bonds: frozenset[int]
 ) -> BondPairOrbitSignature | None:
-    """``BondPairOrbitSignature(groups, pair_group)`` for an unordered bond pair."""
+    """Unordered ``BondPairOrbitSignature`` for an unordered bond pair."""
 
     if len(bonds) != 2:
         return None
@@ -579,15 +604,72 @@ def bond_pair_orbit_key(
 def bond_atom_orbit_key(
     mol: Mol, bond_idx: int, atom_idx: int
 ) -> BondAtomOrbitSignature:
-    """``BondAtomOrbitSignature`` for a (bond, atom) pair.
+    """``BondAtomOrbitSignature`` for a directed (bond, atom) pair.
 
     Used by Dehydrogenation unique-edit (``unique_orbit = \"bond_atom\"``).
+    Pair of ends → :func:`unordered_bond_atom_pair` / :func:`ordered_bond_atom_pair`.
     """
 
     return cast(
         BondAtomOrbitSignature,
         _pair_orbit_signature(mol, "bond_atom", bond_idx, atom_idx),
     )
+
+
+# --- Tagged constructors (ordered vs unordered visible at the call site) ---
+
+
+def unordered_atom_pair_orbit(
+    groups: tuple[TopoGroupId, TopoGroupId], pair_group: PairGroupId
+) -> AtomPairOrbitSignature:
+    """Atom–atom signature with ``ordered=False`` (swappable ends)."""
+
+    return AtomPairOrbitSignature(groups, pair_group, False, ())
+
+
+def ordered_atom_pair_orbit(
+    groups: tuple[TopoGroupId, TopoGroupId],
+    pair_group: PairGroupId,
+    end_ranks: tuple[int, int],
+) -> AtomPairOrbitSignature:
+    """Atom–atom signature with ``ordered=True`` and name-order ``end_ranks``."""
+
+    return AtomPairOrbitSignature(groups, pair_group, True, end_ranks)
+
+
+def unordered_bond_pair_orbit(
+    groups: tuple[TopoGroupId, TopoGroupId], pair_group: PairGroupId
+) -> BondPairOrbitSignature:
+    """Bond–bond signature with ``ordered=False``."""
+
+    return BondPairOrbitSignature(groups, pair_group, False, ())
+
+
+def ordered_bond_pair_orbit(
+    groups: tuple[TopoGroupId, TopoGroupId],
+    pair_group: PairGroupId,
+    end_ranks: tuple[int, int],
+) -> BondPairOrbitSignature:
+    """Bond–bond signature with ``ordered=True`` and name-order ``end_ranks``."""
+
+    return BondPairOrbitSignature(groups, pair_group, True, end_ranks)
+
+
+def unordered_bond_atom_pair(
+    left: BondAtomOrbitSignature, right: BondAtomOrbitSignature
+) -> BondAtomPairOrbitSignature:
+    """Two bond_atom ends, sorted so argument order does not matter."""
+
+    ends = (left, right) if left <= right else (right, left)
+    return BondAtomPairOrbitSignature(ends, False)
+
+
+def ordered_bond_atom_pair(
+    left: BondAtomOrbitSignature, right: BondAtomOrbitSignature
+) -> BondAtomPairOrbitSignature:
+    """Two bond_atom ends already in canonical PatternInfo.name order."""
+
+    return BondAtomPairOrbitSignature((left, right), True)
 
 
 # Compat names used by the unique-edit signature before the rename.
@@ -641,10 +723,12 @@ def _make_signature(
     groups: tuple[TopoGroupId, TopoGroupId],
     pair_group: PairGroupId,
 ) -> PairOrbitSignature:
+    """Low-level table lookup → unordered same-kind / directed bond_atom unit."""
+
     if mode == "atom_atom":
-        return AtomPairOrbitSignature(groups, pair_group)
+        return unordered_atom_pair_orbit(groups, pair_group)
     if mode == "bond_bond":
-        return BondPairOrbitSignature(groups, pair_group)
+        return unordered_bond_pair_orbit(groups, pair_group)
     return BondAtomOrbitSignature(groups, pair_group)
 
 
@@ -864,3 +948,280 @@ def _pynauty_available() -> bool:
     except ImportError:
         return False
     return True
+
+
+# --- Unique-edit signature assembly (swap_group / map ranks / site keys) ---
+#
+# Theory-heavy helpers formerly in rules.py. PatternInfo / Effect are opaque
+# data; rule chemistry stays in rules. Call sites pass ``unique_orbit`` as data.
+
+
+def resolved_swap_group(
+    info: PatternInfo, effect: Effect | None = None
+) -> str | None:
+    """Resolved swap group: When override, else PatternInfo, else ``name``.
+
+    Default is ``name`` so same-role pair ends are unordered without an
+    explicit annotation. Set ``swap_group`` only when grouping differs from
+    ``name`` (see HEURISTICS).
+    """
+
+    if effect is not None:
+        when = effect.get("when")
+        if when is not None and "swap_group" in when:
+            group = when.get("swap_group")
+            if group:
+                return group
+    group = info.get("swap_group")
+    if group:
+        return group
+    name = info.get("name")
+    return name if name else None
+
+
+def ends_swappable(
+    info1: PatternInfo,
+    info2: PatternInfo,
+    effect1: Effect | None = None,
+    effect2: Effect | None = None,
+) -> bool:
+    """True → unordered pair orbit; False → ordered.
+
+    Reads resolved ``swap_group`` (When → PatternInfo → ``name``). Unordered
+    when both ends share the same non-empty group. Unequal → ordered.
+    Canonical pattern order for ordered keys uses ``PatternInfo.name``.
+    """
+
+    g1 = resolved_swap_group(info1, effect1)
+    g2 = resolved_swap_group(info2, effect2)
+    return g1 is not None and g1 == g2
+
+
+# Compat alias used in early unique-edit drafts.
+end_roles_symmetric = ends_swappable
+
+
+def map_rank_key(
+    ranks: Mapping[int, int], mapped: Mapping[int, int]
+) -> tuple[tuple[int, int], ...]:
+    """Stable (mapno, topological-rank) embedding identity."""
+
+    return tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items()))
+
+
+def formula_key(value: str | None) -> str:
+    """Order-invariant formula bag for signature keys (``HCl`` ≡ ``ClH``)."""
+
+    if not value:
+        return ""
+    return "".join(sorted(value))
+
+
+def bond_atom_orbit_for_match(
+    mol: Mol, mapped: Mapping[int, int], site_atom: int
+) -> BondAtomOrbitSignature | None:
+    """``bond_atom`` orbit for the bond between maps 1 and 2 plus ``site_atom``."""
+
+    left, right = mapped.get(1), mapped.get(2)
+    if left is None or right is None:
+        return None
+    bond = mol.GetBondBetweenAtoms(left, right)
+    if bond is None:
+        return None
+    return mol.xf.bond_atom_orbit_key(bond.GetIdx(), site_atom)
+
+
+def site_orbit(
+    mol: Mol,
+    mapped: Mapping[int, int],
+    site: frozenset[int],
+    *,
+    unique_orbit: UniqueOrbit = "atom_atom",
+) -> PairOrbitSignature | None:
+    """Unique-edit orbit field. ``unique_orbit`` is rule data, not a branch."""
+
+    if unique_orbit == "bond_atom" and len(site) == 1:
+        return bond_atom_orbit_for_match(mol, mapped, next(iter(site)))
+    return mol.xf.atom_pair_orbit_key(site)
+
+
+def pair_orbit(
+    mol: Mol,
+    map1: Mapping[int, int],
+    map2: Mapping[int, int],
+    site_a: int,
+    site_b: int,
+    site: frozenset[int],
+    info1: PatternInfo,
+    info2: PatternInfo,
+    *,
+    unique_orbit: UniqueOrbit = "atom_atom",
+    effect1: Effect | None = None,
+    effect2: Effect | None = None,
+) -> PairOrbitSignature | None:
+    """Orbit identity for a ResonancePairRule emission.
+
+    :func:`ends_swappable` → unordered; else ordered by PatternInfo ``name``.
+    """
+
+    swappable = ends_swappable(info1, info2, effect1, effect2)
+    if unique_orbit == "bond_atom":
+        left = bond_atom_orbit_for_match(mol, map1, site_a)
+        right = bond_atom_orbit_for_match(mol, map2, site_b)
+        if left is None or right is None:
+            return None
+        if swappable:
+            return unordered_bond_atom_pair(left, right)
+        name1 = info1.get("name") or ""
+        name2 = info2.get("name") or ""
+        if (name1, site_a) <= (name2, site_b):
+            return ordered_bond_atom_pair(left, right)
+        return ordered_bond_atom_pair(right, left)
+
+    key = mol.xf.atom_pair_orbit_key(site)
+    if key is None:
+        return None
+    if swappable:
+        return key  # already unordered from atom_pair_orbit_key
+    # Asymmetric atom_atom: tag ordered + name-order end ranks (frozenset
+    # orbit alone loses role order).
+    ranks = mol.xf.topol_equiv
+    name1 = info1.get("name") or ""
+    name2 = info2.get("name") or ""
+    end_ranks = (
+        (ranks[site_a], ranks[site_b])
+        if (name1, site_a) <= (name2, site_b)
+        else (ranks[site_b], ranks[site_a])
+    )
+    return ordered_atom_pair_orbit(key.groups, key.pair_group, end_ranks)
+
+
+def incident_orders(
+    mol: Mol, ranks: Mapping[int, int], mapped: Mapping[int, int]
+) -> tuple[tuple[int, int, float], ...]:
+    """Bond orders touching the matched atoms, in rank space.
+
+    Two Kekulé forms of the same site differ here. Two equivalent carbons
+    do not, so they stay one edit.
+    """
+
+    idxs = set(mapped.values())
+    bonds: list[tuple[int, int, float]] = []
+    for bond in mol.GetBonds():
+        i = bond.GetBeginAtomIdx()
+        j = bond.GetEndAtomIdx()
+        if i not in idxs and j not in idxs:
+            continue
+        a, b = sorted((ranks[i], ranks[j]))
+        bonds.append((a, b, bond.GetBondTypeAsDouble()))
+    return tuple(sorted(bonds))
+
+
+def site_signature(
+    context: Mol,
+    work: Mol,
+    mapped: Mapping[int, int],
+    ranks: Mapping[int, int],
+    site: frozenset[int],
+    rxn_num: int,
+    effect: Effect,
+    *,
+    unique_orbit: UniqueOrbit = "atom_atom",
+) -> SiteSignature:
+    """Dedup key. Last field is a pair-orbit signature, or ``None`` for one atom."""
+
+    return (
+        tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items())),
+        incident_orders(work, ranks, mapped),
+        rxn_num,
+        effect.get("adds"),
+        effect.get("removes"),
+        bool(effect.get("cleaves")),
+        bool(effect.get("dearomatizes")),
+        site_orbit(context, mapped, site, unique_orbit=unique_orbit),
+    )
+
+
+def pair_site_signature(
+    mol: Mol,
+    ranks: Mapping[int, int],
+    map1: Mapping[int, int],
+    map2: Mapping[int, int],
+    site_a: int,
+    site_b: int,
+    info1: PatternInfo,
+    info2: PatternInfo,
+    preview: PairSiteInfo,
+    *,
+    unique_orbit: UniqueOrbit = "atom_atom",
+) -> tuple:
+    """Unique-edit key for a pair-path emission (before mol edit).
+
+    Swappable ends (shared ``swap_group``): roles + map embeddings sorted so
+    match order does not matter. Ordered ends: canonical ``name`` order so
+    (pat_lo@site, pat_hi@other) is stable under argument swap, while swapping
+    which pattern sits on which atom stays distinct. Map ranks distinguish
+    dealkylate embeddings that share path ends but cleave different partners.
+    """
+
+    effect = preview["options"]
+    # Pair unique-edit site is always the two end atoms (not a nested Site union).
+    site = frozenset({site_a, site_b})
+    ends = preview.get("ends")
+    effect1: Effect | None = ends[0] if ends else None
+    effect2: Effect | None = ends[1] if ends else None
+    name1 = info1.get("name") or ""
+    name2 = info2.get("name") or ""
+    maps1 = map_rank_key(ranks, map1)
+    maps2 = map_rank_key(ranks, map2)
+    swappable = ends_swappable(info1, info2, effect1, effect2)
+    if swappable:
+        roles: tuple = tuple(
+            sorted(
+                (
+                    (resolved_swap_group(info1, effect1) or name1, maps1),
+                    (resolved_swap_group(info2, effect2) or name2, maps2),
+                )
+            )
+        )
+    elif (name1, site_a, maps1) <= (name2, site_b, maps2):
+        roles = ((name1, maps1), (name2, maps2))
+    else:
+        roles = ((name2, maps2), (name1, maps1))
+    return (
+        roles,
+        tuple(sorted(ranks[i] for i in site)),
+        tuple(sorted(ranks[i] for i in preview["path_ends"])),
+        formula_key(effect.get("adds")),
+        formula_key(effect.get("removes")),
+        bool(effect.get("cleaves")),
+        bool(effect.get("dearomatizes")),
+        bool(effect.get("methide")),
+        pair_orbit(
+            mol,
+            map1,
+            map2,
+            site_a,
+            site_b,
+            site,
+            info1,
+            info2,
+            unique_orbit=unique_orbit,
+            effect1=effect1,
+            effect2=effect2,
+        ),
+    )
+
+
+# Underscore aliases for gradual call-site migration / tests.
+_resolved_swap_group = resolved_swap_group
+_ends_swappable = ends_swappable
+_end_roles_symmetric = ends_swappable
+_map_rank_key = map_rank_key
+_formula_key = formula_key
+_bond_atom_orbit_for_match = bond_atom_orbit_for_match
+_site_orbit = site_orbit
+_pair_orbit = pair_orbit
+_incident_orders = incident_orders
+_site_signature = site_signature
+_pair_site_signature = pair_site_signature

@@ -66,6 +66,7 @@ from xenosite.refactor_poc.graph_isomorphism import (
     bond_pair_orbit_isotope,
     bond_pair_orbit_key,
     bond_site_cip_key,
+    incident_orders,
     orbit_group_cip_key,
     orbit_membership,
     site_pair_cip_key,
@@ -80,7 +81,7 @@ from xenosite.refactor_poc.records import (
     PairGroupId,
     TopoGroupId,
 )
-from xenosite.refactor_poc.rules import QuinoneFormation, _incident_orders
+from xenosite.refactor_poc.rules import QuinoneFormation
 
 # Symmetric aromatics + a few larger poc/H2H substrates for oracle coverage.
 _ORACLE_MOLSMILES = (
@@ -104,7 +105,7 @@ def _rank_key(mol: Mol, left: int, right: int):
     mapped = {1: left, 2: right}
     return (
         tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items())),
-        _incident_orders(mol, ranks, mapped),
+        incident_orders(mol, ranks, mapped),
     )
 
 
@@ -142,6 +143,8 @@ def test_atom_signature_shape_and_unordered():
     assert isinstance(meta, AtomPairOrbitSignature)
     assert isinstance(para, AtomPairOrbitSignature)
     assert meta is not None and para is not None
+    assert meta.ordered is False and para.ordered is False
+    assert meta.end_ranks == () == para.end_ranks
     g = TopoGroupId(mol.xf.topol_equiv[0])
     assert meta.groups == (g, g) == para.groups
     assert isinstance(meta.pair_group, int)
@@ -284,6 +287,8 @@ def test_bond_pair_and_bond_atom_signature_shapes():
     mol = _mol("c1ccccc1")
     bp = bond_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(bp, BondPairOrbitSignature)
+    assert bp.ordered is False
+    assert bp.end_ranks == ()
     assert isinstance(bp.pair_group, int)
     assert bond_pair_orbit_key(mol, frozenset({3, 0})) == bp
     assert bond_pair_orbit_key(mol, frozenset({0})) is None
