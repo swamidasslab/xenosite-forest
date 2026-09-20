@@ -10,145 +10,205 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [Unreleased]
+
+Migration details: [`docs/forest/MIGRATING_0.7.md`](docs/forest/MIGRATING_0.7.md).
+Previous forest (0.6.x API): archive directory
+[`src/xenosite/_archive_forest/`](src/xenosite/_archive_forest/) on GitHub.
+
+### Changed
+
+- Metabolic Forest lives in ``xenosite.forest``. Design notes under
+  ``docs/forest/``.
+- **Breaking:** ``metabolize`` yields ``(products, info)`` where
+  ``products`` is always a ``list[Mol]`` (one element for non-cleavage;
+  siblings for cleavage). Product SMILES via ``product.xf.csmi`` (no
+  ``info["csmi"]``). See the migration guide.
+- Reaction SMIRKS surfaces use ``Smirks`` / ``SmirksReactionRule`` naming
+  (match-only SMARTS stay ``Smarts``).
+- Rules declare ``site_kind`` (``atom`` / ``bond`` / ``directed_bond`` /
+  ``atom_pair``). Public bond sites stay frozensets; directed orientation
+  is on ``discovered_site``.
+- Cross-rule same-product overlaps under a RuleSet log at INFO.
+  Within-rule unique-edit misses still raise ``SiteDeduplicationWarning``.
+- ``find_path`` closers distinguish Hydrogenation (adds H) from
+  Dehydrogenation (removes H).
+- **Dependencies:** ``pynauty`` is now required (no longer optional). Needed
+  for the correct unique-edit / pair-orbit nauty backend (forest unique-edit
+  authority). RDKit/SMILES pair-orbit is not shipped as a product fallback.
+- **Breaking:** Python **3.11+** is required (3.10 is no longer supported).
+
+### Deprecated
+
+- ``AtomTracker`` — prefer ``mol.xf`` / ``mol.xf.tracing``. Migration tutorial:
+  [`docs/forest/XF.md`](docs/forest/XF.md#tutorial-replacing-atomtracker-with-molxf).
+
+### Added
+
+- Opt-in ``canonical_emitted_sites`` on metabolize / path search.
+- Pair-orbit unique-edit (``swap_group``) for ResonancePair ends.
+- ``mol.xf.tracing`` helpers for AtomTracker migration: ``depths()``,
+  ``index_at``, ``added_indices``, ``root_map``.
+- ``xenosite.forest`` typing is at 100% coverage under the package
+  pyright gate (informative for callers).
+
+
 ## [0.6.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.1) - 2026-09-19
 
 ### Fixed
 
-- ``metabolize`` leaves the passed mol's bonds alone. SMARTS kekulize and resonance bond-path search run on a copy. Atom maps and tags are still written on the input.
+- ``metabolize`` leaves the caller's mol bonds alone. SMARTS kekulize and
+  resonance bond-path search run on a copy. Atom maps and tags are still
+  written on the input.
 
 
 ## [0.6.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.0) - 2026-09-19
 
 ### Changed
 
-- ``phase1=True`` reports sites as 0-based atom indexes. The old ``1.h`` and ``2.3`` labels are gone.
+- ``phase1=True`` reports sites as 0-based atom indexes (``1.h`` / ``2.3``
+  labels removed).
 
 ### Fixed
 
-- Guided search tries rules that can dearomatize first when a large matched region is aromatic on the reactant and not on the target. Sites on that system, including atoms bonded to it, are tried first; other sites of those rules are kept and sorted later. Match-boundary sites are expanded before other sites.
+- Guided search prioritizes dearomatizing rules and sites when a large
+  matched region is aromatic on the reactant and not on the target.
 
 
 ## [0.5.3](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.3) - 2026-09-18
 
 ### Fixed
 
-- ``AtomRef`` for a created atom follows the ``atom_trace`` label stamped ``added_by``. The trace records its current frame in ``depth`` (0 on the first stamp, then +1 each stamp). At that frame the ref is the most recent matching add born at or before it. A reaction that adds no label records no creation.
+- ``AtomRef`` for a created atom follows the ``atom_trace`` label stamped
+  ``added_by``, with frame ``depth`` for resolution.
 
 
 ## [0.5.2](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.2) - 2026-09-18
 
 ### Fixed
 
-- SMARTS `metabolites` kekulizes the caller's mol again and drops its resonance cache. `standardize` no longer keeps a kekule prototype.
+- SMARTS ``metabolites`` kekulizes the caller's mol and drops its resonance
+  cache. ``standardize`` no longer keeps a kekule prototype.
 
 
 ## [0.5.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.5.1) - 2026-09-18
 
 ### Added
 
-- Conjugation path policy: one unlabeled `*` peer via `is_redundant`; star products terminal.
-- Optional `include_sites` / `exclude_sites` on `metabolize` (default: no filter).
-- Optional `max_expansions` / `counters` on classic `RuleSet.find_path` (BFS/DFS): accepts `PathSearchCounters` (or a dict mirror); caps billed work so classic and guided counters are comparable.
-- Optional extra `predict` (`xenosite-forest[predict]` → `xenosite-predict`); not installed on CI.
-- Package `find_path` (alias `find_path_guided`): MCS-guided search; default `PhaseOneQF`, `depth=None`, `max_expansions=200`; yields `PathOutcome` (Required `plan` + cleavage-side `maybe`). Unstable API.
-- Per-SMARTS `formula_hint` / `FormulaHint` on reaction options; `metabolize(..., toward_target=)` skips incompatible SMARTS. Dehydrogenation methide is opt-in (not default Phase I).
-- `Deps` (`StepPlan` specialization): flat steps + precedes; linearizations are topological sorts. Guided emission uses `Deps` (not Kahn→And/Seq).
-- `NDealkylation.is_redundant` when `Dealkylation` peers are present; duplicate `Epoxidation` instances dropped.
-- `StepPlan.n_linearizations()`: count total orders without enumerating (`Deps` uses subset DP, `n≤20`).
+- Package ``find_path`` (MCS-guided; default ``PhaseOneQF``); yields
+  ``PathOutcome``. Unstable API.
+- Optional ``include_sites`` / ``exclude_sites`` on ``metabolize``.
+- Optional ``max_expansions`` / ``counters`` on classic ``RuleSet.find_path``.
+- Per-SMARTS ``formula_hint``; ``metabolize(..., toward_target=)`` skips
+  incompatible SMARTS.
+- ``Deps`` step plans; ``StepPlan.n_linearizations()``.
+- Conjugation path policy: one unlabeled ``*`` peer; star products terminal.
+- Optional ``xenosite-forest[predict]`` extra (not on CI).
+- ``NDealkylation.is_redundant`` when ``Dealkylation`` peers are present.
 
 ### Changed
 
-- Attached plan JSON is an expression tree (`op`: `seq`/`and`/`or`/`step`/`deps`); legacy flat `steps`+`precedes` still loads.
-- Cleavage site prune / priority under guided search (MCS frontier, safe-drop interior/exterior, chem-disagree as frontier-only). Early abort when T introduces unreachable elements.
-- Guided `max_expansions` caps `PathSearchCounters.billed()` (`linearizations_applied` + `site_applies`), not `rule_expansions`.
-- Package `__all__` trimmed: emission helpers (`and_cleave_plan`, `CleavageSide`, `MaybeFilter`, PathContext utils, `@unstable`) are submodule-only. Docs keep `find_path` short.
-- QuinoneFormation guided enum can emit phase1 plans without materializing/clean; `include_sites` restricts resonance fanout before `clean`.
-- Store atom traces on mol._forest with stable `_forestLabel` (not CX `atomLabel`); metabolize records atom_refs; copy_mol preserves forest.
-- `@unstable` / `UnstableWarning` on public guided surface: `find_path`, `PathOutcome`, `PathSearchCounters`, `Deps`, `StepPlan.n_linearizations`.
-- `AtomRef.added_by` is `(rule, site)` with frame `depth` for those site idxs; origin refs also carry `depth` (created atoms lack depth-0); `atom_trace` keeps live `records` plus a `removed` event list (cleavage siblings are dropped, not recorded).
-- `QuinoneFormation.phase1_steps` / Phase I emitters return a single `StepPlan`. Prefer `plan.branches()` / `plan.linearizations()`.
+- Attached plan JSON is an expression tree; legacy flat ``steps``+``precedes``
+  still loads.
+- Cleavage site prune / priority under guided search; early abort when the
+  target introduces unreachable elements.
+- Atom traces on ``mol._forest`` with stable labels; ``copy_mol`` preserves
+  forest.
+- Guided surface marked ``@unstable`` / ``UnstableWarning``.
+- Package ``__all__`` trimmed; emission helpers are submodule-only.
 
 
 ## [0.4.0] - 2026-09-17
 
 ### Added
 
-- Public `AtomRef` / `Step` / `StepPlan` / `Linearization`: reactant-stable sites (origin or created-by), partial orders, `Step.apply` / `Linearization.apply` with `mol._forest["atom_refs"]` creation index and opt-in `resolve_site`.
-- `Linearization.apply(..., toward=, drop_last=)` for fragment retention and prep-only replay.
-- `ReactionRule.phase1_steps(mol, site)`: Phase I and `NDealkylation` return a degenerate singleton plan; `QuinoneFormation` returns multi-step prep + final dehydrogenation (`AtomRef` ends for new O); other rules raise `NotImplementedError`.
-- Opt-in `attach_phase1_steps=True` on `metabolize` / rule `metabolites` / rulesets. Attach and read plans with `StepPlan.attach_to_mol` / `from_mol` / `try_from_mol` (storage is private; do not read mol props by name).
-- `Dehydrogenation` query SMARTS for quinoid ends (`#6H0` bonded to OH / NH / tertiary N) so Forest DH can form hydroquinone→benzoquinone and APAP→NAPQI; quinone `StepPlan` full Forest apply works for those cases.
-- Hypothesis fuzz via library `Linearization.apply` (prep agreement; full equality when all steps fire).
+- Public ``AtomRef`` / ``Step`` / ``StepPlan`` / ``Linearization``.
+- ``ReactionRule.phase1_steps(mol, site)`` and opt-in
+  ``attach_phase1_steps=True``.
+- ``Dehydrogenation`` query SMARTS for quinoid ends (hydroquinone→benzoquinone,
+  APAP→NAPQI).
+
 
 ## [0.3.1] - 2026-09-17
 
 ### Changed
 
-- Resonance rules share lazily cached joined resonance forms and `bfs_all_pairs` on `mol._forest` (conjugated vs aromatic modes), avoiding repeated `ResonanceMolSupplier` work within a ruleset. Private `_resonance_cache_disabled()` for parity tests.
+- Resonance rules share lazily cached joined forms and pair paths on
+  ``mol._forest``.
+
 
 ## [0.3.0] - 2026-09-17
 
 ### Fixed
 
-- Resonance reassembly no longer strips conjugation ``*`` adducts when removing FragmentOnBonds dummies, so `bfs(..., ruleset="Full", depth=2, expand_star_conjugates=True)` no longer raises RDKit `Range Error` after acetylation→dehydrogenation.
+- Resonance reassembly keeps conjugation ``*`` adducts when removing
+  FragmentOnBonds dummies (Full BFS depth≥2 after acetylation→dehydrogenation).
 
 ### Added
 
-- `dfs(...)` / `find_path(..., search="dfs")` for depth-first pathway search; CLI `--search dfs`.
-- Optional `max_paths` on `bfs` / `dfs` (default unlimited) and `shuffle_rng` on both to randomize metabolite order.
-- `expand_star_conjugates=False` (default) on BFS/DFS / `find_path`: star (`*`) conjugate adducts are emitted but not metabolized further. Opt in with `expand_star_conjugates=True` or CLI `--expand-star-conjugates`.
-- Hypothesis fuzz: randomly sample Full DFS two-step pathways (``shuffle_rng``); persist ``.hypothesis`` example DB on CI.
-- Regression lock for GitHub issue #3 parent SMILES (PhaseOneRS valence crash was already fixed since 0.2.0 / 0.2.2).
+- ``dfs(...)`` / ``find_path(..., search="dfs")``; CLI ``--search dfs``.
+- Optional ``max_paths`` and ``shuffle_rng`` on BFS/DFS.
+- ``expand_star_conjugates=False`` by default on BFS/DFS / ``find_path``.
+
 
 ## [0.2.8] - 2026-09-13
 
 ### Fixed
 
-- `metabolize` topological dedup now matches the XenoSite UI identity key (normalized pathway + sorted topological ranks + product SMILES), so equivalent sites collapse without dropping distinct products.
+- ``metabolize`` topological dedup matches the XenoSite UI identity key
+  (pathway + topo ranks + product SMILES).
+
 
 ## [0.2.7] - 2026-09-13
 
 ### Added
 
-- `NDealkylation` rule and `ND` ruleset: Dealkylation products filtered to nitrogen-containing formation sites (for the N-dealkylation XenoSite model). Short-circuits when the molecule has no nitrogen. Broad `Dealkylation` on `UO` is unchanged.
+- ``NDealkylation`` rule and ``ND`` ruleset (N-containing formation sites).
+
 
 ## [0.2.6] - 2026-09-09
 
 ### Fixed
 
-- `Glutathionation` reactivity conjugation (high sensitivity / low specificity): Michael acceptors, C–Br/I/F, aldehyde thiohemiacetals, aziridines, sulfonate esters, and isocyanates/isothiocyanates, in addition to epoxide, C–Cl, thiol, and terminal alkene.
+- ``Glutathionation`` reactivity conjugation: Michael acceptors, C–Br/I/F,
+  aldehyde thiohemiacetals, aziridines, sulfonate esters, and
+  isocyanates/isothiocyanates, plus existing epoxide / C–Cl / thiol /
+  terminal alkene coverage.
+
 
 ## [0.2.5] - 2026-09-09
 
 ### Fixed
 
-- `Glucuronidation` site of metabolism is a single atom: the oxygen that receives GlcA (acid and phenol/alcohol SMARTS), aligned with high `ugt` atom scores.
+- ``Glucuronidation`` site of metabolism is the single oxygen that receives
+  GlcA (acid and phenol/alcohol SMARTS).
 
-### Added
-
-- Conjugation regressions that require a single-atom SOM for every UGT / GSH / Protein / DNA / Cyanide SMARTS probe, plus UGT oxygen site checks.
 
 ## [0.2.4] - 2026-09-08
 
 ### Fixed
 
-- Doctest collection via importlib so `xenosite` stays a PEP 420 namespace package.
-- RDKit enumeration drift regressions vs forest 0.2.3 / py2 baselines.
-- `clean()` no longer drops whole product sets when one fragment is invalid; invalid metabolites log at DEBUG.
+- Doctest collection via importlib (PEP 420 namespace package).
+- ``clean()`` keeps valid fragments when one product fragment is invalid;
+  invalid metabolites log at DEBUG.
+
 
 ## [0.2.3] - 2026-09-03
 
 ### Added
 
-- Conjugation star adducts by default; optional `star_label` / `as_star=False`.
-- `Glutathionation(include_thiol=False)` and `load_ruleset("GlutathionationNoThiol")` for DNA / cyanide heads.
-- Star-only labels `Protein`, `DNA`, and `Cyanide`.
+- Conjugation star adducts by default; optional ``star_label`` / ``as_star=False``.
+- ``Glutathionation(include_thiol=False)`` and
+  ``load_ruleset("GlutathionationNoThiol")``.
+- Star-only labels ``Protein``, ``DNA``, and ``Cyanide``.
+
 
 ## [0.2.2] - 2026-08-29
 
 ### Fixed
 
-- RDKit valence / property-cache handling around `RunReactants` and SMILES (refresh before react; skip unsanitizable reactants).
+- RDKit valence / property-cache handling around ``RunReactants`` and SMILES
+  (refresh before react; skip unsanitizable reactants).
 
 [0.4.0]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.4.0
 [0.3.1]: https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.3.1

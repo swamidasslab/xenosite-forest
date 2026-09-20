@@ -1,52 +1,63 @@
-"""Enumerate metabolite structures with Metabolic Forest reaction rules."""
+"""Enumerate metabolite structures with Metabolic Forest reaction rules.
+
+The previous forest implementation lives under
+``xenosite._archive_forest`` (archive directory on GitHub). Prefer
+``mol.xf`` over ``AtomTracker``. See ``docs/forest/MIGRATING_0.7.md``.
+"""
 
 try:
     from ._version import __version__
 except ImportError:  # pragma: no cover - missing only in incomplete checkouts
     __version__ = "0.0.0"
 
-from .bfs import bfs, dfs
-from .guided_path import (
-    PathOutcome,
-    PathSearchCounters,
-    find_path,
-    find_path_guided,
+# StepPlan apply layer still lives on the archived tree until re-homed.
+from xenosite._archive_forest.step_plan import (  # noqa: E402
+    And,
+    AtomRef,
+    Deps,
+    Linearization,
+    Or,
+    Step,
+    StepPlan,
+    pathway_from_json,
+    pathway_to_json,
 )
-from .path_context import (
-    FormulaHint,
-    ADD_O,
-    CLEAVE,
-    CLEAVE_OR_ADD_O,
-    NEUTRAL,
-    REMOVE_O,
-)
-from .phaseone import PhaseOneQF, PhaseOneRS
+
 from . import rules
-from .rulesets import RULESETS, RuleSet, load_ruleset
-from .step_plan import And, AtomRef, Deps, Linearization, Or, Step, StepPlan
-from .step_plan import pathway_from_json, pathway_to_json
-from .trace import AtomTrace
+from .atom_tracker import AtomTracker
+from .find_path import (
+    CleavageSide,
+    Maybe,
+    PathCounters,
+    PathOutcome,
+    bfs,
+    dfs,
+    find_path,
+)
+from .phaseone import PhaseOneQF, PhaseOneRS, metabolize, reaction_labels
+from .rulesets import PhaseOne, RuleSet
+
+# Compatibility alias for callers that used the old counter name.
+PathSearchCounters = PathCounters
 
 __all__ = [
     "__version__",
+    "AtomTracker",
     "bfs",
     "dfs",
     "find_path",
-    "find_path_guided",
     "PathOutcome",
+    "PathCounters",
     "PathSearchCounters",
-    "FormulaHint",
-    "ADD_O",
-    "CLEAVE",
-    "CLEAVE_OR_ADD_O",
-    "NEUTRAL",
-    "REMOVE_O",
+    "Maybe",
+    "CleavageSide",
+    "PhaseOne",
     "PhaseOneRS",
     "PhaseOneQF",
-    "RULESETS",
     "RuleSet",
-    "load_ruleset",
     "rules",
+    "metabolize",
+    "reaction_labels",
     "And",
     "Or",
     "Deps",
@@ -56,5 +67,4 @@ __all__ = [
     "StepPlan",
     "pathway_from_json",
     "pathway_to_json",
-    "AtomTrace",
 ]

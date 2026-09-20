@@ -4,6 +4,8 @@ This library enumerates metabolite *structures* with the Metabolic Forest reacti
 
 Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI [10.1021/acs.jcim.0c00360](https://doi.org/10.1021/acs.jcim.0c00360). BibTeX is in the [README](../README.md#citation).
 
+**0.7 migration:** [`forest/MIGRATING_0.7.md`](forest/MIGRATING_0.7.md). Previous forest API: archive directory [`src/xenosite/_archive_forest/`](../src/xenosite/_archive_forest/) on GitHub.
+
 ## Public API
 
 ```python
@@ -65,32 +67,20 @@ rules.Epoxidation().phase1_steps(Chem.MolFromSmiles("C=C"), frozenset({0, 1}))
 # → Epoxidation[0, 1]
 ```
 
-### Stamp while metabolizing
-
-Opt in with `attach_phase1_steps=True`. Read stamps via `StepPlan` — do not inspect
-mol props by name (`from_mol` raises if missing; `try_from_mol` returns `None`).
-
 ```python
 from rdkit import Chem
-from xenosite.forest import StepPlan, load_ruleset, rules
+from xenosite.forest import rules
+from xenosite.forest.rulesets import PhaseOne
 
 mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
 
-# Single rule
-for site, products in rules.QuinoneFormation().metabolize(
-    mol, attach_phase1_steps=True, tag_atoms=False
-):
-    for p in products:
-        plan = StepPlan.try_from_mol(p)  # None on unstamped fragments
-        if plan is not None:
-            print(site, plan)
+# Single rule — yields (products, info); see docs/forest/MIGRATING_0.7.md
+for products, info in rules.QuinoneFormation().metabolize(mol):
+    print(info["site"], [p.xf.csmi for p in products])
 
-# Same flag on a ruleset (e.g. "QF", "PhaseOneRS", "Full")
-for site, products in load_ruleset("QF").metabolize(
-    mol, attach_phase1_steps=True, tag_atoms=False
-):
-    plan = StepPlan.try_from_mol(products[0])
-    ...
+# Ruleset (same yield shape)
+for products, info in PhaseOne().metabolize(mol):
+    print(info["rule"].name, info["site"], [p.xf.csmi for p in products])
 ```
 
 ### Resolve and replay
@@ -127,16 +117,20 @@ sites as `toward`.
 
 ## Enumerate metabolites
 
+Prefer ``metabolize`` (see [`MIGRATING_0.7.md`](forest/MIGRATING_0.7.md)).
+
 ```python
 from rdkit import Chem
 from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
-for site, products in rules.QuinoneFormation().metabolites(mol):
-    print(site, [Chem.MolToSmiles(p) for p in products])
+for products, info in rules.QuinoneFormation().metabolize(mol):
+    print(info["site"], [p.xf.csmi for p in products])
 ```
 
-Each `site` is `(rule_name, atom_or_bond_indices)`. Products are RDKit molecules.
+`info["site"]` is atom indexes (typically a `frozenset`). Cleavage yields sibling
+mols in one `products` list; read each fragment via `p.xf.csmi` (emission
+identity is the frozenset of those).
 
 ## Conjugation (Phase II)
 
@@ -144,21 +138,22 @@ Each `site` is `(rule_name, atom_or_bond_indices)`. Products are RDKit molecules
 
 ```python
 from rdkit import Chem
-from xenosite.forest import rules, load_ruleset
-from xenosite.forest.utils import mol_to_cxsmiles
+from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
 
 # Default: bare star
-_, products = next(rules.Glucuronidation().metabolites(mol))
-Chem.MolToSmiles(products[0])  # '*Oc1ccccc1'
+products, info = next(rules.Glucuronidation().metabolize(mol))
+product = products[0]
+Chem.MolToSmiles(product)  # '*Oc1ccccc1'
 
-# CXSMILES label on the dummy
-_, products = next(rules.Glucuronidation(star_label="GlcA").metabolites(mol))
-mol_to_cxsmiles(products[0])  # '*Oc1ccccc1 |$GlcA;;;;;;;$|'
+# CXSMILES label on the dummy (when using mol_to_cxsmiles helpers)
+products, info = next(rules.Glucuronidation(star_label="GlcA").metabolize(mol))
+product = products[0]
 
 # Full glucuronide
-_, products = next(rules.Glucuronidation(as_star=False).metabolites(mol))
+products, info = next(rules.Glucuronidation(as_star=False).metabolize(mol))
+product = products[0]
 ```
 
 | Option | Meaning |
@@ -195,31 +190,22 @@ Convert with `xenosite.forest.trace.atom_no` (GetIdx → atom number) and `rdkit
 
 ## Atom tracing
 
-After a reaction (unless `do_not_tag_atoms=True`), each product carries origin map numbers and an `AtomTrace`. Atom numbers are 1-based; depths are 0-based.
+Each `metabolize` product carries forest tracing on `mol.xf` /
+`mol.xf.tracing` (prefer over deprecated `AtomTracker`).
 
 ```python
 from rdkit import Chem
-from xenosite.forest import AtomTrace, rules
+from xenosite.forest import rules
 
 mol = Chem.MolFromSmiles("CCO")
-_, products = next(rules.Hydroxylation().metabolize(mol))
-p = products[0]
-t = AtomTrace(p)
-
-Chem.MolToSmiles(p, canonical=False)
-# e.g. [CH2:1](O)[CH2:2][OH:3]  — :N is origin at depth 0; the new O has no map
-
-t.map()       # {1: 1, 2: 3, 3: 4}  depth-0 atom number -> current atom number
-t.follow(1)   # (1, 1)
-t.origin(2)   # None if current atom 2 is the new O
-t.added()     # frozenset of new 1-based atom numbers
-t.removed()   # frozenset of depth-0 atom numbers that disappeared
-t.depths      # (0, 1)
+products, info = next(rules.Hydroxylation().metabolize(mol))
+product = products[0]
+print(product.xf.csmi)
 ```
 
-Canonical `MolToSmiles` may scramble atom order; reactant-aligned order uses `canonical=False`. Map numbers still appear in canonical SMILES, so `:N` alignment works either way.
-
-`do_not_tag_atoms=True` skips tags, maps, and reorder.
+Prefer `mol.xf` for maps, formula, and atom_trace. See
+[`XF.md`](forest/XF.md) (accessor API) and
+[`MIGRATING_0.7.md`](forest/MIGRATING_0.7.md) (0.6 → 0.7).
 
 ## Search a pathway
 

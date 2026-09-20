@@ -1,0 +1,24 @@
+---
+description: Generic algorithms read data-driven definitions. Types are the documentation of the problem.
+alwaysApply: true
+---
+
+# Data, not branches
+
+A generic algorithm reads specific data. Keep the algorithm short enough to describe. Make a change by changing the data it reads, not by adding an optional code block.
+
+The schema is where a reader learns the categories of the problem. A field on `PatternInfo`, `Forest`, or a NamedTuple is a definition. It is not a comment beside a branch. If a category cannot be named on one of those records, do not add a special case yet.
+
+Methide is the example. Repeat the split. Do not copy it as a one-off.
+
+- The rule's data offers methide as an effect. There is no `pathways=("methide",)` flag and no block that turns methide on.
+- At most one methide site is also data. `PatternInfo` resolves one methide end and does not resolve two. That limit is not a filter and not an `if` in the search.
+- A caller who wants no methides passes `filter_sites`. The filter reads the effect the rule already declared. It does not grow a methide branch of its own.
+
+An exception is allowed only with a good reason. Record it in `docs/forest/HEURISTICS.md` with `Status: approved`, `not approved`, or `not decided`. A silent branch is not an exception. None are approved.
+
+Dropped behavior is recorded in `docs/forest/DROPPED.md` with the same status words. A listing there is not approval. Read the status before treating a cut as permanent.
+
+Data may also say a rule is less likely. The schema for that is not decided. Do not invent the field. A later filter may read it. That is not an opt-in and not a branch.
+
+This governs new work in this repo, especially `src/xenosite/forest/`. Do not retrofit `src/xenosite/_archive_forest/` unless asked.

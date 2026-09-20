@@ -8,13 +8,12 @@ dynamic = ["version"]
 description = "Metabolic Forest: enumerate metabolite structures from reaction rules"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "S. Joshua Swamidass", email = "swamidass@gmail.com" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -25,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "rdkit>=2022.3.3",
+    "pynauty",
 ]
 keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
 
@@ -34,9 +34,8 @@ network = [
     "tqdm>=4.66.0",
 ]
 # Downstream predictors; not installed on CI (workflows use --extra network only).
-# Marker keeps forest's requires-python>=3.10 resolvable; predict itself needs >=3.11.
 predict = [
-    "xenosite-predict>=0.4.2; python_version >= '3.11'",
+    "xenosite-predict>=0.4.2",
 ]
 
 [project.urls]
@@ -59,6 +58,9 @@ dev = [
     "tqdm>=4.66.0",
     "hypothesis>=6.168.0",
     "towncrier>=24.0",
+    "pyright>=1.1.414",
+    "ruff>=0.16.8",
+    "xenopict>=0.3",
 ]
 
 [tool.towncrier]
@@ -114,6 +116,7 @@ version-file = "src/xenosite/forest/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/xenosite"]
+# Archive ships for StepPlan/parity imports but is not supported API.
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -128,26 +131,78 @@ include = [
 
 [tool.pytest.ini_options]
 addopts = "--doctest-modules -n auto --timeout=120 --import-mode=importlib"
-# Collect from src (not src/xenosite/forest) so importlib resolves xenosite.forest.*
-# and xenosite stays a PEP 420 namespace package (no xenosite/__init__.py).
-testpaths = ["tests", "src"]
-pythonpath = ["src", "tests"]
+# Collect from src so importlib resolves xenosite.forest.* and xenosite stays
+# a PEP 420 namespace package (no xenosite/__init__.py).
+testpaths = ["tests/forest", "src/xenosite/forest"]
+pythonpath = ["src", "tests", "tests/_archive_forest"]
+# tests/_archive_forest is on path only so live ports can import example SMILES
+# modules (test_rules, …). Those tests are NOT collected (norecursedirs).
 consider_namespace_packages = true
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
-# Avoid collecting optional network helpers unless explicitly requested
-norecursedirs = [".git", ".venv", "build", "dist", ".hypothesis"]
+# Archived pre-swap forest + its tests stay out of the default gate.
+norecursedirs = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    ".hypothesis",
+    "_archive_forest",
+]
 filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::xenosite.forest.unstable.UnstableWarning",
+    "error",
+    # Intentional archive chemotype noise; not a live-forest contract.
+    "ignore::xenosite._archive_forest.unstable.UnstableWarning",
+    # Deprecated AtomTracker facade: tests that call it use pytest.warns /
+    # catch_warnings(ignore). Do not blanket-ignore DeprecationWarning.
+    # Cross-rule overlaps log INFO only (no RedundantRulesWarning); SiteDeduplicationWarning
+    # stays an error under this filterwarnings=error gate.
 ]
 markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
+    "regression: deferred bug, not correct behavior or out of scope",
+    "cleared_0_7: former hard xfail that now passes on live forest (since v0.6)",
 ]
 
 [tool.coverage.run]
 source_pkgs = ["xenosite.forest"]
-omit = ["*/_version.py"]
+omit = ["*/_version.py", "*/_archive_forest/*"]
 
 [tool.coverage.report]
 skip_empty = true
 show_missing = true
+
+[tool.pyright]
+include = [
+    "src/xenosite/forest",
+]
+exclude = [
+    "src/xenosite/_archive_forest",
+    "src/xenosite/refactor_poc/test.ipynb",
+]
+# tests/forest stays out until its MolFromSmiles / TypedDict noise is cleaned.
+# Local and CI: `uv run pyright src/xenosite/forest`.
+# Untyped parameters error for the live forest tree. Argument / member /
+# variable Unknown stay off: RDKit stubs still flood those.
+reportMissingParameterType = "error"
+reportUnknownParameterType = "error"
+reportUntypedFunctionDecorator = "error"
+
+# Live forest + its tests. Archive and examples stay out.
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [
+    "src/xenosite/_archive_forest",
+    "tests/_archive_forest",
+    "examples",
+    "src/xenosite/refactor_poc/test.ipynb",
+    "tests/conftest.py",
+]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort. Bugbear (B) is off: B905 wants
+# zip(..., strict=) and that is a behavior change, not a quiet rule.
+select = ["E", "W", "F", "I"]
+# PLC0414 flags `import name as name`. Re-exports use that form on purpose.
+ignore = ["PLC0414"]

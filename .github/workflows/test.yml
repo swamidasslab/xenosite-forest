@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,7 +25,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .hypothesis
-          key: hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('tests/test_bfs_fuzz.py', 'uv.lock') }}
+          key: hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('tests/forest/test_bfs_fuzz.py', 'uv.lock') }}
           restore-keys: |
             hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-
             hypothesis-${{ runner.os }}-
@@ -34,4 +34,21 @@ jobs:
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
       - name: Run tests in parallel
-        run: uv run pytest -n auto --cov=xenosite.forest --cov-report=term-missing
+        run: uv run pytest tests/forest src/xenosite/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and dev extras
+        run: uv sync --extra network --group dev
+      - name: Ruff (live forest only)
+        run: uv run ruff check src/xenosite/forest tests/forest
+      - name: Pyright (live forest src only)
+        # Paths match [tool.pyright] include; tests stay out until typed clean.
+        run: uv run pyright src/xenosite/forest
