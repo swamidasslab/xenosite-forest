@@ -1,6 +1,6 @@
 """Deprecated ``AtomTracker`` facade over ``mol.xf.tracing`` / ``mol.xf``.
 
-Kept working for call-site compatibility after the POC→``xenosite.forest``
+Kept working for call-site compatibility after the promote to ``xenosite.forest``
 swap. Prefer ``mol.xf`` / ``mol.xf.tracing`` for new code. Old forest
 internals live under ``xenosite._archive_forest`` for a while.
 

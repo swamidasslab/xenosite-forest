@@ -4,8 +4,8 @@ Identity rules report themselves at the metabolize site. QuinoneFormation
 expands to prep steps plus dehydrogenation; search must not see a
 QuinoneFormation leaf. Epoxidation / NDealkylation keep identity plans
 (forest ``phase1_equivalent`` singletons), not group look-aheads.
-Apply uses forest StepPlan for composite plans (plain mol, no poc forest)
-and a site-filtered poc metabolize for identity plans.
+Apply uses forest StepPlan for composite plans (plain mol, no live forest state)
+and a site-filtered forest metabolize for identity plans.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from xenosite.forest.rulesets import PhaseOne
 from .substrate_library import QUICK_SUBSTRATES, SUBSTRATE_LIBRARY
 
 # Concrete reaction rules under test. Not RuleSet / abstract bases.
-_POC_RULES: tuple[type[ReactionRule], ...] = tuple(type(rule) for rule in PhaseOne) + (
+_FOREST_RULES: tuple[type[ReactionRule], ...] = tuple(type(rule) for rule in PhaseOne) + (
     NDealkylation,
     AzoSplitting,
     BenzodioxoleReduction,
@@ -49,7 +49,7 @@ _POC_RULES: tuple[type[ReactionRule], ...] = tuple(type(rule) for rule in PhaseO
 )
 
 _RULE_BY_NAME: dict[str, type[ReactionRule]] = {
-    cls.__name__: cls for cls in _POC_RULES
+    cls.__name__: cls for cls in _FOREST_RULES
 }
 
 _PRODUCTS_PER_PAIR = 4
@@ -160,10 +160,10 @@ def plan_reaches_product(
     )
 
 
-@pytest.mark.parametrize("rule_cls", _POC_RULES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize("rule_cls", _FOREST_RULES, ids=lambda cls: cls.__name__)
 @pytest.mark.parametrize("smiles", QUICK_SUBSTRATES)
 def test_canonical_plan_reaches_product_quick(rule_cls, smiles):
-    """Every poc rule × quick substrates: reported plan reaches the product."""
+    """Every forest rule × quick substrates: reported plan reaches the product."""
 
     rule = _make_rule(rule_cls)
     checked = 0
@@ -174,7 +174,7 @@ def test_canonical_plan_reaches_product_quick(rule_cls, smiles):
             break
 
 
-@pytest.mark.parametrize("rule_cls", _POC_RULES, ids=lambda cls: cls.__name__)
+@pytest.mark.parametrize("rule_cls", _FOREST_RULES, ids=lambda cls: cls.__name__)
 def test_canonical_plan_reaches_product_library(rule_cls):
     """Broader SMARTS/edit cohort: same check, fewer products per reactant."""
 

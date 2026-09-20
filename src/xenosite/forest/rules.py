@@ -277,7 +277,7 @@ class ReactionRule:
         orbit representative for chemistry and the emitted ``site`` key.
         ``discovered_site`` holds the pre-canonical indexes when they differ.
         Filters must not assume ``info["site"]`` equals discovery — use
-        ``discovered_site`` when present. See PAIR_ORBITS.md / HEURISTICS.
+        ``discovered_site`` when present. See docs/forest/PAIR_ORBITS.md / HEURISTICS.
         """
         if mol is None:
             raise ValueError("mol is required")
@@ -2021,7 +2021,7 @@ class ResonancePairRule(ResonanceRule):
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
                     # At most one methide end is data: two methide ends do not
-                    # resolve (DROPPED.md / data-not-branches). Not a search
+                    # resolve (docs/forest/DROPPED.md / data-not-branches). Not a search
                     # filter — the pair is never built.
                     if end1.get("methide") and end2.get("methide"):
                         continue
@@ -2755,7 +2755,7 @@ class Dephosphorylation(SmartsReactionRule):
 
     Map 1 must be the carbon-bound oxygen. Plain P-OH matches are excluded so
     RDKit uniquify cannot keep a water / methyl-phosphite cleavage instead of
-    the ester (see DIVERGENCES.md).
+    the ester (see docs/forest/DIVERGENCES.md).
     """
 
     phase1_sites_on = "bonds"
@@ -2914,10 +2914,10 @@ class TautomerRule(ResonancePairRule):
     tests. That matching helper is orthogonal to a first-class tautomer
     *rule* that emits tautomer metabolites.
 
-    **POC stance.** Not in PhaseOne. Patternless stub until chemistry and
+    **Stub.** Not in PhaseOne. Patternless until chemistry and
     unique-edit (ordered vs unordered ends) are decided. When implemented,
     prefer data on ``PatternInfo`` / endpoints over a silent search branch
-    (see HEURISTICS.md).
+    (see docs/forest/HEURISTICS.md).
     """
 
     name = "TautomerRule"
@@ -2928,7 +2928,7 @@ class TautomerRule(ResonancePairRule):
     def metabolites(self, mol: Mol, *args: Any, **kwargs: Any):  # type: ignore[override]
         raise NotImplementedError(
             "TautomerRule is a design stub; see class docstring and "
-            "HEURISTICS.md / TODO.md (tautomer SMARTS vs tautomer rule)"
+            "docs/forest/HEURISTICS.md / TODO.md (tautomer SMARTS vs tautomer rule)"
         )
 
 

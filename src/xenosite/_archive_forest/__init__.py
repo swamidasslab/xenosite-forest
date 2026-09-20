@@ -1,4 +1,4 @@
-"""Archived pre-POC Metabolic Forest (not the public API).
+"""Archived pre-swap Metabolic Forest (not the public API).
 
 Import modules explicitly, e.g. ``xenosite._archive_forest.rules``.
 Public callers should use ``xenosite.forest``. See README.md in this directory.

@@ -1,7 +1,7 @@
 """PathOutcome.maybe / allows: cleavage bags, not searched prefix chemistry.
 
 Port of ``tests/test_maybe_path.py``. Forest ``MaybeFilter`` / ``CleavageSide``
-map to poc ``Maybe`` / ``CleavageSide``. Forest helper ``_cleavage_sides_for_kept``
+map to forest ``Maybe`` / ``CleavageSide``. Forest helper ``_cleavage_sides_for_kept``
 is not ported — bags are asserted on ``find_path`` outcomes.
 """
 

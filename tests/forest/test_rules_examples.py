@@ -1,7 +1,7 @@
 """Port of ``tests/test_rules.py``: each historical example must appear as a product.
 
 SMILES stay in ``test_rules.examples``. Tautomerization is out of scope for the
-poc (see TODO.md / DROPPED.md). Conjugation examples keep full adducts
+forest (see TODO.md / docs/forest/DROPPED.md). Conjugation examples keep full adducts
 (``as_star=False``), matching the forest suite.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from test_rules import examples
 
-from xenosite.forest import rules as poc_rules
+from xenosite.forest import rules as forest_rules
 
 from .helpers import emits_product
 
@@ -39,8 +39,8 @@ def _params():
 
 @pytest.mark.parametrize("rule", sorted(set(c[0] for c in _CASES)))
 def test_rule_class_exists(rule):
-    assert hasattr(poc_rules, rule), rule
-    assert callable(getattr(poc_rules, rule))
+    assert hasattr(forest_rules, rule), rule
+    assert callable(getattr(forest_rules, rule))
 
 
 @pytest.mark.parametrize(
@@ -49,8 +49,8 @@ def test_rule_class_exists(rule):
 )
 def test_rule_emits_historical_product(rule, name, reactant, product):
     # progression: forest xfails this tetrabromo substitution under current
-    # RDKit. Poc emits it.
-    cls = getattr(poc_rules, rule)
+    # RDKit. Forest emits it.
+    cls = getattr(forest_rules, rule)
     if rule in _CONJUGATION:
         instance = cls(as_star=False)
     else:

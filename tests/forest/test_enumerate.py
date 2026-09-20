@@ -13,13 +13,13 @@ def _oxygens(smiles):
 
 
 def test_depth_one_hydroxylation_of_ethane_is_ethanol():
-    ruleset = RuleSet((Hydroxylation,), name="Poc")
+    ruleset = RuleSet((Hydroxylation,), name="Forest")
     smiles = {info["csmi"] for _mol, info in bfs("CC", ruleset, depth=1)}
     assert smiles == {"CCO"}
 
 
 def test_dfs_reaches_depth_two_before_the_frontier_is_done():
-    ruleset = RuleSet((Hydroxylation,), name="Poc")
+    ruleset = RuleSet((Hydroxylation,), name="Forest")
     reactant = "c1ccc(CCCC)cc1"
     dfs_oxygen = []
     for _mol, info in dfs(reactant, ruleset, depth=2):
@@ -49,7 +49,7 @@ def test_filter_sites_keeps_the_chain_alcohol_and_drops_the_ring():
         atoms = site if isinstance(site, frozenset) else frozenset((site,))
         return atoms.isdisjoint(ring)
 
-    ruleset = RuleSet((Hydroxylation,), name="Poc")
+    ruleset = RuleSet((Hydroxylation,), name="Forest")
     smiles = {
         _canon(info["csmi"])
         for _mol, info in bfs(
@@ -62,7 +62,7 @@ def test_filter_sites_keeps_the_chain_alcohol_and_drops_the_ring():
 
 
 def test_filter_rules_can_refuse_the_only_child():
-    ruleset = RuleSet((Hydroxylation,), name="Poc")
+    ruleset = RuleSet((Hydroxylation,), name="Forest")
     products = list(
         bfs("CC", ruleset, filter_rules=lambda mol, rule, info: False, depth=1)
     )

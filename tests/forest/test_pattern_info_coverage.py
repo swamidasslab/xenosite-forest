@@ -420,7 +420,7 @@ def test_patternless_whitelist_is_exact():
         assert issubclass(cls, ReactionRule), cls
         assert cls in discovered, (
             f"whitelist entry {cls.__name__} is not a discovered ReactionRule "
-            f"subclass under refactor_poc"
+            f"subclass under xenosite.forest"
         )
 
     patterned_whitelist = sorted(

@@ -1,4 +1,4 @@
-"""Port of ``tests/test_basic.py`` chemical checks. Path finds use poc ``find_path``.
+"""Port of ``tests/test_basic.py`` chemical checks. Path finds use forest ``find_path``.
 
 Epoxide / dehydrogenation path cases assert a non-empty plan. Dealkylation
 site and sanitize checks keep the forest asserts. Nevirapine SMILES is the
@@ -81,7 +81,7 @@ def test_hydroxyl_should_not_be_dealkylated():
 
 def test_epoxide_opening2_rejects_invalid_target():
     """Forest ``C1=CC=CC1OC1`` does not parse; forest ``find_path`` treated
-    ``end_mol=None`` as any-path. Poc must not soft-pass: invalid SMILES
+    ``end_mol=None`` as any-path. Forest must not soft-pass: invalid SMILES
     raises, and a depth-1 budget still misses the diol on a valid target.
     """
 
@@ -109,7 +109,7 @@ def test_epoxide_opening1_fail():
             "c1ccccc1",
             "C1=CC=CC(O)C1O",
             ruleset=RuleSet((Epoxidation, EpoxideOpening), name="EO"),
-            # Forest default depth=1. Poc hits the diol by node 3; keep a
+            # Forest default depth=1. Forest hits the diol by node 3; keep a
             # one-hop ceiling so the empty-hits assert stays meaningful.
             max_nodes=2,
             max_paths=3,

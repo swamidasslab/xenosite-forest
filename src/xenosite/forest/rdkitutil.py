@@ -1,4 +1,4 @@
-"""Molecule questions for the proof of concept.
+"""Molecule questions for Metabolic Forest.
 
 RDKit itself is imported in :mod:`xenosite.forest.rdkit_api`. This
 module calls those names.

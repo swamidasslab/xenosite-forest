@@ -1,7 +1,7 @@
-"""Port of ``tests/test_phaseone.py`` pathway cases onto poc ``find_path``.
+"""Port of ``tests/test_phaseone.py`` pathway cases onto forest ``find_path``.
 
 Each case asks for the same reactant→product chemistry. Plan site sets stay
-asserted when the forest suite named them. Histidine validity uses poc
+asserted when the forest suite named them. Histidine validity uses forest
 ``PhaseOne`` / ``NitrogenOxidation``. Forest ``clean`` / ``bfs`` APIs and
 rule ``rxns=`` surgery are skipped (unfinished / different surface).
 """
@@ -23,7 +23,7 @@ def _plan_rules(outcome) -> list[str]:
 
 
 def _find(reactant: str, product: str, *, max_nodes: int = 200):
-    # Default find_path ruleset is the tiny Poc catalog (4 leaves), not PhaseOne.
+    # Default find_path ruleset is the tiny default_ruleset (4 leaves), not PhaseOne.
     return find_phaseone(reactant, product, max_nodes=max_nodes, max_paths=3)
 
 

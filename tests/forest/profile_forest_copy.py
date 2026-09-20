@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Before/after cProfile harness for ``forest_copy`` vs ``copy.deepcopy`` on ``_forest``.
 
-Same find_path case shape as ``profile_find_path_poc.py`` — stresses forest
+Same find_path case shape as ``profile_find_path.py`` — stresses forest
 copy on every work-copy / product path.
 
   uv run python tests/forest/profile_forest_copy.py before
@@ -31,7 +31,7 @@ CASES: list[tuple[str, str, str]] = [
     ),
 ]
 
-POC_MAX_NODES = 800
+MAX_NODES = 800
 MAX_PATHS = 1
 TOP_N = 30
 
@@ -58,7 +58,7 @@ def run_case(label: str, reactant: str, target: str) -> tuple[bool, float, PathC
             ruleset=PhaseOne,
             counters=counters,
             max_paths=MAX_PATHS,
-            max_nodes=POC_MAX_NODES,
+            max_nodes=MAX_NODES,
         )
     )
     elapsed = time.perf_counter() - t0
@@ -125,7 +125,7 @@ def main(argv: list[str]) -> int:
         lines.append(line)
 
     log(f"forest_copy cProfile tag={tag}")
-    log(f"cases={len(CASES)}  max_nodes={POC_MAX_NODES}  max_paths={MAX_PATHS}")
+    log(f"cases={len(CASES)}  max_nodes={MAX_NODES}  max_paths={MAX_PATHS}")
     log(f"live log: {art_live}")
     log("")
 

@@ -1,6 +1,6 @@
 """Canonical plans for quinone, epoxidation, and N-dealkylation.
 
-``And`` / ``Or`` trees and plan JSON are not the poc surface. The check is
+``And`` / ``Or`` trees and plan JSON are not the forest surface. The check is
 the elementary plan the rule reports: quinone ends in dehydrogenation after
 the preps that supply oxygen; epoxidation and N-dealkylation are themselves.
 

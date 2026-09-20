@@ -1,4 +1,4 @@
-"""Every target placement stays available to the search. See HEURISTICS.md."""
+"""Every target placement stays available to the search. See docs/forest/HEURISTICS.md."""
 
 from xenosite.forest.find_path import atom_diff
 from xenosite.forest.rdkitutil import as_mol, mcs_matches

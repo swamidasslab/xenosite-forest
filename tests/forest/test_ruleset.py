@@ -7,7 +7,7 @@ from xenosite.forest.rulesets import PhaseOne, RuleSet
 
 
 def test_ruleset_metabolize_runs_each_child():
-    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Poc")
+    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Forest")
     assert isinstance(ruleset, ReactionRule)
 
     products = list(ruleset.metabolize(Chem.MolFromSmiles("CC")))
@@ -17,7 +17,7 @@ def test_ruleset_metabolize_runs_each_child():
 
 
 def test_filter_rules_refuses_one_child_and_keeps_the_other():
-    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Poc")
+    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Forest")
     seen = []
 
     def filter_rules(mol, rule, info):

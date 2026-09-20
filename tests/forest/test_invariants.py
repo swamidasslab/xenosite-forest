@@ -45,7 +45,7 @@ def _pairs(rule, smiles="CC"):
 
 
 def test_input_chemistry_is_unchanged():
-    rule = RuleSet((Hydroxylation, Dealkylation, Epoxidation), name="Poc")
+    rule = RuleSet((Hydroxylation, Dealkylation, Epoxidation), name="Forest")
     mol, before, products = _pairs(rule, "C=CC")
     assert products
     assert _chemistry(mol) == before
@@ -91,7 +91,7 @@ def test_canonical_smiles_are_not_repeated():
     from xenosite.forest.rules import _unique_csmi_key
 
     _mol, _before, products = _pairs(
-        RuleSet((Hydroxylation, Dealkylation), name="Poc"), "CC"
+        RuleSet((Hydroxylation, Dealkylation), name="Forest"), "CC"
     )
     keys = [_unique_csmi_key(info, info["csmi"]) for _product, info in products]
     assert len(keys) == len(set(keys))
@@ -99,7 +99,7 @@ def test_canonical_smiles_are_not_repeated():
 
 def test_a_new_atom_points_at_one_addition_record():
     mol, _before, products = _pairs(
-        RuleSet((Hydroxylation,), name="Poc"), "CC"
+        RuleSet((Hydroxylation,), name="Forest"), "CC"
     )
     parent_formula = mol._forest["atom_trace"]["formula"]
     product, _info = products[0]
@@ -116,7 +116,7 @@ def test_a_new_atom_points_at_one_addition_record():
     addition = trace["additions"][transform_id]
     assert set(_ADDITION_FIELDS) <= set(addition)
     names = tuple(getattr(item, "name", item) for item in addition["rules"])
-    assert names == ("Hydroxylation", "Poc")
+    assert names == ("Hydroxylation", "Forest")
     assert addition["name"] == "Hydroxylation"
     # Ethane carbons are h=3 → pattern ``h2`` (partitioned from ``h`` / h1).
     assert addition["pattern"] is Hydroxylation.smarts[1][1]
@@ -168,6 +168,6 @@ def test_a_rule_is_itself_when_iterated_and_its_name_has_no_underscore():
 
 
 def test_a_ruleset_iterates_its_children():
-    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Poc")
+    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Forest")
     assert [type(rule) for rule in ruleset] == [Hydroxylation, Dealkylation]
     assert ruleset.name is not None and "_" not in ruleset.name

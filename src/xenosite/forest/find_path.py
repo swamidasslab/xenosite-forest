@@ -806,11 +806,11 @@ def _steps_for(mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
 
 
 def default_ruleset() -> RuleSet:
-    """The poc catalog as one rule. Phase I is the ``Deps`` search yields."""
+    """Phase I catalog as one rule. Phase I is the ``Deps`` search yields."""
 
     return RuleSet(
         (Dealkylation, QuinoneFormation, Hydroxylation, Dehydrogenation),
-        name="Poc",
+        name="Default",
     )
 
 
@@ -874,7 +874,7 @@ def _walk_priority(*, target_hit: bool, seq: int) -> tuple[int, int]:
     """Heap key matching the old deque: hits first, then FIFO.
 
     Lower is better. The queue had no priority key before this; a richer key
-    from ``atom_diff`` / ``order_key`` is not decided (see HEURISTICS.md).
+    from ``atom_diff`` / ``order_key`` is not decided (see docs/forest/HEURISTICS.md).
     """
 
     return (0 if target_hit else 1, seq)
@@ -932,7 +932,7 @@ def find_path(
     with every site edited. ``counters`` is optional; pass one in when the
     test needs ``billed``. Extra ``kwargs`` (e.g. ``canonical_emitted_sites``)
     forward to each ``ruleset.metabolites`` call. Opt-in is kwargs-only
-    (no env / process toggle); see PAIR_ORBITS.md §5.
+    (no env / process toggle); see docs/forest/PAIR_ORBITS.md §5.
     """
 
     if reactant is None or target is None:
@@ -981,7 +981,7 @@ def find_path(
 
         diff = atom_diff(walk.mol, target_mol)
         parent_cost = diff.cost()
-        # See HEURISTICS.md before changing what these filters are allowed to see.
+        # See docs/forest/HEURISTICS.md before changing what these filters are allowed to see.
         filter_rules, filter_sites = _filters(diff, use_filters)
         # Order reads span data against the diff (cleave / dearomatize / oxygen).
         order_key = _order_key_for(diff)

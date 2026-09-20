@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""cProfile harness for refactor_poc find_path (poc only).
+"""cProfile harness for forest find_path.
 
 Reuses substrate/target pairs and PhaseOne wiring from bench_find_path_h2h.
 Writes text dump + pstats under artifacts/.
 
-  uv run python tests/forest/profile_find_path_poc.py
+  uv run python tests/forest/profile_find_path.py
 """
 
 from __future__ import annotations
@@ -31,12 +31,12 @@ CASES: list[tuple[str, str, str]] = [
     ),
 ]
 
-POC_MAX_NODES = 800
+MAX_NODES = 800
 MAX_PATHS = 1
 TOP_N = 30
 
 ROOT = Path(__file__).resolve().parents[2]
-# Post-xf / no-canonicalize / lazy-csmi snapshot (prior baseline: poc_find_path_profile.out).
+# Post-xf / no-canonicalize / lazy-csmi snapshot (prior baseline: find_path profile artifacts).
 ART_OUT = ROOT / "artifacts" / "poc_find_path_profile_after_xf.out"
 ART_PSTATS = ROOT / "artifacts" / "poc_find_path_profile_after_xf.pstats"
 ART_LIVE = ROOT / "artifacts" / "poc_find_path_profile_after_xf.live.log"
@@ -52,7 +52,7 @@ def run_case(label: str, reactant: str, target: str) -> tuple[bool, float, PathC
             ruleset=PhaseOne,
             counters=counters,
             max_paths=MAX_PATHS,
-            max_nodes=POC_MAX_NODES,
+            max_nodes=MAX_NODES,
         )
     )
     elapsed = time.perf_counter() - t0
@@ -109,8 +109,8 @@ def main() -> int:
         live.flush()
         lines.append(msg)
 
-    log("poc find_path cProfile (after xf / no-canonicalize / lazy csmi)")
-    log(f"cases={len(CASES)}  max_nodes={POC_MAX_NODES}  max_paths={MAX_PATHS}")
+    log("forest find_path cProfile (after xf / no-canonicalize / lazy csmi)")
+    log(f"cases={len(CASES)}  max_nodes={MAX_NODES}  max_paths={MAX_PATHS}")
     log(f"live log: {ART_LIVE}")
     log("")
 

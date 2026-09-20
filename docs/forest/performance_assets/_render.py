@@ -9,7 +9,7 @@ Products: MCS-aligned to the paired reactant via ``Xenopict.align_to``.
 
 Re-run from repo root (needs ``xenopict`` via ``tool.uv.sources``):
 
-  uv run python src/xenosite/forest/performance_assets/_render.py
+  uv run python docs/forest/performance_assets/_render.py
 """
 
 from __future__ import annotations

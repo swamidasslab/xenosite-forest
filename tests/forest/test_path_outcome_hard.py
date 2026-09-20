@@ -1,9 +1,9 @@
 """Hard PathOutcome cases: macrocycle span, multi-route, impossible early abort.
 
 Port of ``tests/test_path_outcome_hard.py``. Forest ``PathOutcome.steps`` /
-``linearizations()`` / ``budget_exhausted`` map to poc ``plan.children`` /
+``linearizations()`` / ``budget_exhausted`` map to forest ``plan.children`` /
 ``plan.linearizations()`` / empty-frontier or ``nodes >= max_nodes``.
-Symmetric arms collapse to one topol orbit (see DIVERGENCES.md).
+Symmetric arms collapse to one topol orbit (see docs/forest/DIVERGENCES.md).
 """
 
 from __future__ import annotations
@@ -191,7 +191,7 @@ def test_tribenzyl_symmetric_arms_one_orbit():
         if len(h.plan.children) == 1
     }
     assert len(sites) >= 1
-    # Symmetry collapse is approved (DIVERGENCES.md); forest would see ≥3.
+    # Symmetry collapse is approved (docs/forest/DIVERGENCES.md); archive would see ≥3.
 
 
 def test_o_demethyl_maybe_allows_after_hydrolysis():

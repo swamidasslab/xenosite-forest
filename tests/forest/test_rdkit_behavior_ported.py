@@ -1,8 +1,8 @@
-"""RDKit 2026 / POC PhaseOne behavior locks (ported from forest drift suites).
+"""RDKit 2026 / PhaseOne behavior locks (ported from forest drift suites).
 
 Forest ``test_py2_rdkit_drift.py`` and ``test_rdkit_valence.py`` hit
 ``xenosite.forest``. These ports keep the *behavioral* asserts (enumerate,
-round-trip, quiet stderr, key metabolites) on POC ``PhaseOne`` /
+round-trip, quiet stderr, key metabolites) on forest ``PhaseOne`` /
 ``QuinoneFormation`` so CI covers them without the forest API.
 """
 

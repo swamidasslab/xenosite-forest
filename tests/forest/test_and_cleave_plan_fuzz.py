@@ -1,6 +1,6 @@
 """Cleavage walks: the kept piece matches the target; the other side is not searched.
 
-``and_cleave_plan`` replay is not the poc surface. ``PathOutcome.maybe`` is
+``and_cleave_plan`` replay is not the forest surface. ``PathOutcome.maybe`` is
 the discarded fragment.
 
 ``canonical_emitted_sites`` is drawn with Hypothesis ``st.booleans()``.

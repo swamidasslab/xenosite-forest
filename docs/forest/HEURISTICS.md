@@ -11,9 +11,9 @@ An exception to that rule is allowed only with a good reason. Record it here. Ea
 
 A rule may later carry data that it is less likely, and a filter may read that. The schema is not decided. Do not invent the field, and do not treat the missing field as an exception.
 
-## Migration (not executed)
+## Migration
 
-When the POC replaces the live library: archive old `xenosite.forest` for a while, then move POC modules into the `xenosite.forest` tree. Aim for a seamless import/call-surface swap (`AtomTracker` facade names, `xf` where forest had tags). Status: done (archived to xenosite._archive_forest; POC promoted to xenosite.forest).
+Status: done. Pre-swap tree is `xenosite._archive_forest` (read-only). Live public API is `xenosite.forest`. Prefer `mol.xf` over `AtomTracker`.
 
 ## Correctness, not yet done
 
@@ -59,9 +59,9 @@ Status: **not approved** as a replacement for ``swap_group`` / name-default grou
 
 Status: not decided for chemistry / unique-edit; stub lands first.
 
-Forest ``Tautomerization`` extended alternating paths by one H-bearing
+Archived ``Tautomerization`` extended alternating paths by one H-bearing
 neighbor and flipped bonds (net heavy-atom formula and H count unchanged;
-path swap, not ``RunReactants``). POC ``TautomerRule`` subclasses
+path swap, not ``RunReactants``). Live ``TautomerRule`` subclasses
 ``ResonancePairRule``, is patternless, raises ``NotImplementedError`` from
 ``metabolites``, and is not in PhaseOne. Orthogonal deferred work: tautomer
 *SMARTS matching* via RDKit ``TautomerQuery`` (preferred direction only;

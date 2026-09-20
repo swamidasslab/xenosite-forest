@@ -65,7 +65,7 @@ def possibility_key(
 
 
 def discover_reaction_rule_classes() -> list[type[ReactionRule]]:
-    """Unique ``ReactionRule`` subclasses declared under refactor_poc."""
+    """Unique ``ReactionRule`` subclasses declared under xenosite.forest."""
 
     found: dict[type[ReactionRule], type[ReactionRule]] = {}
     for mod in (rules_mod, rulesets):

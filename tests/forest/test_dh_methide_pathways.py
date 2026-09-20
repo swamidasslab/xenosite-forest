@@ -1,7 +1,7 @@
 """Methide is always in rule data; refuse via filter_sites (no pathways= opt-in).
 
 Adapted from ``tests/test_dh_methide_pathways.py``. Forest gated methide with
-``pathways=("methide",)`` — approved drop (DROPPED.md). Poc offers methide on
+``pathways=("methide",)`` — approved drop (docs/forest/DROPPED.md). Forest offers methide on
 Dehydrogenation / QuinoneFormation PatternInfo. At most one methide end is
 resolved (both-methide pairs are not built). Callers who want none pass
 ``filter_sites`` that reads ``options["methide"]``.

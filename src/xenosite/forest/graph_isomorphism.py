@@ -413,7 +413,7 @@ def atom_bond_generators_nauty(
 
     Automorphism group via nauty/Traces (McKay & Piperno 2014). Induced
     orbits on ordered pairs are classically *orbitals* (Sharp 1999); see
-    ``PAIR_ORBITS.md`` References.
+    ``docs/forest/PAIR_ORBITS.md`` References.
     """
 
     nauty = cast(_NautyModule, importlib.import_module("pynauty"))

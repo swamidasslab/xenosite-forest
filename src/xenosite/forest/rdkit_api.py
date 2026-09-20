@@ -1,4 +1,4 @@
-"""RDKit names this proof of concept calls.
+"""RDKit names this package calls.
 
 The ``TYPE_CHECKING`` branch is the type of those names. ``Mol._forest`` is
 declared there and is not assigned, so molecules do not share one forest.

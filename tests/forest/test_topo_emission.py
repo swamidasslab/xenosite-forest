@@ -1,9 +1,9 @@
 """Unique-edit / unique_csmi never drop distinct product SMILES.
 
 Adapted from ``tests/test_topo_emission.py``. Forest keyed
-``(rule, topo ranks, product SMILES)``. Poc splits that into unique-edit
+``(rule, topo ranks, product SMILES)``. Live forest splits that into unique-edit
 (site ranks + pair orbit) and ``unique_csmi`` ``(rule, pattern, csmi)`` —
-see DIVERGENCES.md (symmetry collapse approved; product csmi key approved).
+see docs/forest/DIVERGENCES.md (symmetry collapse approved; product csmi key approved).
 """
 
 from __future__ import annotations

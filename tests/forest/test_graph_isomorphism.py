@@ -93,7 +93,7 @@ from xenosite.forest.records import (
 )
 from xenosite.forest.rules import QuinoneFormation
 
-# Symmetric aromatics + a few larger poc/H2H substrates for oracle coverage.
+# Symmetric aromatics + a few larger forest/H2H substrates for oracle coverage.
 _ORACLE_MOLSMILES = (
     "c1ccccc1",  # benzene
     "c1ccc2ccccc2c1",  # naphthalene

@@ -78,7 +78,7 @@ def test_existing_parent_forest_is_kept():
 
 
 def test_ruleset_does_not_edit_its_input():
-    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Poc")
+    ruleset = RuleSet((Hydroxylation, Dealkylation), name="Forest")
     products = _assert_untouched(ruleset, "CC")
     product, info = products[0]
     trace = product._forest["atom_trace"]
@@ -93,7 +93,7 @@ def test_ruleset_does_not_edit_its_input():
     addition = trace["additions"][transform_id]
     assert addition["name"] in {"Hydroxylation", "Dealkylation"}
     names = tuple(getattr(item, "name", item) for item in addition["rules"])
-    assert "Poc" in names
+    assert "Forest" in names
     assert addition["name"] in names
     assert addition["depth"] == 0
     assert "site" in addition and "effect" in addition

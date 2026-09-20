@@ -1,4 +1,4 @@
-This file lists what the proof of concept left out. A listing is not approval.
+This file lists what live ``xenosite.forest`` left out relative to the pre-swap archive. A listing is not approval.
 Each entry has `Status: approved`, `not approved`, or `not decided`.
 `approved` means the cut is accepted for the long term.
 `not approved` means the capability comes back. The old shape may still change.
@@ -57,7 +57,7 @@ have to be a `phase1_steps` method on every rule, and the name need not
 stay "phase I". See the phase-one entry.
 
 `AtomTracker` in `base.py`, and `phase1_steps` on each rule in
-`forest/rules.py`. The poc rules do not subclass `AtomTracker`.
+`forest/rules.py`. Live forest rules do not subclass `AtomTracker`.
 
 Old tests: `tests/test_phase1_steps_fuzz.py`, `tests/test_atom_trace_char.py`.
 
@@ -65,13 +65,13 @@ Old tests: `tests/test_phase1_steps_fuzz.py`, `tests/test_atom_trace_char.py`.
 
 Status: not approved.
 
-The old module (`phaseone.py`, `PhaseOneRS`, `PhaseOneQF`) is not what the
-poc calls. The capability stays. Quinone rules are composite look-aheads.
+The archived module (`phaseone.py`, `PhaseOneRS`, `PhaseOneQF`) is not what live
+forest calls. The capability stays. Quinone rules are composite look-aheads.
 A ruleset is still a rule. Epoxidation sits inside StableOxygenation among
-peers; NDealkylation is its own forest ruleset (not UnstableOxygenation —
-that group is Dealkylation + OxidativeDehalogenation). Forest
+peers; NDealkylation is its own ruleset (not UnstableOxygenation —
+that group is Dealkylation + OxidativeDehalogenation). Archive
 ``phase1_steps`` for both leaves are degenerate singletons naming the leaf
-(``Epoxidation`` / ``NDealkylation``), not the group. Poc
+(``Epoxidation`` / ``NDealkylation``), not the group. Live
 ``canonical_plan`` matches that identity. Status: not approved for a
 group-name look-ahead on those leaves (misremembered; fixed).
 
@@ -82,7 +82,7 @@ Old tests: `tests/test_phaseone.py`.
 Status: not decided.
 
 `max_expansions` as a public mode and the old depth counters. A billed
-counter stays, as a measurement (`mol_edits + nodes`). Poc `bfs` and `dfs`
+counter stays, as a measurement (`mol_edits + nodes`). Live `bfs` and `dfs`
 enumerate one ruleset up to a depth cap. They take `filter_rules` and
 `filter_sites`, and they do not use the atom diff or the closer drop.
 Adding them is not approval to drop enumeration, and it is not a port of
@@ -127,19 +127,18 @@ Status: not decided.
 `ResonancePairRule` used to stash the alternating-path atom list on
 `ProductsOfReaction.info["path"]` after `filter_sites`. `merge_effects`
 also wrote `partners` and `aromatic` onto the merged options. Nothing in
-the poc read those keys. Closed `SiteInfo` / `Effect` TypedDicts reject
+live forest read those keys. Closed `SiteInfo` / `Effect` TypedDicts reject
 them; the writes are gone. Per-end partners stay on `info["ends"]`.
 
 
 ## Network module / find_network_paths (xenosite.forest.net)
 
-Status: approved to drop from the POC plan.
+Status: approved to drop from the live forest plan.
 
-Forest `net.py` builds a NetworkX reaction graph from one-step
+Archived `net.py` builds a NetworkX reaction graph from one-step
 `find_path` metabolites (Rxn records, SMILES-order atom maps). That
-network API / `find_network_paths` scaffolding is not coming into the
-POC. MS1 / MS2 path finding (if pursued) stays on `find_path`-style
+network API / `find_network_paths` scaffolding is not in live forest.
+MS1 / MS2 path finding (if pursued) stays on `find_path`-style
 APIs, not a revived `xenosite.net` package.
 
-Old code: `src/xenosite/forest/net.py` (forest-only; leave in place until
-a later archive move).
+Old code: `src/xenosite/_archive_forest/net.py`.

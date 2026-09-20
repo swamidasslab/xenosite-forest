@@ -1,10 +1,10 @@
-"""Port of ``tests/test_conjugates.py`` for poc conjugation rules.
+"""Port of ``tests/test_conjugates.py`` for forest conjugation rules.
 
 Probe SMILES are imported from ``test_conjugates`` (not copied). Forest
 ``include_thiol`` / ``load_ruleset`` / ``STAR_ONLY_LABELS`` are unfinished on
-the poc surface — those cases are skipped. GSH SMARTS indices differ because
-the poc expands epoxide and aziridine into three patterns each; helpers remap
-forest indices to the matching poc ``rxn_num`` set.
+the forest surface — those cases are skipped. GSH SMARTS indices differ because
+forest expands epoxide and aziridine into three patterns each; helpers remap
+forest indices to the matching forest ``rxn_num`` set.
 """
 
 from __future__ import annotations
@@ -50,8 +50,8 @@ from xenosite._archive_forest.utils import mol_to_cxsmiles
 from xenosite.forest.rdkit_api import Mol, MolFromSmiles, MolToSmiles
 from xenosite.forest.rules import Glucuronidation, Glutathionation
 
-# Forest GSH index → poc rxn_num values (epoxide/aziridine are three patterns).
-_GSH_FOREST_TO_POC: dict[int, frozenset[int]] = {
+# Archive GSH index → live rxn_num values (epoxide/aziridine are three patterns).
+_GSH_ARCHIVE_TO_LIVE: dict[int, frozenset[int]] = {
     0: frozenset({0, 1, 2}),  # epoxide
     1: frozenset({3}),  # halide
     2: frozenset({4}),  # thiol
@@ -63,8 +63,8 @@ _GSH_FOREST_TO_POC: dict[int, frozenset[int]] = {
     8: frozenset({12}),  # isocyanate
 }
 
-# Forest UGT: acid=0 phenol=1. Poc: phenol=0 acid=1.
-_UGT_FOREST_TO_POC: dict[int, frozenset[int]] = {
+# Archive UGT: acid=0 phenol=1. Live: phenol=0 acid=1.
+_UGT_ARCHIVE_TO_LIVE: dict[int, frozenset[int]] = {
     0: frozenset({1}),
     1: frozenset({0}),
 }
@@ -78,9 +78,9 @@ def _sites_for_rxn(rule, smi: str, forest_rxn_idx: int, *, family: str):
     mol = MolFromSmiles(smi)
     assert mol is not None, smi
     if family == "gsh":
-        wanted = _GSH_FOREST_TO_POC[forest_rxn_idx]
+        wanted = _GSH_ARCHIVE_TO_LIVE[forest_rxn_idx]
     elif family == "ugt":
-        wanted = _UGT_FOREST_TO_POC[forest_rxn_idx]
+        wanted = _UGT_ARCHIVE_TO_LIVE[forest_rxn_idx]
     else:
         raise AssertionError(family)
     out = []
@@ -166,7 +166,7 @@ def test_star_only_labels_reject_full_structure(label):
 
 
 # Skipped: include_thiol=False probes, GlutathionationNoThiol load_ruleset,
-# and STAR_ONLY_LABELS import — unfinished poc public surface.
+# and STAR_ONLY_LABELS import — unfinished forest public surface.
 
 
 _SMARTS_PROBES = [

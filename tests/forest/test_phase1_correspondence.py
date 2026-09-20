@@ -1,7 +1,7 @@
 """Remaining default-set rules, both libraries, canonical fragment SMILES.
 
 Order does not matter. A product only the old library emits is a failure
-unless `src/xenosite/forest/DIVERGENCES.md` records both sets and the
+unless `docs/forest/DIVERGENCES.md` records both sets and the
 reason. These comparisons call each rule's metabolites method. They do not
 call find_path.
 """
@@ -43,13 +43,13 @@ from xenosite.forest.rules import (
     SulfurReduction,
 )
 
-# Even path. Still C4H6. See DIVERGENCES.md.
+# Even path. Still C4H6. See docs/forest/DIVERGENCES.md.
 _OLD_CUMULENE = {"C=C=CC"}
 
 # Old `[#7D2:1]=[#8:2]>>([*:1].[*2])`. `[*2]` is a dummy, not oxygen.
 _OLD_NITROSO_DUMMY = {"*"}
 
-# Old RunReactants also cleaves a P-OH bond. See DIVERGENCES.md.
+# Old RunReactants also cleaves a P-OH bond. See docs/forest/DIVERGENCES.md.
 _OLD_METHYL_PHOSPHITE = {"CO[PH](=O)O", "O"}
 
 

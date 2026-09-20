@@ -2,11 +2,12 @@
 
 ## 2026-09-20
 
+- Moved forest design/performance docs out of the package to `docs/forest/` (`PERFORMANCE.md`, `PAIR_ORBITS.md`, `HEURISTICS.md`, `DIVERGENCES.md`, `DROPPED.md`, `performance_assets/`). Package stays code-focused. Stripped leftover POC/`refactor_poc` wording from live docs and comments; release target **v0.7.0** (hatch-vcs; latest tag `v0.6.1`).
 - PERFORMANCE depictions: xenopict circles on **SOM only** (from find_path plan AtomRef origins); no atom-index labels; products still MCS-aligned.
-- PERFORMANCE.md three-way H2H (archive BFS/DFS vs live `find_path`): harness `MAX_MOLS=200` yield cap, no archive edits. Wins where both archive modes CAP — eugenol→allyl-Q (4 steps / 0.062s), dimethoxy-PEA→catechol (`&`, 0.015s), MeOPhOH→HQ (4 steps / 0.947s), TBA→aldehyde (22 HA, 0.017s). Retuned naphthalene to reachable **2-MeO→1,2-NQ** (3 steps / 0.075s; BFS early hit, DFS CAP). **2-MeO→1,4-NQ** documented as no PhaseOne path (frontier empty at nd=95, not budget) — not a find_path bug. Harness `tests/forest/bench_find_path_h2h.py`; raw `artifacts/bench_find_path_h2h_3way.out`. RDKit SVGs in `src/xenosite/forest/performance_assets/`.
-- PERFORMANCE assets: xenopict `mark_atoms` circles + atom indices on reactants; products MCS-aligned via `Xenopict.align_to`. Regenerator `performance_assets/_render.py`.
+- PERFORMANCE.md three-way H2H (archive BFS/DFS vs live `find_path`): harness `MAX_MOLS=200` yield cap, no archive edits. Wins where both archive modes CAP — eugenol→allyl-Q (4 steps / 0.062s), dimethoxy-PEA→catechol (`&`, 0.015s), MeOPhOH→HQ (4 steps / 0.947s), TBA→aldehyde (22 HA, 0.017s). Retuned naphthalene to reachable **2-MeO→1,2-NQ** (3 steps / 0.075s; BFS early hit, DFS CAP). **2-MeO→1,4-NQ** documented as no PhaseOne path (frontier empty at nd=95, not budget) — not a find_path bug. Harness `tests/forest/bench_find_path_h2h.py`; raw `artifacts/bench_find_path_h2h_3way.out`. RDKit SVGs in `docs/forest/performance_assets/`.
+- PERFORMANCE assets: xenopict `mark_atoms` circles + MCS align. Regenerator `docs/forest/performance_assets/_render.py`.
 
-- Package swap: archived pre-POC forest to `src/xenosite/_archive_forest/` (**read-only / locked**; CI excludes archive tests + lint). Promoted `refactor_poc` → `xenosite.forest`; tests → `tests/forest/`. `AtomTracker` facade kept, deprecated (prefer `mol.xf`). StepPlan still imported from archive.
+- Package swap: archived pre-swap forest to `src/xenosite/_archive_forest/` (**read-only / locked**; CI excludes archive tests + lint). Live public API is `xenosite.forest`; tests → `tests/forest/`. `AtomTracker` facade kept, deprecated (prefer `mol.xf`). StepPlan still imported from archive.
 - Long fuzz: `HYPOTHESIS_PROFILE=long XENOSITE_FUZZ_EXAMPLES=200` on bfs/guided/phase1/and_cleave/find_path_phase1 fuzz — **18 passed** (~23s). Artifact: `artifacts/long_fuzz_post_swap.out`.
 - ResonancePair path fix (`516d66f`): lasting shared path chemistry (double-first + odd bond-count) — not butadiene-specific, not PatternInfo. No redesign this PR.
 
@@ -83,7 +84,7 @@
 - `_forest` copy optimization (two stages). **Approach:** explicit `forest_copy` / `copy_mutable` walker in `src/xenosite/refactor_poc/forest_copy.py` — not `ReactionRule.__deepcopy__` / pickle hooks. Magic on rules would hide the cost model and surprise picklers; the forest schema already names the three layers, so the copy policy lives next to that schema.
 - **Keys:** `immutable` (MappingProxyType; only immutable types downward — currently `start_labels: Mapping[int, str]`); `cache` (renamed from `structure` — structure-dependent ephemeral answers); mutable rest (`atom_trace`, `is_terminal_product`, …).
 - **API:** `forest_copy(forest, *, same_structure=False)` — deep-copy mutable (share ReactionRule + PatternInfo by id); shallow-copy `immutable`; drop `cache` unless `same_structure=True` (then keep by identity). Wired through `copy_mol` (same_structure=True), `cannonicalize_order` (False), `_apply_forest_trace`, `carry_forest`.
-- **Profile** (same find_path harness as `profile_find_path_poc`; `tests/refactor_poc/profile_forest_copy.py`):
+- **Profile** (same find_path harness as `profile_find_path`; `tests/refactor_poc/profile_forest_copy.py`):
   - before: wall 4.959s; deepcopy cum **1.637s** / 1.44M ncalls / **~33%** of profile wall
   - after: wall 4.018s; deepcopy **0**; `copy_mutable` cum ~0.50s; `forest_copy` cum 0.002s / 844 calls / ~0.1%
   - Artifacts (untracked): `artifacts/forest_copy_before.{out,pstats,live.log}`, `artifacts/forest_copy_after.*`
@@ -223,7 +224,7 @@
 
 ## 2026-09-19
 
-- Profiled poc `find_path` (cProfile; harness `tests/refactor_poc/profile_find_path_poc.py`). Cases: anisole (cheap), PhCH2OH, acetate→catechol, MeOPhOH→hydroxyQ. Wall ~2.0s profiled (hydroxyQ ~1.8s). Artifacts: `artifacts/poc_find_path_profile.out`, `.pstats`.
+- Profiled poc `find_path` (cProfile; harness `tests/refactor_poc/profile_find_path.py`). Cases: anisole (cheap), PhCH2OH, acetate→catechol, MeOPhOH→hydroxyQ. Wall ~2.0s profiled (hydroxyQ ~1.8s). Artifacts: `artifacts/poc_find_path_profile.out`, `.pstats`.
 - Top hotspots (~1.98s cumulative): `copy.deepcopy` ~1.17s (~59%) via `_finish` → `cannonicalize_order` (deepcopy forest) + `forest_trace` (deepcopy atom_trace); `atom_diff`/`_mappings` ~0.37s; `RuleSet.metabolites` ~0.27s; MCS `_mcs_query` tottime ~0.08s. Search/RDKit secondary to forest copy/trace on every finished fragment.
 - Quick wins (not done): cut deepcopy in canonicalize/trace; defer full finish for cleaved-away fragments; cache atom_diff/MCS.
 

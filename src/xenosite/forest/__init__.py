@@ -1,6 +1,5 @@
 """Enumerate metabolite structures with Metabolic Forest reaction rules.
 
-This tree is the promoted refactor (formerly ``xenosite.refactor_poc``).
 The pre-swap implementation lives in ``xenosite._archive_forest`` for a
 while (parity / H2H / StepPlan apply). Prefer ``mol.xf`` over ``AtomTracker``.
 """

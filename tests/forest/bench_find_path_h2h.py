@@ -77,7 +77,7 @@ CASES: list[tuple[str, str, str]] = [
         "CC(C)(C)C#CC=CC=O",
     ),
     # 2-methoxynaphthalene → 1,2-NQ (reachable 3-step plan).
-    # Contrast: 2-MeO → 1,4-NQ has no PhaseOne path (see PERFORMANCE.md).
+    # Contrast: 2-MeO → 1,4-NQ has no PhaseOne path (see docs/forest/PERFORMANCE.md).
     (
         "2-MeO-naph→1,2-NQ",
         "COc1ccc2ccccc2c1",

@@ -1,4 +1,4 @@
-"""Shared substrate SMILES for refactor_poc coverage and canonical-plan checks.
+"""Shared substrate SMILES for forest coverage and canonical-plan checks.
 
 Collected from forest fuzz / SMARTS-coverage probes (phase1 steps, formula
 hints, bfs crashers, conjugation probes). Import this module; do not copy
@@ -8,7 +8,7 @@ the list into other test files.
 from __future__ import annotations
 
 # Phase-I / quinone / conjugation probes plus a few drug-like crashers.
-# Designed to hit the SMARTS families the poc rules declare.
+# Designed to hit the SMARTS families the forest rules declare.
 SUBSTRATE_LIBRARY: tuple[str, ...] = (
     # Formula / Phase I SMARTS probes
     "CCO",

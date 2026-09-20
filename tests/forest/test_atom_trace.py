@@ -44,13 +44,13 @@ _FALLBACK = {
 
 
 def _rule_classes():
-    from xenosite.forest import rules as poc_rules
+    from xenosite.forest import rules as forest_rules
 
     return [
         cls
-        for _, cls in inspect.getmembers(poc_rules, inspect.isclass)
+        for _, cls in inspect.getmembers(forest_rules, inspect.isclass)
         if issubclass(cls, ReactionRule)
-        and cls.__module__ == poc_rules.__name__
+        and cls.__module__ == forest_rules.__name__
         and cls.__name__ not in _SKIP
     ]
 

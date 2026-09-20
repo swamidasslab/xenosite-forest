@@ -1,7 +1,7 @@
 """The four easy pairs, both libraries, canonical fragment SMILES.
 
 Order does not matter. A product only the old library emits is a failure
-unless `src/xenosite/forest/DIVERGENCES.md` records both sets and the
+unless `docs/forest/DIVERGENCES.md` records both sets and the
 reason. These four are not xfail.
 """
 
@@ -41,7 +41,7 @@ from xenosite.forest.rules import (
 )
 from xenosite.forest.rulesets import RuleSet
 
-# Old `[#6h2:1]>>[*:1]=O`. Both patterns add OH. See DIVERGENCES.md.
+# Old `[#6h2:1]>>[*:1]=O`. Both patterns add OH. See docs/forest/DIVERGENCES.md.
 _OLD_BUTYL_KETONES = {
     "CC(=O)CCc1ccccc1",
     "CCC(=O)Cc1ccccc1",
@@ -491,7 +491,7 @@ def test_filter_skips_the_benzylic_alcohol_and_keeps_the_phenol_sulfate():
     assert "O=S(=O)(O)OCc1ccc(O)cc1" not in products
 
 
-# Old `[#8:1][#6:2](=[O,N,P,S:3])` writes `=[#8:3]`. See DIVERGENCES.md.
+# Old `[#8:1][#6:2](=[O,N,P,S:3])` writes `=[#8:3]`. See docs/forest/DIVERGENCES.md.
 _OLD_IMIDATE_ACID = {"O=C(OC1OC(C(=O)O)C(O)C(O)C1O)c1ccccc1"}
 
 
@@ -623,7 +623,7 @@ def test_cleaved_ring_bond_sets_breaks_ring():
 def test_benzene_and_phenol_quinone_match_old():
     """Quinone formation matches. The same product is also two steps, not a quinone step."""
 
-    steps = RuleSet((Hydroxylation, Dehydrogenation), name="Poc")
+    steps = RuleSet((Hydroxylation, Dehydrogenation), name="Forest")
     for smiles, depth in (("c1ccccc1", 3), ("Oc1ccccc1", 2)):
         old = _old(OldQuinone(), smiles)
         new = _new(QuinoneFormation(), smiles)

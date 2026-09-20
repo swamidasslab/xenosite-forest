@@ -19,7 +19,7 @@ Raw: `artifacts/bench_find_path_h2h_3way.out`. Images:
 
 ```bash
 uv run python tests/forest/bench_find_path_h2h.py
-uv run python src/xenosite/forest/performance_assets/_render.py  # xenopict circles + MCS align
+uv run python docs/forest/performance_assets/_render.py  # xenopict circles + MCS align
 ```
 
 Why BFS/DFS fail the cap: they expand **ordered** walks; *k* commuting edits

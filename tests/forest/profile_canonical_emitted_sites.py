@@ -30,7 +30,7 @@ CASES: list[tuple[str, str, str]] = [
     ),
 ]
 
-POC_MAX_NODES = 800
+MAX_NODES = 800
 MAX_PATHS = 1
 TOP_N = 30
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,7 +62,7 @@ def run_batch(*, canonical: bool) -> tuple[float, list[tuple[str, bool, float, P
                 ruleset=PhaseOne,
                 counters=counters,
                 max_paths=MAX_PATHS,
-                max_nodes=POC_MAX_NODES,
+                max_nodes=MAX_NODES,
                 canonical_emitted_sites=canonical,
             )
         )
@@ -126,7 +126,7 @@ def main() -> None:
 
     stream = io.StringIO()
     stream.write("canonical_emitted_sites profile (find_path PhaseOne)\n")
-    stream.write(f"cases={len(CASES)} max_nodes={POC_MAX_NODES} max_paths={MAX_PATHS}\n\n")
+    stream.write(f"cases={len(CASES)} max_nodes={MAX_NODES} max_paths={MAX_PATHS}\n\n")
     stream.write(f"OFF wall={wall_off:.3f}s\n")
     for label, hit, elapsed, counters in rows_off:
         stream.write(

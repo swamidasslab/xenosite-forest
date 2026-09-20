@@ -2,7 +2,7 @@
 
 Port of the metabolite golds in ``tests/test_guided_path.py``. Skip
 PathContext helpers, dearomatization site-rank filters, and
-``enumerate_for_path``. Peer ``is_redundant`` is forest-only (not in poc);
+``enumerate_for_path``. Peer ``is_redundant`` is archive-only (not in live forest);
 assert terminal conjugations instead.
 """
 
@@ -115,7 +115,7 @@ def test_find_path_benzene_bq_qf_vs_phaseone():
         )
     )
     assert po_hits
-    # Forest PhaseOneRS lacked QF and spent more OH orbits; poc PhaseOne
+    # Archive PhaseOneRS lacked QF and spent more OH orbits; live PhaseOne
     # includes QuinoneFormation, so billed stays a small handful.
     assert po_c.mol_edits >= qf_c.mol_edits
     assert po_c.billed <= 30
@@ -123,7 +123,7 @@ def test_find_path_benzene_bq_qf_vs_phaseone():
 
 
 def test_conjugation_is_terminal():
-    """Forest peer ``is_redundant`` is not in poc; terminal conjugates still stop."""
+    """Archive peer ``is_redundant`` is not in live forest; terminal conjugates still stop."""
 
     a = Acetylation()
     mol = MolFromSmiles("CCO")

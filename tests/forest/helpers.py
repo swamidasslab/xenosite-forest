@@ -1,4 +1,4 @@
-"""Shared helpers for refactor_poc correctness ports. SMILES stay in the source suites."""
+"""Shared helpers for forest correctness ports. SMILES stay in the source suites."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def find_phaseone(
     max_paths: int = 3,
     **kwargs: object,
 ):
-    """``find_path`` over catalog ``PhaseOne``, not the tiny default Poc set.
+    """``find_path`` over catalog ``PhaseOne``, not the tiny default_ruleset.
 
     Extra ``kwargs`` (e.g. ``canonical_emitted_sites``) forward to ``find_path``.
     """

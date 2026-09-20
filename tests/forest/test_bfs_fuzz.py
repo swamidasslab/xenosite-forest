@@ -1,7 +1,7 @@
 """Bounded DFS (and a small BFS smoke) over drug crashers + small organics.
 
 No RDKit crash, no dotted product, traces present. Port of the hard
-``tests/test_bfs_fuzz.py`` corpus (PhaseOne; poc has no Full / star-expand).
+``tests/test_bfs_fuzz.py`` corpus (PhaseOne; live forest has no Full / star-expand).
 DFS samples depth-2 without draining a BFS frontier on drug-sized mols.
 A star acetyl is terminal here, so dehydrogenation does not expand it.
 
@@ -97,7 +97,7 @@ def _generated_smiles(draw):
 
 
 @st.composite
-def poc_smiles(draw):
+def forest_smiles(draw):
     if draw(st.booleans()):
         return draw(st.sampled_from(_CORPUS))
     return draw(_generated_smiles())
@@ -122,7 +122,7 @@ def _sample_dfs_depth2(smiles: str, *, canonical_emitted_sites: bool):
     return out
 
 
-@given(smiles=poc_smiles(), canonical_emitted_sites=st.booleans())
+@given(smiles=forest_smiles(), canonical_emitted_sites=st.booleans())
 @settings(
     max_examples=_fuzz_examples(16),
     deadline=20_000,

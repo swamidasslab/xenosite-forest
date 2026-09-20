@@ -159,7 +159,7 @@ present. Tests: ``test_canonical_emitted_sites.py`` (includes
 parent-cache-after-clear).
 Profile (same find_path cases as forest_copy): OFF 3.862s / ON 4.007s ≈ **+3.7%** wall (commit 6f13ca9).
 
-POC fuzz draws ``canonical_emitted_sites`` with Hypothesis ``st.booleans()`` /
+Forest fuzz draws ``canonical_emitted_sites`` with Hypothesis ``st.booleans()`` /
 ``data.draw`` and passes the kwarg through ``find_path`` / ``bfs`` / ``dfs`` /
 ``metabolize``. Default stays off. Hardcoding ``True`` on individual flaky
 tests (topo, guided gold, path hard, unique-edit) is a **future option** only

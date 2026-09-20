@@ -37,7 +37,7 @@ def test_find_path_and_metabolize_reject_none():
 
 
 def test_ruleset_runs_children_and_filters_see_them():
-    ruleset = RuleSet((Hydroxylation,), name="Poc")
+    ruleset = RuleSet((Hydroxylation,), name="Forest")
     assert isinstance(ruleset, ReactionRule)
     assert [type(rule) for rule in ruleset] == [Hydroxylation]
     seen = []
@@ -223,12 +223,12 @@ def test_butylbenzene_to_quinone_and_chain_alcohol_bills_those_sites():
 
 
 def _ruleset(*names):
-    import xenosite.forest.rules as poc
+    import xenosite.forest.rules as forest_rules
 
-    missing = [name for name in names if not hasattr(poc, name)]
+    missing = [name for name in names if not hasattr(forest_rules, name)]
     if missing:
         pytest.skip("not ported yet: %s" % ", ".join(missing))
-    return RuleSet(tuple(getattr(poc, name) for name in names), name="Poc")
+    return RuleSet(tuple(getattr(forest_rules, name) for name in names), name="Forest")
 
 
 def _old_site_applies(reactant, target, *, ruleset=None, depth=None, ceiling=40):
@@ -367,7 +367,7 @@ def test_phch2oh_to_quinone_via_benzylic_dealkylation():
 
 
 def test_hard_multi_oxidation_quinones_that_forest_struggled_on():
-    """Large / multi-oxidation quinones: poc finds a path under a node ceiling.
+    """Large / multi-oxidation quinones: forest finds a path under a node ceiling.
 
     Forest PhaseOneQF exhausts budget on 4-methoxyphenol → hydroxyquinone
     (see tests/test_find_path_phase1_plan_fuzz.py xfail). Orthocarbonate and
