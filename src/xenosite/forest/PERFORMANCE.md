@@ -13,7 +13,8 @@ resolve quickly as long plans.
 **Caps:** archive `MAX_MOLS=200` (harness yield stop; depth=4); live
 `max_nodes=800`. Tree: `feature/rule-refactor` @ `ba57d7e` (2026-09-20).
 Raw: `artifacts/bench_find_path_h2h_3way.out`. Images:
-[`performance_assets/`](performance_assets/).
+[`performance_assets/`](performance_assets/) — xenopict `mark_atoms` circles +
+indices on reactants; products MCS-aligned with `align_to`.
 
 ```bash
 uv run python tests/forest/bench_find_path_h2h.py
