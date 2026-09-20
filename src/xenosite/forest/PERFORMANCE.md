@@ -11,7 +11,7 @@ resolve quickly as long plans.
 | live `find_path` | `xenosite.forest` | PhaseOne | plan-guided `find_path` |
 
 **Caps:** archive `MAX_MOLS=200` (harness yield stop; depth=4); live
-`max_nodes=800`. Tree: `feature/rule-refactor` @  (2026-09-20).
+`max_nodes=800`. Tree: `feature/rule-refactor` @ `5229542` (2026-09-20).
 Raw: `artifacts/bench_find_path_h2h_3way.out`. Images:
 [`performance_assets/`](performance_assets/).
 
