@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Pattern emit-name uniqueness meta-test: `test_emitable_names_unique_within_each_reaction_rule` walks all concrete `ReactionRule` subclasses via `pattern_info_inventory` (skips `PATTERNLESS_REACTION_RULE_BASES`). Collects `PatternInfo.name` plus optional future `When["name"]` via `emitable_pattern_names` / `optional_when_name`. No within-rule collisions. when→name still HEURISTICS Status: not decided; hook documented. Suite: pattern_names + pattern_info_coverage **193 passed**, 2 xfailed.
+
+## 2026-09-20
+
 - Hydroxylation double-emit fixed: partition `h` → `[#6h1]` (when h=1) and keep `h2` → `[#6h2,#6h3]` (when h=2,3). Ethane → one `CCO` under `unique_csmi`. Same antipattern on Glutathionation: `epoxide_c` / `aziridine_c` narrowed to `#6H0` (bare `#6`([!#1]) nested `#6H1` with substituent). Residual multi-name same-csmi cases (distinct cleavage fragments, dual nitro writings, pair vs SMARTS, glucuronidation) documented in DIVERGENCES.md. when→name left as HEURISTICS Schema proposal Status: not decided (no silent branch). Possibilities 188 / when-branches 133. Focused suite 269 passed, 2 xfailed.
 
 ## 2026-09-20

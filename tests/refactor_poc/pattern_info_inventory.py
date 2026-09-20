@@ -1,19 +1,20 @@
 """Shared inventory of PatternInfo possibilities for coverage + meta-tests.
 
-Both ``test_pattern_info_coverage`` and the completeness meta-test call
-:func:`iter_pattern_possibilities` so the parameterized rows cannot drift
-from the rule-derived set.
+``test_pattern_info_coverage``, the completeness meta-test, and within-rule
+name uniqueness all call helpers here so parameterized rows and uniqueness
+checks cannot drift from the rule-derived set.
 """
 
 from __future__ import annotations
 
 import inspect
-from collections.abc import Iterator
+from collections import defaultdict
+from collections.abc import Iterator, Mapping
 from typing import Any, NamedTuple
 
 from xenosite.refactor_poc import rules as rules_mod
 from xenosite.refactor_poc import rulesets
-from xenosite.refactor_poc.records import PatternInfo, When
+from xenosite.refactor_poc.records import Effect, PatternInfo, When
 from xenosite.refactor_poc.rules import (
     ReactionRule,
     ResonancePairRule,
@@ -127,3 +128,114 @@ def pattern_possibility_keys() -> set[
         possibility_key(row.rule_cls, row.pattern_name, row.poss_i, row.when)
         for row in iter_pattern_possibilities()
     }
+
+
+def _when_resolved_name(when: When | None) -> str | None:
+    """Optional when→name label, if the schema ever carries one.
+
+    ``when → name`` is only a HEURISTICS Schema proposal (Status: not
+    decided). ``When`` has no ``name`` field today — do not invent it.
+    Read via :class:`~collections.abc.Mapping` so a future optional key
+    plugs into uniqueness without rewriting callers.
+    """
+
+    if when is None:
+        return None
+    raw = Mapping[str, Any](when).get("name")
+    if isinstance(raw, str) and raw:
+        return raw
+    return None
+
+
+def emitable_names_for_pattern(info: PatternInfo) -> list[str]:
+    """Names one PatternInfo can emit (for ``unique_csmi`` / uniqueness).
+
+    Always includes ``PatternInfo.name`` when set. Also folds any
+    when-resolved names once that optional key appears on ``When``.
+    """
+
+    names: list[str] = []
+    base = info.get("name") or ""
+    if base:
+        names.append(base)
+    for poss in info.get("possibilities") or ():
+        resolved = _when_resolved_name(poss.get("when"))
+        if resolved:
+            names.append(resolved)
+    return names
+
+
+def emitable_names_by_rule() -> dict[str, list[str]]:
+    """Every emitable name per concrete (non-whitelisted) ``ReactionRule``.
+
+    Duplicate names across different rules are fine; callers check
+    uniqueness within each rule's list.
+    """
+
+    by_rule: dict[str, list[str]] = defaultdict(list)
+    for cls in discover_reaction_rule_classes():
+        if cls in PATTERNLESS_REACTION_RULE_BASES:
+            continue
+        rule = instantiate_rule(cls)
+        for _group, _smarts, info in patterns_on(rule):
+            by_rule[cls.__name__].extend(emitable_names_for_pattern(info))
+    return dict(by_rule)
+
+
+def optional_when_name(when: When | None) -> str | None:
+    """Optional emit name on a ``When`` branch.
+
+    ``When`` has no ``name`` field yet (HEURISTICS Schema proposals,
+    Status: not decided). Read the key if a future schema adds it so
+    :func:`emitable_pattern_names` picks up resolved tokens without a
+    new code path.
+    """
+
+    if when is None:
+        return None
+    raw = dict(when).get("name")
+    if isinstance(raw, str) and raw:
+        return raw
+    return None
+
+
+def emitable_pattern_names(info: PatternInfo) -> frozenset[str]:
+    """Names this pattern may contribute to ``unique_csmi`` / traces.
+
+    Always includes ``PatternInfo.name`` when set. Also includes every
+    ``when``-branch name once when→name lands (optional ``When["name"]``).
+    Empty when the pattern still lacks a name.
+    """
+
+    names: set[str] = set()
+    base = info.get("name")
+    if isinstance(base, str) and base:
+        names.add(base)
+    for poss in info.get("possibilities") or ():
+        branch = optional_when_name(poss.get("when"))
+        if branch is not None:
+            names.add(branch)
+    return frozenset(names)
+
+
+def emitable_names_by_rule() -> dict[str, dict[str, list[str]]]:
+    """``rule_cls_name -> emit_name -> [pattern sources]`` for concrete rules.
+
+    Skips :data:`PATTERNLESS_REACTION_RULE_BASES`. A source string is
+    ``"{group}:{PatternInfo.name|smarts}"`` so duplicate emit tokens point
+    at the conflicting patterns. Cross-rule reuse of a name is fine.
+    """
+
+    by_rule: dict[str, dict[str, list[str]]] = {}
+    for cls in discover_reaction_rule_classes():
+        if cls in PATTERNLESS_REACTION_RULE_BASES:
+            continue
+        rule = instantiate_rule(cls)
+        rule_key = cls.__name__
+        bucket = by_rule.setdefault(rule_key, {})
+        for group, smarts, info in patterns_on(rule):
+            label = info.get("name") or smarts
+            source = f"{group}:{label}"
+            for emit in emitable_pattern_names(info):
+                bucket.setdefault(emit, []).append(source)
+    return by_rule
