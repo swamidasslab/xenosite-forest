@@ -55,7 +55,7 @@ def _mol(smiles: str):
 def _clear_pair_caches(mol) -> None:
     if not getattr(mol, "_forest", None):
         return
-    structure = mol._forest.setdefault("structure", {})
+    structure = mol._forest.setdefault("cache", {})
     structure.pop("site_pair_orbits_nauty", None)
     structure.pop("site_pair_orbits_smiles", None)
     structure.pop("bond_topeqiv", None)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING,
     Literal,
@@ -490,7 +491,12 @@ SitePairOrbitTables: TypeAlias = dict[
 
 
 class Structure(TypedDict, total=False):
-    """Cache filled in later. ``total`` is false because each key is filled in later.
+    """Schema of ``_forest["cache"]``. Answers about one molecular structure.
+
+    ``total`` is false because each key is filled in later. Structure-dependent
+    / ephemeral: :func:`~xenosite.refactor_poc.rdkitutil.forest_copy` drops this
+    key when the destination is a different structure, and keeps it by identity
+    when copying onto the same structure.
 
     ``mcs_matches`` and ``mcs_targets`` are keyed by the target canonical SMILES.
     ``kekule_parents`` is the dict :class:`KekuleParents` helpers fill. The
@@ -516,31 +522,51 @@ class Structure(TypedDict, total=False):
     cip_ids_stereo: tuple[int, ...]
 
 
-class Forest(TypedDict, total=False):
-    """The molecule's ``_forest``. ``total`` is false because each key is filled in later.
+class ImmutableForest(TypedDict, total=False):
+    """``_forest["immutable"]`` payload. Only immutable types downward.
 
-    ``start_labels`` maps depth-0 atom index → CX ``atomLabel`` captured when the
-    forest is first established. Stamp/check restamps those props onto the
+    Runtime value is a ``MappingProxyType`` wrapping this shape. Nested maps
+    (e.g. ``start_labels``) are also ``MappingProxyType``. Allowed leaves:
+    ``str``, ``int``, ``float``, ``bool``, ``None``, ``tuple``, ``frozenset``,
+    and immutable mappings. Pyright sees ``Mapping`` rather than ``dict``.
+
+    ``start_labels`` maps depth-0 atom index → CX ``atomLabel`` captured when
+    the forest is first established. Stamp/check restamps those props onto the
     surviving start atoms so reaction finishing cannot drop them.
     """
 
-    structure: Structure
+    start_labels: Mapping[int, str]
+
+
+class Forest(TypedDict, total=False):
+    """The molecule's ``_forest``. ``total`` is false because each key is filled in later.
+
+    Three layers:
+
+    - ``immutable`` — frozen after write; :func:`~xenosite.refactor_poc.rdkitutil.forest_copy`
+      shallow-copies the map (shared nested values).
+    - ``cache`` — structure-dependent ephemeral answers (renamed from ``structure``).
+    - everything else — mutable tree deep-copied without duplicating rules.
+    """
+
+    immutable: ImmutableForest
+    cache: Structure
     atom_trace: AtomTrace
     is_terminal_product: bool
-    start_labels: dict[int, str]
 
 
 class UntracedForest(TypedDict, total=False):
-    """A forest with no ``atom_trace`` key. ``structure`` is filled in when needed."""
+    """A forest with no ``atom_trace`` key. ``cache`` is filled in when needed."""
 
-    structure: Structure
+    immutable: ImmutableForest
+    cache: Structure
     is_terminal_product: bool
-    start_labels: dict[int, str]
 
 
 class TracingForest(TypedDict):
     """A forest whose trace is initialized. Same keys :class:`InitializedAtomTrace` names."""
 
-    structure: Structure
+    immutable: ImmutableForest
+    cache: Structure
     atom_trace: InitializedAtomTrace
 

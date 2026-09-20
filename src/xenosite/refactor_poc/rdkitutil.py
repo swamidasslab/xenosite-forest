@@ -3,7 +3,8 @@
 RDKit itself is imported in :mod:`xenosite.refactor_poc.rdkit_api`. This
 module calls those names.
 
-Answers about a molecule are cached on ``mol.xf.forest["structure"]``.
+Answers about a molecule are cached on ``mol.xf.forest["cache"]``
+(structure-dependent ephemeral; formerly ``"structure"``).
 Accessing ``mol.xf`` mints an ephemeral :class:`Xf` (strong parent ref).
 Forest attaches lazily via :func:`_require_forest` when a method needs it.
 ``mol.xf.has_forest`` reports wipe/absence without installing. Prefer
@@ -44,11 +45,18 @@ edited here.
 from __future__ import annotations
 
 import ast
-import copy
 from collections import defaultdict, deque
 from collections.abc import Iterable, Sequence
 from typing import Literal, TypeGuard, TypeVar, cast, overload
 
+from xenosite.refactor_poc.forest_copy import (
+    copy_mutable,
+    empty_forest,
+    forest_copy,
+    set_start_labels,
+    shallow_immutable,
+    start_labels_of,
+)
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
     Atom,
@@ -271,8 +279,8 @@ class XfTracing:
 
         held = _require_forest(self.mol)
         forest = held._forest
-        if "structure" not in forest:
-            forest["structure"] = {}
+        if "cache" not in forest:
+            forest["cache"] = {}
         if "atom_trace" not in forest:
             trace: InitializedAtomTrace = {
                 "records": {},
@@ -317,8 +325,8 @@ class XfTracing:
         ``reactant.xf.of_products(...)`` over calling this directly.
 
         After the rule-side apply, this facade copies the reactant's
-        ``start_labels`` onto the product forest and restamps CX
-        ``atomLabel`` so finishing stays transparent to rules / search.
+        ``immutable`` (``start_labels``) onto the product forest and restamps
+        CX ``atomLabel`` so finishing stays transparent to rules / search.
         """
 
         from xenosite.refactor_poc.rules import _apply_forest_trace
@@ -326,8 +334,10 @@ class XfTracing:
         result = _apply_forest_trace(reactant, self.mol, info, executed=executed)
         parent = _read_forest(reactant)
         held = _read_forest(self.mol)
-        if parent is not None and held is not None and "start_labels" in parent:
-            held["start_labels"] = copy.deepcopy(parent["start_labels"])
+        if parent is not None and held is not None:
+            parent_imm = parent.get("immutable")
+            if parent_imm is not None:
+                held["immutable"] = shallow_immutable(parent_imm)
         _restamp_start_labels(self.mol)
         return result
 
@@ -414,9 +424,9 @@ class Xf:
 
         mol = _require_forest(self.mol)
         forest = mol._forest
-        if "structure" not in forest:
-            forest["structure"] = {}
-        structure = forest["structure"]
+        if "cache" not in forest:
+            forest["cache"] = {}
+        structure = forest["cache"]
         csmi = structure.get("csmi")
         if not csmi:
             csmi = MolToSmiles(mol, isomericSmiles=False)
@@ -437,7 +447,7 @@ class Xf:
     def clear_structure(self) -> None:
         """Drop cached structure answers. Labels and the rest of the forest stay."""
 
-        _require_forest(self.mol)._forest["structure"] = {}
+        _require_forest(self.mol)._forest["cache"] = {}
 
     @property
     def rings(self) -> dict[int, tuple[tuple[int, ...], ...]]:
@@ -582,18 +592,18 @@ class Xf:
 def _capture_start_labels(mol: ForestMol) -> None:
     """Snapshot CX ``atomLabel`` once when the forest is first established.
 
-    An empty dict is stored so a later clear cannot be mistaken for "not
+    An empty map is stored so a later clear cannot be mistaken for "not
     yet captured" and re-read from a stripped work copy.
     """
 
     forest = mol._forest
-    if "start_labels" in forest:
+    if start_labels_of(forest) is not None:
         return
     labels: dict[int, str] = {}
     for atom in mol.GetAtoms():
         if atom.HasProp("atomLabel"):
             labels[int(atom.GetIdx())] = atom.GetProp("atomLabel")
-    forest["start_labels"] = labels
+    set_start_labels(forest, labels)
 
 
 def _restamp_start_labels(mol: Mol) -> None:
@@ -602,7 +612,7 @@ def _restamp_start_labels(mol: Mol) -> None:
     forest = _read_forest(mol)
     if forest is None:
         return
-    start_labels = forest.get("start_labels")
+    start_labels = start_labels_of(forest)
     if not start_labels:
         return
     if is_tracing(mol):
@@ -642,7 +652,7 @@ def _require_forest(mol: Mol) -> ForestMol:
 
     if is_forest(mol):
         return mol
-    mol._forest = {"structure": {}}
+    mol._forest = empty_forest()
     assert is_forest(mol)
     _capture_start_labels(mol)
     return mol
@@ -730,10 +740,15 @@ def _place_forest(mol: Mol, forest: Forest) -> ForestMol:
 
 
 def _structure(mol: Mol) -> Structure:
+    """Return ``forest["cache"]``, creating an empty dict if needed.
+
+    Name kept for call-site stability; the forest key is ``cache``.
+    """
+
     forest = _require_forest(mol)._forest
-    if "structure" not in forest:
-        forest["structure"] = {}
-    return forest["structure"]
+    if "cache" not in forest:
+        forest["cache"] = {}
+    return forest["cache"]
 
 
 def sanitize_mol(mol: Mol) -> int:
@@ -801,7 +816,7 @@ def molecule_formula(mol: Mol) -> Formula:
     """Heavy-atom counts, total hydrogens, and formal charge.
 
     Explicit hydrogens are counted through ``GetTotalNumHs`` on the heavy
-    atom they belong to, not as a second copy. Cached as ``structure["formula"]``.
+    atom they belong to, not as a second copy. Cached as ``cache["formula"]``.
     The trace keeps its own ``formula`` and ``delta_formula``.
     """
 
@@ -842,7 +857,8 @@ def copy_mol(mol: Mol) -> Mol:
 
     out = Mol(mol)
     if is_forest(mol):
-        return _place_forest(out, copy.deepcopy(mol._forest))
+        # Same molecular structure: keep ``cache`` by identity.
+        return _place_forest(out, forest_copy(mol._forest, same_structure=True))
     return out
 
 
@@ -902,10 +918,12 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]
         renumber_map[old_idx] = new_pos
 
     source = ensure_forest(mol)
+    # Atom order changed: drop structure-dependent cache, then seed csmi.
     renumbered = _place_forest(
-        RenumberAtoms(mol, renumber_map), copy.deepcopy(source._forest)
+        RenumberAtoms(mol, renumber_map),
+        forest_copy(source._forest, same_structure=False),
     )
-    renumbered._forest["structure"] = {"csmi": csmi}
+    renumbered._forest["cache"] = {"csmi": csmi}
 
     if tracing_reset:
         _reordered_forest_labels(renumbered)
@@ -1504,9 +1522,10 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
         return dst
 
     src_forest = src._forest
-    child: Forest = {"structure": {}}
-    if "start_labels" in src_forest:
-        child["start_labels"] = copy.deepcopy(src_forest["start_labels"])
+    child: Forest = empty_forest()
+    src_imm = src_forest.get("immutable")
+    if src_imm is not None:
+        child["immutable"] = shallow_immutable(src_imm)
 
     try:
         same_size = src.GetNumAtoms() == dst.GetNumAtoms()
@@ -1531,7 +1550,7 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
             if label not in label_to_idx:
                 # Cleavage sibling / foreign — absent on this fragment.
                 continue
-            rec_copy = copy.deepcopy(rec)
+            rec_copy = copy_mutable(rec)
             idxs = rec_copy.get("idx")
             if not idxs:
                 raise KeyError("idx")
@@ -1548,11 +1567,11 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
         carried = {
             "records": records,
             "deletes": (
-                copy.deepcopy(trace.get("deletes") or {}) if same_size else {}
+                copy_mutable(trace.get("deletes") or {}) if same_size else {}
             ),
             "transforms": list(trace.get("transforms") or []),
-            "additions": copy.deepcopy(trace.get("additions") or {}),
-            "delta_formula": copy.deepcopy(trace.get("delta_formula") or {}),
+            "additions": copy_mutable(trace.get("additions") or {}),
+            "delta_formula": copy_mutable(trace.get("delta_formula") or {}),
             "depth": int(trace["depth"]),
             "last_tag": int(trace["last_tag"]),
             "next_transform": int(trace.get("next_transform") or 1),
@@ -1561,7 +1580,7 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
         child["atom_trace"] = carried  # type: ignore[typeddict-item]
         held = _place_forest(dst, child)
         carried["formula"] = molecule_formula(held)
-        child["structure"] = {}
+        child["cache"] = {}
         _restamp_start_labels(held)
         return held
 

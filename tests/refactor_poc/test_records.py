@@ -78,8 +78,8 @@ def test_records_are_tuples_and_dicts():
         "last_tag": 0,
         "next_transform": 1,
     }
-    forest: Forest = {"structure": structure, "atom_trace": trace}
-    assert forest["structure"]["formula"]["charge"] == 0
+    forest: Forest = {"cache": structure, "atom_trace": trace}
+    assert forest["cache"]["formula"]["charge"] == 0
     assert forest["atom_trace"]["next_transform"] == 1
 
 

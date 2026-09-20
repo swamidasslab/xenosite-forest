@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 # Standard Library
-import copy
 import itertools
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
@@ -19,6 +18,7 @@ from xenosite.refactor_poc.canonical_plan import (
     identity_canonical_plan,
     quinone_canonical_plan,
 )
+from xenosite.refactor_poc.forest_copy import copy_mutable
 from xenosite.refactor_poc.rdkit_api import (
     ChemicalReaction,
     MolFromSmarts,
@@ -622,7 +622,7 @@ def _apply_forest_trace(
     site = _as_site(info["site"])
     parent = reactant.xf.tracing._stamp()
     held = product.xf.forestmol
-    trace: InitializedAtomTrace = copy.deepcopy(parent._forest["atom_trace"])
+    trace: InitializedAtomTrace = copy_mutable(parent._forest["atom_trace"])
     trace.setdefault("additions", {})
     trace.setdefault("delta_formula", {})
     trace.setdefault("transforms", [])
@@ -1919,9 +1919,9 @@ def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
     forest = mol.xf.forest
-    if "structure" not in forest:
-        raise KeyError("structure")
-    structure = forest["structure"]
+    if "cache" not in forest:
+        raise KeyError("cache")
+    structure = forest["cache"]
     cache = structure.get("kekule_parents")
     if cache is None:
         fresh: KekuleParents = {

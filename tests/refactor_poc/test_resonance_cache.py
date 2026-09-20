@@ -1,7 +1,5 @@
 """Partial kekulé parents. Helpers take a dict. The rule stores it."""
 
-import copy
-
 from rdkit import Chem
 
 from xenosite.refactor_poc.rdkitutil import (
@@ -70,20 +68,22 @@ def test_polyphenyl_is_twelve_parents_not_sixty_four():
         assert aromatic == 30
 
 
-def test_rule_stores_the_dict_and_deepcopy_keeps_the_mols():
+def test_rule_stores_the_dict_and_forest_copy_keeps_the_mols():
+    from xenosite.refactor_poc.forest_copy import forest_copy
+
     mol = Chem.MolFromSmiles("c1ccccc1")
     assert mol is not None
     list(Epoxidation().metabolites(mol))
-    structure = ensure_forest(mol).xf.forest.get("structure")
+    structure = ensure_forest(mol).xf.forest.get("cache")
     assert structure is not None
     cache = structure.get("kekule_parents")
     assert cache is not None
     assert len(cache.get("parents") or []) == 2
-    copied = copy.deepcopy(ensure_forest(mol).xf.forest)
-    copied_structure = copied.get("structure")
-    assert copied_structure is not None
+    copied = forest_copy(ensure_forest(mol).xf.forest, same_structure=True)
+    copied_structure = copied.get("cache")
+    assert copied_structure is structure
     copied_cache = copied_structure.get("kekule_parents")
-    assert copied_cache is not None
+    assert copied_cache is cache
     assert len(copied_cache.get("parents") or []) == 2
 
 

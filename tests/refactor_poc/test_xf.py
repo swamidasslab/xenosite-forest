@@ -76,7 +76,7 @@ def test_csmi_on_demand_via_xf():
     mol = Chem.MolFromSmiles("c1ccccc1O")
     assert not mol.xf.has_forest
     first = mol.xf.csmi
-    assert mol.xf.forest["structure"]["csmi"] == first
+    assert mol.xf.forest["cache"]["csmi"] == first
     assert mol.xf.csmi is first
 
 

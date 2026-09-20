@@ -1,7 +1,8 @@
 """Input-model CX ``atomLabel`` on start atoms survives stamp and metabolize.
 
-Without ``_forest["start_labels"]`` capture + restamp on the stamp/check path,
-RunReactants / fragment finishing drop those props and they stay gone.
+Without ``_forest["immutable"]["start_labels"]`` capture + restamp on the
+stamp/check path, RunReactants / fragment finishing drop those props and they
+stay gone.
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ def test_stamp_keeps_input_atom_labels():
     stamped = mol.xf.tracing._stamp()
     assert stamped.GetAtomWithIdx(0).GetProp("atomLabel") == "alpha"
     assert stamped.GetAtomWithIdx(2).GetProp("atomLabel") == "oxy"
-    assert stamped._forest["start_labels"] == {0: "alpha", 2: "oxy"}
+    assert dict(stamped._forest["immutable"]["start_labels"]) == {0: "alpha", 2: "oxy"}
 
 
 def test_metabolize_preserves_start_atom_labels():

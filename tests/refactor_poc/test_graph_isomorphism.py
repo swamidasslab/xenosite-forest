@@ -174,7 +174,7 @@ def test_singleton_topeqiv_uses_trivial_pair_group():
     )
     assert sig.pair_group == TRIVIAL_PAIR_GROUP
     assert sig.pair_group == PairGroupId(-1)
-    structure = mol._forest["structure"]
+    structure = mol._forest["cache"]
     assert "site_pair_orbits_smiles" not in structure
     assert "site_pair_orbits_nauty" not in structure
 
@@ -183,7 +183,7 @@ def test_multi_multi_materializes_forest_cache_once():
     mol = _mol("c1ccccc1")
     sig = atom_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(sig, AtomPairOrbitSignature)
-    structure = mol._forest["structure"]
+    structure = mol._forest["cache"]
     if _has_pynauty():
         cache_key = "site_pair_orbits_nauty"
     else:
@@ -321,7 +321,7 @@ def test_dispatcher_uses_isotope_pair_group_when_pynauty_absent():
     assert sig is not None
     assert isinstance(sig.pair_group, int)
     assert sig.pair_group >= 0
-    cached = mol._forest["structure"]["site_pair_orbits_smiles"]
+    cached = mol._forest["cache"]["site_pair_orbits_smiles"]
     assert (
         cached["atom_atom"][sig.groups][tuple(sorted((0, 3)))] == sig.pair_group
     )
@@ -400,7 +400,7 @@ def test_nauty_cache_fills_all_modes_up_front():
     mol = _mol("c1ccccc1")
     sig = atom_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(sig, AtomPairOrbitSignature)
-    cached = mol._forest["structure"]["site_pair_orbits_nauty"]
+    cached = mol._forest["cache"]["site_pair_orbits_nauty"]
     assert set(cached) == {"atom_atom", "bond_bond", "bond_atom"}
     bp = bond_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(bp, BondPairOrbitSignature)
