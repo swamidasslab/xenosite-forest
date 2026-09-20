@@ -1532,22 +1532,29 @@ class CsmiDedupWarning(UserWarning):
     """Product csmi dedup dropped a duplicate that unique-edit / orbit missed."""
 
 
-# Identical text every call so warnings' default once-per-message filter works.
-_CSMI_DEDUP_WARNING = (
-    "CSMI dedup triggered: canonization / unique-edit filtering is off or "
-    "incomplete (unique-edit/orbit missed a duplicate product). "
-    "Raise log level to INFO on this logger for per-drop detail."
-)
+def _csmi_dedup_warning_message(rule_name: str) -> str:
+    """Generic text keyed by rule so stdlib once-per-message emits once per rule."""
+
+    return (
+        f"CSMI dedup triggered for rule {rule_name}: canonization / unique-edit "
+        "filtering is off or incomplete (unique-edit/orbit missed a duplicate "
+        "product). Raise log level to INFO on this logger for per-drop detail."
+    )
+
 
 _logger = logging.getLogger(__name__)
 
 
 def _report_csmi_dedup_drop(substrate: Mol, info: SiteInfo, product_csmi: str) -> None:
-    """Warn (generic) and log INFO detail when ``unique_csmi`` drops a product."""
+    """Warn once-per-rule (generic) and log INFO detail when ``unique_csmi`` drops."""
 
-    warnings.warn(_CSMI_DEDUP_WARNING, CsmiDedupWarning, stacklevel=2)
     rule = info["rule"]
     rule_name = getattr(rule, "name", None) or type(rule).__name__
+    warnings.warn(
+        _csmi_dedup_warning_message(rule_name),
+        CsmiDedupWarning,
+        stacklevel=2,
+    )
     _logger.info(
         "CSMI dedup drop: substrate=%s rule=%s site=%s pattern=%s product=%s",
         substrate.xf.csmi,
