@@ -13,10 +13,10 @@ from xenosite.forest.rdkitutil import Mol
 from xenosite.forest.records import PatternInfo
 from xenosite.forest.rules import (
     AzoSplitting,
-    SiteDeduplicationWarning,
     ProductsOfReaction,
     ReactionRule,
     RuleSiteKind,
+    SiteDeduplicationWarning,
     SmirksReactionRule,
     describe,
 )

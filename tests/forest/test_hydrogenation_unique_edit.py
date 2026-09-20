@@ -14,7 +14,7 @@ import warnings
 import pytest
 from rdkit import Chem
 
-from xenosite.forest.rules import SiteDeduplicationWarning, Hydrogenation
+from xenosite.forest.rules import Hydrogenation, SiteDeduplicationWarning
 
 
 @pytest.mark.parametrize(

@@ -14,13 +14,13 @@ from rdkit import Chem
 
 from xenosite.forest.rules import (
     AzoSplitting,
-    SiteDeduplicationWarning,
     Dealkylation,
     Dehydration,
     Dehydrogenation,
     NitrogenReduction,
     OxidativeDehalogenation,
     ReductiveDehalogenation,
+    SiteDeduplicationWarning,
 )
 
 

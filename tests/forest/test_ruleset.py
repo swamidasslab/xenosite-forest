@@ -7,11 +7,11 @@ from rdkit import Chem
 
 from xenosite.forest.records import PatternInfo
 from xenosite.forest.rules import (
-    SiteDeduplicationWarning,
     Dealkylation,
     Hydroxylation,
     ReactionRule,
     RuleSiteKind,
+    SiteDeduplicationWarning,
     SmirksReactionRule,
     describe,
 )

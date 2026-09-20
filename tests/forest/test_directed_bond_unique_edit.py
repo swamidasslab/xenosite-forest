@@ -19,10 +19,10 @@ from rdkit import Chem
 from xenosite.forest.graph_isomorphism import bond_rank_key, map_rank_key
 from xenosite.forest.rdkitutil import MolFromSmiles
 from xenosite.forest.rules import (
-    SiteDeduplicationWarning,
     Dealkylation,
     NDealkylation,
     ResonanceRule,
+    SiteDeduplicationWarning,
     _site_indexes,
 )
 

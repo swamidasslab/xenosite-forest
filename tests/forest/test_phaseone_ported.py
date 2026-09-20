@@ -163,7 +163,11 @@ def test_histidine_phase1_does_not_emit_invalid_metabolites():
 def test_histidine_nitrogen_oxidation_is_chemically_valid():
     mol = MolFromSmiles(HISTIDINE)
     assert mol is not None
-    smiles = {canon(product) for _pl, _info in NitrogenOxidation().metabolize(mol) for product in _pl}
+    smiles = {
+        canon(product)
+        for _pl, _info in NitrogenOxidation().metabolize(mol)
+        for product in _pl
+    }
 
     assert canon("O=C(O)C(CC1=CN=CN1)NO") in smiles
     assert canon("O=NC(CC1=CN=CN1)C(=O)O") in smiles

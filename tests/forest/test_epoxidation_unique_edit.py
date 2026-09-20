@@ -14,7 +14,7 @@ import warnings
 import pytest
 from rdkit import Chem
 
-from xenosite.forest.rules import SiteDeduplicationWarning, Epoxidation
+from xenosite.forest.rules import Epoxidation, SiteDeduplicationWarning
 
 
 @pytest.mark.parametrize(

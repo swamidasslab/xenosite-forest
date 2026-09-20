@@ -2420,6 +2420,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pynauty" },
     { name = "rdkit" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -2454,6 +2455,7 @@ requires-dist = [
     { name = "pynauty" },
     { name = "rdkit", specifier = ">=2022.3.3" },
     { name = "tqdm", marker = "extra == 'network'", specifier = ">=4.66.0" },
+    { name = "typing-extensions", specifier = ">=4.0" },
     { name = "xenosite-predict", marker = "python_full_version >= '3.11' and extra == 'predict'", specifier = ">=0.4.2" },
 ]
 provides-extras = ["network", "predict"]

@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "rdkit>=2022.3.3",
     "pynauty",
+    "typing-extensions>=4.0",
 ]
 keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
 
