@@ -70,7 +70,7 @@ def test_epoxidation_does_not_edit_its_input():
 
 def test_existing_parent_forest_is_kept():
     mol = Chem.MolFromSmiles("CC")
-    install_forest(mol)
+    mol = install_forest(mol)
     mol._forest["atom_trace"]["depth"] = 2
     before = _chemistry(mol)
     products = list(Hydroxylation().metabolize(mol))

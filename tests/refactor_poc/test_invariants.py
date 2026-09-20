@@ -61,7 +61,7 @@ def test_a_parent_with_no_forest_keeps_one_afterward():
 
 def test_an_existing_parent_depth_is_not_reset():
     mol = Chem.MolFromSmiles("CC")
-    install_forest(mol)
+    mol = install_forest(mol)
     mol._forest["atom_trace"]["depth"] = 4
     products = list(Hydroxylation().metabolize(mol))
     assert mol._forest["atom_trace"]["depth"] == 4

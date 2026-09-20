@@ -1560,7 +1560,7 @@ def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:
 def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
-    forest = ensure_forest(mol)._forest
+    forest = get_forest(ensure_forest(mol))
     if "structure" not in forest:
         raise KeyError("structure")
     structure = forest["structure"]
