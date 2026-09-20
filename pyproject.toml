@@ -156,7 +156,14 @@ skip_empty = true
 show_missing = true
 
 [tool.pyright]
-include = ["src/xenosite/refactor_poc/records.py"]
+include = [
+    "src/xenosite/refactor_poc/rdkit_api.py",
+    "src/xenosite/refactor_poc/rdkitutil.py",
+    "src/xenosite/refactor_poc/records.py",
+    "src/xenosite/refactor_poc/rules.py",
+    "src/xenosite/refactor_poc/rulesets.py",
+    "src/xenosite/refactor_poc/find_path.py",
+]
 
 # POC only. Forest stays out. phaseone.py and test.ipynb stay out until the
 # class rewrite; do not lint-fix the old example.
@@ -174,3 +181,7 @@ extend-exclude = [
 # E/W pycodestyle, F pyflakes, I isort. Bugbear (B) is off: B905 wants
 # zip(..., strict=) and that is a behavior change, not a quiet rule.
 select = ["E", "W", "F", "I"]
+# PLC0414 flags `import name as name`. refactor_poc re-exports use that
+# form on purpose. PL stays unselected; ignore so a wider editor select
+# does not report it.
+ignore = ["PLC0414"]

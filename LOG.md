@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+- Typing pass on refactor_poc: `mol = ensure_forest(mol)` installs in place and returns the same object as `ForestMol`; `get_forest` only reads a `ForestMol` and returns its `Forest`.
+- Site is indices only (`int | tuple[int, ...] | frozenset[int] | frozenset[frozenset[int]]`). FutureSite mirrors that nesting; the top-level single deferred atom is `AtomRef` only (not bare int). Nested leaves are `int | AtomRef`. `AnySite = Site | FutureSite`. `_flat_ints` takes `Site` only.
+- Focused `pyright: ignore[reportIncompatibleVariableOverride]` kept on `_forest` overrides in `rdkit_api.py`. Pyright on the poc modules listed in `pyproject.toml`: 0 errors.
+
+## 2026-09-19
+
 - PatternInfo now carries a distinguishing ``name``. Where a short role name is not ready, the rule numbers the pattern ("1", "2", …) on that object at init; that numbering is a disfavored interim, not the final names.
 - RuleSet always appends itself on the product chain. Its reported label is the initialization name; an unnamed set (including ``name=""``) stays on the chain and contributes no label. The addition links to the PatternInfo that fired; the pattern is not a chain entry.
 

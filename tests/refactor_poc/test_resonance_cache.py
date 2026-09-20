@@ -5,6 +5,7 @@ import copy
 from rdkit import Chem
 
 from xenosite.refactor_poc.rdkitutil import (
+    ensure_forest,
     ensure_kekule_parents,
     get_forest,
     parents_for_ends,
@@ -71,9 +72,9 @@ def test_rule_stores_the_dict_and_deepcopy_keeps_the_mols():
     mol = Chem.MolFromSmiles("c1ccccc1")
     assert mol is not None
     list(Epoxidation().metabolites(mol))
-    cache = get_forest(mol)._forest["structure"]["kekule_parents"]
+    cache = get_forest(ensure_forest(mol))["structure"]["kekule_parents"]
     assert len(cache["parents"]) == 2
-    copied = copy.deepcopy(get_forest(mol)._forest)
+    copied = copy.deepcopy(get_forest(ensure_forest(mol)))
     assert len(copied["structure"]["kekule_parents"]["parents"]) == 2
 
 

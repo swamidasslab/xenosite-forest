@@ -3,7 +3,9 @@
 RDKit itself is imported in :mod:`xenosite.refactor_poc.rdkit_api`. This
 module calls those names.
 
-Answers about a molecule are cached on ``ensure_forest(mol)._forest["structure"]``.
+Answers about a molecule are cached on ``get_forest(ensure_forest(mol))["structure"]``.
+The caller rebinds ``mol = ensure_forest(mol)`` when the molecule had no forest.
+``get_forest`` only reads a molecule that already has one.
 The key is one string. Process-wide data, such as parsed SMARTS reactions,
 stays a module dict. Do not cache a result on a molecule this function
 then edits. Edits belong on a copy from :func:`copy_mol` or :func:`rw_copy`.
@@ -32,7 +34,7 @@ import ast
 import copy
 from collections import defaultdict, deque
 from collections.abc import Iterable
-from typing import Any, TypeGuard, TypeVar, cast, overload
+from typing import TypeGuard, TypeVar, overload
 
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
@@ -46,6 +48,7 @@ from xenosite.refactor_poc.rdkit_api import (
     DisableLog,
     FindMCS,
     ForestMol,
+    ForestNoTracingMol,
     ForestTracingMol,
     GetMolFrags,
     Mol,
@@ -97,13 +100,25 @@ def _read_forest(mol: Mol) -> Forest | None:
     return forest
 
 
-def is_forest(mol: Mol) -> TypeGuard[ForestMol]:
+@overload
+def is_forest(mol: ForestTracingMol) -> TypeGuard[ForestTracingMol]: ...
+@overload
+def is_forest(mol: ForestNoTracingMol) -> TypeGuard[ForestNoTracingMol]: ...
+@overload
+def is_forest(mol: ForestMol) -> TypeGuard[ForestMol]: ...
+@overload
+def is_forest(mol: Mol) -> TypeGuard[ForestMol]: ...
+def is_forest(mol: Mol) -> bool:
     """True when ``_forest`` is present. Does not install one."""
 
     return _read_forest(mol) is not None
 
 
-def is_tracing(mol: Mol) -> TypeGuard[ForestTracingMol]:
+@overload
+def is_tracing(mol: ForestTracingMol) -> TypeGuard[ForestTracingMol]: ...
+@overload
+def is_tracing(mol: Mol) -> TypeGuard[ForestTracingMol]: ...
+def is_tracing(mol: Mol) -> bool:
     """True when ``atom_trace`` exists and has the keys the trace writer fills.
 
     Does not install a forest or a trace.
@@ -118,28 +133,50 @@ def is_tracing(mol: Mol) -> TypeGuard[ForestTracingMol]:
     return all(key in trace for key in _TRACE_KEYS)
 
 
-def ensure_forest(mol: ForestMol | Mol) -> ForestMol:
+@overload
+def ensure_forest(mol: ForestTracingMol) -> ForestTracingMol: ...
+@overload
+def ensure_forest(mol: ForestNoTracingMol) -> ForestNoTracingMol: ...
+@overload
+def ensure_forest(mol: ForestMol) -> ForestMol: ...
+@overload
+def ensure_forest(mol: Mol) -> ForestMol: ...
+def ensure_forest(mol: Mol) -> ForestMol:
     """Install a missing forest on ``mol`` and return that same object.
 
-    An existing forest is left alone, including its depth. This does not copy
-    and does not raise.
+    An existing forest is left alone, including its depth. A traced molecule
+    stays traced. This does not copy and does not raise. Callers rebind:
+    ``mol = ensure_forest(mol)``.
     """
 
     if is_forest(mol):
         return mol
     structure: Structure = {}
     mol._forest = {"structure": structure}
-    return cast(ForestMol, mol)
+    assert is_forest(mol)
+    return mol
 
 
-def get_forest(mol: ForestMol | Mol) -> ForestMol:
-    """Same function as :func:`ensure_forest`. The name callers already use."""
+def get_forest(mol: ForestMol) -> Forest:
+    """The forest already on ``mol``. Does not install and does not copy."""
 
-    return ensure_forest(mol)
+    return mol._forest
+
+
+def _place_forest(mol: Mol, forest: Forest) -> ForestMol:
+    """Write ``forest`` onto ``mol`` and return that same object.
+
+    The parameter is :class:`Mol`, not :class:`NoForestMol`, so the write is
+    the base attribute. The molecule is not copied.
+    """
+
+    mol._forest = forest
+    assert is_forest(mol)
+    return mol
 
 
 def _structure(mol: Mol) -> Structure:
-    forest = ensure_forest(mol)._forest
+    forest = get_forest(ensure_forest(mol))
     if "structure" not in forest:
         raise KeyError("structure")
     return forest["structure"]
@@ -213,18 +250,25 @@ def molecule_formula(mol: Mol) -> Formula:
     return formula
 
 
+@overload
+def copy_mol(mol: ForestTracingMol) -> ForestTracingMol: ...
+@overload
+def copy_mol(mol: ForestNoTracingMol) -> ForestNoTracingMol: ...
+@overload
+def copy_mol(mol: ForestMol) -> ForestMol: ...
+@overload
+def copy_mol(mol: Mol) -> Mol: ...
 def copy_mol(mol: Mol) -> Mol:
     """``Chem.Mol`` copy that also carries a deep-copied forest.
 
     The constructor itself does not keep ``_forest``. This function does,
     when the source has one, so the result is not :class:`NoForestMol`.
+    The new molecule is the copy. The source is not edited.
     """
 
     out = Mol(mol)
     if is_forest(mol):
-        stamped = cast(ForestMol, out)
-        stamped._forest = copy.deepcopy(mol._forest)
-        return stamped
+        return _place_forest(out, copy.deepcopy(get_forest(mol)))
     return out
 
 
@@ -263,11 +307,17 @@ def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[NoForestMol, ...], ...]:
     return tuple(product_sets)
 
 
+@overload
+def cannonicalize_order(
+    mol: ForestTracingMol, tracing_reset: bool = True
+) -> tuple[ForestTracingMol, str]: ...
+@overload
+def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol, str]: ...
 def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol, str]:
     """Renumber into canonical SMILES order. Returns the new mol and that SMILES.
 
-    The mol is not a record field, so this stays a tuple. The SMILES is also
-    the only structure entry copied onto the renumbered molecule.
+    ``RenumberAtoms`` builds a new molecule and the forest is copied onto it.
+    The input is not edited. A traced input comes back traced.
     """
 
     csmi = MolToSmiles(mol, isomericSmiles=False)
@@ -277,17 +327,19 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol
     for new_pos, old_idx in enumerate(smiles_order):
         renumber_map[old_idx] = new_pos
 
-    renumbered = cast(ForestMol, RenumberAtoms(mol, renumber_map))
-    renumbered._forest = copy.deepcopy(ensure_forest(mol)._forest)
-    renumbered._forest["structure"] = {"csmi": csmi}
+    source = ensure_forest(mol)
+    renumbered = _place_forest(
+        RenumberAtoms(mol, renumber_map), copy.deepcopy(get_forest(source))
+    )
+    get_forest(renumbered)["structure"] = {"csmi": csmi}
 
     if tracing_reset:
         _reordered_forest_labels(renumbered)
 
     return renumbered, csmi
 
-# need to asser this function ensure Mol atoms exactly matches the forest labels,
-# or throw error
+# TODO: this function should ensure Mol atoms exactly matches the forest labels,
+# or throw error. It's only a helper that's meant to work if labels were dropped from mol.
 def _reordered_forest_labels(mol: ForestMol) -> None:
     if not is_tracing(mol):
         raise KeyError("atom_trace")
@@ -764,10 +816,13 @@ def smarts_matches(mol: Mol, smarts: str) -> tuple[dict[int, int], ...]:
     return cache[smarts]
 
 
-def _bump(counters: Any, name: str, amount: int = 1) -> None:
+def _bump(counters: object | None, name: str, amount: int = 1) -> None:
     if counters is None:
         return
-    setattr(counters, name, getattr(counters, name) + amount)
+    current = getattr(counters, name)
+    if not isinstance(current, int):
+        raise TypeError(name)
+    setattr(counters, name, current + amount)
 
 
 def _sanitize_piece(frag: Mol) -> bool:
@@ -786,7 +841,7 @@ def _sanitize_piece(frag: Mol) -> bool:
     return not SanitizeMol(frag, catchErrors=True)
 
 
-def sanitized_fragments(mol: Mol, counters: Any = None) -> FragmentSplit:
+def sanitized_fragments(mol: Mol, counters: object | None = None) -> FragmentSplit:
     """Split, drop the dealkylation leaving group, sanitize.
 
     Empty pieces when any fragment fails. Callers read ``pieces``.

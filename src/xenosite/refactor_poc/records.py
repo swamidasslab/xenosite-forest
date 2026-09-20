@@ -58,7 +58,7 @@ class AtomRef(NamedTuple):
 
 
 def _flat_ints(site: Site) -> set[int]:
-    """Flatten a known-index site to atom indexes. Resolve FutureSite first."""
+    """Flatten a known-index :class:`Site`. Resolve AtomRef leaves first."""
 
     if isinstance(site, int):
         return {site}
@@ -73,13 +73,19 @@ def _flat_ints(site: Site) -> set[int]:
     return found
 
 
-# Known atom indices only. No deferred refs.
-# A frozenset[int] is a two-atom site. Nested frozensets are pair-of-pairs.
+# Known atom indices only. AtomRef is a leaf, not a site by itself.
+# frozenset[int] is a two-atom site; nested frozensets are pair-of-pairs.
 # Trace storage may keep a sorted tuple of the same indexes.
 Site = int | tuple[int, ...] | frozenset[int] | frozenset[frozenset[int]]
 
-# Deferred atom a later frame resolves. Oxygen added by hydroxylation is one.
-FutureSite = AtomRef
+# Same nesting as Site. Top-level single deferred atom is AtomRef only
+# (bare int belongs to Site). Nested leaves may be int or AtomRef.
+FutureSite = (
+    AtomRef
+    | tuple[int | AtomRef, ...]
+    | frozenset[int | AtomRef]
+    | frozenset[frozenset[int | AtomRef]]
+)
 
 AnySite = Site | FutureSite
 
@@ -210,7 +216,7 @@ class TraceAddition(TypedDict):
     pattern: PatternInfo | None
 
 
-class AtomTrace(TypedDict, total=False):
+class AtomTrace(TypedDict):
     """Schema of ``_forest["atom_trace"]``. Not a second object beside the forest.
 
     ``records`` is the heavy atoms still in the molecule, keyed by tag.

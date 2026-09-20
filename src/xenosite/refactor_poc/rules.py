@@ -7,7 +7,7 @@ import copy
 import itertools
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from typing import NamedTuple
+from typing import NamedTuple, TypeGuard
 
 from xenosite.refactor_poc.rdkit_api import (
     ChemicalReaction,
@@ -29,6 +29,7 @@ from xenosite.refactor_poc.rdkitutil import (
     copy_mol,
     ensure_forest,
     ensure_kekule_parents,
+    get_forest,
     is_tracing,
     molecule_formula,
     move_charge_with_bonds,
@@ -55,8 +56,29 @@ from xenosite.refactor_poc.records import (
     PatternInfo,
     Site,
     TraceAddition,
+    TracingForest,
     When,
 )
+
+
+def _is_pattern(value: object) -> TypeGuard[PatternInfo]:
+    """True when ``value`` is the pattern dict a rule stored on the info."""
+
+    return isinstance(value, dict)
+
+
+def _copy_when(raw: Mapping[str, object]) -> When:
+    copied: When = {}
+    mapno = raw.get("map")
+    if isinstance(mapno, int):
+        copied["map"] = mapno
+    atomic = raw.get("z")
+    if isinstance(atomic, int):
+        copied["z"] = atomic
+    hydrogens = raw.get("h")
+    if isinstance(hydrogens, int):
+        copied["h"] = hydrogens
+    return copied
 
 
 def set_terminal_product(mol: Mol, value: bool = True) -> ForestMol:
@@ -100,8 +122,8 @@ class ReactionRule:
         name: str | None = None,
         sites_on: object | None = None,
         longname: str | None = None,
-        *args: object,
-        **kwargs: object,
+        *args,
+        **kwargs,
     ) -> None:
         # super().__init__( *args, **kwargs)
 
@@ -126,7 +148,7 @@ class ReactionRule:
             self.sites_on = sites_on
 
     def __call__(
-        self, mol: Mol, **kwargs: object
+        self, mol: Mol, **kwargs
     ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
@@ -139,7 +161,7 @@ class ReactionRule:
         filter_rules: FilterRules = lambda rule, info: True,
         filter_sites: FilterSites = lambda site, info: True,
         unique_csmi: bool = True,
-        **kwargs: object,
+        **kwargs,
     ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
         """Apply this rule and yield ``(product, info)`` pairs.
 
@@ -175,7 +197,7 @@ class ReactionRule:
         assert mol is not None
         # The caller's chemistry is not edited. A mol with no trace gets one,
         # at its current depth, so products can sit one step below it.
-        ensure_tracing(mol)
+        mol = ensure_tracing(mol)
         # Matching, map clearing, and forest stamps happen on a copy.
         mol = ensure_tracing(_work_copy(mol))
 
@@ -212,7 +234,7 @@ class ReactionRule:
                 # canonicalize deep-copies the forest; keep the rule's
                 # PatternInfo object as the addition's pattern link.
                 pattern = info.get("pattern")
-                if pattern is not None:
+                if _is_pattern(pattern):
                     tid = ordered._forest["atom_trace"]["transforms"][-1]
                     ordered._forest["atom_trace"]["additions"][tid]["pattern"] = (
                         pattern
@@ -230,17 +252,29 @@ class ReactionRule:
 
                 yield ordered, i
 
-    def _top_site(self, site: object, mol: Mol) -> int | frozenset[int]:
+    def _top_site(self, site: Site, mol: Mol) -> Site:
         te = topol_equiv(mol)
-        if type(site) is int:
+        if isinstance(site, int):
             return te[site]
-        else:
+        if isinstance(site, tuple):
             return frozenset(int(te[s]) for s in site)
+        if isinstance(site, frozenset):
+            nested: list[frozenset[int]] = []
+            flat: list[int] = []
+            for item in site:
+                if isinstance(item, frozenset):
+                    nested.append(frozenset(int(te[index]) for index in item))
+                elif isinstance(item, int):
+                    flat.append(int(te[item]))
+            if nested:
+                return frozenset(nested)
+            return frozenset(flat)
+        return site
 
     def is_terminal_product(self, mol: Mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search."""
 
-        forest = ensure_forest(mol)._forest
+        forest = get_forest(ensure_forest(mol))
         structure = forest.get("structure")
         if not structure or "is_terminal_product" not in structure:
             return False
@@ -251,7 +285,7 @@ class ReactionRule:
         mol: Mol,
         filter_rules: FilterRules = lambda rule, info: True,
         filter_sites: FilterSites = lambda site, info: True,
-        **kwargs: object,
+        **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Yield one :class:`ProductsOfReaction` per edit. Subclasses override this.
 
@@ -283,7 +317,7 @@ class ReactionRule:
 
 
 FilterRules = Callable[[ReactionRule, PatternInfo], bool]
-FilterSites = Callable[[object, dict[str, object]], bool]
+FilterSites = Callable[[Site, dict[str, object]], bool]
 
 
 def __getattr__(name: str) -> object:
@@ -364,10 +398,13 @@ def ensure_tracing(mol: Mol) -> ForestTracingMol:
     return held
 
 
-def install_forest(mol: Mol) -> Forest:
-    """Install the forest data structure in the molecule."""
+def install_forest(mol: Mol) -> ForestTracingMol:
+    """Install tracing on ``mol`` and return that same object.
 
-    return ensure_tracing(mol)._forest
+    Callers rebind: ``mol = install_forest(mol)``. This does not copy.
+    """
+
+    return ensure_tracing(mol)
 
 
 def _write_forest_labels(mol: ForestTracingMol) -> None:
@@ -400,12 +437,34 @@ def reordered_forest_labels(mol: ForestTracingMol) -> None:
             idx[-1] = i
 
 
-def _site_tuple(site: object) -> Site:
+def _as_site(value: object) -> Site:
+    """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first."""
+
+    if isinstance(value, int):
+        return value
+    if isinstance(value, tuple) and all(isinstance(item, int) for item in value):
+        return value
+    if isinstance(value, frozenset):
+        if all(isinstance(item, int) for item in value):
+            return value
+        if all(
+            isinstance(item, frozenset) and all(isinstance(inner, int) for inner in item)
+            for item in value
+        ):
+            return value
+    raise TypeError(value)
+
+
+def _site_tuple(site: Site) -> Site:
     if isinstance(site, int):
         return (site,)
-    if isinstance(site, (frozenset, set, list, tuple)):
+    if isinstance(site, tuple):
         return tuple(sorted(site))
-    raise TypeError(site)
+    sample = next(iter(site), None)
+    if isinstance(sample, frozenset):
+        return site
+    indexes = [item for item in site if isinstance(item, int)]
+    return tuple(sorted(indexes))
 
 
 def _trace_info(info: Mapping[str, object]) -> dict[str, object]:
@@ -483,7 +542,7 @@ def _as_effect(value: object) -> Effect:
         effect["site_aromatic"] = site_aromatic
     when = value.get("when")
     if isinstance(when, dict):
-        effect["when"] = when
+        effect["when"] = _copy_when(when)
     return effect
 
 
@@ -492,7 +551,7 @@ def forest_trace(
     product: Mol,
     info: Mapping[str, object],
     executed: ReactionRule | None = None,
-) -> AtomTrace:
+) -> InitializedAtomTrace:
     """Record one transform on the product's atom trace.
 
     A new atom's ``added_by`` is an id such as ``R1``. The site, the rule
@@ -502,10 +561,10 @@ def forest_trace(
     """
 
     rule = info.get("rule")
-    site = info.get("site")
+    site = _as_site(info.get("site"))
     parent = stamp_forest_labels(reactant)
     held = ensure_forest(product)
-    trace = copy.deepcopy(parent._forest["atom_trace"])
+    trace: InitializedAtomTrace = copy.deepcopy(parent._forest["atom_trace"])
     trace.setdefault("additions", {})
     trace.setdefault("delta_formula", {})
     trace.setdefault("transforms", [])
@@ -539,6 +598,13 @@ def forest_trace(
     after = molecule_formula(held)
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
+    # PatternInfo is stored on info as the same dict the rule holds.
+    raw_pattern = info.get("pattern")
+    pattern: PatternInfo | None
+    if isinstance(raw_pattern, dict):
+        pattern = raw_pattern  # pyright: ignore[reportAssignmentType]
+    else:
+        pattern = None
     addition: TraceAddition = {
         "site": _site_tuple(site),
         "rules": tuple(chain),
@@ -547,7 +613,7 @@ def forest_trace(
         "name": _rule_name(rule),
         "phase1": info.get("phase1"),
         "depth": frame,
-        "pattern": info.get("pattern") if isinstance(info.get("pattern"), dict) else None,
+        "pattern": pattern,
     }
     trace["additions"][transform_id] = addition
     trace["transforms"].append(transform_id)
@@ -641,8 +707,8 @@ def branches(
     """
 
     out: list[Effect] = []
-    for when in whens:
-        when = dict(when)
+    for raw in whens:
+        when = _copy_when(dict(raw))
         item = _as_effect(effect)
         item["when"] = when
         symbol = _SYMBOL.get(when.get("z", -1))
@@ -724,7 +790,7 @@ def may(info: PatternInfo, key: str, value: object = True) -> bool:
     For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring.
     """
 
-    for possibility in info["possibilities"]:
+    for possibility in info.get("possibilities") or ():
         have = possibility.get(key, _EFFECT_DEFAULTS.get(key))
         if (
             isinstance(value, str)
@@ -746,7 +812,7 @@ def may(info: PatternInfo, key: str, value: object = True) -> bool:
 def must(info: PatternInfo, key: str, value: object = True) -> bool:
     """True if every possibility has this outcome."""
 
-    possibilities = info["possibilities"]
+    possibilities = info.get("possibilities") or ()
     if not possibilities:
         return False
     return all(
@@ -797,9 +863,9 @@ def resolve_effect(mol: Mol, mapped: Mapping[int, int], info: PatternInfo) -> Ef
         effect["symbol"] = atom.GetSymbol()
         effect["h"] = atom.GetTotalNumHs()
         effect["site_aromatic"] = atom.GetIsAromatic()
-    when = chosen.get("when") or {}
-    branch = when.get("map")
-    if branch in mapped and branch != site_map:
+    when = chosen.get("when")
+    branch = when.get("map") if when is not None else None
+    if isinstance(branch, int) and branch in mapped and branch != site_map:
         partner = mol.GetAtomWithIdx(mapped[branch])
         effect["partner"] = partner.GetSymbol()
         effect["partner_h"] = partner.GetTotalNumHs()
@@ -971,7 +1037,7 @@ class SmartsReactionRule(ReactionRule):
 
     rxns: list[tuple[str, ChemicalReaction, PatternInfo]]
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(self, *args, **kwargs) -> None:
 
         super().__init__(*args, **kwargs)
 
@@ -990,7 +1056,7 @@ class SmartsReactionRule(ReactionRule):
         filter_rules: FilterRules = lambda rule, info: True,
         filter_sites: FilterSites = lambda site, info: True,
         context_mol: Mol | None = None,
-        **kwargs: object,
+        **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
@@ -1062,7 +1128,7 @@ class SmartsReactionRule(ReactionRule):
         self,
         smarts: str,
         use_implicit_properties: bool = False,
-        **kwargs: object,
+        **kwargs,
     ) -> ChemicalReaction:
         """Converts SMARTS reactions to RDKit reactions."""
         return reaction_from_smarts(smarts)
@@ -1548,7 +1614,7 @@ class ResonanceRule(SmartsReactionRule):
         filter_rules: FilterRules = lambda rule, info: True,
         filter_sites: FilterSites = lambda site, info: True,
         context_mol: Mol | None = None,
-        **kwargs: object,
+        **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`SmartsReactionRule.metabolites`.
 
@@ -1635,7 +1701,7 @@ class ResonancePairRule(ResonanceRule):
         filter_rules: FilterRules = lambda rule, info: True,
         filter_sites: FilterSites = lambda site, info: True,
         context_mol: Mol | None = None,
-        **kwargs: object,
+        **kwargs,
     ) -> Generator[ProductsOfReaction, None, None]:
         """Same contract as :meth:`ReactionRule.metabolites`.
 
@@ -1988,10 +2054,14 @@ class QuinoneFormation(ResonancePairRule):
     )
 
 
-def _whens(mapno, atomic_nums):
+def _whens(mapno: int, atomic_nums: Sequence[int]) -> tuple[When, ...]:
     """One branch constraint per atomic number, for :func:`branches`."""
 
-    return tuple({"map": mapno, "z": int(z)} for z in atomic_nums)
+    out: list[When] = []
+    for z in atomic_nums:
+        when: When = {"map": mapno, "z": int(z)}
+        out.append(when)
+    return tuple(out)
 
 
 class Dealkylation(SmartsReactionRule):

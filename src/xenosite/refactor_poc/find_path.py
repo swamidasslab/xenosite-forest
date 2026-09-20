@@ -9,11 +9,12 @@ fragments that were not expanded.
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, NamedTuple, cast
+from typing import NamedTuple
 
 from xenosite.forest.step_plan import AtomRef as AddedRef
-from xenosite.forest.step_plan import Deps, Step
+from xenosite.forest.step_plan import Deps, Step, StepPlan
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
     Mol,
@@ -27,13 +28,14 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitize_catch,
     split_fragments,
 )
-from xenosite.refactor_poc.records import AtomRef
+from xenosite.refactor_poc.records import AtomRef, Site, _flat_ints
+from xenosite.refactor_poc.rulesets import RuleSet
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
     Hydroxylation,
     QuinoneFormation,
-    RuleSet,
+    _as_site,
     forest_trace,
     install_forest,
 )
@@ -78,27 +80,35 @@ class CleavageSide:
     canonical SMILES of the discarded fragment.
     """
 
-    site: frozenset
+    site: frozenset[int]
     side: str
-    opens: tuple = ()
+    opens: tuple[frozenset[int], ...] = ()
 
-    def span_sites(self):
-        return tuple(self.opens) + (self.site,)
+    def span_sites(self) -> tuple[frozenset[int], ...]:
+        return self.opens + (self.site,)
 
 
-def _site_keys(site):
+def _site_keys(site: Site | Sequence[int | AddedRef | AtomRef] | None) -> frozenset[int | str]:
     if site is None:
         return frozenset()
-    keys = set()
+    if isinstance(site, int):
+        return frozenset({site})
+    keys: set[int | str] = set()
     for item in site:
+        if isinstance(item, frozenset):
+            keys |= _site_keys(item)
+            continue
         origin = getattr(item, "origin", None)
         if origin is not None:
             keys.add(int(origin))
             continue
-        try:
-            keys.add(int(item))
-        except (TypeError, ValueError):
-            keys.add(str(item))
+        if isinstance(item, AtomRef):
+            keys.add(item.idx)
+            continue
+        if isinstance(item, int):
+            keys.add(item)
+            continue
+        keys.add(str(item))
     return frozenset(keys)
 
 
@@ -144,11 +154,18 @@ class Maybe:
 class PathOutcome:
     """Required phase-I plan, plus cleavage fragments left on :class:`Maybe`."""
 
-    plan: Any
+    # Deps is @unstable; pyright does not see it as a class. StepPlan is the API.
+    plan: StepPlan
     maybe: Maybe
     smiles: str
 
-    def allows(self, rule_name=None, site=None, *, side=None):
+    def allows(
+        self,
+        rule_name: str | None = None,
+        site: Site | Sequence[int | AddedRef | AtomRef] | None = None,
+        *,
+        side: Mol | str | None = None,
+    ) -> bool:
         return self.maybe.allows(rule_name, site, side=side)
 
 
@@ -537,18 +554,26 @@ def _alkyl_bond_raises(mol: Mol, atom_idx, diff):
     return False
 
 
-def _site_could_help(site, info, diff, mol: Mol):
+def _site_could_help(site: Site, info: dict[str, object], diff: AtomDiff, mol: Mol) -> bool:
     """``filter_sites`` sees one resolved effect and the local atom diff."""
 
     effect = info.get("options") or {}
-    atoms = set(site)
+    if not isinstance(effect, dict):
+        effect = {}
+    atoms = _flat_ints(site)
     if effect.get("cleaves"):
         return diff.site_is_cleavage(atoms)
 
     ends = info.get("ends")
     end_atoms = info.get("end_atoms")
-    if ends and end_atoms and len(tuple(ends)) == len(tuple(end_atoms)):
+    if (
+        isinstance(ends, (list, tuple))
+        and isinstance(end_atoms, (list, tuple))
+        and len(ends) == len(end_atoms)
+    ):
         for atom, end in zip(end_atoms, ends):
+            if not isinstance(end, dict) or not isinstance(atom, int):
+                continue
             if _effect_adds_oxygen(end) and atom not in diff.needs_oxygen:
                 return False
             # An alkyl partner turns the ring bond into an exocyclic double
@@ -569,14 +594,17 @@ def _site_could_help(site, info, diff, mol: Mol):
         ):
             return False
 
+    path_ends = info.get("path_ends") or ()
+    if not isinstance(path_ends, (set, frozenset, list, tuple)):
+        path_ends = ()
     if effect.get("dearomatizes"):
-        scope = atoms | set(info.get("path_ends") or ())
+        scope = atoms | set(path_ends)
         if not (scope & set(diff.loses_aromaticity)):
             return False
 
     removes = effect.get("removes") or ""
-    if "H" in removes and not _effect_adds_oxygen(effect) and not effect.get("cleaves"):
-        scope = atoms | set(info.get("path_ends") or ())
+    if isinstance(removes, str) and "H" in removes and not _effect_adds_oxygen(effect) and not effect.get("cleaves"):
+        scope = atoms | set(path_ends)
         loses_h = any(diff.h_delta.get(atom, 0) < 0 for atom in scope)
         if not loses_h and not (scope & set(diff.loses_aromaticity)):
             return False
@@ -596,14 +624,17 @@ def _filters(diff, enabled, mol: Mol):
     return filter_rules, filter_sites
 
 
-def _rule_can_cleave(rule: Any) -> bool:
-    patterns: list[tuple[Any, Any]] = []
+def _rule_can_cleave(rule: object) -> bool:
+    patterns: list[tuple[str, dict[str, object]]] = []
     for group in (getattr(rule, "smarts", None), getattr(rule, "endpoints", None)):
         if not group:
             continue
         patterns.extend(group)
     for _smarts, info in patterns:
-        if _any_span(info.get("span") or {}, "cleaves", bool, False):
+        span = info.get("span") or {}
+        if not isinstance(span, dict):
+            continue
+        if _any_span(span, "cleaves", bool, False):
             return True
     return False
 
@@ -651,16 +682,23 @@ def _atom_ref(mol: Mol, idx):
 class _PlanStep(NamedTuple):
     """One phase-I step before it is handed to :class:`Deps`.
 
-    ``site`` may hold an int, an :class:`AddedRef`, or an :class:`AtomRef`
-    for an atom that does not exist yet.
+    ``site`` is a flat tuple of atom notes for that step: a known index,
+    a forest :class:`AddedRef`, or a records :class:`AtomRef` for an atom
+    that does not exist yet. That is not a reaction :class:`FutureSite`.
     """
 
     rule: str
-    site: tuple
+    site: tuple[int | AddedRef | AtomRef, ...]
 
 
-def _step(mol: Mol, rule_name, site):
-    return _PlanStep(rule_name, tuple(_atom_ref(mol, idx) for idx in site))
+def _step(mol: Mol, rule_name: str, site: Site) -> _PlanStep:
+    if isinstance(site, int):
+        atoms: tuple[int, ...] = (site,)
+    elif isinstance(site, tuple):
+        atoms = site
+    else:
+        atoms = tuple(sorted(_flat_ints(site)))
+    return _PlanStep(rule_name, tuple(_atom_ref(mol, idx) for idx in atoms))
 
 
 def _steps_for(mol: Mol, info):
@@ -750,15 +788,15 @@ def _forest_item(item, steps, later):
     return item.idx
 
 
-def _deps(steps):
+def _deps(steps: Sequence[_PlanStep]) -> StepPlan:
     """A later step depends on an earlier one when its site names an atom that step added.
 
     An :class:`AtomRef` is that note: its ``idx`` is the atom the earlier
     step changed, and its ``element`` is what had to be added.
     """
 
-    edges = []
-    forest_steps = []
+    edges: list[tuple[int, int]] = []
+    forest_steps: list[Step] = []
     for later, step in enumerate(steps):
         for item in step.site:
             if isinstance(item, AtomRef):
@@ -779,7 +817,8 @@ def _deps(steps):
         forest_steps.append(
             Step(step.rule, frozenset(_forest_item(item, steps, later) for item in step.site))
         )
-    return cast(Any, Deps)(tuple(forest_steps), edges)
+    # Deps is wrapped by @unstable; pyright does not treat the constructor as Deps/StepPlan.
+    return Deps(tuple(forest_steps), edges)  # pyright: ignore[reportReturnType, reportCallIssue]
 
 
 # ---------------------------------------------------------------------------
@@ -835,9 +874,23 @@ def _keep_fragment(finished, target: Mol):
 @dataclass
 class _Walk:
     mol: Mol
-    steps: tuple
-    sides: tuple
-    opens: tuple
+    steps: tuple[_PlanStep, ...]
+    sides: tuple[CleavageSide, ...]
+    opens: tuple[frozenset[int], ...]
+
+
+def _cleavage_site(value: object) -> frozenset[int]:
+    """Known-index site as a frozenset for cleavage bookkeeping."""
+
+    site = _as_site(value)
+    if isinstance(site, int):
+        return frozenset({site})
+    if isinstance(site, tuple):
+        return frozenset(site)
+    sample = next(iter(site), None)
+    if isinstance(sample, frozenset):
+        return frozenset(_flat_ints(site))
+    return frozenset(item for item in site if isinstance(item, int))
 
 
 def find_path(
@@ -863,7 +916,7 @@ def find_path(
     target_mol = as_mol(target)
     reactant = copy_mol(reactant)
     reactant._forest = None
-    install_forest(reactant)
+    reactant = install_forest(reactant)
     target_smiles = canon_smiles(target_mol)
     if ruleset is None:
         ruleset = default_ruleset()
@@ -925,15 +978,16 @@ def find_path(
                 continue
             seen.add(child_smiles)
 
-            cleaves = bool((por.info.get("options") or {}).get("cleaves"))
+            options = por.info.get("options")
+            cleaves = isinstance(options, dict) and bool(options.get("cleaves"))
             if len(finished) == 1 and cleaves:
-                opens = walk.opens + (por.info["site"],)
+                opens = walk.opens + (_cleavage_site(por.info.get("site")),)
                 sides = walk.sides
             elif len(finished) > 1:
                 opens = walk.opens
                 sides = walk.sides + tuple(
                     CleavageSide(
-                        site=por.info["site"],
+                        site=_cleavage_site(por.info.get("site")),
                         side=smiles,
                         opens=walk.opens,
                     )
@@ -951,7 +1005,7 @@ def find_path(
 class _Expand:
     mol: Mol
     depth: int
-    info: dict[str, Any] | None = None
+    info: dict[str, object] | None = None
 
 
 def _keep_rule(rule, info) -> bool:
@@ -999,7 +1053,7 @@ def _enumerate(
             filter_sites=filter_sites,
         ):
             smiles = info["csmi"]
-            if smiles in seen:
+            if not isinstance(smiles, str) or smiles in seen:
                 continue
             seen.add(smiles)
             children.append(_Expand(product, node.depth + 1, info))

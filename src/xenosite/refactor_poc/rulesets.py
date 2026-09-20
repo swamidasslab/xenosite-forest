@@ -5,6 +5,11 @@ each child, so the set does not hide that child's patterns. A pattern the
 filter refuses is not run. A pattern it accepts is.
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable, Generator
+
+from xenosite.refactor_poc.rdkit_api import ForestTracingMol
 from xenosite.refactor_poc.rdkitutil import Mol
 
 from .rules import (
@@ -14,6 +19,8 @@ from .rules import (
     Dephosphorylation,
     Epoxidation,
     EpoxideOpening,
+    FilterRules,
+    FilterSites,
     Hydrogenation,
     Hydrolysis,
     Hydroxylation,
@@ -21,6 +28,7 @@ from .rules import (
     NitrogenReduction,
     OxidativeDehalogenation,
     OxygenReduction,
+    ProductsOfReaction,
     QuinoneFormation,
     ReactionRule,
     ReductiveDehalogenation,
@@ -73,11 +81,11 @@ class RuleSet(ReactionRule):
     def metabolites(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
         order_key=None,
         **kwargs,
-    ):
+    ) -> Generator[ProductsOfReaction, None, None]:
         rules = self.rules
         if order_key is not None:
             rules = tuple(sorted(rules, key=order_key))
@@ -92,12 +100,12 @@ class RuleSet(ReactionRule):
     def metabolize(
         self,
         mol: Mol,
-        filter_rules=lambda rule, info: True,
-        filter_sites=lambda site, info: True,
-        unique_csmi=True,
+        filter_rules: FilterRules = lambda rule, info: True,
+        filter_sites: FilterSites = lambda site, info: True,
+        unique_csmi: bool = True,
         order_key=None,
         **kwargs,
-    ):
+    ) -> Generator[tuple[ForestTracingMol, dict[str, object]], None, None]:
         """Run each contained rule, then append this set on that product.
 
         The contained rule, including a nested set, has already put itself
@@ -105,14 +113,14 @@ class RuleSet(ReactionRule):
         is the one that rule yielded.
         """
 
-        ensure_tracing(mol)
+        mol = ensure_tracing(mol)
         if self.is_terminal_product(mol):
             return
 
         rules = self.rules
         if order_key is not None:
             rules = tuple(sorted(rules, key=order_key))
-        seen = set()
+        seen: set[str] = set()
         for rule in rules:
             for product, info in rule.metabolize(
                 mol,
