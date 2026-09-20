@@ -166,7 +166,9 @@ class ReactionRule:
     sites_on: SitesOn | None = None
     # Emitted Site shape (atom-index frozenset). Class data — not
     # Generic[SiteT] (heterogeneous RuleSets erase the param; pyright cannot
-    # enforce frozenset size). ``"atom"`` singleton; ``"atom_pair"`` unordered pair.
+    # enforce frozenset size). ``"atom"`` singleton; ``"bond"`` undirected
+    # bond; ``"directed_bond"`` bond with ordered map ranks; ``"atom_pair"``
+    # ResonancePair ends only.
     site_kind: RuleSiteKind = "atom"
     # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
     # TODO: expand so examples cover all patterns/whens on this rule.
@@ -1226,6 +1228,7 @@ class SmartsReactionRule(ReactionRule):
                     site,
                     rxn_num,
                     effect,
+                    site_kind=self.site_kind,
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
@@ -1930,6 +1933,7 @@ class ResonanceRule(SmartsReactionRule):
                     site,
                     rxn_num,
                     effect,
+                    site_kind=self.site_kind,
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
@@ -2555,9 +2559,11 @@ class Dealkylation(ResonanceRule):
 
     The site is both atoms of the broken bond. Aromatic hits react on the
     Kekulé parent where that bond is single (SMARTS-implied order).
+    ``site_kind="directed_bond"``: unique-edit keeps directed MapRankKey
+    because map 1 is the carbon that receives oxygen.
     """
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom_pair"
+    site_kind: RuleSiteKind = "directed_bond"
     _example_substrates: tuple[str, ...] = ('CCO', 'COc1ccccc1')
 
 
@@ -2723,7 +2729,7 @@ class NDealkylation(SmartsReactionRule):
     NDealkylation has its own ruleset.
     """
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom_pair"
+    site_kind: RuleSiteKind = "directed_bond"
     _example_substrates: tuple[str, ...] = ('CCN', 'CN(C)C')
 
 
@@ -2771,7 +2777,7 @@ class AzoSplitting(ResonanceRule):
     ``=,:`` matches aromatic ring N=N; the Kekulé parent keeps that bond double.
     """
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom_pair"
+    site_kind: RuleSiteKind = "bond"
     _example_substrates: tuple[str, ...] = ('N=Nc1ccccc1',)
 
 
@@ -2791,7 +2797,7 @@ class BenzodioxoleReduction(SmartsReactionRule):
     Both bonds are in that ring. A filter reads ``leave_count``.
     """
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom_pair"
+    site_kind: RuleSiteKind = "directed_bond"
     _example_substrates: tuple[str, ...] = ('c1ccc2c(c1)OCO2',)
 
 
@@ -2817,7 +2823,7 @@ class NitroaromaticReduction(SmartsReactionRule):
     A filter reads ``leave_count``.
     """
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom_pair"
+    site_kind: RuleSiteKind = "directed_bond"
     _example_substrates: tuple[str, ...] = ('[O-][N+](=O)c1ccccc1',)
 
 
@@ -3207,7 +3213,9 @@ class Epoxidation(ResonanceRule):
     """Adds an epoxide across a C=C or C=N bond.
 
     The reactant bond is ``=,:``, so an aromatic bond matches on the parent.
-    The reaction runs on the cached kekulé parent for that bond.
+    The reaction runs on the cached kekulé parent for that bond. The site is
+    the undirected bond (``site_kind="bond"``); unique-edit keys unordered
+    bond-end ranks so symmetry-related embeddings collapse.
 
     Forest ``phase1_steps`` is a degenerate singleton naming this rule; the
     default :meth:`canonical_plan` matches that (not StableOxygenation).
@@ -3219,7 +3227,7 @@ class Epoxidation(ResonanceRule):
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom"
+    site_kind: RuleSiteKind = "bond"
     _example_substrates: tuple[str, ...] = ('C=C', 'c1ccccc1')
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         (
@@ -3230,6 +3238,7 @@ class Epoxidation(ResonanceRule):
                     adds="O",
                 ),
                 name="epoxide",
+                site_map=(1, 2),
             ),
         ),
     )

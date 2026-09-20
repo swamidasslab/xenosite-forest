@@ -988,6 +988,14 @@ def map_rank_key(
     return tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items()))
 
 
+def bond_rank_key(
+    ranks: Mapping[int, int], site: frozenset[int]
+) -> tuple[int, ...]:
+    """Unordered bond ends as sorted topological ranks (``site_kind="bond"``)."""
+
+    return tuple(sorted(ranks[i] for i in site))
+
+
 def formula_key(value: str | None) -> str:
     """Order-invariant formula bag for signature keys (``HCl`` ≡ ``ClH``)."""
 
@@ -1073,11 +1081,23 @@ def site_signature(
     site: frozenset[int],
     rxn_num: int,
     effect: Effect,
+    *,
+    site_kind: str = "atom",
 ) -> SiteSignature:
-    """Dedup key. Last field is a pair-orbit signature, or ``None`` for one atom."""
+    """Dedup key. Last field is a pair-orbit signature, or ``None`` for one atom.
 
+    ``site_kind="bond"``: sorted site ranks (undirected ends — Epoxidation).
+    ``"directed_bond"`` / ``"atom"``: directed MapRankKey (Dealkylation map 1
+    is the oxygenated carbon). ``"atom_pair"`` is ResonancePair only and uses
+    :func:`pair_site_signature` instead.
+    """
+
+    if site_kind == "bond":
+        map_key = bond_rank_key(ranks, site)
+    else:
+        map_key = map_rank_key(ranks, mapped)
     return (
-        tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items())),
+        map_key,
         incident_orders(work, ranks, mapped),
         rxn_num,
         effect.get("adds"),

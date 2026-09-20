@@ -1,7 +1,7 @@
 # TODO
 
-- Forest WAE: Epoxidation (and peers) still emit `CsmiDedupWarning` after aromatic `incident_orders` on ResonanceRule — chem suite is green with CSMI ignored; unique-edit not fully collapsing symmetric epoxides
-- **Gate (PR #15 / pre-v0.7.0):** do not merge or tag v0.7.0 until `bond_atom` is gone, DH uses atom-pair Sites, `site_kind` + `_example_substrates` + `test_site_kind` are green, and PAIR_ORBITS/HEURISTICS/LOG docs match the atom-pair taxonomy
+- Forest WAE: residual `CsmiDedupWarning` after Epoxidation `bond` unique-edit — Hydrogenation / Dealkylation / OxidativeDehalogenation / peers may still miss collapses; chem suite green with CSMI ignored
+- **Gate (PR #15 / pre-v0.7.0):** do not merge or tag v0.7.0 until `bond_atom` is gone, DH uses atom-pair Sites, `site_kind` (`atom`/`bond`/`directed_bond`/`atom_pair`) + `_example_substrates` + `test_site_kind` are green, and PAIR_ORBITS/HEURISTICS/LOG docs match
 - Expand each rule's `_example_substrates` so examples cover all patterns/whens (meta-test currently only checks site_kind shape)
 
 - Later (optional): hardcode `canonical_emitted_sites=True` on flaky forest tests (topo / guided gold / path hard / unique-edit) if lex site identity helps — fuzz already draws the flip via Hypothesis

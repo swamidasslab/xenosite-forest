@@ -3,6 +3,12 @@
 Uses each rule's internal ``_example_substrates`` (SMILES guaranteed to
 produce metabolites). Expand those lists later so they cover all
 patterns/whens — see TODO.md.
+
+Taxonomy:
+- ``atom`` — singleton
+- ``bond`` — undirected bond (sorted site ranks in unique-edit)
+- ``directed_bond`` — bond Site, directed MapRankKey (Dealkylation)
+- ``atom_pair`` — ResonancePair ends only
 """
 
 from __future__ import annotations
@@ -10,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from xenosite.forest.rdkitutil import MolFromSmiles
-from xenosite.forest.rules import ReactionRule, TautomerRule
+from xenosite.forest.rules import ReactionRule, ResonancePairRule, TautomerRule
 
 from .pattern_info_inventory import (
     PATTERNLESS_REACTION_RULE_BASES,
@@ -25,6 +31,13 @@ _SKIP_EXAMPLE_REQUIREMENT: frozenset[type[ReactionRule]] = frozenset(
         TautomerRule,
     }
 )
+
+_SITE_KIND_LEN = {
+    "atom": 1,
+    "bond": 2,
+    "directed_bond": 2,
+    "atom_pair": 2,
+}
 
 
 def _concrete_rules() -> list[type[ReactionRule]]:
@@ -42,10 +55,17 @@ def _concrete_rules() -> list[type[ReactionRule]]:
 )
 def test_site_kind_matches_emitted_sites(rule_cls: type[ReactionRule]) -> None:
     kind = getattr(rule_cls, "site_kind", None)
-    assert kind in ("atom", "atom_pair"), (
-        f"{rule_cls.__name__} must declare site_kind as 'atom' or 'atom_pair', got {kind!r}"
+    assert kind in _SITE_KIND_LEN, (
+        f"{rule_cls.__name__} must declare site_kind as "
+        f"'atom', 'bond', 'directed_bond', or 'atom_pair', got {kind!r}"
     )
-    expect = 1 if kind == "atom" else 2
+    if kind == "atom_pair":
+        assert issubclass(rule_cls, ResonancePairRule), (
+            f"{rule_cls.__name__} site_kind='atom_pair' but is not a "
+            f"ResonancePairRule (atom_pair is pair-rule only; use 'bond' "
+            f"or 'directed_bond' for SMARTS bond sites)"
+        )
+    expect = _SITE_KIND_LEN[kind]
 
     examples = getattr(rule_cls, "_example_substrates", ())
     if rule_cls in _SKIP_EXAMPLE_REQUIREMENT:

@@ -51,6 +51,21 @@ Status: done. Pre-swap tree is `xenosite._archive_forest` (read-only). Live publ
 
 - **``swap_group: str``** on `PatternInfo` (optional When override). Pair unique-edit resolves as When → PatternInfo → ``name``. Same non-empty resolved group on both ends → unordered; unequal → ordered by ``name``. Omit the field when it would equal ``name``; set it only when grouping should differ. Status: approved. Tests: `test_pair_signatures.py`.
 
+## Site kind taxonomy (approved)
+
+`RuleSiteKind`: ``"atom"`` | ``"bond"`` | ``"directed_bond"`` | ``"atom_pair"``.
+
+- **``atom``** — singleton Site; unique-edit uses directed `MapRankKey` `((mapno, rank), …)`.
+- **``bond``** — undirected bond (two adjacent atoms). Unique-edit first field is sorted site ranks (`bond_rank_key`). Epoxidation phenol ortho-meta `((1,4),(2,2))` vs `((1,2),(2,4))` → both `(2,4)`; `incident_orders` / orbit already matched. AzoSplitting too.
+- **``directed_bond``** — bond Site shape (`len==2`) but unique-edit keeps directed MapRankKey because map 1 is chemically distinct (Dealkylation / NDealkylation oxygenate map 1; Benzodioxole / Nitroaromatic similarly). Undirected ranks wrongly collapse anisole ring-open regioisomers (`C=CC(=CC=CO)OC` vs `C=CC=C(C=CO)OC`).
+- **``atom_pair``** — ResonancePair ends only (DH / QF / Hydrogenation / TautomerRule stub). Never on plain SMARTS. Pair unique-edit stays `pair_site_signature` + `swap_group`.
+
+Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`, `test_parity.py` (anisole dealk).
+
+## Antipattern: global `_kekule_forms` on SmartsReactionRule
+
+Status: **not approved** (removed on PR #15). Materializing every Kekulé form inside plain `SmartsReactionRule.metabolites` is combinatorial expansion — that is why `ResonanceRule` exists. Match once on the aromatic parent; react on a cached Kekulé parent selected by SMARTS-implied bond order. Do not reintroduce an all-forms loop or an easy opt-in that restores the tax. `_kekule_forms` may remain for tests / helpers that need the list explicitly.
+
 ## Narrowing SMARTS vs ``swap_group`` (ResonancePair)
 
 Status: **not approved** as a replacement for ``swap_group`` / name-default groups. Hydroxylation-style H-count partitions fix *nested same-atom* SMARTS that double-emit under ``unique_csmi``. Pair same-role couples are different: two path ends that both match the same edit (hydroquinone ``phenol_end``×2, benzene ``add_carbonyl_o``×2, diene ``path_end``×2, QF ``dealkylate``×2, …) are real chemistry and stay unordered via resolved group (= ``name``). Narrowing SMARTS so those couples never co-apply would drop pathways. Keep resolved groups + nauty ordered/unordered. Residual: map ranks still distinguish dealkylate embeddings.

@@ -302,7 +302,10 @@ SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
 # not Generic[SiteT] (shared emit path + heterogeneous RuleSets erase the param;
 # pyright cannot enforce frozenset size). Replaces UniqueOrbit / bond_atom.
 # Distinct from graph_isomorphism.SiteKind (atom/bond marks for orbits).
-RuleSiteKind: TypeAlias = Literal["atom", "atom_pair"]
+# ``"atom"`` singleton; ``"bond"`` undirected bond (two adjacent atoms);
+# ``"directed_bond"`` bond Site with directed map ranks (Dealkylation);
+# ``"atom_pair"`` ResonancePair path/ends only — never on plain SMARTS rules.
+RuleSiteKind: TypeAlias = Literal["atom", "bond", "directed_bond", "atom_pair"]
 
 # Keyword values :func:`~xenosite.forest.rules.describe` / ``branches`` accept.
 EffectField: TypeAlias = str | bool | int | When | None
@@ -545,11 +548,15 @@ class PairSiteSignature(NamedTuple):
 
 
 # Dedup key for one SMARTS site across Kekulé forms / equivalent carbons.
+# First field: directed ``MapRankKey`` for ``atom`` / ``directed_bond``, or
+# sorted site ranks (undirected bond ends) for ``bond``.
 # Last field: pair-orbit signature, or None for a one-atom site.
 # Built in ``graph_isomorphism.site_signature``; declared here so records own
 # the schema the same way ``PairSiteSignature`` does.
+BondRankKey: TypeAlias = tuple[int, ...]
+SiteMapKey: TypeAlias = MapRankKey | BondRankKey
 SiteSignature: TypeAlias = tuple[
-    MapRankKey,
+    SiteMapKey,
     tuple[tuple[int, int, float], ...],
     int,
     str | None,

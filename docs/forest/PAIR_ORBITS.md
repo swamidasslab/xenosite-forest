@@ -79,9 +79,12 @@ emissions are already the two end atoms. Unique-edit uses unordered
 differ). Directed ``bond_atom`` UniqueOrbit / ``BondAtomOrbitSignature`` was
 never an intended Site pattern and was retired (DROPPED approved).
 
-Site shape is class data on ``ReactionRule`` (``site_kind: Literal["atom", "atom_pair"]``),
-not ``Generic[SiteT]`` — shared emit path + heterogeneous RuleSets erase a
-type param; pyright cannot enforce frozenset cardinality.
+Site shape is class data on ``ReactionRule``
+(``site_kind: Literal["atom", "bond", "directed_bond", "atom_pair"]``), not
+``Generic[SiteT]`` — shared emit path + heterogeneous RuleSets erase a type
+param; pyright cannot enforce frozenset cardinality. ``"bond"`` is undirected
+SMARTS bond Sites (Epoxidation); ``"directed_bond"`` keeps ordered map ranks
+(Dealkylation); ``"atom_pair"`` is ResonancePair ends only.
 
 ## 4. Types
 
