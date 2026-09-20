@@ -162,6 +162,7 @@ filterwarnings = [
 markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
     "regression: deferred bug, not correct behavior or out of scope",
+    "cleared_0_7: former hard xfail that now passes on live forest (since v0.6)",
 ]
 
 [tool.coverage.run]

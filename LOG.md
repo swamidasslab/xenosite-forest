@@ -2,6 +2,17 @@
 
 ## 2026-09-20
 
+- **`cleared_0_7` mark.** Baseline `v0.6.1`; marked the 28 hard rules-example xfails still open after the cleavage XPASS clear (`b2830ee` `_XFAIL_IDS`), now passing on live forest. Not the quinone `Reaction*` bulk. Still xfail: Glutathionation `epoxide_c` / `aziridine_c` pattern_info. `pytest -m cleared_0_7`: 28 passed.
+
+- **`test_distinct_signatures_distinct_product_sets[dh-aminophenol]` skip.**
+  `Nc1ccc(O)cc1` DH emits **1** pair sig → one product `N=C1C=CC(=O)C=C1`;
+  skip is correct (not a latent failure). Removing skip would pass
+  vacuously. No other param in that test covers DH with ≥2 sigs; QF
+  siblings pass. Multi-end DH mols (e.g. `Oc1ccc(N)c(O)c1`,
+  `Nc1ccc(O)c(O)c1`) get 2 sigs and the injectivity assert **passes**.
+  Still skip-worthy for p-aminophenol; better substrate optional. No code
+  change.
+
 - **pynauty required; no SMILES pair-orbit product path.** `pynauty` moved to
   `pyproject.toml` dependencies. `get_pair_orbit_backend()` always `"nauty"`;
   removed `PynautyRecommendedWarning`, env override, and smiles dispatcher.
