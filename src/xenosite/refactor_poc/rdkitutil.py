@@ -3,9 +3,22 @@
 RDKit itself is imported in :mod:`xenosite.refactor_poc.rdkit_api`. This
 module calls those names.
 
-Answers about a molecule are cached on ``get_forest(ensure_forest(mol))["structure"]``.
-The caller rebinds ``mol = ensure_forest(mol)`` when the molecule had no forest.
-``get_forest`` only reads a molecule that already has one.
+Answers about a molecule are cached on ``mol.xf.forest["structure"]``.
+Accessing ``mol.xf`` mints an ephemeral :class:`Xf` (strong parent ref).
+Forest attaches lazily via :func:`_require_forest` when a method needs it.
+``mol.xf.has_forest`` reports wipe/absence without installing. Prefer
+``mol.xf.*`` for queries and finishing; no prior ``ensure_forest`` ritual.
+
+Typing brands (stubs; runtime is RDKit ``Mol``):
+
+- :class:`ForestMol` — ``_forest`` present. Wipe APIs return ``NoForestMol`` /
+  ``Mol``, not ``ForestMol``. Re-enter via ``mol.xf.forestmol``.
+- :class:`TracingMol` — initialized atom-trace (extends ForestMol).
+- :class:`NoForestMol` — no forest (constructors, reaction pieces, wipe).
+
+Atom-trace plumbing lives under ``mol.xf.tracing``. :func:`ensure_forest` is
+a thin alias of :func:`_require_forest`.
+
 The key is one string. Process-wide data, such as parsed SMARTS reactions,
 stays a module dict. Do not cache a result on a molecule this function
 then edits. Edits belong on a copy from :func:`copy_mol` or :func:`rw_copy`.
@@ -33,8 +46,8 @@ from __future__ import annotations
 import ast
 import copy
 from collections import defaultdict, deque
-from collections.abc import Iterable
-from typing import TypeGuard, TypeVar, overload
+from collections.abc import Iterable, Sequence
+from typing import TypeGuard, TypeVar, cast, overload
 
 from xenosite.refactor_poc.rdkit_api import (
     KEKULE_ALL,
@@ -48,8 +61,6 @@ from xenosite.refactor_poc.rdkit_api import (
     DisableLog,
     FindMCS,
     ForestMol,
-    ForestNoTracingMol,
-    ForestTracingMol,
     GetMolFrags,
     Mol,
     MolFromSmarts,
@@ -62,6 +73,7 @@ from xenosite.refactor_poc.rdkit_api import (
     RWMol,
     SanitizeFlags,
     SanitizeMol,
+    TracingMol,
 )
 from xenosite.refactor_poc.records import (
     EditCounters,
@@ -69,8 +81,10 @@ from xenosite.refactor_poc.records import (
     Forest,
     Formula,
     FragmentSplit,
+    InitializedAtomTrace,
     KekuleParents,
     McsResult,
+    SiteInfo,
     Structure,
 )
 
@@ -101,24 +115,396 @@ def _read_forest(mol: Mol) -> Forest | None:
     return forest
 
 
-@overload
-def is_forest(mol: ForestTracingMol) -> TypeGuard[ForestTracingMol]: ...
-@overload
-def is_forest(mol: ForestNoTracingMol) -> TypeGuard[ForestNoTracingMol]: ...
-@overload
-def is_forest(mol: ForestMol) -> TypeGuard[ForestMol]: ...
-@overload
-def is_forest(mol: Mol) -> TypeGuard[ForestMol]: ...
-def is_forest(mol: Mol) -> bool:
+class XfTracing:
+    """Atom-trace queries and plumbing for a parent :class:`~xenosite.refactor_poc.rdkit_api.Mol`.
+
+    Nested under ``mol.xf.tracing``. Holds a strong reference to the same
+    parent as :class:`Xf`. Trace state lives on the forest.
+
+    Read-only queries (no underscore): ``active``, ``depth``, ``atom_origin``,
+    ``atom_indices``, ``atom_added_by``. These answer questions about the
+    installed atom trace without exposing ``forestLabel`` tags or transform
+    ids.
+
+    Plumbing mutators (underscore): ``_ensure``, ``_stamp``, ``_install``,
+    ``_trace``. Downstream code should prefer ``mol.xf.of_products`` over
+    calling these directly.
+    """
+
+    __slots__ = ("_mol",)
+
+    def __init__(self, mol: Mol) -> None:
+        self._mol = mol
+
+    @property
+    def mol(self) -> Mol:
+        return self._mol
+
+    @property
+    def active(self) -> bool:
+        """True when the parent has an initialized atom trace."""
+
+        return is_tracing(self.mol)
+
+    @property
+    def depth(self) -> int | None:
+        """Transform depth from the root, or None when untraced.
+
+        Trace-derived (from ``atom_trace["depth"]``), so it lives here rather
+        than on :class:`Xf` beside structure queries like ``csmi`` / rings.
+        """
+
+        if not is_tracing(self.mol):
+            return None
+        return int(self.mol._forest["atom_trace"]["depth"])
+
+    def atom_indices(self, idx: int) -> tuple[int, ...] | None:
+        """Index frames for atom ``idx`` from origin to now.
+
+        None when the parent is untraced or the atom has no record. Does not
+        expose internal label tags.
+        """
+
+        record = self._atom_record(idx)
+        if record is None:
+            return None
+        idxs = record.get("idx")
+        if not idxs:
+            return None
+        return tuple(int(i) for i in idxs)
+
+    def atom_origin(self, idx: int) -> int | None:
+        """Earliest recorded index for atom ``idx``, or None if unknown."""
+
+        history = self.atom_indices(idx)
+        if history is None:
+            return None
+        return history[0]
+
+    def atom_added_by(self, idx: int) -> tuple[str, frozenset[int]] | None:
+        """Rule name and site for an atom created by a prior transform.
+
+        None when the parent is untraced, the atom has no record, or the atom
+        was not added by a transform. Does not expose transform ids or
+        ``forestLabel`` tags — only the rule name and site the addition stored.
+        """
+
+        record = self._atom_record(idx)
+        if record is None:
+            return None
+        added = record.get("added_by")
+        if not added:
+            return None
+        mol = self.mol
+        if not is_tracing(mol):
+            return None
+        trace = mol._forest["atom_trace"]
+        if isinstance(added, str):
+            detail = trace["additions"].get(added)
+            if detail is None:
+                return None
+        else:
+            detail = added
+        name = detail.get("name")
+        if name is None:
+            rule = detail.get("rule")
+            name = rule if isinstance(rule, str) else getattr(rule, "name", None)
+        if name is None:
+            return None
+        from xenosite.refactor_poc.records import _flat_ints
+
+        site = detail.get("site") or ()
+        return (str(name), frozenset(_flat_ints(site)))
+
+    def _ensure(self) -> TracingMol:
+        """Initialize the atom trace on the parent if missing. Does not reset depth."""
+
+        held = _require_forest(self.mol)
+        forest = held._forest
+        if "structure" not in forest:
+            forest["structure"] = {}
+        if "atom_trace" not in forest:
+            trace: InitializedAtomTrace = {
+                "records": {},
+                "deletes": {},
+                "transforms": [],
+                "additions": {},
+                "formula": molecule_formula(held),
+                "delta_formula": {},
+                "depth": 0,
+                "last_tag": 0,
+                "next_transform": 1,
+            }
+            forest["atom_trace"] = trace
+            for atom in held.GetAtoms():
+                if atom.GetAtomicNum() != 1:
+                    i = atom.GetIdx()
+                    trace["records"][str(i)] = {
+                        "idx": [i],
+                        "depth": [0],
+                    }
+                    trace["last_tag"] = i
+        assert is_tracing(held)
+        _write_forest_labels(held)
+        return held
+
+    def _stamp(self) -> TracingMol:
+        """Ensure tracing and write forest labels onto atoms. Same object."""
+
+        return self._ensure()
+
+    def _install(self) -> TracingMol:
+        """Alias of :meth:`_stamp` (search-entry wording)."""
+
+        return self._ensure()
+
+    def _trace(
+        self, reactant: Mol, info: SiteInfo, executed=None
+    ) -> InitializedAtomTrace:
+        """Record one transform from ``reactant`` onto this product mol.
+
+        Implementation lives in :mod:`xenosite.refactor_poc.rules`. Prefer
+        ``reactant.xf.of_products(...)`` over calling this directly.
+        """
+
+        from xenosite.refactor_poc.rules import _apply_forest_trace
+
+        return _apply_forest_trace(reactant, self.mol, info, executed=executed)
+
+    def _atom_record(self, idx: int):
+        """Resolve the trace record for ``idx`` via forestLabel."""
+
+        mol = self.mol
+        if not is_tracing(mol):
+            return None
+        atom = mol.GetAtomWithIdx(idx)
+        if not atom.HasProp("forestLabel"):
+            return None
+        return mol._forest["atom_trace"]["records"].get(atom.GetProp("forestLabel"))
+
+
+class Xf:
+    """Ephemeral facade for one molecule: minted on each ``mol.xf`` read.
+
+    Design:
+
+    - ``Mol.xf`` is a read-only property (monkey-patched onto RDKit ``Mol``).
+      Each access constructs a new :class:`Xf`; nothing is stored on the mol,
+      so facades cannot be copied between molecules.
+    - :class:`Xf` holds a **strong** reference to its parent. Temporary chains
+      like ``MolFromSmiles(...).xf.csmi`` are safe.
+    - ``has_forest`` reports whether ``_forest`` exists **without** installing.
+      ``forestmol`` ensures forest and returns the parent as :class:`ForestMol`
+      (typed bridge for pyright). Wipe APIs must return ``NoForestMol`` / ``Mol``.
+    - :class:`TracingMol` is forest + initialized atom-trace. Prefer it for
+      of_products returns, filters, and find_path walks.
+
+    Public surface: ``has_forest``, ``forestmol``, ``csmi``, ``forest``, ``is_terminal``,
+    ``clear_structure``, ring / conjugate / ``topol_equiv`` / ``formula`` /
+    ``sanitize`` / ``smarts_matches``, and ``of_products``. Tracing nest:
+    ``active`` / ``depth`` / ``atom_origin`` / ``atom_indices`` /
+    ``atom_added_by``, plus underscored ``_stamp`` / ``_ensure`` / ``_install``
+    / ``_trace``.
+    """
+
+    __slots__ = ("_mol",)
+
+    def __init__(self, mol: Mol) -> None:
+        # Strong ref only. Forest attaches lazily via _require_forest when needed
+        # so has_forest can report a wipe without installing.
+        self._mol = mol
+
+    @property
+    def mol(self) -> Mol:
+        return self._mol
+
+    @property
+    def has_forest(self) -> bool:
+        """True when ``_forest`` is already present. Does not install one."""
+
+        return is_forest(self.mol)
+
+    @property
+    def forestmol(self) -> ForestMol:
+        """Parent as :class:`ForestMol` after lazy attach.
+
+        Typed bridge: plain ``Mol`` → ``ForestMol`` for call sites that need
+        the brand. Same object as ``mol``; installs via :func:`_require_forest`.
+        """
+
+        return _require_forest(self.mol)
+
+    @property
+    def forest(self) -> Forest:
+        """The forest on the parent; installs an empty one if missing."""
+
+        return _require_forest(self.mol)._forest
+
+    @property
+    def tracing(self) -> XfTracing:
+        """Atom-trace facade for this parent (strong ref; minted each access)."""
+
+        return XfTracing(_require_forest(self.mol))
+
+    @property
+    def csmi(self) -> str:
+        """Canonical SMILES, cached on ``structure["csmi"]`` on first read."""
+
+        mol = _require_forest(self.mol)
+        forest = mol._forest
+        if "structure" not in forest:
+            forest["structure"] = {}
+        structure = forest["structure"]
+        csmi = structure.get("csmi")
+        if not csmi:
+            csmi = MolToSmiles(mol, isomericSmiles=False)
+            structure["csmi"] = csmi
+        return csmi
+
+    @property
+    def is_terminal(self) -> bool:
+        """True when this mol must not be expanded further (forest flag)."""
+
+        return bool(self.forest.get("is_terminal_product"))
+
+    def _mark_terminal(self, value: bool = True) -> None:
+        """Set or clear the forest-level terminal flag. Plumbing for finishers."""
+
+        self.forest["is_terminal_product"] = value
+
+    def clear_structure(self) -> None:
+        """Drop cached structure answers. Labels and the rest of the forest stay."""
+
+        _require_forest(self.mol)._forest["structure"] = {}
+
+    @property
+    def rings(self) -> dict[int, tuple[tuple[int, ...], ...]]:
+        """Per-atom ring membership (cached on structure)."""
+
+        return _ring_membership(self.mol)
+
+    @property
+    def conjugated_systems(self) -> tuple[frozenset[int], ...]:
+        """Conjugated atom sets (cached; loads resonance on first read)."""
+
+        return _conjugated_systems(self.mol)
+
+    @property
+    def aromatic_systems(self) -> tuple[frozenset[int], ...]:
+        """Aromatic connected components (cached on structure)."""
+
+        return _aromatic_systems(self.mol)
+
+    @property
+    def topol_equiv(self) -> dict[int, int]:
+        """Map each atom index to its topological equivalence class."""
+
+        return _topol_equiv(self.mol)
+
+    @property
+    def formula(self) -> Formula:
+        """Heavy-atom counts, total hydrogens, and formal charge (cached)."""
+
+        return molecule_formula(self.mol)
+
+    def sanitize(self) -> int:
+        """Sanitize a copy and cache the RDKit status code. Does not edit parent."""
+
+        return sanitize_mol(self.mol)
+
+    def smarts_matches(self, smarts: str) -> tuple[dict[int, int], ...]:
+        """Cached substructure matches for ``smarts``, keyed by atom map."""
+
+        return _smarts_matches(self.mol, smarts)
+
+    def of_products(
+        self,
+        product_or_product_list: Mol | Sequence[Mol],
+        site_info: SiteInfo,
+        executed=None,
+    ) -> list[TracingMol]:
+        """Stamp and trace products of this reactant; return the finished list.
+
+        Readable finishing path: ``reactant.xf.of_products(products, site_info)``.
+        Accepts one product or a sequence. Each product is taken through
+        :func:`copy_mol` (keeps lifted ``forestLabel`` props and any forest;
+        bare ``Chem.Mol`` drops ``_forest`` only), then
+        ``product.xf.tracing._trace`` from this reactant, then
+        :meth:`clear_structure`. When the executed rule (or ``site_info``'s
+        rule) has ``is_terminal_rule``, each finished product is marked
+        terminal. The reactant is stamped first via ``tracing._stamp``. Does
+        not sanitize or split. Inputs are not edited.
+        """
+
+        reactant = self.tracing._stamp()
+        if isinstance(product_or_product_list, Mol):
+            products: Sequence[Mol] = (product_or_product_list,)
+        else:
+            products = product_or_product_list
+        rule = executed if executed is not None else site_info.get("rule")
+        mark_terminal = bool(getattr(rule, "is_terminal_rule", False))
+        finished: list[TracingMol] = []
+        for product in products:
+            held = copy_mol(product)
+            held.xf.tracing._trace(reactant, site_info, executed=executed)
+            if mark_terminal:
+                held.xf._mark_terminal(True)
+            held.xf.clear_structure()
+            assert is_tracing(held)
+            finished.append(held)
+        return finished
+
+
+def _write_forest_labels(mol: TracingMol) -> None:
+    for tag, record in mol._forest["atom_trace"]["records"].items():
+        idxs = record.get("idx")
+        if not idxs:
+            raise KeyError("idx")
+        mol.GetAtomWithIdx(idxs[-1]).SetProp("forestLabel", tag)
+
+
+def _require_forest(mol: Mol) -> ForestMol:
+    """Install an empty forest when missing. Same object as :class:`ForestMol`.
+
+    The only place forest presence is coerced. ``mol.xf.forestmol`` and
+    :func:`ensure_forest` call this.
+    """
+
+    if is_forest(mol):
+        return mol
+    mol._forest = {"structure": {}}
+    assert is_forest(mol)
+    return mol
+
+
+def _mol_xf_get(self: Mol) -> Xf:
+    """Mint a fresh :class:`Xf` for ``self``. Forest attaches lazily on need."""
+
+    return Xf(self)
+
+
+def _mol_xf_set(self: Mol, value: object) -> None:
+    raise AttributeError("xf is read-only; each access mints a new facade")
+
+
+def _mol_xf_del(self: Mol) -> None:
+    raise AttributeError("xf is read-only")
+
+
+# Read-only property on RDKit Mol: never stored, never copied between mols.
+Mol.xf = property(_mol_xf_get, _mol_xf_set, _mol_xf_del)  # type: ignore[misc]
+
+
+def is_forest(mol: Mol) -> TypeGuard[ForestMol]:
     """True when ``_forest`` is present. Does not install one."""
 
     return _read_forest(mol) is not None
 
 
 @overload
-def is_tracing(mol: ForestTracingMol) -> TypeGuard[ForestTracingMol]: ...
+def is_tracing(mol: TracingMol) -> TypeGuard[TracingMol]: ...
 @overload
-def is_tracing(mol: Mol) -> TypeGuard[ForestTracingMol]: ...
+def is_tracing(mol: Mol) -> TypeGuard[TracingMol]: ...
 def is_tracing(mol: Mol) -> bool:
     """True when ``atom_trace`` exists and has the keys the trace writer fills.
 
@@ -135,40 +521,36 @@ def is_tracing(mol: Mol) -> bool:
 
 
 @overload
-def ensure_forest(mol: ForestTracingMol) -> ForestTracingMol: ...
-@overload
-def ensure_forest(mol: ForestNoTracingMol) -> ForestNoTracingMol: ...
+def ensure_forest(mol: TracingMol) -> TracingMol: ...
 @overload
 def ensure_forest(mol: ForestMol) -> ForestMol: ...
 @overload
 def ensure_forest(mol: Mol) -> ForestMol: ...
 def ensure_forest(mol: Mol) -> ForestMol:
-    """Install a missing forest on ``mol`` and return that same object.
+    """Explicit coerce to :class:`ForestMol`. Prefer ``mol.xf.forestmol``.
 
-    An existing forest is left alone, including its depth. A traced molecule
-    stays traced. This does not copy and does not raise. Callers rebind:
-    ``mol = ensure_forest(mol)``.
+    Thin alias of :func:`_require_forest`. Does not copy.
     """
 
-    if is_forest(mol):
-        return mol
-    structure: Structure = {}
-    mol._forest = {"structure": structure}
-    assert is_forest(mol)
-    return mol
+    return _require_forest(mol)
 
 
-def get_forest(mol: ForestMol) -> Forest:
-    """The forest already on ``mol``. Does not install and does not copy."""
+def wipe_forest(mol: Mol) -> NoForestMol:
+    """Remove ``_forest`` if present. Same object, typed as :class:`NoForestMol`.
 
-    return mol._forest
+    Honest wipe: callers must not treat the result as ``ForestMol`` until
+    ``mol.xf.forestmol`` (or ``ensure_forest``) re-attaches.
+    """
+
+    if getattr(mol, "_forest", None) is not None:
+        mol._forest = None  # type: ignore[assignment]
+    return mol  # type: ignore[return-value]
 
 
 def _place_forest(mol: Mol, forest: Forest) -> ForestMol:
-    """Write ``forest`` onto ``mol`` and return that same object.
+    """Write ``forest`` onto ``mol`` and return that same object as ForestMol.
 
-    The parameter is :class:`Mol`, not :class:`NoForestMol`, so the write is
-    the base attribute. The molecule is not copied.
+    Does not store ``xf`` (minted on access). The molecule is not copied.
     """
 
     mol._forest = forest
@@ -177,9 +559,9 @@ def _place_forest(mol: Mol, forest: Forest) -> ForestMol:
 
 
 def _structure(mol: Mol) -> Structure:
-    forest = get_forest(ensure_forest(mol))
+    forest = _require_forest(mol)._forest
     if "structure" not in forest:
-        raise KeyError("structure")
+        forest["structure"] = {}
     return forest["structure"]
 
 
@@ -201,7 +583,7 @@ def sanitize_catch(mol: Mol) -> int:
     return int(SanitizeMol(mol, catchErrors=True))
 
 
-def topol_equiv(mol: Mol) -> dict[int, int]:
+def _topol_equiv(mol: Mol) -> dict[int, int]:
     """Map each atom index to its topological class. The same dict on a hit."""
 
     structure = _structure(mol)
@@ -252,9 +634,7 @@ def molecule_formula(mol: Mol) -> Formula:
 
 
 @overload
-def copy_mol(mol: ForestTracingMol) -> ForestTracingMol: ...
-@overload
-def copy_mol(mol: ForestNoTracingMol) -> ForestNoTracingMol: ...
+def copy_mol(mol: TracingMol) -> TracingMol: ...
 @overload
 def copy_mol(mol: ForestMol) -> ForestMol: ...
 @overload
@@ -269,7 +649,7 @@ def copy_mol(mol: Mol) -> Mol:
 
     out = Mol(mol)
     if is_forest(mol):
-        return _place_forest(out, copy.deepcopy(get_forest(mol)))
+        return _place_forest(out, copy.deepcopy(mol._forest))
     return out
 
 
@@ -310,11 +690,11 @@ def run_reactants(smarts: str, mol: Mol) -> tuple[tuple[NoForestMol, ...], ...]:
 
 @overload
 def cannonicalize_order(
-    mol: ForestTracingMol, tracing_reset: bool = True
-) -> tuple[ForestTracingMol, str]: ...
+    mol: TracingMol, tracing_reset: bool = True
+) -> tuple[TracingMol, str]: ...
 @overload
-def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol, str]: ...
-def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol, str]:
+def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]: ...
+def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[Mol, str]:
     """Renumber into canonical SMILES order. Returns the new mol and that SMILES.
 
     ``RenumberAtoms`` builds a new molecule and the forest is copied onto it.
@@ -330,9 +710,9 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol
 
     source = ensure_forest(mol)
     renumbered = _place_forest(
-        RenumberAtoms(mol, renumber_map), copy.deepcopy(get_forest(source))
+        RenumberAtoms(mol, renumber_map), copy.deepcopy(source._forest)
     )
-    get_forest(renumbered)["structure"] = {"csmi": csmi}
+    renumbered._forest["structure"] = {"csmi": csmi}
 
     if tracing_reset:
         _reordered_forest_labels(renumbered)
@@ -341,7 +721,7 @@ def cannonicalize_order(mol: Mol, tracing_reset: bool = True) -> tuple[ForestMol
 
 # TODO: this function should ensure Mol atoms exactly matches the forest labels,
 # or throw error. It's only a helper that's meant to work if labels were dropped from mol.
-def _reordered_forest_labels(mol: ForestMol) -> None:
+def _reordered_forest_labels(mol: Mol) -> None:
     if not is_tracing(mol):
         raise KeyError("atom_trace")
     trace = mol._forest["atom_trace"]
@@ -355,13 +735,6 @@ def _reordered_forest_labels(mol: ForestMol) -> None:
             record["idx"][-1] = index
 
 
-def get_csmi(mol: Mol) -> str:
-    structure = _structure(mol)
-    csmi = structure.get("csmi")
-    if not csmi:
-        csmi = MolToSmiles(mol, isomericSmiles=False)
-        structure["csmi"] = csmi
-    return csmi
 
 
 def mol_from_smiles(smiles: str) -> NoForestMol:
@@ -490,7 +863,7 @@ def resonance_bond_maps(mol: Mol) -> tuple[dict[tuple[int, int], float], ...]:
     return structure["resonance_bonds"]
 
 
-def conjugated_systems(mol: Mol) -> tuple[frozenset[int], ...]:
+def _conjugated_systems(mol: Mol) -> tuple[frozenset[int], ...]:
     _load_resonance(mol)
     structure = _structure(mol)
     if "conjugated_systems" not in structure:
@@ -498,7 +871,7 @@ def conjugated_systems(mol: Mol) -> tuple[frozenset[int], ...]:
     return structure["conjugated_systems"]
 
 
-def aromatic_systems(mol: Mol) -> tuple[frozenset[int], ...]:
+def _aromatic_systems(mol: Mol) -> tuple[frozenset[int], ...]:
     structure = _structure(mol)
     if "aromatic_systems" not in structure:
         aromatic = {atom.GetIdx() for atom in mol.GetAromaticAtoms()}
@@ -789,7 +1162,7 @@ def parents_for_ends(mol: Mol, start: int, end: int, cache: KekuleParents) -> En
     )
 
 
-def ring_membership(mol: Mol) -> dict[int, tuple[tuple[int, ...], ...]]:
+def _ring_membership(mol: Mol) -> dict[int, tuple[tuple[int, ...], ...]]:
     structure = _structure(mol)
     if "rings" not in structure:
         work = Mol(mol)
@@ -802,7 +1175,7 @@ def ring_membership(mol: Mol) -> dict[int, tuple[tuple[int, ...], ...]]:
     return structure["rings"]
 
 
-def smarts_matches(mol: Mol, smarts: str) -> tuple[dict[int, int], ...]:
+def _smarts_matches(mol: Mol, smarts: str) -> tuple[dict[int, int], ...]:
     cache = _structure(mol).setdefault("smarts_matches", {})
     if smarts not in cache:
         query = MolFromSmarts(smarts)
@@ -859,7 +1232,7 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
     if not is_forest(src):
         return dst
 
-    src_forest = get_forest(src)
+    src_forest = src._forest
     child: Forest = {"structure": {}}
 
     try:
@@ -1051,7 +1424,8 @@ def mcs_matches(reactant: Mol, target: Mol) -> McsResult:
     structure = _structure(reactant)
     cache: dict[str, McsResult] = structure.setdefault("mcs_matches", {})
     targets: dict[str, McsResult] = structure.setdefault("mcs_targets", {})
-    key = get_csmi(target)
+    held_target = ensure_forest(target)
+    key = held_target.xf.csmi
     cached = cache.get(key)
     if cached is not None:
         return cached
@@ -1067,7 +1441,8 @@ def mcs_target_matches(reactant: Mol, target: Mol) -> McsResult:
     """Target-side embeddings for the same MCS query. Filled with :func:`mcs_matches`."""
 
     mcs_matches(reactant, target)
-    key = get_csmi(target)
+    held_target = ensure_forest(target)
+    key = held_target.xf.csmi
     structure = _structure(reactant)
     if "mcs_targets" not in structure:
         raise KeyError("mcs_targets")

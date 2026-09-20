@@ -9,23 +9,18 @@ from rdkit import Chem
 from xenosite.refactor_poc.rdkitutil import (
     copy_mol,
     ensure_forest,
-    get_csmi,
-    get_forest,
     mcs_matches,
-    molecule_formula,
     resonance_bond_maps,
     rw_copy,
     sanitized_fragments,
-    smarts_matches,
     split_fragments,
-    topol_equiv,
 )
 
 if TYPE_CHECKING:
     from xenosite.refactor_poc.rdkit_api import (
         ForestMol,
         ForestNoTracingMol,
-        ForestTracingMol,
+        TracingMol,
         NoForestMol,
         NoTracingMol,
     )
@@ -39,7 +34,7 @@ if TYPE_CHECKING:
     def _subclass_relationships(
         bare: NoForestMol,
         untraced: ForestNoTracingMol,
-        traced: ForestTracingMol,
+        traced: TracingMol,
     ) -> None:
         """No-forest is no-trace. Forest-without-trace is both. Traced is a forest."""
 
@@ -50,45 +45,46 @@ if TYPE_CHECKING:
 
 
 def test_cached_answers_are_the_same_object():
-    mol = Chem.MolFromSmiles("CCC")
-    assert topol_equiv(mol) is topol_equiv(mol)
-    assert get_csmi(mol) is get_csmi(mol)
+    mol = ensure_forest(Chem.MolFromSmiles("CCC"))
+    assert mol.xf.topol_equiv is mol.xf.topol_equiv
+    assert mol.xf.csmi is mol.xf.csmi
     smarts = "[C:1][C:2]"
-    assert smarts_matches(mol, smarts) is smarts_matches(mol, smarts)
+    assert mol.xf.smarts_matches(smarts) is mol.xf.smarts_matches(smarts)
 
 
 def test_mcs_matches_cache_on_the_reactant():
     reactant = Chem.MolFromSmiles("c1ccccc1")
-    target = Chem.MolFromSmiles("c1ccccc1")
+    target = ensure_forest(Chem.MolFromSmiles("c1ccccc1"))
     first = mcs_matches(reactant, target)
     second = mcs_matches(reactant, target)
     assert first is second
     assert len(first.embeddings) > 1
-    structure = get_forest(ensure_forest(reactant)).get("structure")
+    held_reactant = ensure_forest(reactant)
+    structure = held_reactant.xf.forest.get("structure")
     assert structure is not None
-    held = (structure.get("mcs_matches") or {})[get_csmi(target)]
+    held = (structure.get("mcs_matches") or {})[target.xf.csmi]
     assert held is first
     assert isinstance(held.embeddings, tuple)
 
 
 def test_a_fresh_mol_does_not_reuse_parent_caches():
-    parent = Chem.MolFromSmiles("c1ccccc1O")
-    parent_csmi = get_csmi(parent)
+    parent = ensure_forest(Chem.MolFromSmiles("c1ccccc1O"))
+    parent_csmi = parent.xf.csmi
     parent_maps = resonance_bond_maps(parent)
 
     product = Chem.Mol(parent)
     fresh = ensure_forest(product)
-    structure = get_forest(fresh).get("structure")
+    structure = fresh.xf.forest.get("structure")
     assert structure is not None
     assert "csmi" not in structure
     assert "resonance_bonds" not in structure
-    parent_structure = get_forest(ensure_forest(parent)).get("structure")
+    parent_structure = parent.xf.forest.get("structure")
     assert structure is not parent_structure
-    assert get_csmi(product) == parent_csmi
+    assert fresh.xf.csmi == parent_csmi
     assert resonance_bond_maps(product) is not parent_maps
 
     child = copy_mol(parent)
-    child_structure = get_forest(ensure_forest(child)).get("structure")
+    child_structure = ensure_forest(child).xf.forest.get("structure")
     assert child_structure is not None
     assert child_structure.get("csmi") == parent_csmi
 
@@ -96,8 +92,8 @@ def test_a_fresh_mol_does_not_reuse_parent_caches():
 def test_forest_stays_a_dict():
     """Forest is a TypedDict schema and still a plain dict at runtime."""
 
-    mol = Chem.MolFromSmiles("CC")
-    forest = get_forest(ensure_forest(mol))
+    mol = ensure_forest(Chem.MolFromSmiles("CC"))
+    forest = mol.xf.forest
     # Intentional non-schema writes: the forest must remain a mutable dict.
     raw = cast(dict, forest)
     structure = raw.setdefault("structure", {})
@@ -109,11 +105,11 @@ def test_forest_stays_a_dict():
     assert raw["not_a_schema_key"] == 1
     assert isinstance(forest, dict)
 
-    formula = molecule_formula(mol)
+    formula = mol.xf.formula
     assert isinstance(formula, dict)
     assert formula["counts"]["C"] == 2
     assert formula["charge"] == 0
-    assert formula is molecule_formula(mol)
+    assert formula is mol.xf.formula
 
     cloned = copy.deepcopy(forest)
     assert cloned.get("structure", {}).get("formula", {}).get("counts", {}).get("C") == 2
@@ -121,27 +117,26 @@ def test_forest_stays_a_dict():
 
 
 def test_rw_copy_does_not_carry_the_structure_cache():
-    parent = Chem.MolFromSmiles("CCO")
-    get_csmi(parent)
+    parent = ensure_forest(Chem.MolFromSmiles("CCO"))
+    _ = parent.xf.csmi
     child = rw_copy(parent)
     assert getattr(child, "_forest", None) is None
-    copied = get_forest(copy_mol(parent)).get("structure")
+    copied = copy_mol(parent).xf.forest.get("structure")
     assert copied is not None
-    assert copied.get("csmi") == get_csmi(parent)
+    assert copied.get("csmi") == parent.xf.csmi
 
 
-def test_ensure_forest_is_identity_and_get_forest_only_reads():
-    """Callers rebind ``mol = ensure_forest(mol)``. ``get_forest`` does not install."""
+def test_forestmol_bridge_and_wipe_honesty():
+    """``xf.forestmol`` attaches; ``wipe_forest`` returns NoForestMol brand."""
 
     mol = Chem.MolFromSmiles("CC")
-    assert getattr(mol, "_forest", None) is None
-    with pytest.raises(AttributeError):
-        get_forest(mol)  # pyright: ignore[reportArgumentType]
-
-    held = ensure_forest(mol)
-    assert held is mol
-    assert get_forest(held) is held._forest
-    assert ensure_forest(held) is held
+    assert mol.xf.has_forest is False
+    held = mol.xf.forestmol
+    assert held is mol and mol.xf.has_forest
+    assert held.xf.forest is held._forest
+    from xenosite.refactor_poc.rdkitutil import wipe_forest
+    wiped = wipe_forest(held)
+    assert wiped is mol and mol.xf.has_forest is False
 
 
 def test_fragment_split_uses_pieces():
@@ -153,7 +148,7 @@ def test_fragment_split_uses_pieces():
 
 
 def test_carry_forest_drops_sibling_records_and_clears_structure():
-    from xenosite.refactor_poc.rdkitutil import carry_forest, GetMolFrags
+    from xenosite.refactor_poc.rdkitutil import GetMolFrags, carry_forest
     from xenosite.refactor_poc.rules import stamp_forest_labels
 
     parent = stamp_forest_labels(Chem.MolFromSmiles("C.O"))

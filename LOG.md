@@ -2,6 +2,42 @@
 
 ## 2026-09-19
 
+- **xf redesign (mint-on-read)**: `Mol.xf` is a read-only monkey-patched property; each access mints a new `Xf` with a **strong** parent ref (no stored xf, no weakref, no copy-between-mols). Forest attaches lazily via `_require_forest`; `has_forest` reports wipe without installing; `forestmol` is the typed `Mol` → `ForestMol` bridge. `wipe_forest` is the honest wipe → `NoForestMol`.
+- **Type brands**: keep `ForestMol` / `NoForestMol` / `TracingMol` as TYPE_CHECKING classes (runtime aliases of RDKit `Mol`). Wipe/constructor/reaction-piece returns stay `NoForestMol`; re-enter with `mol.xf.forestmol`. `ForestTracingMol` remains a compat alias of `TracingMol`.
+- **Library on xf**: rules / find_path / rulesets / canonical_plan consume `mol.xf.*`; deleted dual free APIs `get_csmi` / `get_forest` / public `ring_membership` / `conjugated_systems` / `aromatic_systems` / `topol_equiv` / `smarts_matches` (private `_` helpers remain). Dropped rules.py copies of `_bond_key` / `_current_bond_map` / dead `_connected_components`. Thin shims: `stamp_forest_labels` / `install_forest` / `ensure_forest` / `forest_trace`.
+- **Conjugation terminal**: `ConjugationRule.is_terminal_rule = True`; `of_products` marks via that flag; `is_terminal_product` reads forest-level flag (`xf.is_terminal`); find_path skips expanding terminals. Fixed reader bug (was looking on `structure`, writer used forest root).
+- **xf.tracing**: added `atom_added_by`; `plan_atom_note` uses it. Also on xf: `topol_equiv`, `formula`, `sanitize`, `smarts_matches`.
+- Tests: `test_xf.py` rewritten for mint-on-read / forestmol / conjugate terminal. `pytest tests/refactor_poc`: 1066 passed, 104 xfailed, 1 xpassed. `pyright src/xenosite/refactor_poc`: 0 errors.
+
+## 2026-09-19
+
+- Nested atom-trace under `mol.xf.tracing` (`XfTracing`, weakref-only). Underscored plumbing: `_stamp` / `_ensure` / `_install` / `_trace`. Read-only on the nest: `active`, `depth`, `atom_origin`, `atom_indices` (`depth` is trace-derived, not a structure query). Flat `xf.stamp` / `xf.trace` / `xf.depth` removed (poc clean break). User-facing finish stays `xf.of_products`.
+
+## 2026-09-19
+
+- `of_products` takes products through `copy_mol` (not bare `Chem.Mol`); inputs stay unedited. Test fixture uses pre-trace `metabolites` pieces with lifted labels — not finished metabolize products (those carry finish-tags; `Chem.Mol` orphans them → KeyError on re-trace). Dropped hand-rolled clear-`forestLabel` helper.
+
+## 2026-09-19
+
+- Installed `mol.xf` (`Xf`): weakref-to-parent facade, no instance cache. Structure answers stay on the forest. `ensure_forest` / `_place_forest` attach `xf`.
+- First-wave on xf: `csmi`, `forest`, `clear_structure`, `rings`, `conjugated_systems`, `aromatic_systems`, label-safe `atom_origin` / `atom_indices` / `depth` / `tracing`, plus `stamp` / `ensure_tracing` / `install` / `trace`.
+- Finishing API: `reactant.xf.of_products(product_or_list, site_info, executed=None)` → stamped+traced list (trace + clear_structure). Wired in `ReactionRule.metabolize` and `find_path._finish`.
+- Free functions `get_csmi`, `ensure_tracing`, `install_forest`, `stamp_forest_labels`, `forest_trace` are thin wrappers that bind the mol before touching `xf` (weakref must not see a temporary). Import goal: `ensure_forest` then `mol.xf…`.
+- Tests: `tests/refactor_poc/test_xf.py` (weakref, csmi, rings/conjugate, stamp, of_products single+list).
+
+## 2026-09-19
+
+- Dropped `cannonicalize_order` (RenumberAtoms + forest deepcopy) from metabolize / `_finish` hot path. Profile had ~59% in deepcopy via that path; renumber not required for search identity, ForestTracingMol labels, or asserted product SMILES. `cannonicalize_order` remains in `rdkitutil` unused by the hot path. react→split→`forest_trace` kept; structure caches cleared on each product.
+- Product `csmi` is lazy: `get_csmi(mol)` caches on `structure["csmi"]` on demand; metabolize yields `_LazyProductInfo` so `info["csmi"]` still works without stuffing SMILES into every intermediate. Dedup / target-hit / cleavage sides / enumerate call `get_csmi` when they need the string.
+
+## 2026-09-19
+
+- Profiled poc `find_path` (cProfile; harness `tests/refactor_poc/profile_find_path_poc.py`). Cases: anisole (cheap), PhCH2OH, acetate→catechol, MeOPhOH→hydroxyQ. Wall ~2.0s profiled (hydroxyQ ~1.8s). Artifacts: `artifacts/poc_find_path_profile.out`, `.pstats`.
+- Top hotspots (~1.98s cumulative): `copy.deepcopy` ~1.17s (~59%) via `_finish` → `cannonicalize_order` (deepcopy forest) + `forest_trace` (deepcopy atom_trace); `atom_diff`/`_mappings` ~0.37s; `RuleSet.metabolites` ~0.27s; MCS `_mcs_query` tottime ~0.08s. Search/RDKit secondary to forest copy/trace on every finished fragment.
+- Quick wins (not done): cut deepcopy in canonicalize/trace; defer full finish for cleaved-away fragments; cache atom_diff/MCS.
+
+## 2026-09-19
+
 - Lazy heap on poc `find_path`: queue had no walk priority (deque + target-hit prepend). Minimal key `(hit_tier, seq)` preserves that order; on pop, cheaply rescore and push back if worse than peek (`fresh != stored`). Richer `atom_diff`/`order_key` walk key still not decided (sibling cost-sort lesson). `HEURISTICS.md` Status: approved for lazy handling.
 - Filter API: `FilterRules` / `FilterSites` take live `ForestTracingMol` first so filters need no mol closure; mol stays out of `SiteInfo`. `find_path` `_filters` closes over `diff` only.
 - H2H after: poc 10/10 hit, both 9/10. PhCH2OH ed=22; TBA ed=3; hydroxyQ ed=331 (forest EXH miss).

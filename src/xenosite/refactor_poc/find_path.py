@@ -18,16 +18,16 @@ from xenosite.forest.step_plan import StepPlan
 from xenosite.refactor_poc.canonical_plan import CanonicalStep, as_deps
 from xenosite.refactor_poc.rdkitutil import (
     Atom,
-    ForestTracingMol,
     Mol,
+    TracingMol,
     as_mol,
-    cannonicalize_order,
     canon_smiles,
     copy_mol,
     mcs_matches,
     mcs_target_matches,
     sanitize_catch,
     split_fragments,
+    wipe_forest,
 )
 from xenosite.refactor_poc.records import (
     AtomRef,
@@ -45,8 +45,6 @@ from xenosite.refactor_poc.rules import (
     QuinoneFormation,
     ReactionRule,
     _as_site,
-    forest_trace,
-    install_forest,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
 
@@ -548,7 +546,7 @@ def _formula_oxygen(mol: Mol) -> int:
     return sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 8)
 
 
-def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: ForestTracingMol | Mol):
+def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol):
     """``filter_rules`` sees ``span``, the atom diff, and the live mol."""
 
     span: Span = info.get("span") or {
@@ -639,7 +637,7 @@ def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
 
 
 def _site_could_help(
-    site: Site, info: SiteInfo, diff: AtomDiff, mol: ForestTracingMol | Mol
+    site: Site, info: SiteInfo, diff: AtomDiff, mol: TracingMol | Mol
 ) -> bool:
     """``filter_sites`` sees one resolved effect, the live mol, and the local atom diff."""
 
@@ -801,9 +799,13 @@ def default_ruleset():
 
 
 def _finish(parent: Mol, raw_products, info, counters):
-    """Sanitize and trace each fragment. Failed sanitizes are dropped."""
+    """Sanitize and trace each fragment. Failed sanitizes are dropped.
 
-    finished = []
+    Does not renumber atoms or compute SMILES. Callers use ``mol.xf.csmi``
+    when identity is needed. Tracing is ``parent.xf.of_products(...)``.
+    """
+
+    pieces = []
     for raw in raw_products:
         for piece in split_fragments(raw).pieces:
             if sanitize_catch(piece):
@@ -811,34 +813,35 @@ def _finish(parent: Mol, raw_products, info, counters):
                 continue
             for atom in piece.GetAtoms():
                 atom.SetAtomMapNum(0)
-            forest_trace(parent, piece, info)
-            ordered, smiles = cannonicalize_order(piece)
-            finished.append((ordered, smiles))
-    return finished
+            pieces.append(piece)
+    if not pieces:
+        return []
+    return parent.xf.of_products(pieces, info)
 
 
-def _keep_fragment(finished, target: Mol):
+def _keep_fragment(finished, target: Mol, target_smiles: str):
     """The fragment closest to ``target``. The rest were cleaved off."""
 
     best = None
     best_cost = None
-    for mol, smiles in finished:
-        if smiles == canon_smiles(target):
+    for mol in finished:
+        smiles = mol.xf.csmi
+        if smiles == target_smiles:
             cost = -1
         else:
             cost = atom_diff(mol, target).cost()
         if best_cost is None or cost < best_cost:
-            best = (mol, smiles)
+            best = mol
             best_cost = cost
     if best is None:
         return None, []
-    discarded = [item for item in finished if item[0] is not best[0]]
+    discarded = [mol for mol in finished if mol is not best]
     return best, discarded
 
 
 @dataclass
 class _Walk:
-    mol: Mol
+    mol: TracingMol
     steps: tuple[CanonicalStep, ...]
     sides: tuple[CleavageSide, ...]
     opens: tuple[frozenset[int], ...]
@@ -860,7 +863,7 @@ def _fresh_walk_priority(
     """Cheap rescore before expand. Today: target-hit check only."""
 
     return _walk_priority(
-        target_hit=canon_smiles(walk.mol) == target_smiles,
+        target_hit=walk.mol.xf.csmi == target_smiles,
         seq=seq,
     )
 
@@ -908,10 +911,9 @@ def find_path(
         raise ValueError("reactant and target are required")
     reactant = as_mol(reactant)
     target_mol = as_mol(target)
-    reactant = copy_mol(reactant)
-    reactant._forest = None
-    reactant = install_forest(reactant)
-    target_smiles = canon_smiles(target_mol)
+    reactant = wipe_forest(copy_mol(reactant))
+    reactant = reactant.xf.tracing._stamp()
+    target_smiles = target_mol.xf.csmi
     if ruleset is None:
         ruleset = default_ruleset()
     if counters is None:
@@ -925,7 +927,7 @@ def find_path(
         (_walk_priority(target_hit=False, seq=seq), seq, _Walk(reactant, (), (), ())),
     )
     seq += 1
-    seen = {canon_smiles(reactant)}
+    seen = {reactant.xf.csmi}
     found = 0
 
     while heap and found < max_paths and counters.nodes < max_nodes:
@@ -936,7 +938,7 @@ def find_path(
             heapq.heappush(heap, (fresh, item_seq, walk))
             continue
         counters.nodes += 1
-        here = canon_smiles(walk.mol)
+        here = walk.mol.xf.csmi
         if here == target_smiles:
             yield PathOutcome(
                 plan=as_deps(walk.steps),
@@ -944,6 +946,9 @@ def find_path(
                 smiles=here,
             )
             found += 1
+            continue
+        # Conjugation (and other is_terminal_rule) products are not expanded.
+        if walk.mol.xf.is_terminal:
             continue
 
         diff = atom_diff(walk.mol, target_mol)
@@ -964,10 +969,11 @@ def find_path(
             finished = _finish(walk.mol, por.products, por.info, counters)
             if not finished:
                 continue
-            kept, discarded = _keep_fragment(finished, target_mol)
+            kept, discarded = _keep_fragment(finished, target_mol, target_smiles)
             if kept is None:
                 continue
-            child, child_smiles = kept
+            child = kept
+            child_smiles = child.xf.csmi
             target_hit = child_smiles == target_smiles
             closer = target_hit or atom_diff(child, target_mol).cost() < parent_cost
             if not closer:
@@ -986,10 +992,10 @@ def find_path(
                 sides = walk.sides + tuple(
                     CleavageSide(
                         site=_cleavage_site(por.info["site"]),
-                        side=smiles,
+                        side=mol.xf.csmi,
                         opens=walk.opens,
                     )
-                    for _mol, smiles in discarded
+                    for mol in discarded
                 )
             else:
                 opens = walk.opens
@@ -1044,8 +1050,9 @@ def _enumerate(
     if ruleset is None:
         ruleset = default_ruleset()
     start = as_mol(reactant)
+    start = start.xf.forestmol
     frontier: deque[_Expand] = deque([_Expand(start, 0)])
-    seen = {canon_smiles(start)}
+    seen = {start.xf.csmi}
     while frontier:
         node = pop(frontier)
         if node.info is not None:
@@ -1058,8 +1065,8 @@ def _enumerate(
             filter_rules=filter_rules,
             filter_sites=filter_sites,
         ):
-            smiles = info["csmi"]
-            if not isinstance(smiles, str) or smiles in seen:
+            smiles = product.xf.csmi
+            if smiles in seen:
                 continue
             seen.add(smiles)
             children.append(_Expand(product, node.depth + 1, info))

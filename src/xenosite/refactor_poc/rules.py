@@ -7,7 +7,7 @@ import copy
 import itertools
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypeGuard, cast
+from typing import TYPE_CHECKING, NamedTuple, TypeAlias, cast
 
 if TYPE_CHECKING:
     # Static re-export so ``from .rules import RuleSet`` types correctly.
@@ -30,31 +30,22 @@ from xenosite.refactor_poc.rdkitutil import (
     Bond,
     BondType,
     ForestMol,
-    ForestTracingMol,
     Mol,
     RWMol,
-    aromatic_systems,
-    cannonicalize_order,
-    conjugated_systems,
+    TracingMol,
+    _bond_key,
+    _current_bond_map,
     copy_mol,
-    ensure_forest,
     ensure_kekule_parents,
-    get_forest,
-    is_tracing,
-    molecule_formula,
     move_charge_with_bonds,
     parent_for_bond,
     parents_for_ends,
     reaction_from_smarts,
     resonance_bond_maps,
-    ring_membership,
     run_reactants,
     rw_copy,
     sanitize_catch,
-    sanitize_mol,
     sanitized_fragments,
-    smarts_matches,
-    topol_equiv,
 )
 from xenosite.refactor_poc.records import (
     EditCounters,
@@ -88,10 +79,31 @@ SiteSignature: TypeAlias = tuple[
 ]
 
 
-def _is_pattern(value: PatternInfo | dict) -> TypeGuard[PatternInfo]:
-    """True when ``value`` is the pattern dict a rule stored on the info."""
+class _LazyProductInfo(dict):
+    """Product ``info`` view. ``csmi`` is ``product.xf.csmi``.
 
-    return isinstance(value, dict)
+    The hot path does not compute SMILES. Dedup, export, and ``info["csmi"]``
+    read ``mol.xf.csmi``, which caches on ``structure["csmi"]``.
+    """
+
+    __slots__ = ("_mol",)
+
+    def __init__(self, data: dict, mol: ForestMol):
+        super().__init__(data)
+        self._mol = mol
+
+    def __getitem__(self, key):
+        if key == "csmi":
+            return self._mol.xf.csmi
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):  # type: ignore[override]
+        if key == "csmi":
+            return self._mol.xf.csmi
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        return key == "csmi" or super().__contains__(key)
 
 
 def _copy_when(raw: When | Mapping[str, int]) -> When:
@@ -109,8 +121,10 @@ def _copy_when(raw: When | Mapping[str, int]) -> When:
 
 
 def set_terminal_product(mol: Mol, value: bool = True) -> ForestMol:
-    held = ensure_forest(mol)
-    held._forest["is_terminal_product"] = value
+    """Mark ``mol`` terminal on the forest. Prefer ``mol.xf._mark_terminal``."""
+
+    held = mol.xf.forestmol
+    held.xf._mark_terminal(value)
     return held
 
 
@@ -191,7 +205,7 @@ class ReactionRule:
 
     def __call__(
         self, mol: Mol, **kwargs
-    ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
+    ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
         yield from self.metabolize(mol, **kwargs)
 
     def __iter__(self) -> Iterator[ReactionRule]:
@@ -204,7 +218,7 @@ class ReactionRule:
         filter_sites: FilterSites = lambda mol, site, info: True,
         unique_csmi: bool = True,
         **kwargs,
-    ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
+    ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
         """Apply this rule and yield ``(product, info)`` pairs.
 
         This is the method callers use. It keeps the invariants below.
@@ -229,8 +243,10 @@ class ReactionRule:
           depth of the site's index frame live under
           ``atom_trace["additions"][id]``. The change in formula lives
           under ``atom_trace["delta_formula"][id]``.
-        - Carries ``info["csmi"]``, the canonical SMILES of that product.
-          The same SMILES is not yielded twice.
+        - Reads ``info["csmi"]`` (or ``product.xf.csmi``)
+          as the canonical SMILES of that product; computed on demand and
+          cached on the product forest. With ``unique_csmi`` (default), the
+          same SMILES is not yielded twice.
 
         ``filter_rules(mol, rule, pattern_info)`` sees the pattern before a
         match. ``filter_sites(mol, site, info)`` sees the resolved effect
@@ -240,9 +256,9 @@ class ReactionRule:
             raise ValueError("mol is required")
         # The caller's chemistry is not edited. A mol with no trace gets one,
         # at its current depth, so products can sit one step below it.
-        mol = ensure_tracing(mol)
+        mol = mol.xf.tracing._stamp()
         # Matching, map clearing, and forest stamps happen on a copy.
-        mol = ensure_tracing(_work_copy(mol))
+        mol = _work_copy(mol).xf.tracing._stamp()
 
         if self.is_terminal_product(mol):
             return
@@ -260,8 +276,8 @@ class ReactionRule:
         ):
             info = por.info
             # react → split → trace. Cleavage pieces are separate mols before
-            # forest_trace; each fragment gets its own atom_trace from the
-            # parent (siblings are absent, not deleted from a shared pre-split
+            # tracing; each fragment gets its own atom_trace from the parent
+            # (siblings are absent, not deleted from a shared pre-split
             # trace). A dotted leftover is expanded here as a safety net.
             products: list[Mol] = []
             for raw in por.products:
@@ -273,42 +289,40 @@ class ReactionRule:
             if not products:
                 continue
 
+            for p in products:
+                p.xf.sanitize()
+                # Terminal marking is of_products (reads is_terminal_rule).
+
+            # Stamp + trace + clear structure caches on each fragment.
+            finished = mol.xf.of_products(products, info, executed=self)
+
             # Same canonical SMILES is one outcome. Two sites in one atom
             # class can still be different molecules (ortho quinone and para).
-            for n, p in enumerate(products):
-                sanitize_mol(p)
-
-                if self.is_terminal_rule:
-                    set_terminal_product(p)
-
-                forest_trace(mol, p, info, executed=self)
-
-                ordered, csmi = cannonicalize_order(p)
-                assert is_tracing(ordered)
-                # canonicalize deep-copies the forest; keep the rule's
-                # PatternInfo object as the addition's pattern link.
-                if "pattern" in info:
-                    pattern = info["pattern"]
-                    if _is_pattern(pattern):
-                        tid = ordered._forest["atom_trace"]["transforms"][-1]
-                        ordered._forest["atom_trace"]["additions"][tid]["pattern"] = (
-                            pattern
-                        )
+            for n, p in enumerate(finished):
+                assert p.xf.tracing.active
 
                 if unique_csmi:
+                    csmi = p.xf.csmi
                     if csmi in seen:
                         continue
                     seen.add(csmi)
 
-                i = cast(ProductInfo, dict(info))
-                i["product_index"] = n
-                i["product_count"] = len(products)
-                i["csmi"] = csmi
+                i = cast(
+                    ProductInfo,
+                    _LazyProductInfo(
+                        {
+                            **dict(info),
+                            "product_index": n,
+                            "product_count": len(finished),
+                        },
+                        p,
+                    ),
+                )
 
-                yield ordered, i
+                yield p, i
 
     def _top_site(self, site: Site, mol: Mol) -> Site:
-        te = topol_equiv(mol)
+        te = mol.xf.topol_equiv
         if isinstance(site, int):
             return te[site]
         if isinstance(site, tuple):
@@ -327,13 +341,14 @@ class ReactionRule:
         return site
 
     def is_terminal_product(self, mol: Mol) -> bool:
-        """True if ``mol`` must not be expanded further in guided path search."""
+        """True if ``mol`` must not be expanded further in guided path search.
 
-        forest = get_forest(ensure_forest(mol))
-        structure = forest.get("structure")
-        if not structure or "is_terminal_product" not in structure:
-            return False
-        return structure["is_terminal_product"]
+        Reads the forest-level ``is_terminal_product`` flag (survives
+        ``clear_structure``). Prefer ``mol.xf.is_terminal`` at call sites that
+        already hold a :class:`ForestMol`.
+        """
+
+        return mol.xf.is_terminal
 
     def metabolites(
         self,
@@ -372,8 +387,8 @@ class ReactionRule:
         raise NotImplementedError
 
 
-FilterRules = Callable[[ForestTracingMol, ReactionRule, PatternInfo], bool]
-FilterSites = Callable[[ForestTracingMol, Site, SiteInfo], bool]
+FilterRules = Callable[[TracingMol, ReactionRule, PatternInfo], bool]
+FilterSites = Callable[[TracingMol, Site, SiteInfo], bool]
 
 
 def __getattr__(name: str) -> type[ReactionRule]:
@@ -417,65 +432,23 @@ def _work_copy(mol: Mol) -> Mol:
     return copy_mol(mol)
 
 
-def ensure_tracing(mol: Mol) -> ForestTracingMol:
-    """Forest is present and the trace is initialized. Does not reset depth.
+def stamp_forest_labels(mol: Mol) -> TracingMol:
+    """Ensure tracing and stamp labels. Prefer ``mol.xf.tracing._stamp()``.
 
-    A missing trace is started the way :func:`install_forest` always has.
-    An existing trace, including its depth, is left in place.
+    Thin shim for tests that still take a bare ``Mol``. ``install_forest`` /
+    ``ensure_tracing`` / ``install_forest`` are gone — use ``mol.xf.tracing._stamp``.
     """
 
-    held = ensure_forest(mol)
-    forest = held._forest
-    if "structure" not in forest:
-        forest["structure"] = {}
-    if "atom_trace" not in forest:
-        trace: InitializedAtomTrace = {
-            "records": {},
-            "deletes": {},
-            "transforms": [],
-            "additions": {},
-            "formula": molecule_formula(held),
-            "delta_formula": {},
-            "depth": 0,
-            "last_tag": 0,
-            "next_transform": 1,
-        }
-        forest["atom_trace"] = trace
-        for a in held.GetAtoms():
-            if a.GetAtomicNum() != 1:
-                i = a.GetIdx()
-                trace["records"][str(i)] = {
-                    "idx": [i],
-                    "depth": [0],
-                }
-                trace["last_tag"] = i
-    assert is_tracing(held)
-    _write_forest_labels(held)
-    return held
+    return mol.xf.tracing._stamp()
 
 
-def install_forest(mol: Mol) -> ForestTracingMol:
-    """Install tracing on ``mol`` and return that same object.
+def install_forest(mol: Mol) -> TracingMol:
+    """Deprecated alias of :func:`stamp_forest_labels` (tests)."""
 
-    Callers rebind: ``mol = install_forest(mol)``. This does not copy.
-    """
-
-    return ensure_tracing(mol)
+    return stamp_forest_labels(mol)
 
 
-def _write_forest_labels(mol: ForestTracingMol) -> None:
-    for tag, record in mol._forest["atom_trace"]["records"].items():
-        idx = record.get("idx")
-        if not idx:
-            raise KeyError("idx")
-        mol.GetAtomWithIdx(idx[-1]).SetProp("forestLabel", tag)
-
-
-def stamp_forest_labels(mol: Mol) -> ForestTracingMol:
-    return ensure_tracing(mol)
-
-
-def reordered_forest_labels(mol: ForestTracingMol) -> None:
+def reordered_forest_labels(mol: TracingMol) -> None:
     trace = mol._forest["atom_trace"]
     # if "atom_trace" not in forest:
     #     install_forest(mol)
@@ -608,6 +581,21 @@ def forest_trace(
 ) -> InitializedAtomTrace:
     """Record one transform on the product's atom trace.
 
+    Thin wrapper over ``product.xf.tracing._trace(...)``. Prefer
+    ``reactant.xf.of_products(product, info)`` for the finishing path.
+    """
+
+    return product.xf.tracing._trace(reactant, info, executed=executed)
+
+
+def _apply_forest_trace(
+    reactant: Mol,
+    product: Mol,
+    info: SiteInfo,
+    executed: ReactionRule | None = None,
+) -> InitializedAtomTrace:
+    """Record one transform on the product's atom trace.
+
     A new atom's ``added_by`` is an id such as ``R1``. The site, the rule
     hierarchy, the resolved effect, and the formula change live once, under
     ``atom_trace["additions"][id]``. ``depth`` is the reactant index frame
@@ -616,8 +604,8 @@ def forest_trace(
 
     rule = info["rule"]
     site = _as_site(info["site"])
-    parent = stamp_forest_labels(reactant)
-    held = ensure_forest(product)
+    parent = reactant.xf.tracing._stamp()
+    held = product.xf.forestmol
     trace: InitializedAtomTrace = copy.deepcopy(parent._forest["atom_trace"])
     trace.setdefault("additions", {})
     trace.setdefault("delta_formula", {})
@@ -636,8 +624,8 @@ def forest_trace(
     if all(rule is not seen for seen in chain):
         chain.append(rule)
 
-    before = trace.get("formula") or molecule_formula(reactant)
-    after = molecule_formula(held)
+    before = trace.get("formula") or reactant.xf.formula
+    after = held.xf.formula
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
     # PatternInfo is stored on info as the same dict the rule holds.
@@ -926,7 +914,7 @@ def _cleavage_breaks_ring(
     right = mapped.get(site_map[1])
     if not isinstance(left, int) or not isinstance(right, int):
         return False
-    rings = ring_membership(mol)
+    rings = mol.xf.rings
     return bool(set(rings.get(left, ())) & set(rings.get(right, ())))
 
 
@@ -1118,10 +1106,10 @@ class SmartsReactionRule(ReactionRule):
 
         counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
-        live = cast(ForestTracingMol, context)
+        live = cast(TracingMol, context)
         _bump(counters, "rule_expansions")
         seen: set[SiteSignature] = set()
-        ranks = topol_equiv(context)
+        ranks = context.xf.topol_equiv
 
         for work in _kekule_forms(mol):
             for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
@@ -1129,7 +1117,7 @@ class SmartsReactionRule(ReactionRule):
                     continue
 
                 reactant = smarts.split(">>", 1)[0]
-                for mapped in smarts_matches(work, reactant):
+                for mapped in work.xf.smarts_matches(reactant):
                     site = _site_indexes(mapped, pattern)
                     if not site:
                         continue
@@ -1242,41 +1230,6 @@ _BOND = {
     1.5: BondType.AROMATIC,
 }
 
-
-def _bond_key(i: int, j: int) -> tuple[int, int]:
-    return (i, j) if i < j else (j, i)
-
-
-def _current_bond_map(mol: Mol) -> dict[tuple[int, int], float]:
-    bonds: dict[tuple[int, int], float] = {}
-    for bond in mol.GetBonds():
-        i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        bonds[_bond_key(i, j)] = bond.GetBondTypeAsDouble()
-    return bonds
-
-
-def _connected_components(mol: Mol, atoms: Iterable[int]) -> list[frozenset[int]]:
-    atoms = set(atoms)
-    seen: set[int] = set()
-    systems: list[frozenset[int]] = []
-    for start in atoms:
-        if start in seen:
-            continue
-        comp: set[int] = set()
-        queue = deque([start])
-        while queue:
-            i = queue.popleft()
-            if i in comp:
-                continue
-            comp.add(i)
-            for nbr in mol.GetAtomWithIdx(i).GetNeighbors():
-                j = nbr.GetIdx()
-                if j in atoms and j not in comp:
-                    queue.append(j)
-        seen |= comp
-        if len(comp) >= 2:
-            systems.append(frozenset(comp))
-    return systems
 
 
 def system_neighbors(mol: Mol, system: Iterable[int]) -> dict[int, list[int]]:
@@ -1607,7 +1560,7 @@ def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:
 def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
-    forest = get_forest(ensure_forest(mol))
+    forest = mol.xf.forest
     if "structure" not in forest:
         raise KeyError("structure")
     structure = forest["structure"]
@@ -1674,17 +1627,17 @@ class ResonanceRule(SmartsReactionRule):
             return
         counters = kwargs.get("counters")
         context = mol if context_mol is None else context_mol
-        live = cast(ForestTracingMol, context)
+        live = cast(TracingMol, context)
         _bump(counters, "rule_expansions")
         cache = _kekule_cache(mol)
         seen: set[SiteSignature] = set()
-        ranks = topol_equiv(context)
+        ranks = context.xf.topol_equiv
 
         for rxn_num, (smarts, _rxn, pattern) in enumerate(self.rxns):
             if not filter_rules(live, self, pattern):
                 continue
             reactant = smarts.split(">>", 1)[0]
-            for mapped in smarts_matches(mol, reactant):
+            for mapped in mol.xf.smarts_matches(reactant):
                 site = _site_indexes(mapped, pattern)
                 if not site:
                     continue
@@ -1784,7 +1737,7 @@ class ResonancePairRule(ResonanceRule):
 
         _bump(counters, "rule_expansions")
 
-        live = cast(ForestTracingMol, mol)
+        live = cast(TracingMol, mol)
         active = [
             (smarts, info)
             for smarts, info in self.endpoints
@@ -1794,15 +1747,15 @@ class ResonancePairRule(ResonanceRule):
             return
 
         if self.systems == "aromatic":
-            systems = aromatic_systems(mol)
+            systems = mol.xf.aromatic_systems
         else:
-            systems = conjugated_systems(mol)
+            systems = mol.xf.conjugated_systems
         if not systems:
             return
 
         hits: dict[int, list[tuple[dict[int, int], PatternInfo]]] = defaultdict(list)
         for smarts, info in active:
-            for mapped in smarts_matches(mol, smarts):
+            for mapped in mol.xf.smarts_matches(smarts):
                 hits[mapped[1]].append((mapped, info))
         if len(hits) < 2:
             return
@@ -1869,7 +1822,7 @@ class ResonancePairRule(ResonanceRule):
                     if rings is None and (
                         info1.get("skip_same_rings") or info2.get("skip_same_rings")
                     ):
-                        rings = ring_membership(mol)
+                        rings = mol.xf.rings
                     ring_table = rings or {}
                     for parent, path in paths:
                         _bump(counters, "mol_edits")
@@ -2848,9 +2801,11 @@ class ConjugationRule(SmartsReactionRule):
 
     ``as_star`` and ``star_label`` belong on this class. ``Protein``,
     ``DNA``, and ``Cyanide`` stay stars. The site heteroatom is ``symbol``.
-    A filter reads that. This reaction does not cleave.
+    A filter reads that. This reaction does not cleave. Products are
+    terminal (``is_terminal_rule``): conjugation ends further expansion.
     """
 
+    is_terminal_rule: bool = True
     as_star: bool = True
     star_label: str | None = None
     smarts: tuple[tuple[str, PatternInfo], ...] = (

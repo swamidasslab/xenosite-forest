@@ -411,7 +411,6 @@ class Structure(TypedDict, total=False):
 
     sanitized: int
     topol_equiv: dict[int, int]
-    is_terminal_product: bool
     csmi: str
     formula: Formula
     smarts_matches: dict[str, tuple[dict[int, int], ...]]

@@ -12,8 +12,6 @@ from xenosite.refactor_poc.rules import (
     Epoxidation,
     Hydroxylation,
     ReactionRule,
-    install_forest,
-    molecule_formula,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
 
@@ -61,7 +59,7 @@ def test_a_parent_with_no_forest_keeps_one_afterward():
 
 def test_an_existing_parent_depth_is_not_reset():
     mol = Chem.MolFromSmiles("CC")
-    mol = install_forest(mol)
+    mol = mol.xf.tracing._stamp()
     mol._forest["atom_trace"]["depth"] = 4
     products = list(Hydroxylation().metabolize(mol))
     assert mol._forest["atom_trace"]["depth"] == 4
@@ -76,7 +74,7 @@ def test_each_product_is_one_depth_below_its_parent():
         assert isinstance(info, dict)
         child = product._forest["atom_trace"]
         assert child["depth"] == parent_depth + 1
-        assert child["formula"] == molecule_formula(product)
+        assert child["formula"] == product.xf.formula
         assert info["csmi"] == Chem.MolToSmiles(product, isomericSmiles=False)
         rule = info["rule"]
         assert isinstance(rule, ReactionRule)

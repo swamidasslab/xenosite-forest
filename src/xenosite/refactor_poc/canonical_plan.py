@@ -17,7 +17,7 @@ from typing import NamedTuple
 
 from xenosite.forest.step_plan import AtomRef as AddedRef
 from xenosite.forest.step_plan import Deps, Step, StepPlan
-from xenosite.refactor_poc.rdkitutil import Mol, is_tracing
+from xenosite.refactor_poc.rdkitutil import Mol
 from xenosite.refactor_poc.records import AtomRef, Effect, Site, SiteInfo, _flat_ints
 
 PlanAtom = int | AddedRef | AtomRef
@@ -38,36 +38,15 @@ class CanonicalStep(NamedTuple):
 def plan_atom_note(mol: Mol, idx: int) -> int | AddedRef:
     """Origin index, or ``added_by`` when this atom was created by a step.
 
-    ``added_by`` on the record is a transform id (``R1``). The rule name and
-    site are on ``atom_trace["additions"]``.
+    Reads ``mol.xf.tracing.atom_added_by`` (rule name + site) without
+    exposing transform ids or ``forestLabel``.
     """
 
-    atom = mol.GetAtomWithIdx(idx)
-    if not is_tracing(mol) or not atom.HasProp("forestLabel"):
+    added = mol.xf.tracing.atom_added_by(idx)
+    if added is None:
         return idx
-    trace = mol._forest["atom_trace"]
-    record = trace["records"].get(atom.GetProp("forestLabel"))
-    if record is None:
-        return idx
-    added = record.get("added_by")
-    if not added:
-        return idx
-    if isinstance(added, str):
-        detail = trace["additions"].get(added)
-        if detail is None:
-            return idx
-    else:
-        detail = added
-    name = detail.get("name")
-    if name is None:
-        rule = detail.get("rule")
-        name = rule if isinstance(rule, str) else getattr(rule, "name", None)
-    site = detail.get("site") or ()
-    if isinstance(site, int):
-        site = (site,)
-    if name is None:
-        return idx
-    return AddedRef(added_by=(name, frozenset(site)))
+    name, site = added
+    return AddedRef(added_by=(name, site))
 
 
 def _site_atoms(site: Site) -> tuple[int, ...]:

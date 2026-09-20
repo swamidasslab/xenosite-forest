@@ -2,10 +2,13 @@
 
 The ``TYPE_CHECKING`` branch is the type of those names. ``Mol._forest`` is
 declared there and is not assigned, so molecules do not share one forest.
-A constructor returns :class:`NoForestMol` when the object it builds has no
-``_forest``. RDKit copies do not keep that attribute. A function that hands
-back a molecule the caller already owned keeps that molecule's type.
-At runtime the same names are the real RDKit objects.
+``Mol._forest`` is declared on the typing stubs and is not assigned, so
+molecules do not share one forest. :class:`ForestMol` means ``_forest`` is
+present; :class:`NoForestMol` means it is absent (wipe / constructor /
+reaction pieces). :class:`TracingMol` means an initialized atom-trace.
+``mol.xf`` / ``_require_forest`` attach forest on demand. Wipe APIs must
+return ``Mol`` / ``NoForestMol``, not claim ``ForestMol``. At runtime these
+names are RDKit ``Mol``.
 
 Argument lists are the C++ signatures Boost printed when each used function
 was called with the wrong arguments, narrowed to the overload the call site
@@ -16,10 +19,16 @@ does not wrap them.
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, Literal, Protocol, overload
 
 if TYPE_CHECKING:
-    from xenosite.refactor_poc.records import Forest, TracingForest, UntracedForest
+    from xenosite.refactor_poc.records import (
+        Forest,
+        Formula,
+        InitializedAtomTrace,
+        TracingForest,
+        UntracedForest,
+    )
 
     class BondType:
         SINGLE: BondType
@@ -72,6 +81,11 @@ if TYPE_CHECKING:
     class Mol:
         _forest: None | Forest
 
+        @property
+        def xf(self) -> Xf:
+            """Ephemeral facade; mints on each read and attaches forest if needed."""
+            ...
+
         def __new__(
             cls, mol: Mol, quickCopy: bool = False, confId: int = -1
         ) -> NoForestMol: ...
@@ -96,31 +110,82 @@ if TYPE_CHECKING:
             maxMatches: int = 1000,
         ) -> tuple[tuple[int, ...], ...]: ...
 
-    class NoTracingMol(Mol):
-        """``atom_trace`` is absent. This does not say whether ``_forest`` exists."""
+    class XfTracing(Protocol):
+        """Atom-trace facade nested under ``mol.xf.tracing`` (see rdkitutil)."""
 
-        # Instance attributes are invariant. These states are narrower on purpose.
-        _forest: None | UntracedForest  # pyright: ignore[reportIncompatibleVariableOverride]
+        @property
+        def mol(self) -> Mol: ...
+        @property
+        def active(self) -> bool: ...
+        @property
+        def depth(self) -> int | None: ...
+        def atom_indices(self, idx: int) -> tuple[int, ...] | None: ...
+        def atom_origin(self, idx: int) -> int | None: ...
+        def atom_added_by(self, idx: int) -> tuple[str, frozenset[int]] | None: ...
+        def _ensure(self) -> TracingMol: ...
+        def _stamp(self) -> TracingMol: ...
+        def _install(self) -> TracingMol: ...
+        def _trace(
+            self, reactant: Mol, info, executed=None
+        ) -> InitializedAtomTrace: ...
 
-    class ForestMol(Mol):
-        """``_forest`` is present. The trace may or may not be."""
+    class Xf(Protocol):
+        """Ephemeral mint-on-read facade (see rdkitutil). Strong parent ref."""
 
-        _forest: Forest  # pyright: ignore[reportIncompatibleVariableOverride]
+        @property
+        def mol(self) -> Mol: ...
+        @property
+        def has_forest(self) -> bool: ...
+        @property
+        def forestmol(self) -> ForestMol: ...
+        @property
+        def forest(self) -> Forest: ...
+        @property
+        def tracing(self) -> XfTracing: ...
+        @property
+        def csmi(self) -> str: ...
+        @property
+        def is_terminal(self) -> bool: ...
+        def clear_structure(self) -> None: ...
+        def _mark_terminal(self, value: bool = True) -> None: ...
+        @property
+        def rings(self) -> dict[int, tuple[tuple[int, ...], ...]]: ...
+        @property
+        def conjugated_systems(self) -> tuple[frozenset[int], ...]: ...
+        @property
+        def aromatic_systems(self) -> tuple[frozenset[int], ...]: ...
+        @property
+        def topol_equiv(self) -> dict[int, int]: ...
+        @property
+        def formula(self) -> Formula: ...
+        def sanitize(self) -> int: ...
+        def smarts_matches(self, smarts: str) -> tuple[dict[int, int], ...]: ...
+        def of_products(
+            self,
+            product_or_product_list: Mol | Sequence[Mol],
+            site_info,
+            executed=None,
+        ) -> list[TracingMol]: ...
 
-    class NoForestMol(NoTracingMol):
-        """No ``_forest``. A missing forest has no trace."""
+    class NoForestMol(Mol):
+        """No ``_forest``. Honest return type for wipe / constructor / reaction pieces."""
 
         _forest: None  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    class ForestNoTracingMol(NoTracingMol, ForestMol):
-        """``_forest`` is present and ``atom_trace`` is absent."""
+    class ForestMol(Mol):
+        """``_forest`` is present. Trace may or may not be initialized."""
 
-        _forest: UntracedForest  # pyright: ignore[reportIncompatibleVariableOverride]
+        _forest: Forest  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    class ForestTracingMol(ForestMol):
+    class TracingMol(ForestMol):
         """``_forest`` is present and ``atom_trace`` is initialized."""
 
         _forest: TracingForest  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    # Compat alias — prefer TracingMol.
+    ForestTracingMol = TracingMol
+    ForestNoTracingMol = ForestMol  # untraced forest: still ForestMol
+    NoTracingMol = Mol  # trace absent; forest may or may not exist
 
     class RWMol(NoForestMol):
         def __new__(cls, m: Mol) -> RWMol: ...
@@ -281,10 +346,10 @@ else:
     MolFromSmarts = Chem.MolFromSmarts
     MolToSmarts = Chem.MolToSmarts
     SanitizeFlags = Chem.SanitizeFlags
-    # Typing-only states. Runtime molecules stay RDKit's Mol; these names
-    # exist so annotations can be imported. They are not a shared forest.
+    # Typing-only brands. Runtime molecules stay RDKit's Mol.
     NoForestMol = Mol
     NoTracingMol = Mol
     ForestMol = Mol
     ForestNoTracingMol = Mol
+    TracingMol = Mol
     ForestTracingMol = Mol

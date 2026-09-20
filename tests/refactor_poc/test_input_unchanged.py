@@ -10,8 +10,6 @@ from xenosite.refactor_poc.rules import (
     Dealkylation,
     Epoxidation,
     Hydroxylation,
-    install_forest,
-    molecule_formula,
 )
 from xenosite.refactor_poc.rulesets import RuleSet
 
@@ -42,7 +40,7 @@ def _assert_parent_and_products(parent, products, parent_depth):
     for product, _info in products:
         child = product._forest["atom_trace"]
         assert child["depth"] == parent_depth + 1
-        assert child["formula"] == molecule_formula(product)
+        assert child["formula"] == product.xf.formula
 
 
 def _assert_untouched(rule, smiles):
@@ -70,7 +68,7 @@ def test_epoxidation_does_not_edit_its_input():
 
 def test_existing_parent_forest_is_kept():
     mol = Chem.MolFromSmiles("CC")
-    mol = install_forest(mol)
+    mol = mol.xf.tracing._stamp()
     mol._forest["atom_trace"]["depth"] = 2
     before = _chemistry(mol)
     products = list(Hydroxylation().metabolize(mol))
@@ -103,4 +101,4 @@ def test_ruleset_does_not_edit_its_input():
     assert "H" in trace["formula"]["counts"]
     assert transform_id in trace["delta_formula"]
     assert trace["delta_formula"][transform_id]["counts"]
-    assert trace["formula"] == molecule_formula(product)
+    assert trace["formula"] == product.xf.formula

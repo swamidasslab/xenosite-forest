@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Generator, Iterator
 
-from xenosite.refactor_poc.rdkit_api import ForestTracingMol
+from xenosite.refactor_poc.rdkit_api import TracingMol
 from xenosite.refactor_poc.rdkitutil import Mol
 from xenosite.refactor_poc.records import ProductInfo
 
@@ -35,7 +35,6 @@ from .rules import (
     ReductiveDehalogenation,
     SulfurOxidation,
     SulfurReduction,
-    ensure_tracing,
 )
 
 
@@ -106,7 +105,7 @@ class RuleSet(ReactionRule):
         unique_csmi: bool = True,
         order_key=None,
         **kwargs,
-    ) -> Generator[tuple[ForestTracingMol, ProductInfo], None, None]:
+    ) -> Generator[tuple[TracingMol, ProductInfo], None, None]:
         """Run each contained rule, then append this set on that product.
 
         The contained rule, including a nested set, has already put itself
@@ -116,7 +115,7 @@ class RuleSet(ReactionRule):
 
         if mol is None:
             raise ValueError("mol is required")
-        mol = ensure_tracing(mol)
+        mol = mol.xf.tracing._stamp()
         if self.is_terminal_product(mol):
             return
 
@@ -136,7 +135,7 @@ class RuleSet(ReactionRule):
                 addition = trace["additions"][trace["transforms"][-1]]
                 addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
-                    csmi = info["csmi"]
+                    csmi = product.xf.csmi
                     if csmi in seen:
                         continue
                     seen.add(csmi)

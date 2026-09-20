@@ -1,5 +1,6 @@
 # TODO
 
+- xf: hang remaining helpers still free (`resonance_bond_maps`, MCS pairwise, `carry_forest` / split, `reordered_forest_labels`); drop thin shims `stamp_forest_labels` / `install_forest` / `ensure_forest` / `forest_trace` once tests use `mol.xf` only
 - Clear remaining `@pytest.mark.regression` xfails in `tests/refactor_poc/` (mostly quinone + rules chemistry; GSH SOM gaps; phaseone wrong-rule / reduction misses) without weakening asserts
 - Deferred until testing is mature: tautomer SMARTS matching (match a tautomer of the pattern; if it hits, infer the tautomerization) for more robust matching without a breaking change, new errors, or a major slowdown — not this phase
 - Later: SMARTS least-common atoms first, and the isotope atom first when a tag is used
