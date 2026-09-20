@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Rewrote `PAIR_ORBITS.md` from scratch (deleted stale briefing). Verified citations: McKay–Piperno 2014 (keep — nauty/Traces); Sharp 1999 (keep — orbitals = orbits on ordered pairs); Surge 2022 / Laffitte et al. 2026 optional adjacent context only. Methods sentence frames classical orbital construction; chemistry novelty is typed sites / directed bond–atom / recursive composite orbiting / stable emission — not “automorphisms on pairs”. Scrubbed false “remap before filter so filters see emit” story in canonicalize_* docs; HEURISTICS unique-edit bullet now names second-order `BondAtomPairOrbitSignature` + truthful canonical-emission wiring (SMARTS/Resonance after filter; pair helper unwired).
+
+## 2026-09-20
+
 - External PAIR_ORBITS review: second-order gap **valid**. `BondAtomPairOrbitSignature` now carries joint `pair_group` (orbit of `((b1,a1),(b2,a2))` under nauty). API: `bond_atom_pair_orbits_from_nauty_generators` + `bond_atom_orbits_from_nauty_generators` (closed site set); `endpoint_bond_atom_sites`; wired through `pair_orbit` / constructors. Benzene proof lives with the other wrong-coarse-key negatives in `test_graph_isomorphism.py` (`test_benzene_bond_atom_pair_needs_joint_orbit`: adjacent ≠ opposite, rotation matches; old ends-only key collapses). Skipped name/swap_group-default fixes (user not worried). Caveats: `topol_equiv` = CIP ranks not automorphism orbits; stereo / dative out of primary scope.
 
 ## 2026-09-20
