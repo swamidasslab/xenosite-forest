@@ -28,7 +28,7 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitize_catch,
     split_fragments,
 )
-from xenosite.refactor_poc.records import AtomRef, Site, _flat_ints
+from xenosite.refactor_poc.records import AtomRef, Site, SiteInfo, _flat_ints
 from xenosite.refactor_poc.rules import (
     Dealkylation,
     Dehydrogenation,
@@ -554,26 +554,18 @@ def _alkyl_bond_raises(mol: Mol, atom_idx, diff):
     return False
 
 
-def _site_could_help(site: Site, info: dict[str, object], diff: AtomDiff, mol: Mol) -> bool:
+def _site_could_help(site: Site, info: SiteInfo, diff: AtomDiff, mol: Mol) -> bool:
     """``filter_sites`` sees one resolved effect and the local atom diff."""
 
-    effect = info.get("options") or {}
-    if not isinstance(effect, dict):
-        effect = {}
+    effect = info["options"]
     atoms = _flat_ints(site)
     if effect.get("cleaves"):
         return diff.site_is_cleavage(atoms)
 
-    ends = info.get("ends")
-    end_atoms = info.get("end_atoms")
-    if (
-        isinstance(ends, (list, tuple))
-        and isinstance(end_atoms, (list, tuple))
-        and len(ends) == len(end_atoms)
-    ):
+    if "ends" in info:
+        ends = info["ends"]
+        end_atoms = info["end_atoms"]
         for atom, end in zip(end_atoms, ends):
-            if not isinstance(end, dict) or not isinstance(atom, int):
-                continue
             if _effect_adds_oxygen(end) and atom not in diff.needs_oxygen:
                 return False
             # An alkyl partner turns the ring bond into an exocyclic double
@@ -594,9 +586,9 @@ def _site_could_help(site: Site, info: dict[str, object], diff: AtomDiff, mol: M
         ):
             return False
 
-    path_ends = info.get("path_ends") or ()
-    if not isinstance(path_ends, (set, frozenset, list, tuple)):
-        path_ends = ()
+    path_ends: frozenset[int] | tuple[()] = (
+        info["path_ends"] if "path_ends" in info else ()
+    )
     if effect.get("dearomatizes"):
         scope = atoms | set(path_ends)
         if not (scope & set(diff.loses_aromaticity)):
@@ -706,7 +698,7 @@ def _step(mol: Mol, rule_name: str, site: Site) -> _PlanStep:
     return _PlanStep(rule_name, tuple(_atom_ref(mol, idx) for idx in atoms))
 
 
-def _steps_for(mol: Mol, info):
+def _steps_for(mol: Mol, info: SiteInfo):
     """Phase-I steps for one accepted edit.
 
     QuinoneFormation is not itself a step. The hop stands in for the
@@ -714,9 +706,12 @@ def _steps_for(mol: Mol, info):
     follows them.
     """
 
-    if info["rule"].name == "QuinoneFormation":
+    rule_name = info["rule"].name
+    if rule_name is None:
+        return ()
+    if rule_name == "QuinoneFormation":
         return _quinone_phase1(mol, info)
-    return (_step(mol, info["rule"].name, info["site"]),)
+    return (_step(mol, rule_name, info["site"]),)
 
 
 def _bonded(mol: Mol, idx, atomic_num):
@@ -729,7 +724,7 @@ def _bonded(mol: Mol, idx, atomic_num):
     return None
 
 
-def _quinone_phase1(mol: Mol, info):
+def _quinone_phase1(mol: Mol, info: SiteInfo):
     """Hydroxylations that supply missing oxygens, then one dehydrogenation.
 
     An end that already carries oxygen keeps that atom. An end that
@@ -738,8 +733,10 @@ def _quinone_phase1(mol: Mol, info):
     required: the partner atom is the neighbor already on ``mol``.
     """
 
-    ends = tuple(info.get("ends") or ())
-    end_atoms = tuple(info.get("end_atoms") or ())
+    if "ends" not in info:
+        return (_step(mol, "Dehydrogenation", info["site"]),)
+    ends = info["ends"]
+    end_atoms = info["end_atoms"]
     hydroxylations = []
     dh_refs = []
     for end, atom in zip(ends, end_atoms):
@@ -983,16 +980,16 @@ def find_path(
                 continue
             seen.add(child_smiles)
 
-            options = por.info.get("options")
-            cleaves = isinstance(options, dict) and bool(options.get("cleaves"))
+            options = por.info["options"]
+            cleaves = bool(options.get("cleaves"))
             if len(finished) == 1 and cleaves:
-                opens = walk.opens + (_cleavage_site(por.info.get("site")),)
+                opens = walk.opens + (_cleavage_site(por.info["site"]),)
                 sides = walk.sides
             elif len(finished) > 1:
                 opens = walk.opens
                 sides = walk.sides + tuple(
                     CleavageSide(
-                        site=_cleavage_site(por.info.get("site")),
+                        site=_cleavage_site(por.info["site"]),
                         side=smiles,
                         opens=walk.opens,
                     )

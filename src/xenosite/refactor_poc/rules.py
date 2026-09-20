@@ -56,8 +56,11 @@ from xenosite.refactor_poc.records import (
     Formula,
     InitializedAtomTrace,
     KekuleParents,
+    PairSiteInfo,
     PatternInfo,
     Site,
+    SiteInfo,
+    SmartsSiteInfo,
     TraceAddition,
     When,
 )
@@ -97,7 +100,7 @@ class ProductsOfReaction(NamedTuple):
     ``(product, info)`` pair and is what callers should use.
     """
 
-    info: dict[str, object]
+    info: SiteInfo
     products: list[Mol]
 
 
@@ -235,12 +238,13 @@ class ReactionRule:
                 assert is_tracing(ordered)
                 # canonicalize deep-copies the forest; keep the rule's
                 # PatternInfo object as the addition's pattern link.
-                pattern = info.get("pattern")
-                if _is_pattern(pattern):
-                    tid = ordered._forest["atom_trace"]["transforms"][-1]
-                    ordered._forest["atom_trace"]["additions"][tid]["pattern"] = (
-                        pattern
-                    )
+                if "pattern" in info:
+                    pattern = info["pattern"]
+                    if _is_pattern(pattern):
+                        tid = ordered._forest["atom_trace"]["transforms"][-1]
+                        ordered._forest["atom_trace"]["additions"][tid]["pattern"] = (
+                            pattern
+                        )
 
                 if unique_csmi:
                     if csmi in seen:
@@ -319,7 +323,7 @@ class ReactionRule:
 
 
 FilterRules = Callable[[ReactionRule, PatternInfo], bool]
-FilterSites = Callable[[Site, dict[str, object]], bool]
+FilterSites = Callable[[Site, SiteInfo], bool]
 
 
 def __getattr__(name: str) -> object:
@@ -893,7 +897,7 @@ def _cleavage_breaks_ring(
 
 def merge_effects(
     left: Effect, right: Effect, both_aromatic: bool
-) -> dict[str, object]:
+) -> Effect:
     """One effect for a pair. Per-end detail stays on ``info["ends"]``."""
 
     needs = (left.get("needs") or "") + (right.get("needs") or "")
@@ -905,8 +909,6 @@ def merge_effects(
         "dearomatizes": bool(can and both_aromatic),
         "methide": bool(left.get("methide")) ^ bool(right.get("methide")),
         "needs": needs,
-        "partners": (left.get("partner", ""), right.get("partner", "")),
-        "aromatic": bool(both_aromatic),
     }
 
 
@@ -1089,7 +1091,7 @@ class SmartsReactionRule(ReactionRule):
                     if not site:
                         continue
                     effect = resolve_effect(context, mapped, pattern)
-                    info: dict[str, object] = {
+                    info: SmartsSiteInfo = {
                         "site": site,
                         "rule": self,
                         "options": effect,
@@ -1548,7 +1550,7 @@ EDITS: dict[
 
 def _merge_options(
     left: Effect, right: Effect, dearomatizes: bool
-) -> dict[str, object]:
+) -> Effect:
     return merge_effects(left, right, dearomatizes)
 
 
@@ -1643,7 +1645,7 @@ class ResonanceRule(SmartsReactionRule):
                 if not site:
                     continue
                 effect = resolve_effect(context, mapped, pattern)
-                info: dict[str, object] = {
+                info: SmartsSiteInfo = {
                     "site": site,
                     "rule": self,
                     "options": effect,
@@ -1772,7 +1774,7 @@ class ResonancePairRule(ResonanceRule):
                         PatternInfo,
                         dict[int, int],
                         PatternInfo,
-                        dict[str, object],
+                        PairSiteInfo,
                     ]
                 ] = []
                 both_aromatic = (
@@ -1789,7 +1791,7 @@ class ResonancePairRule(ResonanceRule):
                     site = frozenset((site_a, site_b))
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
-                    preview: dict[str, object] = {
+                    preview: PairSiteInfo = {
                         "site": site,
                         "rule": self,
                         "options": merge_effects(end1, end2, both_aromatic),
@@ -1840,9 +1842,7 @@ class ResonancePairRule(ResonanceRule):
                         products = list(sanitized_fragments(rw, counters).pieces)
                         if not products:
                             continue
-                        info = dict(preview)
-                        info["path"] = tuple(path)
-                        yield ProductsOfReaction(info=info, products=products)
+                        yield ProductsOfReaction(info=preview, products=products)
                         break
 
 

@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+- `FilterSites` second arg is now `SiteInfo = SmartsSiteInfo | PairSiteInfo` (closed, total=True) in `records.py`. Shared core: site, rule, options. SMARTS/resonance adds rxn_num, pattern; pair adds ends, end_atoms, end_maps, path_ends.
+- Dropped unused ad-hoc keys that closed schemas reject: pair `info["path"]`, and `merge_effects` keys `partners` / `aromatic` (never read). Per-end detail stays on `ends`.
+- pyright poc modules: 0 errors. `pytest tests/refactor_poc -q`: 126 passed.
+
+## 2026-09-19
+
 - refactor_poc suite: 126 passed. No skips/xfails. Default-set Phase I rules already have chemical coverage via correspondence/parity; added contract tests for `ensure_forest` identity / `get_forest` read-only, Addition↔PatternInfo link, and FutureSite `AtomRef` nesting. Left FilterSites as `dict[str, object]`.
 
 ## 2026-09-19

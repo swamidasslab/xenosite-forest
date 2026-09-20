@@ -117,3 +117,13 @@ on the rule. A caller who wants no thiol sites uses `filter_sites` and reads
 `symbol`.
 
 Old tests: `tests/test_conjugates.py`.
+
+## Pair info `path` and merge_effects `partners` / `aromatic`
+
+Status: not decided.
+
+`ResonancePairRule` used to stash the alternating-path atom list on
+`ProductsOfReaction.info["path"]` after `filter_sites`. `merge_effects`
+also wrote `partners` and `aromatic` onto the merged options. Nothing in
+the poc read those keys. Closed `SiteInfo` / `Effect` TypedDicts reject
+them; the writes are gone. Per-end partners stay on `info["ends"]`.

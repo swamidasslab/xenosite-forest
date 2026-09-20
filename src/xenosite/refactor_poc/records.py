@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NamedTuple, TypedDict
+from typing import TYPE_CHECKING, NamedTuple, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
-    # rules.py imports Effect, PatternInfo, and When from this module.
+    # rules.py imports Effect, PatternInfo, SiteInfo, and When from this module.
     from xenosite.refactor_poc.rdkit_api import Mol
     from xenosite.refactor_poc.rules import ReactionRule
 
@@ -155,6 +155,35 @@ class PatternInfo(TypedDict, total=False):
     # are written first so the match cannot land on a different atom.
     pin: tuple[int, ...]
     skip_same_rings: bool
+
+
+class _SiteInfoCore(TypedDict):
+    """Fields every ``filter_sites`` bag carries before an edit."""
+
+    site: Site
+    rule: ReactionRule
+    options: Effect
+
+
+class SmartsSiteInfo(_SiteInfoCore):
+    """Bag from :meth:`SmartsReactionRule.metabolites` and
+    :meth:`ResonanceRule.metabolites` for ``filter_sites``.
+    """
+
+    rxn_num: int
+    pattern: PatternInfo
+
+
+class PairSiteInfo(_SiteInfoCore):
+    """Bag from :meth:`ResonancePairRule.pair_metabolites` for ``filter_sites``."""
+
+    ends: tuple[Effect, Effect]
+    end_atoms: tuple[int, int]
+    end_maps: tuple[dict[int, int], dict[int, int]]
+    path_ends: frozenset[int]
+
+
+SiteInfo: TypeAlias = SmartsSiteInfo | PairSiteInfo
 
 
 class Addition(NamedTuple):
