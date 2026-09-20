@@ -853,7 +853,7 @@ def _finish(
     """Sanitize and trace each fragment. Failed sanitizes are dropped.
 
     Does not renumber atoms or compute SMILES. Callers use ``mol.xf.csmi``
-    when identity is needed. Tracing is ``parent.xf.of_products(...)``.
+    when identity is needed. Tracing is ``parent.xf._of_products(...)``.
     """
 
     pieces = []
@@ -867,7 +867,7 @@ def _finish(
             pieces.append(piece)
     if not pieces:
         return []
-    return parent.xf.of_products(pieces, info)
+    return parent.xf._of_products(pieces, info)
 
 
 def _keep_fragment(

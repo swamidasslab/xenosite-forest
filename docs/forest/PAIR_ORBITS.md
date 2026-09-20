@@ -96,10 +96,9 @@ frozenset and ``discovered_site`` holds the ordered map-order tuple;
 | `BondPairOrbitSignature` | bond–bond; same shape |
 
 Assembly: `site_orbit` / `pair_orbit` → `site_signature` /
-`pair_site_signature`. Public xf: `atom_pair_orbit_key` /
-`bond_pair_orbit_key` / `site_pair_orbits` /
-`pair_orbit_backend`. Env: `XENOSITE_PAIR_ORBIT_BACKEND` ∈
-`{nauty, smiles, none}`.
+`pair_site_signature`. These live in `graph_isomorphism.py` and underscored
+`mol.xf._*` wrappers (forest-internal, not public xf API). Backend is always
+**nauty** (`pynauty` is a required package dependency).
 
 ---
 
@@ -166,7 +165,11 @@ before presentation.
 
 ## 6. How to assess (three checks)
 
-Prefer `uv run` with pynauty (nauty default when importable).
+**pynauty is required.** Unique-edit always uses the nauty backend
+(`get_pair_orbit_backend()` → `"nauty"`). Install with the package
+dependencies (`pynauty` is listed in `pyproject.toml` `dependencies`, not an
+optional extra). RDKit isotope recipes remain in-tree for profiling / oracle
+tests only — not a product fallback.
 
 ### A. HQ collapse
 
@@ -186,8 +189,7 @@ Also: benzene meta share orbit, meta ≠ para. Suites: `test_pair_signatures.py`
 ## 7. Caveats (do not overclaim)
 
 - `TRIVIAL_PAIR_GROUP` (`-1`) when either end is a singleton topeqiv class, or
-  backend `none` for multi–multi, or second-order when nauty unavailable /
-  all involved classes are singletons.
+  second-order when all involved classes are singletons.
 - `atom_bond` ordered ≡ unordered — do not invent a split.
 - `topol_equiv` is RDKit `CanonicalRankAtoms(..., breakTies=False)` (CIP
   ranks), **not** proven automorphism orbits. `TRIVIAL_PAIR_GROUP` is safe
@@ -195,8 +197,8 @@ Also: benzene meta share orbit, meta ≠ para. Suites: `test_pair_signatures.py`
 - Stereo: ordinary tetrahedral / E–Z via CIP / bond stereo labels on the
   colored graph; enhanced stereo groups and nonstandard stereo are not fully
   represented. Undirected nauty graph — directed dative bonds out of scope.
-- Isotope (`smiles`) backend is for profiling; nauty is unique-edit authority
-  when pynauty is importable.
+- Isotope (`site_pair_orbits_smiles` / `*_isotope`) helpers are for profiling /
+  oracle comparison only; nauty is the unique-edit authority.
 - Narrowing SMARTS ≠ `swap_group` replacement for ResonancePair same-role
   couples (HEURISTICS: not approved).
 

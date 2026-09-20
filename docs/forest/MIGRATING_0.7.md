@@ -29,7 +29,7 @@ for site, products in rule.metabolize(mol):
 Common kwargs gone on live `metabolize`:
 `only_emit_topologically_distinct_sites`, `tag_atoms` / `do_not_tag_atoms`,
 `format_output_site`, `only_unique`, `only_largest_fragment`,
-`attach_phase1_steps`, `include_sites` / `exclude_sites`.
+`include_sites` / `exclude_sites`.
 
 ### Is (0.7)
 
@@ -135,10 +135,16 @@ Rules declare `site_kind`: `"atom"` | `"bond"` | `"directed_bond"` |
 | `AtomTracker` tagging kwargs      | Prefer `mol.xf` / `mol.xf.tracing` (`AtomTracker` is deprecated) |
 
 
-`mol.xf` is the public molecule accessor (csmi, matches, tracing, …) — not
-the forest schema. It caches into private `_forest`. Full surface:
-[`XF.md`](XF.md). Cache layout TypedDicts (`Forest` / `Structure` /
-`AtomTrace`) live in
+`mol.xf` is the public molecule accessor (csmi, matches, tracing, …). It
+caches into private `_forest`. Full surface: [`XF.md`](XF.md). Step-by-step
+replacements for `AtomTracker.tags` / `depths` / `topol_equiv` / parent maps:
+[Replacing AtomTracker](XF.md#tutorial-replacing-atomtracker-with-molxf).
+`AtomTracker` still imports but emits `DeprecationWarning` on use.
+
+Pair-orbit unique-edit requires **pynauty** (always nauty). See
+[`PAIR_ORBITS.md`](PAIR_ORBITS.md).
+
+Cache layout TypedDicts (`Forest` / `Structure` / `AtomTrace`) live in
 [`records.py`](../../src/xenosite/forest/records.py); exact `_forest`
 details are unstable — use `xf`, do not poke `_forest`.
 
@@ -193,7 +199,6 @@ Do not treat cross-rule INFO as a unique-edit failure. Do not ignore
 `phase1_steps(mol, site)` on every rule. `StepPlan` / `AtomRef` /
 `Linearization` are still re-exported from
 `xenosite.forest` (implementation under the archive directory for now).
-- `attach_phase1_steps=True` on `metabolize` is gone.
 - `find_path(reactant, target, ruleset=..., max_nodes=..., counters=..., use_filters=..., **kwargs)` — plan-guided search. Older guided knobs
 (`max_expansions` as the public mode, PathContext formula algebra, …) are
 not the live API; see `DROPPED.md`.
@@ -221,7 +226,8 @@ on GitHub (not exercised by CI).
 2. Read `info["site"]`; product SMILES via `product.xf.csmi` (or
   `frozenset(p.xf.csmi for p in products)` for emission identity). Drop
   `(rule_name, site)` unpacking — there is no `info["csmi"]`.
-3. Replace `include_sites` / tagging kwargs with `filter_sites` / `mol.xf`.
+3. Replace `include_sites` / tagging kwargs with `filter_sites` / `mol.xf`
+   ([AtomTracker tutorial](XF.md#tutorial-replacing-atomtracker-with-molxf)).
 4. Rename `SmartsReactionRule` / `.smarts` → `SmirksReactionRule` / `.smirks`.
 5. Expect `SiteDeduplicationWarning` on true unique-edit misses; cross-rule overlaps
   are INFO only.

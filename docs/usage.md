@@ -67,11 +67,6 @@ rules.Epoxidation().phase1_steps(Chem.MolFromSmiles("C=C"), frozenset({0, 1}))
 # → Epoxidation[0, 1]
 ```
 
-### Stamp while metabolizing
-
-Opt in with `attach_phase1_steps=True`. Read stamps via `StepPlan` — do not inspect
-mol props by name (`from_mol` raises if missing; `try_from_mol` returns `None`).
-
 ```python
 from rdkit import Chem
 from xenosite.forest import rules

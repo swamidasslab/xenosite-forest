@@ -145,7 +145,7 @@ def test_one_bond_alcohol_emits_both_bond_endpoints():
     assert len(site) == 2
     mapped = mol.xf.smarts_matches("[#6h:1]-[#8H1:2]")[0]
     assert site == frozenset({mapped[1], mapped[2]})
-    sig = mol.xf.atom_pair_orbit_key(site)
+    sig = mol.xf._atom_pair_orbit_key(site)
     assert isinstance(sig, AtomPairOrbitSignature)
     assert sig.ordered is False
 

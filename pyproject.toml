@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "rdkit>=2022.3.3",
+    "pynauty",
 ]
 keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
 
@@ -37,10 +38,6 @@ network = [
 # Marker keeps forest's requires-python>=3.10 resolvable; predict itself needs >=3.11.
 predict = [
     "xenosite-predict>=0.4.2; python_version >= '3.11'",
-]
-# Pair-orbit oracle. Tests skip when it is not installed. Not a default dependency.
-pynauty = [
-    "pynauty",
 ]
 
 [project.urls]

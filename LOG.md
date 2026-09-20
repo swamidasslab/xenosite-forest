@@ -2,6 +2,18 @@
 
 ## 2026-09-20
 
+- **pynauty required; no SMILES pair-orbit product path.** `pynauty` moved to
+  `pyproject.toml` dependencies. `get_pair_orbit_backend()` always `"nauty"`;
+  removed `PynautyRecommendedWarning`, env override, and smiles dispatcher.
+  Isotope helpers remain for oracle/profile tests only. Docs: PAIR_ORBITS /
+  XF internals / MIGRATING / CHANGELOG.
+- **AtomTracker deprecated → xf.tracing.** Tutorial in `docs/forest/XF.md`;
+  helpers `depths()` / `index_at` / `added_indices` / `root_map`. Pair-orbit /
+  `_of_products` stay underscored (not public xf). Scrubbed
+  `attach_phase1_steps` from public usage/MIGRATING (archive-only; not a live
+  public contract).
+
+
 - **Drop `info["csmi"]`.** No lazy/eager emission frozenset on ProductInfo
   (zombie risk from retained mols; extra API). Callers use `product.xf.csmi`
   or `frozenset(p.xf.csmi for p in products)`. Internal unique_csmi / check /

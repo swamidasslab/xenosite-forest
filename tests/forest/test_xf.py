@@ -1,4 +1,4 @@
-"""ForestMol.xf facade: mint-on-read, forestmol bridge, of_products, terminal conjugates."""
+"""ForestMol.xf facade: mint-on-read, forestmol bridge, tracing, terminal conjugates."""
 
 import gc
 import weakref
@@ -98,6 +98,29 @@ def test_stamp_installs_tracing_without_exposing_labels():
     assert "forestLabel" not in dir(mol.xf.tracing)
 
 
+def test_tracing_migration_helpers_on_hydroxylation_product():
+    """depths / added_indices / root_map / index_at replace AtomTracker patterns."""
+
+    products, _info = next(Hydroxylation().metabolize(Chem.MolFromSmiles("CCO")))
+    product = products[0]
+    t = product.xf.tracing
+    assert t.active
+    assert t.depth == 1
+    assert t.depths() == (0, 1)
+    added = t.added_indices()
+    assert added
+    for i in added:
+        assert t.atom_root(i) is None
+        assert t.atom_added_by(i) is not None
+        assert t.index_at(i, 0) is None
+        assert t.index_at(i, 1) == i
+    roots = t.root_map()
+    assert roots
+    assert not (set(roots) & added)
+    for cur, root in roots.items():
+        assert t.index_at(cur, 0) == root
+
+
 def test_of_products_single_and_list():
     reactant = Chem.MolFromSmiles("CCO")
     reactant = reactant.xf.tracing._stamp()
@@ -113,13 +136,13 @@ def test_of_products_single_and_list():
             break
     assert pieces and site_info is not None
 
-    finished_one = work.xf.of_products(pieces[0], site_info)
+    finished_one = work.xf._of_products(pieces[0], site_info)
     assert len(finished_one) == 1
     assert finished_one[0].xf.tracing.active
     assert finished_one[0].xf.tracing.depth == 1
     assert getattr(pieces[0], "_forest", None) is None
 
-    finished_many = work.xf.of_products(pieces[:2], site_info)
+    finished_many = work.xf._of_products(pieces[:2], site_info)
     assert all(p.xf.tracing.active for p in finished_many)
 
 

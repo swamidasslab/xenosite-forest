@@ -1,18 +1,15 @@
-"""Pair-orbit validation: invariants + hand cases + optional pynauty oracle.
+"""Pair-orbit validation: invariants + hand cases + pynauty oracle.
 
-Invariant-backed (no pynauty required): benzene meta≠para atom–atom orbits;
-signature shapes; TRIVIAL_PAIR_GROUP; forest cache; bond-pair hand sizes;
-naphthalene hand pairs; quinone ortho/para unique-edit.
+pynauty is a required dependency. Invariants: benzene meta≠para atom–atom
+orbits; signature shapes; TRIVIAL_PAIR_GROUP; forest cache; bond-pair hand
+sizes; naphthalene hand pairs; quinone ortho/para unique-edit.
 
-Oracle-backed (pynauty): isotope vs nauty partitions and PairGroupIds for
+Oracle: isotope (profiling) vs nauty partitions and PairGroupIds for
 atom–atom / bond–bond; nauty cache fills both same-kind modes up front.
-
-Dispatcher: isotope path when pynauty absent.
 """
 
 from __future__ import annotations
 
-import importlib.util
 from collections import defaultdict
 from itertools import combinations
 
@@ -69,12 +66,25 @@ def _rank_key(mol: Mol, left: int, right: int):
     )
 
 
-def _has_pynauty() -> bool:
-    return importlib.util.find_spec("pynauty") is not None
-
-
 def _group_sizes(groups: dict) -> list[int]:
     return sorted(len(v) for v in groups.values())
+
+
+
+def test_pair_orbit_backend_is_nauty():
+    from xenosite.forest.graph_isomorphism import (
+        get_pair_orbit_backend,
+        set_pair_orbit_backend,
+    )
+
+    assert get_pair_orbit_backend() == "nauty"
+    set_pair_orbit_backend(None)
+    assert get_pair_orbit_backend() == "nauty"
+    set_pair_orbit_backend("nauty")
+    with pytest.raises(ValueError, match="only 'nauty'"):
+        set_pair_orbit_backend("smiles")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="only 'nauty'"):
+        set_pair_orbit_backend("none")  # type: ignore[arg-type]
 
 
 def test_benzene_meta_and_para_share_ranks_but_not_atom_pair_orbits():
@@ -147,10 +157,7 @@ def test_multi_multi_materializes_forest_cache_once():
     sig = atom_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(sig, AtomPairOrbitSignature)
     structure = mol._forest["cache"]
-    if _has_pynauty():
-        cache_key = "site_pair_orbits_nauty"
-    else:
-        cache_key = "site_pair_orbits_smiles"
+    cache_key = "site_pair_orbits_nauty"
     assert isinstance(sig.pair_group, int)
     assert sig.pair_group >= 0
     cached = structure[cache_key]
@@ -258,25 +265,12 @@ def test_quinone_unique_edit_keeps_ortho_and_para():
     assert by_product["O=C1C=CC=CC1=O"].isdisjoint(by_product["O=C1C=CC(=O)C=C1"])
 
 
-def test_dispatcher_uses_isotope_pair_group_when_pynauty_absent():
-    if _has_pynauty():
-        pytest.skip("pynauty installed; dispatcher uses nauty pair_group")
-    mol = _mol("c1ccccc1")
-    sig = atom_pair_orbit_key(mol, frozenset({0, 3}))
-    assert sig is not None
-    assert isinstance(sig.pair_group, int)
-    assert sig.pair_group >= 0
-    cached = mol._forest["cache"]["site_pair_orbits_smiles"]
-    assert (
-        cached["atom_atom"][sig.groups][tuple(sorted((0, 3)))] == sig.pair_group
-    )
-    bsig = bond_pair_orbit_key(mol, frozenset({0, 3}))
-    assert bsig is not None
-    assert isinstance(bsig.pair_group, int)
-
 
 # ---------------------------------------------------------------------------
-# Oracle (pynauty)
+# Oracle
+
+# ---------------------------------------------------------------------------
+# Oracle (isotope vs required nauty)
 # ---------------------------------------------------------------------------
 
 
@@ -298,7 +292,6 @@ def _orbit_partition_isotope(mol: Mol, mode: str) -> set[frozenset[tuple[int, in
 
 
 def test_oracle_isotope_vs_pynauty_partitions():
-    pytest.importorskip("pynauty")
     for smiles in _ORACLE_MOLSMILES:
         mol = _mol(smiles)
         for mode in ("atom_atom", "bond_bond"):
@@ -313,7 +306,6 @@ def test_oracle_isotope_vs_pynauty_partitions():
 def test_oracle_canonical_pair_group_ids_agree():
     """Partitions and sequential CIP PairGroupIds agree across backends."""
 
-    pytest.importorskip("pynauty")
     for smiles in _ORACLE_MOLSMILES:
         mol = _mol(smiles)
         smiles_orbits = site_pair_orbits_smiles(mol)
@@ -338,7 +330,6 @@ def test_oracle_canonical_pair_group_ids_agree():
 
 
 def test_nauty_cache_fills_all_modes_up_front():
-    pytest.importorskip("pynauty")
     mol = _mol("c1ccccc1")
     sig = atom_pair_orbit_key(mol, frozenset({0, 3}))
     assert isinstance(sig, AtomPairOrbitSignature)

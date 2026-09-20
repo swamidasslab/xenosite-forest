@@ -33,11 +33,20 @@ Previous forest (0.6.x API): archive directory
   Within-rule unique-edit misses still raise ``SiteDeduplicationWarning``.
 - ``find_path`` closers distinguish Hydrogenation (adds H) from
   Dehydrogenation (removes H).
+- **``pynauty`` is required** for unique-edit / pair orbits (nauty backend
+  only). No RDKit/SMILES pair-orbit product backend.
+
+### Deprecated
+
+- ``AtomTracker`` — prefer ``mol.xf`` / ``mol.xf.tracing``. Migration tutorial:
+  [`docs/forest/XF.md`](docs/forest/XF.md#tutorial-replacing-atomtracker-with-molxf).
 
 ### Added
 
 - Opt-in ``canonical_emitted_sites`` on metabolize / path search.
 - Pair-orbit unique-edit (``swap_group``) for ResonancePair ends.
+- ``mol.xf.tracing`` helpers for AtomTracker migration: ``depths()``,
+  ``index_at``, ``added_indices``, ``root_map``.
 
 
 ## [0.6.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.6.1) - 2026-09-19

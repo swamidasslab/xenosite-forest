@@ -1,8 +1,9 @@
 """Site-pair orbits under the molecular automorphism group.
 
 **Source of truth:** :func:`all_site_pair_orbits_nauty` — six families via
-colored pynauty graphs (atoms + bond-as-vertex). RDKit isotope recipes remain
-callable for profiling but are not the unique-edit authority.
+colored pynauty graphs (atoms + bond-as-vertex). ``pynauty`` is a required
+dependency. RDKit isotope recipes remain callable for profiling / oracle
+tests only; they are not a unique-edit product backend.
 
 Families::
 
@@ -30,16 +31,16 @@ Ordered vs unordered for ResonancePair unique-edit reads
 embeddings and formula bags live here too; rule chemistry stays in
 ``rules`` / ``records``.
 
-Public access is ``mol.xf.atom_pair_orbit_key`` / ``bond_pair_orbit_key`` /
-``site_pair_orbits`` / ``pair_orbit_backend``, plus :func:`site_signature` /
-:func:`pair_site_signature`.
+Forest-internal xf wrappers (not public API): ``mol.xf._atom_pair_orbit_key`` /
+``_bond_pair_orbit_key`` / ``_site_pair_orbits`` / ``_pair_orbit_backend``.
+Callers of unique-edit use :func:`site_signature` / :func:`pair_site_signature`
+(and ``metabolize``); see ``docs/forest/PAIR_ORBITS.md``.
 """
 
 
 from __future__ import annotations
 
 import importlib
-import os
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from itertools import (
@@ -91,10 +92,8 @@ OrbitFamily = Literal[
 ]
 SiteKind = Literal["atom", "bond"]
 MarkedSite = tuple[SiteKind, int]
-# Dispatcher backends. ``smiles`` is RDKit isotope marking — implemented and
-# callable, but not the default when pynauty is absent (does not improve speed).
-# Unique-edit prefers nauty; isotope is not the source of truth for groups.
-PairOrbitBackend = Literal["nauty", "smiles", "none"]
+# Unique-edit pair-orbit backend. Nauty/pynauty only (required dependency).
+PairOrbitBackend = Literal["nauty"]
 
 # Re-export schema types owned by records (call sites historically imported here).
 __all__ = (
@@ -104,6 +103,7 @@ __all__ = (
     "PairMode",
     "OrbitFamily",
 )
+
 
 PAIR_MODES: dict[PairMode, tuple[SiteKind, SiteKind]] = {
     "atom_atom": ("atom", "atom"),
@@ -123,15 +123,10 @@ _CACHE_NAUTY = "site_pair_orbits_nauty"
 _CACHE_NAUTY_FAMILIES = "site_pair_orbits_nauty_families"
 _CACHE_SMILES = "site_pair_orbits_smiles"
 _CACHE_LEX_REPS = "lexical_orbit_representatives"
-_ENV_BACKEND = "XENOSITE_PAIR_ORBIT_BACKEND"
 _MEMBERSHIP_BASE = 4
-# Documented trivial pair_group when either end is a singleton topeqiv group,
-# or when backend is ``none`` for multi–multi (cheap path; no isotope tables).
+# Documented trivial pair_group when either end is a singleton topeqiv group.
 # Reserved negative id so sequential orbit ids stay 0..n-1.
 TRIVIAL_PAIR_GROUP: Final[PairGroupId] = PairGroupId(-1)
-
-# Process-wide override. ``None`` → env var → auto (nauty if importable else none).
-_backend_override: PairOrbitBackend | None = None
 
 SitePairOrbitGroups = dict[OrbitFamily, list[list[tuple[int, int]]]]
 
@@ -145,25 +140,30 @@ LexicalRepTable: TypeAlias = dict[OrbitCandidate, OrbitCandidate]
 
 
 def get_pair_orbit_backend() -> PairOrbitBackend:
-    """Resolved backend: override, else ``XENOSITE_PAIR_ORBIT_BACKEND``, else auto."""
+    """Pair-orbit backend for unique-edit. Always ``nauty`` (pynauty required)."""
 
-    if _backend_override is not None:
-        return _backend_override
-    env = os.environ.get(_ENV_BACKEND, "").strip().lower()
-    if env in ("nauty", "smiles", "none"):
-        return cast(PairOrbitBackend, env)
-    if _pynauty_available():
-        return "nauty"
-    return "none"
+    return "nauty"
 
 
 def set_pair_orbit_backend(backend: PairOrbitBackend | None) -> None:
-    """Set process-wide backend, or ``None`` to clear (env / auto resume)."""
+    """No-op compatibility shim. Only ``nauty`` / ``None`` are accepted."""
 
-    global _backend_override
-    if backend is not None and backend not in ("nauty", "smiles", "none"):
-        raise ValueError(f"unknown pair_orbit_backend: {backend!r}")
-    _backend_override = backend
+    if backend is not None and backend != "nauty":
+        raise ValueError(
+            f"unknown pair_orbit_backend: {backend!r}; only 'nauty' is supported"
+        )
+
+
+def _require_pynauty() -> object:
+    """Import pynauty or raise a clear ImportError if missing."""
+
+    try:
+        return importlib.import_module("pynauty")
+    except ImportError as err:
+        raise ImportError(
+            "pynauty is required for Metabolic Forest unique-edit / pair orbits. "
+            "Install the package dependencies (pynauty is no longer optional)."
+        ) from err
 
 
 def canonical_emitted_sites_requested(kwargs: Mapping[str, object]) -> bool:
@@ -376,7 +376,7 @@ def atom_bond_generators_nauty(
     ``docs/forest/PAIR_ORBITS.md`` References.
     """
 
-    nauty = cast(_NautyModule, importlib.import_module("pynauty"))
+    nauty = cast(_NautyModule, _require_pynauty())
     graph, n_atoms, n_bonds = _colored_graph(mol, nauty, include_stereo=include_stereo)
     raw_generators, _, _, _, _ = nauty.autgrp(graph)
     generators: list[tuple[tuple[int, ...], tuple[int, ...]]] = []
@@ -675,32 +675,24 @@ def _pair_orbit_signature(
     if not _both_ends_multi(mol, mode, left, right):
         return _make_signature(mode, groups, TRIVIAL_PAIR_GROUP)
 
-    backend = get_pair_orbit_backend()
-    if backend == "none":
-        # Cheap path: ranks already on the signature; skip isotope tables.
-        return _make_signature(mode, groups, TRIVIAL_PAIR_GROUP)
-    if backend == "nauty":
-        tables = _ensure_nauty_tables(mol)
-    else:
-        tables = _ensure_smiles_tables(mol)
+    tables = _ensure_nauty_tables(mol)
     pair_group = tables[mode][groups][pair]
     return _make_signature(mode, groups, pair_group)
 
 
 def ensure_site_pair_orbit_tables(
     mol: Mol, backend: PairOrbitBackend | None = None
-) -> SitePairOrbitTables | None:
-    """Materialize nested forest tables for ``backend`` (default: resolved).
+) -> SitePairOrbitTables:
+    """Materialize nested nauty forest tables. Used by ``mol.xf._site_pair_orbits``.
 
-    ``none`` returns ``None`` without building. Used by ``mol.xf.site_pair_orbits``.
+    ``backend`` must be ``None`` or ``"nauty"`` (only supported product backend).
     """
 
-    chosen = get_pair_orbit_backend() if backend is None else backend
-    if chosen == "none":
-        return None
-    if chosen == "nauty":
-        return _ensure_nauty_tables(mol)
-    return _ensure_smiles_tables(mol)
+    if backend is not None and backend != "nauty":
+        raise ValueError(
+            f"unknown pair_orbit_backend: {backend!r}; only 'nauty' is supported"
+        )
+    return _ensure_nauty_tables(mol)
 
 
 def _make_signature(
@@ -923,14 +915,6 @@ def _colored_graph(
     return graph, n_atoms, n_bonds
 
 
-def _pynauty_available() -> bool:
-    try:
-        importlib.import_module("pynauty")
-    except ImportError:
-        return False
-    return True
-
-
 # --- Unique-edit signature assembly (swap_group / map ranks / site keys) ---
 #
 # Theory-heavy helpers formerly in rules.py. PatternInfo / Effect are opaque
@@ -1013,7 +997,7 @@ def site_orbit(
 ) -> PairOrbitSignature | None:
     """Unique-edit orbit field for a SMARTS site (atom–atom when ``len==2``)."""
 
-    return mol.xf.atom_pair_orbit_key(frozenset(_flat_ints(site)))
+    return mol.xf._atom_pair_orbit_key(frozenset(_flat_ints(site)))
 
 
 def pair_orbit(
@@ -1036,7 +1020,7 @@ def pair_orbit(
     """
 
     swappable = ends_swappable(info1, info2, effect1, effect2)
-    key = mol.xf.atom_pair_orbit_key(site)
+    key = mol.xf._atom_pair_orbit_key(site)
     if key is None:
         return None
     if swappable:
@@ -1316,7 +1300,7 @@ def ensure_lexical_orbit_representatives(
     mol: Mol,
     *,
     parent: Mol | None = None,
-) -> LexicalOrbitRepresentatives | None:
+) -> LexicalOrbitRepresentatives:
     """Materialize lex-rep tables from nauty atom / same-kind pair families.
 
     Cache lives on ``parent`` when given, otherwise on ``mol``. Use
@@ -1324,13 +1308,7 @@ def ensure_lexical_orbit_representatives(
     ``clear_structure`` wiped ``_forest["cache"]`` (including
     ``lexical_orbit_representatives``). Orbit computation always runs on the
     cache host — site indexes are in the reactant frame, not the product's.
-
-    Returns ``None`` when nauty is unavailable (opt-in path then skips
-    remapping and keeps discovery-order emission).
     """
-
-    if get_pair_orbit_backend() != "nauty" or not _pynauty_available():
-        return None
 
     host = parent if parent is not None else mol
     structure = _structure(host)
@@ -1550,8 +1528,7 @@ def canonicalize_smarts_match(
     on ``discovered_site`` when they differ. ``parent`` (when set) is the
     cache host for lex-rep tables — required when ``mol`` is a work/product
     copy whose forest cache was cleared. Returns ``None`` only when a
-    representative exists but no automorphism was found (skip). With no
-    nauty tables, returns the input unchanged.
+    representative exists but no automorphism was found (skip).
 
     Preserves Site container shape (``int`` / ``tuple`` / ``frozenset``;
     directed_bond keeps ordered tuples; undirected bond keeps frozensets).
@@ -1559,8 +1536,6 @@ def canonicalize_smarts_match(
 
     host = parent if parent is not None else mol
     tables = ensure_lexical_orbit_representatives(mol, parent=host)
-    if tables is None:
-        return dict(mapped), _copy_site(site)
 
     atoms = _flat_ints(site)
     if len(atoms) == 1:
@@ -1631,8 +1606,6 @@ def canonicalize_pair_match(
 
     host = parent if parent is not None else mol
     tables = ensure_lexical_orbit_representatives(mol, parent=host)
-    if tables is None:
-        return dict(map1), dict(map2), site_a, site_b
 
     ordered = not ends_swappable(info1, info2, effect1, effect2)
 

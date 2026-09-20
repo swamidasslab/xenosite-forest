@@ -331,7 +331,7 @@ class ReactionRule:
                 # Terminal marking is of_products (reads is_terminal_rule).
 
             # Stamp + trace + clear structure caches on each fragment.
-            finished = mol.xf.of_products(products, info, executed=self)
+            finished = mol.xf._of_products(products, info, executed=self)
             if "discovered_site" in info:
                 from xenosite.forest.rdkitutil import (
                     restamp_product_forest_last_layer,
@@ -644,7 +644,7 @@ def forest_trace(
     """Record one transform on the product's atom trace.
 
     Thin wrapper over ``product.xf.tracing._trace(...)``. Prefer
-    ``reactant.xf.of_products(product, info)`` for the finishing path.
+    ``reactant.xf._of_products(product, info)`` for the finishing path.
     """
 
     return product.xf.tracing._trace(reactant, info, executed=executed)

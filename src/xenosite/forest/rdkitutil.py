@@ -134,9 +134,10 @@ class XfTracing:
     Nested under ``mol.xf.tracing``. Holds a strong reference to the same
     parent as :class:`Xf`. Trace state lives on the forest.
 
-    Read-only queries (no underscore): ``active``, ``depth``, ``atom_origin``,
-    ``atom_indices``, ``atom_depths``, ``atom_root``, ``atom_added_by``,
-    ``removed_roots``. These answer questions about the installed atom trace
+    Read-only queries (no underscore): ``active``, ``depth``, ``depths``,
+    ``atom_origin``, ``atom_indices``, ``atom_depths``, ``atom_root``,
+    ``atom_added_by``, ``removed_roots``, ``index_at``, ``added_indices``,
+    ``root_map``. These answer questions about the installed atom trace
     without exposing ``forestLabel`` tags or transform ids.
 
     ``atom_origin`` is the earliest index in the record (an added atom's
@@ -144,8 +145,8 @@ class XfTracing:
     was created later. ``removed_roots`` are depth-0 indexes that left.
 
     Plumbing mutators (underscore): ``_ensure``, ``_stamp``, ``_install``,
-    ``_trace``. Downstream code should prefer ``mol.xf.of_products`` over
-    calling these directly.
+    ``_trace``. Forest finishers call ``mol.xf._of_products`` rather than
+    these plumbing methods directly.
     """
 
     __slots__ = ("_mol",)
@@ -275,6 +276,68 @@ class XfTracing:
         site = detail.get("site") or ()
         return (str(name), frozenset(_flat_ints(site)))
 
+    def depths(self) -> tuple[int, ...]:
+        """Sorted unique depth frames across heavy atoms.
+
+        Same multiset :meth:`xenosite.forest.AtomTracker.depths` collected from
+        tag records. Empty when untraced. Prefer this over looping
+        :meth:`atom_depths` yourself.
+        """
+
+        if not self.active:
+            return ()
+        found: set[int] = set()
+        for atom in self.mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                continue
+            frames = self.atom_depths(atom.GetIdx())
+            if frames:
+                found.update(frames)
+        return tuple(sorted(found))
+
+    def index_at(self, idx: int, depth: int) -> int | None:
+        """Index of atom ``idx`` at ``depth``, or None if unknown / absent."""
+
+        depths = self.atom_depths(idx)
+        indices = self.atom_indices(idx)
+        if depths is None or indices is None or depth not in depths:
+            return None
+        return indices[depths.index(depth)]
+
+    def added_indices(self) -> frozenset[int]:
+        """Current heavy-atom indexes with no depth-0 root (created later)."""
+
+        if not self.active:
+            return frozenset()
+        out: set[int] = set()
+        for atom in self.mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                continue
+            i = atom.GetIdx()
+            if self.atom_indices(i) is None:
+                continue
+            if self.atom_root(i) is None:
+                out.add(i)
+        return frozenset(out)
+
+    def root_map(self) -> dict[int, int]:
+        """Map current heavy-atom index → depth-0 root index.
+
+        Atoms created after depth 0 are omitted (see :meth:`added_indices`).
+        """
+
+        if not self.active:
+            return {}
+        out: dict[int, int] = {}
+        for atom in self.mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                continue
+            i = atom.GetIdx()
+            root = self.atom_root(i)
+            if root is not None:
+                out[i] = root
+        return out
+
     def _ensure(self) -> TracingMol:
         """Initialize the atom trace on the parent if missing. Does not reset depth."""
 
@@ -323,7 +386,7 @@ class XfTracing:
         """Record one transform from ``reactant`` onto this product mol.
 
         Implementation lives in :mod:`xenosite.forest.rules`. Prefer
-        ``reactant.xf.of_products(...)`` over calling this directly.
+        ``reactant.xf._of_products(...)`` over calling this directly.
 
         After the rule-side apply, this facade copies the reactant's
         ``immutable`` (``start_labels``) onto the product forest and restamps
@@ -368,16 +431,18 @@ class Xf:
       ``forestmol`` ensures forest and returns the parent as :class:`ForestMol`
       (typed bridge for pyright). Wipe APIs must return ``NoForestMol`` / ``Mol``.
     - :class:`TracingMol` is forest + initialized atom-trace. Prefer it for
-      of_products returns, filters, and find_path walks.
+      metabolize products, filters, and find_path walks.
 
-    Public surface: ``has_forest``, ``forestmol``, ``csmi``, ``forest``, ``is_terminal``,
-    ``clear_structure``, ring / conjugate / ``topol_equiv`` / ``formula`` /
-    ``sanitize`` / ``smarts_matches``, pair-orbit
-    (``atom_pair_orbit_key`` / ``bond_pair_orbit_key`` /
-    ``site_pair_orbits`` / ``pair_orbit_backend``), and ``of_products``. Tracing nest:
-    ``active`` / ``depth`` / ``atom_origin`` / ``atom_indices`` /
-    ``atom_depths`` / ``atom_root`` / ``atom_added_by`` / ``removed_roots``,
-    plus underscored ``_stamp`` / ``_ensure`` / ``_install`` / ``_trace``.
+    Public surface: ``has_forest``, ``forestmol``, ``csmi``, ``forest``,
+    ``is_terminal``, ``clear_structure``, ring / conjugate / ``topol_equiv`` /
+    ``formula`` / ``sanitize`` / ``smarts_matches``. Tracing nest:
+    ``active`` / ``depth`` / ``depths`` / ``atom_origin`` / ``atom_indices`` /
+    ``atom_depths`` / ``atom_root`` / ``atom_added_by`` / ``removed_roots`` /
+    ``index_at`` / ``added_indices`` / ``root_map``, plus underscored
+    ``_stamp`` / ``_ensure`` / ``_install`` / ``_trace``.
+    Forest-internal (leading underscore, not a stable public contract):
+    ``_of_products``, ``_atom_pair_orbit_key`` / ``_bond_pair_orbit_key`` /
+    ``_site_pair_orbits`` / ``_pair_orbit_backend``.
     """
 
     __slots__ = ("_mol",)
@@ -481,51 +546,43 @@ class Xf:
         return molecule_formula(self.mol)
 
     @property
-    def pair_orbit_backend(self) -> Literal["nauty", "smiles", "none"]:
-        """Resolved pair-orbit backend (override / env / auto). Process-wide."""
+    def _pair_orbit_backend(self) -> Literal["nauty"]:
+        """Forest-internal: always ``nauty`` (pynauty required). Not public API."""
 
         from xenosite.forest.graph_isomorphism import get_pair_orbit_backend
 
         return get_pair_orbit_backend()
 
     @classmethod
-    def set_pair_orbit_backend(
-        cls, backend: Literal["nauty", "smiles", "none"] | None
-    ) -> None:
-        """Set process-wide pair-orbit backend, or ``None`` to clear override."""
+    def _set_pair_orbit_backend(cls, backend: Literal["nauty"] | None) -> None:
+        """Forest-internal: only ``nauty`` / ``None`` accepted."""
 
         from xenosite.forest.graph_isomorphism import set_pair_orbit_backend
 
         set_pair_orbit_backend(backend)
 
-    def atom_pair_orbit_key(
+    def _atom_pair_orbit_key(
         self, site: frozenset[int]
     ) -> AtomPairOrbitSignature | None:
-        """Unique-edit atom-pair signature; caches tables on forest structure."""
+        """Forest-internal unique-edit atom-pair signature. Not public API."""
 
         from xenosite.forest.graph_isomorphism import atom_pair_orbit_key
 
         return atom_pair_orbit_key(_require_forest(self.mol), site)
 
-    def bond_pair_orbit_key(
+    def _bond_pair_orbit_key(
         self, bonds: frozenset[int]
     ) -> BondPairOrbitSignature | None:
-        """Unique-edit bond-pair signature; caches tables on forest structure."""
+        """Forest-internal unique-edit bond-pair signature. Not public API."""
 
         from xenosite.forest.graph_isomorphism import bond_pair_orbit_key
 
         return bond_pair_orbit_key(_require_forest(self.mol), bonds)
 
-    def site_pair_orbits(
-        self, backend: Literal["nauty", "smiles", "none"] | None = None
-    ) -> SitePairOrbitTables | None:
-        """Nested pair-orbit tables on ``structure``, or ``None`` for ``none``.
-
-        Default backend is the resolved process-wide setting. Pass
-        ``backend="smiles"`` to opt into RDKit isotope tables; ``"nauty"`` for
-        pynauty. Forest keys: ``site_pair_orbits_nauty`` /
-        ``site_pair_orbits_smiles``.
-        """
+    def _site_pair_orbits(
+        self, backend: Literal["nauty"] | None = None
+    ) -> SitePairOrbitTables:
+        """Forest-internal nauty pair-orbit tables. Not a public contract."""
 
         from xenosite.forest.graph_isomorphism import (
             ensure_site_pair_orbit_tables,
@@ -543,23 +600,20 @@ class Xf:
 
         return _smarts_matches(self.mol, smarts)
 
-    def of_products(
+    def _of_products(
         self,
         product_or_product_list: Mol | Sequence[Mol],
         site_info: SiteInfo,
         executed: Any | None = None,
     ) -> list[TracingMol]:
-        """Stamp and trace products of this reactant; return the finished list.
+        """Forest-internal finisher: stamp/trace products of this reactant.
 
-        Readable finishing path: ``reactant.xf.of_products(products, site_info)``.
-        Accepts one product or a sequence. Each product is taken through
-        :func:`copy_mol` (keeps lifted ``forestLabel`` props and any forest;
-        bare ``Chem.Mol`` drops ``_forest`` only), then
+        Used by ``metabolize`` / ``find_path``. Not a stable public API —
+        naming and entry points may change. Accepts one product or a sequence.
+        Each product goes through :func:`copy_mol`, then
         ``product.xf.tracing._trace`` from this reactant, then
-        :meth:`clear_structure`. When the executed rule (or ``site_info``'s
-        rule) has ``is_terminal_rule``, each finished product is marked
-        terminal. The reactant is stamped first via ``tracing._stamp``. Does
-        not sanitize or split. Inputs are not edited.
+        :meth:`clear_structure`. Terminal rules mark each finished product
+        terminal. The reactant is stamped first via ``tracing._stamp``.
         """
 
         reactant = self.tracing._stamp()

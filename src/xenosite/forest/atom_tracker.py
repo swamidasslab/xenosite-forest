@@ -27,8 +27,8 @@ TagInput: TypeAlias = Mol | Mapping[str, AtomRecord] | list[Mol | Mapping[str, A
 
 _DEPRECATION = (
     "xenosite.forest.AtomTracker is deprecated; use mol.xf / mol.xf.tracing "
-    "instead. The facade remains for compatibility and will be removed in a "
-    "future release."
+    "instead (see docs/forest/XF.md). The facade remains for compatibility "
+    "and will be removed in a future release."
 )
 
 
@@ -39,7 +39,8 @@ def _warn_deprecated(*, stacklevel: int = 3) -> None:
 class AtomTracker:
     """Deprecated compatibility surface for archived ``AtomTracker`` callers.
 
-    Prefer ``mol.xf.tracing.*``. Instantiation and public helpers emit
+    Prefer ``mol.xf`` / ``mol.xf.tracing`` (migration tutorial in
+    ``docs/forest/XF.md``). Instantiation and public helpers emit
     :class:`DeprecationWarning`.
     """
 
@@ -155,24 +156,16 @@ class AtomTracker:
     def depths(
         cls, record: Mol | Mapping[str, AtomRecord], strict: bool = True
     ) -> list[int]:
-        """Sorted unique depths from tag records or ``xf.tracing.depth``."""
+        """Sorted unique depths from tag records or ``xf.tracing.depths``."""
 
-        tags: Mapping[str, AtomRecord]
         if isinstance(record, Mol):
             tracing = record.xf.tracing
-            if tracing.active and tracing.depth is not None:
-                # Prefer full record set when present so multi-depth paths agree
-                # with forest AtomTracker.depths.
-                try:
-                    raw = cls.tags(record, strict=True)
-                except KeyError:
-                    return [int(tracing.depth)]
-                tags = cast(TagRecordMap, raw)
-            else:
-                if strict:
-                    raise KeyError("atom_trace")
-                return []
-        elif isinstance(record, Mapping):
+            if tracing.active:
+                return list(tracing.depths())
+            if strict:
+                raise KeyError("atom_trace")
+            return []
+        if isinstance(record, Mapping):
             tags = record
         else:
             raise ValueError("Must submit RDKit Mol or dict")

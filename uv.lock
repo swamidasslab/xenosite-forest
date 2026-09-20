@@ -2436,6 +2436,7 @@ dev = [
 name = "xenosite-forest"
 source = { editable = "." }
 dependencies = [
+    { name = "pynauty" },
     { name = "rdkit" },
 ]
 
@@ -2447,9 +2448,6 @@ network = [
 ]
 predict = [
     { name = "xenosite-predict", marker = "python_full_version >= '3.11'" },
-]
-pynauty = [
-    { name = "pynauty" },
 ]
 
 [package.dev-dependencies]
@@ -2471,12 +2469,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "networkx", marker = "extra == 'network'", specifier = ">=3.2.1" },
-    { name = "pynauty", marker = "extra == 'pynauty'" },
+    { name = "pynauty" },
     { name = "rdkit", specifier = ">=2022.3.3" },
     { name = "tqdm", marker = "extra == 'network'", specifier = ">=4.66.0" },
     { name = "xenosite-predict", marker = "python_full_version >= '3.11' and extra == 'predict'", specifier = ">=0.4.2" },
 ]
-provides-extras = ["network", "predict", "pynauty"]
+provides-extras = ["network", "predict"]
 
 [package.metadata.requires-dev]
 dev = [
