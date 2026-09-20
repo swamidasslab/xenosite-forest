@@ -3,6 +3,7 @@
 import copy
 from typing import TYPE_CHECKING, cast
 
+import pytest
 from rdkit import Chem
 
 from xenosite.refactor_poc.rdkitutil import (
@@ -127,6 +128,20 @@ def test_rw_copy_does_not_carry_the_structure_cache():
     copied = get_forest(copy_mol(parent)).get("structure")
     assert copied is not None
     assert copied.get("csmi") == get_csmi(parent)
+
+
+def test_ensure_forest_is_identity_and_get_forest_only_reads():
+    """Callers rebind ``mol = ensure_forest(mol)``. ``get_forest`` does not install."""
+
+    mol = Chem.MolFromSmiles("CC")
+    assert getattr(mol, "_forest", None) is None
+    with pytest.raises(AttributeError):
+        get_forest(mol)  # pyright: ignore[reportArgumentType]
+
+    held = ensure_forest(mol)
+    assert held is mol
+    assert get_forest(held) is held._forest
+    assert ensure_forest(held) is held
 
 
 def test_fragment_split_uses_pieces():

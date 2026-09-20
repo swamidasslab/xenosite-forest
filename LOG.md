@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- refactor_poc suite: 126 passed. No skips/xfails. Default-set Phase I rules already have chemical coverage via correspondence/parity; added contract tests for `ensure_forest` identity / `get_forest` read-only, Addition↔PatternInfo link, and FutureSite `AtomRef` nesting. Left FilterSites as `dict[str, object]`.
+
+## 2026-09-19
+
 - Expanded ruff and pyright to every Python module under `src/xenosite/refactor_poc/` and every test under `tests/refactor_poc/`. Still excluding `test.ipynb`, `src/xenosite/forest/`, and `examples/`. Cleared to 0 ruff findings and 0 pyright errors. `ReactionRule.__iter__` / `RuleSet.__iter__` return `Iterator`; `rules.RuleSet` keeps a TYPE_CHECKING re-export beside the runtime `__getattr__`.
 
 ## 2026-09-19

@@ -5,11 +5,13 @@ from pathlib import Path
 
 from xenosite.refactor_poc.records import (
     Addition,
+    AtomRef,
     AtomTrace,
     Forest,
     Formula,
     FragmentSplit,
     McsResult,
+    PatternInfo,
     Structure,
 )
 from xenosite.refactor_poc.rules import ReactionRule
@@ -29,6 +31,7 @@ def test_records_are_tuples_and_dicts():
     assert isinstance(formula, dict)
 
     rule: ReactionRule = _StubRule(name="Hydroxylation")
+    pattern: PatternInfo = {"name": "h", "possibilities": ()}
     addition = Addition(
         site=1,
         rules=(rule,),
@@ -37,10 +40,25 @@ def test_records_are_tuples_and_dicts():
         name="Hydroxylation",
         phase1=None,
         depth=0,
+        pattern=pattern,
     )
     assert addition.site == 1
     assert addition.name == "Hydroxylation"
     assert addition.depth == 0
+    assert addition.pattern is pattern
+    assert addition.pattern is not None
+    assert addition.pattern.get("name") == "h"
+    # PatternInfo is linked, not a chain entry.
+    assert addition.pattern not in addition.rules
+
+    # FutureSite top-level leaf is AtomRef; bare int stays a Site.
+    future = AtomRef(0, "O")
+    assert future.idx == 0
+    assert future.element == "O"
+    assert future.depth == 0
+    nested: tuple[int | AtomRef, ...] = (0, future)
+    assert nested[0] == 0
+    assert nested[1] is future
 
     found = McsResult(embeddings=((0, 1),))
     assert found.embeddings == ((0, 1),)

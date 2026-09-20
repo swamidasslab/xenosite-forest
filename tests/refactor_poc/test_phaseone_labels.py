@@ -10,7 +10,7 @@ from xenosite.refactor_poc.phaseone import (
     metabolize,
     reaction_labels,
 )
-from xenosite.refactor_poc.records import Addition
+from xenosite.refactor_poc.records import Addition, PatternInfo
 from xenosite.refactor_poc.rules import Epoxidation, Hydroxylation, QuinoneFormation
 from xenosite.refactor_poc.rulesets import PhaseOne as CatalogPhaseOne
 from xenosite.refactor_poc.rulesets import RuleSet
@@ -130,6 +130,7 @@ def test_labels_read_a_named_addition_the_same_way():
 
 
 def test_unnamed_ruleset_stays_on_the_chain_but_emits_no_label():
+    pattern: PatternInfo = {"name": "h"}
     addition = Addition(
         site=(0,),
         rules=(PhaseOne, PhaseOneRS, Hydroxylation()),
@@ -138,8 +139,11 @@ def test_unnamed_ruleset_stays_on_the_chain_but_emits_no_label():
         name=None,
         phase1=None,
         depth=0,
+        pattern=pattern,
     )
 
     assert PhaseOne.name == "PhaseOne"
     assert PhaseOneRS.name is None
     assert reaction_labels(addition) == ("PhaseOne", "Hydroxylation")
+    assert addition.pattern is pattern
+    assert addition.pattern not in addition.rules
