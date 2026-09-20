@@ -2,8 +2,10 @@
 
 Identity rules report themselves at the metabolize site. QuinoneFormation
 expands to prep steps plus dehydrogenation; search must not see a
-QuinoneFormation leaf. Apply uses forest StepPlan for composite plans (plain
-mol, no poc forest) and a site-filtered poc metabolize for identity plans.
+QuinoneFormation leaf. Epoxidation / NDealkylation look ahead to the
+phase-I group at the same site (product set may be wider than the leaf).
+Apply uses forest StepPlan for composite plans (plain mol, no poc forest)
+and a site-filtered poc metabolize for identity plans.
 """
 
 from __future__ import annotations
@@ -13,35 +15,24 @@ from rdkit import Chem
 
 from xenosite.forest.utils import unmapped_smiles
 from xenosite.refactor_poc.canonical_plan import CanonicalStep, as_deps
+from xenosite.refactor_poc.phaseone import (
+    StableOxygenation_PhaseOne,
+    UnstableOxygenation_PhaseOne,
+)
 from xenosite.refactor_poc.rdkitutil import as_mol
 from xenosite.refactor_poc.records import AtomRef, ProductInfo, SiteInfo, _flat_ints
 from xenosite.refactor_poc.rules import (
     Acetylation,
     AzoSplitting,
     BenzodioxoleReduction,
-    Dealkylation,
-    Dehydration,
-    Dehydrogenation,
-    Dephosphorylation,
     Epoxidation,
-    EpoxideOpening,
     Glucuronidation,
     Glutathionation,
-    Hydrogenation,
-    Hydrolysis,
-    Hydroxylation,
     NDealkylation,
-    NitrogenOxidation,
-    NitrogenReduction,
     NitroaromaticReduction,
-    OxidativeDehalogenation,
-    OxygenReduction,
     QuinoneFormation,
     ReactionRule,
-    ReductiveDehalogenation,
     Sulfation,
-    SulfurOxidation,
-    SulfurReduction,
     ThiopheneSulfurOxidation,
 )
 from xenosite.refactor_poc.rulesets import PhaseOne
@@ -63,6 +54,12 @@ _POC_RULES: tuple[type[ReactionRule], ...] = tuple(type(rule) for rule in PhaseO
 
 _RULE_BY_NAME: dict[str, type[ReactionRule]] = {
     cls.__name__: cls for cls in _POC_RULES
+}
+
+# Leaf → phase-I group look-ahead (same site; group product set may be wider).
+_GROUP_LOOKAHEAD = {
+    "Epoxidation": StableOxygenation_PhaseOne.longname,
+    "NDealkylation": UnstableOxygenation_PhaseOne.longname,
 }
 
 _PRODUCTS_PER_PAIR = 4
@@ -92,6 +89,21 @@ def _cleaving_ends(info: SiteInfo | ProductInfo) -> bool:
     if not ends:
         return False
     return any(bool(end.get("cleaves")) for end in ends)
+
+
+def _plan_site_ints(plan: tuple[CanonicalStep, ...]) -> set[int]:
+    atoms: set[int] = set()
+    for step in plan:
+        for item in step.site:
+            if isinstance(item, int):
+                atoms.add(item)
+            else:
+                origin = getattr(item, "origin", None)
+                if origin is not None:
+                    atoms.add(int(origin))
+                elif isinstance(item, AtomRef):
+                    atoms.add(item.idx)
+    return atoms
 
 
 def _identity_reaches(
@@ -160,6 +172,17 @@ def plan_reaches_product(
         # Dealkylating quinone ends need a Dealkylation prep; not in this plan yet.
         return
 
+    expected_group = _GROUP_LOOKAHEAD.get(rule.name)
+    if expected_group is not None:
+        # Same-site group look-ahead; product set of the group may be wider.
+        assert len(plan) == 1
+        assert plan[0].rule == expected_group, plan
+        assert _plan_site_ints(plan) == set(_flat_ints(info["site"])), (
+            "%s on %s: plan sites %s != metabolize site %s"
+            % (rule.name, smiles, plan, info["site"])
+        )
+        return
+
     target = product_csmi
     if _is_composite(plan) or plan[0].rule != rule.name:
         # Composite, or quinone collapsed to a lone Dehydrogenation / OD leaf.
@@ -214,6 +237,32 @@ def test_quinone_benzene_plan_is_two_oh_then_dh():
     assert names.count("Hydroxylation") == 2
     assert names[-1] == "Dehydrogenation"
     assert "QuinoneFormation" not in names
+    plan_reaches_product(rule, smiles, info, info["csmi"])
+
+
+def test_epoxidation_plan_is_stable_oxygenation_same_site():
+    rule = Epoxidation()
+    smiles = "C=C"
+    _product, info = next(rule.metabolize(as_mol(smiles)))
+    plan = rule.canonical_plan(as_mol(smiles), info)
+    assert len(plan) == 1
+    assert plan[0].rule == StableOxygenation_PhaseOne.longname
+    assert plan[0].rule == "StableOxygenation"
+    assert _plan_site_ints(plan) == set(_flat_ints(info["site"]))
+    assert "Epoxidation" not in [step.rule for step in plan]
+    plan_reaches_product(rule, smiles, info, info["csmi"])
+
+
+def test_ndealkylation_plan_is_unstable_oxygenation_same_site():
+    rule = NDealkylation()
+    smiles = "CCN"
+    _product, info = next(rule.metabolize(as_mol(smiles)))
+    plan = rule.canonical_plan(as_mol(smiles), info)
+    assert len(plan) == 1
+    assert plan[0].rule == UnstableOxygenation_PhaseOne.longname
+    assert plan[0].rule == "UnstableOxygenation"
+    assert _plan_site_ints(plan) == set(_flat_ints(info["site"]))
+    assert "NDealkylation" not in [step.rule for step in plan]
     plan_reaches_product(rule, smiles, info, info["csmi"])
 
 

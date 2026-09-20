@@ -2,6 +2,10 @@
 
 ## 2026-09-19
 
+- Easy phase-I look-aheads on `canonical_plan`: Epoxidation → `StableOxygenation` at the same site; NDealkylation → `UnstableOxygenation` at the same site (phaseone group RuleSets). Not multi-step. Default identity and QuinoneFormation hydroxylation/dehydrogenation unchanged. Search still only calls `rule.canonical_plan`.
+
+## 2026-09-19
+
 - H2H `find_path`: forest `PhaseOneQF` vs poc `PhaseOne` (same Phase I+QF rule names; no conjugation). 6/7 product match. Hard TBA and acetate→catechol both hit; forest bills via plan linearizations (`site_applies` often 0, not idle). Poc miss: `OCc1ccccc1`→quinone (queue empties at 258 nodes / 1277 mol_edits; forest billed=62). Harness: `tests/refactor_poc/bench_find_path_h2h.py`.
 
 - Deferred: tautomer matching on SMARTS (match a tautomer of the pattern; infer the tautomerization on hit). Preferred direction only; not decided / not implemented. Wait for mature tests. Goal if pursued later: more robust matching without breaking change, new errors, or major slowdown.

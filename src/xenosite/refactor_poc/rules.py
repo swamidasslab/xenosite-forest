@@ -14,6 +14,12 @@ if TYPE_CHECKING:
     # Runtime still goes through ``__getattr__`` to avoid the cycle.
     from .rulesets import RuleSet as RuleSet
 
+from xenosite.refactor_poc.canonical_plan import (
+    CanonicalStep,
+    group_look_ahead_plan,
+    identity_canonical_plan,
+    quinone_canonical_plan,
+)
 from xenosite.refactor_poc.rdkit_api import (
     ChemicalReaction,
     MolFromSmarts,
@@ -50,11 +56,6 @@ from xenosite.refactor_poc.rdkitutil import (
     sanitized_fragments,
     smarts_matches,
     topol_equiv,
-)
-from xenosite.refactor_poc.canonical_plan import (
-    CanonicalStep,
-    identity_canonical_plan,
-    quinone_canonical_plan,
 )
 from xenosite.refactor_poc.records import (
     EditCounters,
@@ -178,9 +179,10 @@ class ReactionRule:
         """Elementary steps a search should record for this hop.
 
         The default is identity: this rule is already canonical, so the plan
-        is one step at ``info["site"]``. Composite look-aheads override (for
-        example quinone → hydroxylation then dehydrogenation).
-        ``Addition.phase1`` is not used; its schema is not decided.
+        is one step at ``info["site"]``. Look-aheads override (quinone →
+        hydroxylation then dehydrogenation; epoxidation → StableOxygenation;
+        N-dealkylation → UnstableOxygenation). ``Addition.phase1`` is not
+        used; its schema is not decided.
         """
 
         if self.name is None:
@@ -2232,7 +2234,17 @@ class NDealkylation(SmartsReactionRule):
     leaving piece (``leave_count`` 1). Any larger alkyl still carries atoms
     the pattern does not name, so ``leave_count`` is None. ``breaks_ring`` is
     filled from the cleaved bond, not stored as a second class.
+
+    :meth:`canonical_plan` looks ahead to UnstableOxygenation at the same
+    site. Metabolize still applies this rule in one hop.
     """
+
+    def canonical_plan(self, mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
+        """UnstableOxygenation at the N-dealkylation site."""
+
+        from xenosite.refactor_poc.phaseone import UnstableOxygenation_PhaseOne
+
+        return group_look_ahead_plan(UnstableOxygenation_PhaseOne, mol, info["site"])
 
     smarts: tuple[tuple[str, PatternInfo], ...] = (
         _ndealk("[#6H3:1][#7:2]>>([*:2].[*:1](=O)O)", 1, adds="OO"),
@@ -2595,9 +2607,19 @@ class Epoxidation(ResonanceRule):
     The reactant bond is ``=,:``, so an aromatic bond matches on the parent.
     The reaction runs on the cached kekulé parent for that bond.
 
+    :meth:`canonical_plan` looks ahead to StableOxygenation at the same site.
+    Metabolize still applies this rule in one hop.
+
     NOTE: Downstream epoxidation model only considers carbone-carbon epoxides.
     Phase 1 model additionally considers carbon-nitrogen.
     """
+
+    def canonical_plan(self, mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
+        """StableOxygenation at the epoxidation site."""
+
+        from xenosite.refactor_poc.phaseone import StableOxygenation_PhaseOne
+
+        return group_look_ahead_plan(StableOxygenation_PhaseOne, mol, info["site"])
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"

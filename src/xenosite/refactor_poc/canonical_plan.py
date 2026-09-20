@@ -4,6 +4,8 @@ A rule's :meth:`~xenosite.refactor_poc.rules.ReactionRule.canonical_plan`
 returns the elementary steps a search should record. Ordinary rules are
 already elementary: the plan is that rule at the site. A composite hop
 (quinone formation) expands to hydroxylation then dehydrogenation.
+Epoxidation and N-dealkylation look ahead to their phase-I group at the
+same site (stable / unstable oxygenation).
 
 ``Addition.phase1`` stays reserved; its schema is not decided. Search
 reads this method instead of inventing that field.
@@ -12,7 +14,7 @@ reads this method instead of inventing that field.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import NamedTuple
+from typing import NamedTuple, Protocol
 
 from xenosite.forest.step_plan import AtomRef as AddedRef
 from xenosite.forest.step_plan import Deps, Step, StepPlan
@@ -20,6 +22,11 @@ from xenosite.refactor_poc.rdkitutil import Mol, is_tracing
 from xenosite.refactor_poc.records import AtomRef, Effect, Site, SiteInfo, _flat_ints
 
 PlanAtom = int | AddedRef | AtomRef
+
+
+class _NamedGroup(Protocol):
+    name: str | None
+    longname: str | None
 
 
 class CanonicalStep(NamedTuple):
@@ -88,6 +95,22 @@ def identity_canonical_plan(
             tuple(plan_atom_note(mol, idx) for idx in _site_atoms(site)),
         ),
     )
+
+
+def group_look_ahead_plan(
+    group: _NamedGroup, mol: Mol, site: Site
+) -> tuple[CanonicalStep, ...]:
+    """One step naming a phase-I group ruleset at ``site``.
+
+    Epoxidation looks ahead to StableOxygenation; N-dealkylation to
+    UnstableOxygenation. The plan is not a multi-step invention: same site,
+    group longname (or short name).
+    """
+
+    label = group.longname or group.name
+    if not label:
+        return ()
+    return identity_canonical_plan(label, mol, site)
 
 
 def _bonded(mol: Mol, idx: int, atomic_num: int) -> int | None:
