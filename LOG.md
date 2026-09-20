@@ -2,6 +2,10 @@
 
 ## 2026-09-20
 
+- Hard fuzz ports for `refactor_poc`: new `tests/refactor_poc/test_path_outcome_hard.py` (11 cases from forest `test_path_outcome_hard.py` — macrocycle opens/allows, multi-N-dealk linearizations, impossible early abort, asymmetric MCS arms, E/Z terbinafine, bipiperidinyl opens, metal/dialdehyde budgets). Adapted to poc `PathOutcome` / `PathCounters` / `max_nodes` (no `budget_exhausted`). Tribenzyl asserts one topol orbit (approved symmetry collapse in DIVERGENCES). Strengthened `test_bfs_fuzz.py` with drug-crasher corpus + generated SMILES via DFS (BFS on large PhaseOne frontiers timed out). Suite: path_outcome_hard + bfs_fuzz + prior soft fuzz **29 passed**. No production code changes; no xfails.
+
+## 2026-09-20
+
 - Pattern-info completeness meta-test: shared `tests/refactor_poc/pattern_info_inventory.py` (`iter_pattern_possibilities`) feeds coverage params and meta asserts. Whitelist (patternless bases only): `ReactionRule`, `SmartsReactionRule`, `ResonanceRule`, `ResonancePairRule`, `RuleSet`. No missing (rule, pattern, when) vs coverage; 190 possibilities / 135 when-branches. Suite: pattern_info_coverage + pattern_names **196 passed**.
 
 ## 2026-09-20
