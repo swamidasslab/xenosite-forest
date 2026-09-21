@@ -10,6 +10,13 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.7.2](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.2) - 2026-09-21
+
+### Fixed
+
+- ``info["rule"]`` is ``list[ReactionRule]`` (leaf first; RuleSet appends itself) so callers can walk ``.name``. ([#24](https://github.com/swamidasslab/xenosite-forest/issues/24))
+
+
 ## [0.7.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.1) - 2026-09-21
 
 ### Added
