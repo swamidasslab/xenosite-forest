@@ -1029,20 +1029,22 @@ def _present_site_info(
 ) -> SmirksSiteInfo:
     """Present emitted ``site`` vs raw ``discovered_site``.
 
-    Unique-edit already keyed on ``discovery``. The only conversion is
-    directed_bond: emitted ``site`` is ``frozenset(emit_site)`` so forest
-    labels never carry a directed tuple. ``discovered_site`` is always the
-    raw discovery site with no conversion (directed_bond keeps the tuple).
+    ``discovered_site`` is always the raw discovery site (no conversion).
+    The only conversion of emitted ``site`` here is directed_bond:
+    ``frozenset(emit_site)`` so forest labels stay undirected. Lex-orbit
+    remapping of ``site`` (when ``canonical_emitted_sites`` is on) happens
+    upstream before this call — not unique-edit / ``unique_csmi`` dedup.
     """
 
     if site_kind == "directed_bond" and isinstance(discovery, tuple):
+        # site = frozenset(emit_site)  — only conversion on this path
         public_site: Site = (
             frozenset(emit_site) if isinstance(emit_site, tuple) else emit_site
         )
         return {
             **info,
             "site": public_site,
-            "discovered_site": discovery,
+            "discovered_site": discovery,  # raw; never converted
         }
     if info.get("site") is emit_site:
         return info
@@ -1189,6 +1191,8 @@ class SmirksReactionRule(ReactionRule):
                 emit_mapped: dict[int, int] = dict(mapped)
                 emit_site = site
                 if want_canonical:
+                    # canonical_emitted_sites: remap chemistry + emitted site
+                    # to lex orbit (not unique-edit / unique_csmi dedup).
                     remapped = canonicalize_smarts_match(
                         context,
                         mapped,
@@ -1203,7 +1207,7 @@ class SmirksReactionRule(ReactionRule):
                         info = {
                             **info,
                             "site": emit_site,
-                            "discovered_site": site,
+                            "discovered_site": site,  # raw discovery
                         }
                     else:
                         info = {**info, "site": emit_site}
@@ -1869,6 +1873,8 @@ class ResonanceRule(SmirksReactionRule):
                 emit_mapped: dict[int, int] = dict(mapped)
                 emit_site = site
                 if want_canonical:
+                    # canonical_emitted_sites: remap chemistry + emitted site
+                    # to lex orbit (not unique-edit / unique_csmi dedup).
                     remapped = canonicalize_smarts_match(
                         context,
                         mapped,
@@ -1883,7 +1889,7 @@ class ResonanceRule(SmirksReactionRule):
                         info = {
                             **info,
                             "site": emit_site,
-                            "discovered_site": site,
+                            "discovered_site": site,  # raw discovery
                         }
                     else:
                         info = {**info, "site": emit_site}
@@ -2107,7 +2113,7 @@ class ResonancePairRule(ResonanceRule):
                             "path_ends": frozenset((emit_start, emit_end)),
                         }
                         if emit_site != site:
-                            preview = {**preview, "discovered_site": site}
+                            preview = {**preview, "discovered_site": site}  # raw
                     # Reserve the unique-edit slot once per swappable/ordered site.
                     seen.add(signature)
                     combos.append(

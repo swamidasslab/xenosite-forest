@@ -4,6 +4,8 @@
 
 - **0.7.1** is the dead-code drop plus site-match typing patch.
 
+- **site / discovered_site.** `discovered_site` always raw. Emitted `site`: directed_bond tuple→frozenset; under `canonical_emitted_sites` (not dedup) lex-orbit remap. Dropped `_site_tuple`.
+
 - **site / discovered_site contract.** Emitted `site`: directed_bond tuple→frozenset only; under `canonical_emitted_sites`, remapped to lex orbit. `discovered_site` always raw (no wrap). Dropped `_site_tuple`.
 
 - **Dead forest shims (coverage).** CI-shaped
