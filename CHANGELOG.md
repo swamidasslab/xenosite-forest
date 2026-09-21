@@ -10,6 +10,14 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.7.3](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.3) - 2026-09-21
+
+### Fixed
+
+- QuinoneFormation keeps both-methide and dealkylation fragments; drops two-double nitrogen and re-aromatized systems that stay aromatic with no localized double bond. ([#25](https://github.com/swamidasslab/xenosite-forest/issues/25))
+- Hydrolysis site is the cleaved bond (carbonyl carbon + leaving heteroatom), shared by both fragments as parent indexes. ([#26](https://github.com/swamidasslab/xenosite-forest/issues/26))
+
+
 ## [0.7.2](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.2) - 2026-09-21
 
 ### Fixed
