@@ -2,9 +2,19 @@
 
 ## 2026-09-20
 
-- **0.7.1** is the dead-code drop plus site-match typing patch.
+- **CI 3.14 SIGILL = pynauty `-march=native`, not per-Python uv cache.**
+  `astral-sh/setup-uv` keys already include Python (`…-gnu-3.14-<hash>` vs
+  `3.11`/`3.12`/`3.13`); Hypothesis cache is also per-py. Do **not** add a
+  redundant `cache-suffix: ${{ matrix.python-version }}`. Failures are
+  `Fatal Python error: Illegal instruction` in `pynauty.autgrp` /
+  `nautywrap…so` on Ubuntu GHA; 3.12 stays green (manylinux wheel). Sdist
+  `Makefile.nauty` runs `./configure CFLAGS='-O4 -fPIC'`; nauty then adds
+  `-march=native`. Same uv cache hit can pass or SIGILL on different runner
+  CPUs. Upstream: https://github.com/pdobsan/pynauty/issues/49 (refs #39).
+  Workaround on PR #18: `CC`/`CXX` with `-march=x86-64 -mtune=generic` plus
+  `cache-suffix: portable-x86-64` in `test.yml` / `release.yml`.
 
-- **site / discovered_site.** `discovered_site` always raw. Emitted `site`: directed_bond tuple→frozenset; under `canonical_emitted_sites` (not dedup) lex-orbit remap. Dropped `_site_tuple`.
+- **0.7.1** is the dead-code drop plus site-match typing patch.
 
 - **site / discovered_site contract.** Emitted `site`: directed_bond tuple→frozenset only; under `canonical_emitted_sites`, remapped to lex orbit. `discovered_site` always raw (no wrap). Dropped `_site_tuple`.
 
@@ -24,6 +34,51 @@
   `XfTracing._install`. `_rule_name` stays (trace bookkeeping).
 
 ## 2026-09-20
+
+- **FA+force / override experiment (reject; no PR).** Branched from
+  `main`@PR#17. Proposed merge: add FA + `force-future-annotations`,
+  `reportMissingOverride=error`, `reportDeprecated=warning`,
+  `typeCheckingMode=standard`, plus `typing_extensions`/`tomli`.
+  Reality on ruff **0.16.8**: `lint.flake8-future-annotations.force-future-annotations`
+  is **gone**; successor is `lint.future-annotations` (bool) — only lets
+  *other* rules (e.g. TC*) inject `__future__` annotations, does **not**
+  force FA100/FA102 on py311+. Correct pyright option is
+  `reportImplicitOverride` (`reportMissingOverride` unrecognized).
+  Measured on live forest + `tests/forest`: **FA100=0, FA102=0**,
+  `ruff check --fix --diff` empty. Only `__init__.py` + `_version.py`
+  lack the future import (no annotation surface). Pyright
+  `reportImplicitOverride=error`: **9 errors / 2 files** (`rules.py` 6,
+  `rulesets.py` 3); `reportDeprecated=warning`: **0**. No tomli need
+  (tomllib-only; no TOML read path). **Decision: do not switch.** Keep
+  `select=[E,W,F,I,UP]` + UP031 ignore; leave FA off; leave
+  `reportImplicitOverride` off (9 is tractable later with
+  `typing_extensions.override`, not worth a dep for this alone). No
+  mypy; CI already on GHA. Experiment branch deleted; config reverted.
+
+- **Disk: drop multi-version bench venvs.** Removed `.venvs/{py3.11,py3.12,py3.13,py3.14}`
+  (~299–302 MiB each). Kept primary `.venv` (~299 MiB). Repo
+  `du` **1.51 → 0.34 GiB** (~**1.17 GiB** freed). Added `.venvs/` to
+  `.gitignore`. Future version benches: `uv run --python 3.X` without a
+  persisted `.venvs/` matrix.
+
+- **typing_extensions / Ruff FA+TID blast (dry-run, no switch).** On top of
+  current `select=[E,W,F,I,UP]` + `target-version=py311` / pyright
+  `pythonVersion=3.11`, temporarily enabled `FA`+`TID` with
+  `banned-api` for `typing.override` / `typing.Buffer` pointing at a
+  hypothetical `forest._compat`. Scope: `src/xenosite/forest` +
+  `tests/forest`. Counts: **FA100=0, FA102=0, TID251=0**, no other TID
+  hits; full proposed select still exit 0 (UP031 remains ignored: 31).
+  FA is a no-op at py311 (rules only fire for older `target-version`).
+  58/75 forest files already have `from __future__ import annotations`;
+  17 omit it — FA does not force them. Zero live imports of
+  `typing.override` / `typing.Buffer` / `TypeAliasType` / PEP695 `type`.
+  `typing_extensions` is not a direct dep (transitive via pyright etc.;
+  deliberately dropped from runtime). Three `# type: ignore[override]`
+  only — no `@override` call sites. **Decision: leave UP-as-is.** Skip
+  FA; skip `_compat` + re-add of `typing_extensions` until a real
+  `@override`/Buffer need; TID251 bans optional later (zero blast) but
+  not worth a PR without a destination. Keep
+  `reportImplicitOverride` off; no mypy.
 
 - **Tooling toward 3.11+ typing.** Ruff: keep `target-version=py311`; enable
   `UP` (pyupgrade); ignore `UP031` (printf→format flood). `UP040`/`UP046`/

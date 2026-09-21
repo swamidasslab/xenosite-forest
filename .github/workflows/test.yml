@@ -9,6 +9,13 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    # pynauty sdist configures nauty with CFLAGS='-O4 -fPIC', which lets
+    # nauty add -march=native. GHA runners differ; a uv-cached native wheel
+    # then SIGILLs on a weaker CPU (pdobsan/pynauty#49). Force a baseline ISA
+    # so configure skips native. cache-suffix busts prior native-built wheels.
+    env:
+      CC: "gcc -march=x86-64 -mtune=generic"
+      CXX: "g++ -march=x86-64 -mtune=generic"
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache-suffix: portable-x86-64
       - name: Cache Hypothesis example database
         uses: actions/cache@v4
         with:
