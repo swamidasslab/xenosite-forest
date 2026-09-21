@@ -12,6 +12,7 @@ from typing import (
     Protocol,
     TypeAlias,
     TypedDict,
+    TypeGuard,
 )
 
 if TYPE_CHECKING:
@@ -110,6 +111,40 @@ BondPairSite: TypeAlias = frozenset[frozenset[int]]
 Site: TypeAlias = (
     AtomSite | DirectedBondSite | BondSite | AtomPairSite | BondPairSite
 )
+
+
+def _is_atom_site(value: object) -> TypeGuard[AtomSite]:
+    """``AtomSite``: one known atom index. ``bool`` counts, same as ``int``."""
+
+    return isinstance(value, int)
+
+
+def _is_directed_bond_site(value: object) -> TypeGuard[DirectedBondSite]:
+    """``DirectedBondSite``: map-ordered ends."""
+
+    return isinstance(value, tuple) and all(isinstance(item, int) for item in value)
+
+
+def _is_index_set_site(value: object) -> TypeGuard[BondSite]:
+    """``BondSite`` or ``AtomPairSite``. Both are ``frozenset[int]``.
+
+    An empty frozenset matches this, not :func:`_is_bond_pair_site`.
+    """
+
+    return isinstance(value, frozenset) and all(isinstance(item, int) for item in value)
+
+
+def _is_bond_pair_site(value: object) -> TypeGuard[BondPairSite]:
+    """``BondPairSite``: a frozenset of int-frozensets. Empty is an index set."""
+
+    return (
+        isinstance(value, frozenset)
+        and bool(value)
+        and all(
+            isinstance(item, frozenset) and all(isinstance(inner, int) for inner in item)
+            for item in value
+        )
+    )
 
 # Same nesting as Site. Top-level single deferred atom is AtomRef only
 # (bare int belongs to Site). Nested leaves may be int or AtomRef.

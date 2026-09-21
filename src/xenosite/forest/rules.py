@@ -79,6 +79,10 @@ from xenosite.forest.records import (
     TraceAddition,
     TraceInfo,
     When,
+    _is_atom_site,
+    _is_bond_pair_site,
+    _is_directed_bond_site,
+    _is_index_set_site,
 )
 
 
@@ -451,22 +455,22 @@ def _rule_name(rule: ReactionRule | str | None) -> str | None:
 
 
 def _as_site(value: Site | None) -> Site:
-    """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first."""
+    """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first.
 
-    match value:
-        case int():
-            return value
-        case tuple() if all(isinstance(item, int) for item in value):
-            return value
-        case frozenset() if all(isinstance(item, int) for item in value):
-            return value
-        case frozenset() if all(
-            isinstance(item, frozenset) and all(isinstance(inner, int) for inner in item)
-            for item in value
-        ):
-            return value
-        case _:
-            raise TypeError(value)
+    ``AtomSite`` and the other site names are aliases, not runtime classes,
+    so this dispatches through the predicates in :mod:`xenosite.forest.records`.
+    ``BondSite`` and ``AtomPairSite`` share one shape (:func:`_is_index_set_site`).
+    """
+
+    if _is_atom_site(value):
+        return value
+    if _is_directed_bond_site(value):
+        return value
+    if _is_index_set_site(value):
+        return value
+    if _is_bond_pair_site(value):
+        return value
+    raise TypeError(value)
 
 
 def _site_tuple(site: Site) -> Site:
@@ -476,17 +480,21 @@ def _site_tuple(site: Site) -> Site:
     keeps map order. Callers that need order preserved should copy the tuple.
     """
 
-    match site:
-        case int():
-            return (site,)
-        case tuple():
-            return tuple(sorted(site))
-        case _:
-            sample = next(iter(site), None)
-            if isinstance(sample, frozenset):
-                return site
-            indexes = [item for item in site if isinstance(item, int)]
-            return tuple(sorted(indexes))
+    if _is_atom_site(site):
+        return (site,)
+    if _is_directed_bond_site(site):
+        return tuple(sorted(site))
+    if _is_index_set_site(site):
+        return tuple(sorted(site))
+    if _is_bond_pair_site(site):
+        return site
+    # Mixed contents are not one site kind. Keep the old frozenset fallback.
+    if isinstance(site, frozenset):
+        sample = next(iter(site), None)
+        if isinstance(sample, frozenset):
+            return site
+        return tuple(sorted(item for item in site if isinstance(item, int)))
+    raise TypeError(site)
 
 
 def _trace_info(info: SiteInfo) -> TraceInfo:
@@ -1448,15 +1456,16 @@ def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:
 
     ranks = mol.xf.topol_equiv
     site = info.get("discovered_site", info.get("site"))
-    match site:
-        case int():
-            return (int(ranks[site]),)
-        case tuple():
-            return tuple(int(ranks[i]) for i in site)
-        case frozenset():
-            return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
-        case _:
-            return ()
+    if _is_atom_site(site):
+        return (int(ranks[site]),)
+    if _is_directed_bond_site(site):
+        return tuple(int(ranks[i]) for i in site)
+    if _is_index_set_site(site):
+        return tuple(sorted(int(ranks[i]) for i in site))
+    # BondPairSite has no bare int ends; ranks stay empty (same as a miss).
+    if isinstance(site, frozenset):
+        return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
+    return ()
 
 
 class SiteDeduplicationWarning(UserWarning):

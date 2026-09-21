@@ -2,6 +2,8 @@
 
 ## 2026-09-20
 
+- **0.7.1** is the dead-code drop plus site-match typing patch.
+
 - **Dead forest shims (coverage).** CI-shaped
   `uv run pytest tests/forest src/xenosite/forest -n auto --cov=xenosite.forest`
   (1616 passed). 0-hit and uncalled: `_top_site` (wrong `topol_equiv` remap;
