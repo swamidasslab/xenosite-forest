@@ -375,23 +375,26 @@ class ReactionRule:
 
     def _top_site(self, site: Site, mol: Mol) -> Site:
         te = mol.xf.topol_equiv
-        if isinstance(site, int):
-            return te[site]
-        if isinstance(site, tuple):
-            # Preserve map order for directed_bond emission.
-            return tuple(int(te[s]) for s in site)
-        if isinstance(site, frozenset):
-            nested: list[frozenset[int]] = []
-            flat: list[int] = []
-            for item in site:
-                if isinstance(item, frozenset):
-                    nested.append(frozenset(int(te[index]) for index in item))
-                elif isinstance(item, int):
-                    flat.append(int(te[item]))
-            if nested:
-                return frozenset(nested)
-            return frozenset(flat)
-        return site
+        match site:
+            case int():
+                return te[site]
+            case tuple():
+                # Preserve map order for directed_bond emission.
+                return tuple(int(te[s]) for s in site)
+            case frozenset():
+                nested: list[frozenset[int]] = []
+                flat: list[int] = []
+                for item in site:
+                    match item:
+                        case frozenset():
+                            nested.append(frozenset(int(te[index]) for index in item))
+                        case int():
+                            flat.append(int(te[item]))
+                if nested:
+                    return frozenset(nested)
+                return frozenset(flat)
+            case _:
+                return site
 
     def is_terminal_product(self, mol: Mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search.
@@ -522,19 +525,20 @@ def reordered_forest_labels(mol: TracingMol) -> None:
 def _as_site(value: Site | None) -> Site:
     """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first."""
 
-    if isinstance(value, int):
-        return value
-    if isinstance(value, tuple) and all(isinstance(item, int) for item in value):
-        return value
-    if isinstance(value, frozenset):
-        if all(isinstance(item, int) for item in value):
+    match value:
+        case int():
             return value
-        if all(
+        case tuple() if all(isinstance(item, int) for item in value):
+            return value
+        case frozenset() if all(isinstance(item, int) for item in value):
+            return value
+        case frozenset() if all(
             isinstance(item, frozenset) and all(isinstance(inner, int) for inner in item)
             for item in value
         ):
             return value
-    raise TypeError(value)
+        case _:
+            raise TypeError(value)
 
 
 def _site_tuple(site: Site) -> Site:
@@ -544,15 +548,17 @@ def _site_tuple(site: Site) -> Site:
     keeps map order. Callers that need order preserved should copy the tuple.
     """
 
-    if isinstance(site, int):
-        return (site,)
-    if isinstance(site, tuple):
-        return tuple(sorted(site))
-    sample = next(iter(site), None)
-    if isinstance(sample, frozenset):
-        return site
-    indexes = [item for item in site if isinstance(item, int)]
-    return tuple(sorted(indexes))
+    match site:
+        case int():
+            return (site,)
+        case tuple():
+            return tuple(sorted(site))
+        case _:
+            sample = next(iter(site), None)
+            if isinstance(sample, frozenset):
+                return site
+            indexes = [item for item in site if isinstance(item, int)]
+            return tuple(sorted(indexes))
 
 
 def _trace_info(info: SiteInfo) -> TraceInfo:
@@ -1650,13 +1656,15 @@ def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:
 
     ranks = mol.xf.topol_equiv
     site = info.get("discovered_site", info.get("site"))
-    if isinstance(site, int):
-        return (int(ranks[site]),)
-    if isinstance(site, tuple):
-        return tuple(int(ranks[i]) for i in site)
-    if isinstance(site, frozenset):
-        return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
-    return ()
+    match site:
+        case int():
+            return (int(ranks[site]),)
+        case tuple():
+            return tuple(int(ranks[i]) for i in site)
+        case frozenset():
+            return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
+        case _:
+            return ()
 
 
 class SiteDeduplicationWarning(UserWarning):
