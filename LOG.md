@@ -2,6 +2,32 @@
 
 ## 2026-09-20
 
+- **Tooling toward 3.11+ typing.** Ruff: keep `target-version=py311`; enable
+  `UP` (pyupgrade); ignore `UP031` (printf→format flood). `UP040`/`UP046`/
+  `UP047` (`type` aliases / PEP 695) stay off via target until floor ≥3.12.
+  No FA rules that strip `from __future__ import annotations`. Pyright:
+  `pythonVersion = "3.11"` (already). Skip `reportImplicitOverride` while
+  floor is 3.11 (`typing.override` is 3.12+; do not re-add
+  `typing_extensions` just for `@override`). One UP fix: `Sequence` import
+  in `bfs.py` → `collections.abc` (UP035).
+
+- **Post-3.10 antipattern audit (live forest).** Drop commit `7d61dde` already
+  removed `typing-extensions` and moved `NotRequired` to stdlib `typing`;
+  ruff `target-version=py311`. Re-scan of `src/xenosite/forest` + tests +
+  packaging: **zero** hits for `Self` TypeVar / quoted fluid returns,
+  `tomllib`/`toml`/`tomli` read paths (tomli only transitive via
+  `coverage[toml]` on ≤3.11), `sys.version_info` guards, asyncio /
+  `TaskGroup`, `ExceptionGroup`/`except*`/`add_note`, or explicit dict
+  merge-copy loops that are just `{**a,**b}`/`|`. Kept all
+  `from __future__ import annotations` (still support 3.11–3.13; no
+  mass-unquote). Applied: `match` on four `Site` shape helpers in
+  `rules.py`; `pythonVersion = "3.11"` in pyright. Not inventing async
+  for speed — search is sync RDKit-bound.
+
+- **find_path wallclock 3.11 vs 3.14.** Smoke: `artifacts/find_path_wallclock_py_compare.py` (CASES+LARGER from `tests/forest/bench_find_path_h2h.py`, find_path-only, 40×, 400 hits). uv `.venvs/py3.11` / `.venvs/py3.14`, rdkit 2026.03.5 both. `/usr/bin/time -p` real: 3.11.11 **23.23s**, 3.14.7 **24.28s** (+4.5%); live_sum 22.77s → 23.70s (+4.1%). Quick cProfile on one pass: ~46% xenosite / ~46% rdkit tottime (bindings + C++); interpreter bump does not move this wall much. Log: `artifacts/find_path_wallclock_3.11_vs_3.14.live.log`. TaskGroup/asyncio N/A.
+
+- **Pytest wallclock 3.11–3.14** (CI-matched: `pytest tests/forest src/xenosite/forest -n auto --cov=xenosite.forest --cov-report=term-missing`; uv envs `.venvs/py3.XX`; `/usr/bin/time -p`). Same counts each: 1 failed, 1615 passed, 1 skipped, 2 xfailed. Wallclock real: 3.11.11 **24.38s**, 3.12.9 **26.64s** (+9.3% vs 3.11), 3.13.2 **26.36s** (+8.1%), 3.14.7 **22.04s** (−9.6%). Pytest session: 10.33 / 11.95 / 11.51 / 7.76s. Log: `artifacts/pytest_wallclock_3.11_vs_3.14.live.log`.
+
 - **Python 3.14 support (post v0.7.0).** v0.7.0 test+release CI green on
   main. Local `uv` 3.14.7: deps sync (rdkit 2026.3.5, pynauty, numpy);
   forest suite **1616 passed**, 1 skipped, 2 xfailed. Added classifier,

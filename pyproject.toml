@@ -180,6 +180,8 @@ exclude = [
     "src/xenosite/_archive_forest",
     "src/xenosite/refactor_poc/test.ipynb",
 ]
+# Match requires-python (>=3.11). Do not assume 3.14-only PEP 649 defaults.
+pythonVersion = "3.11"
 # tests/forest stays out until its MolFromSmiles / TypedDict noise is cleaned.
 # Local and CI: `uv run pyright src/xenosite/forest`.
 # Untyped parameters error for the live forest tree. Argument / member /
@@ -187,6 +189,8 @@ exclude = [
 reportMissingParameterType = "error"
 reportUnknownParameterType = "error"
 reportUntypedFunctionDecorator = "error"
+# reportImplicitOverride skipped while floor is 3.11: typing.override is 3.12+
+# and typing_extensions was dropped from runtime deps. Revisit at requires-python>=3.12.
 
 # Live forest + its tests. Archive and examples stay out.
 [tool.ruff]
@@ -202,8 +206,11 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# E/W pycodestyle, F pyflakes, I isort. Bugbear (B) is off: B905 wants
-# zip(..., strict=) and that is a behavior change, not a quiet rule.
-select = ["E", "W", "F", "I"]
-# PLC0414 flags `import name as name`. Re-exports use that form on purpose.
-ignore = ["PLC0414"]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade (3.11+ typing/builtins).
+# Bugbear (B) is off: B905 wants zip(..., strict=) and that is a behavior change.
+# UP031 (printf→format) ignored: style flood, not a typing gate.
+# UP040/UP046/UP047 need 3.12+ (`type` aliases / PEP 695); gated off by
+# target-version=py311 until the floor rises. No FA rules that strip
+# `from __future__ import annotations` (still support 3.11–3.13).
+select = ["E", "W", "F", "I", "UP"]
+ignore = ["PLC0414", "UP031"]
