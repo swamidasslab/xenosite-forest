@@ -295,11 +295,12 @@ class _SiteInfoCore(TypedDict):
     When remapping ran, ``discovered_site`` holds the pre-canonical discovery
     indexes (escape hatch for callers that need discovery).
 
-    For ``site_kind="directed_bond"``, public ``site`` is always a frozenset
-    and ``discovered_site`` is always the ordered map-order tuple (orientation;
-    same ``Site`` union). With ``canonical_emitted_sites``, ``site`` is the
-    frozenset of the lex representative and ``discovered_site`` remains the
-    directed discovery tuple.
+    For ``site_kind="directed_bond"``, public ``site`` is the undirected
+    frozenset (only conversion: raw tuple → frozenset). ``discovered_site``
+    is the raw discovery site with no conversion (the ordered map-order
+    tuple). With ``canonical_emitted_sites``, ``site`` is the frozenset of
+    the lex representative and ``discovered_site`` remains the raw directed
+    discovery tuple.
     """
 
     site: Site
