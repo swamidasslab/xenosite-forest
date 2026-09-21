@@ -827,7 +827,7 @@ def _steps_for(mol: Mol, info: SiteInfo) -> tuple[CanonicalStep, ...]:
     (quinone) expand. Search does not branch on the rule name.
     """
 
-    return info["rule"].canonical_plan(mol, info)
+    return info["rule"][0].canonical_plan(mol, info)
 
 
 # ---------------------------------------------------------------------------

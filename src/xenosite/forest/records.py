@@ -304,7 +304,9 @@ class _SiteInfoCore(TypedDict):
     """
 
     site: Site
-    rule: ReactionRule
+    # Leaf first; each containing RuleSet appends itself (same order as
+    # ``addition["rules"]``). Walk for ``.name`` / identity.
+    rule: list[ReactionRule]
     options: Effect
     discovered_site: NotRequired[Site]
 

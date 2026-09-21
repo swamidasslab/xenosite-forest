@@ -341,7 +341,7 @@ class ReactionRule:
             emission_csmi = frozenset(fragment_csmis)
             site_ranks = _site_ranks_for_csmi_warn(info, mol)
             rule_pat = (
-                _rule_dedup_name(info["rule"]),
+                _rule_dedup_name(_emitting_rule(info)),
                 _pattern_dedup_token(info),
             )
             prior = seen_emissions.setdefault(rule_pat, [])
@@ -395,8 +395,8 @@ class ReactionRule:
         Each yielded item:
 
         - ``info["site"]`` is the atom or atom pair this edit is about.
-        - ``info["rule"]`` is this rule. A containing ruleset is not
-          substituted for it.
+        - ``info["rule"]`` is ``[this rule]``. A containing ruleset appends
+          itself after metabolize (leaf first, outer set last).
         - ``info["options"]`` is the one resolved effect at that site.
         - ``products`` is a list of connected mols. Cleavage puts each
           fragment in that list before :meth:`metabolize` finishes the
@@ -454,6 +454,12 @@ def _rule_name(rule: ReactionRule | str | None) -> str | None:
     return getattr(rule, "name", type(rule).__name__)
 
 
+def _emitting_rule(info: SiteInfo) -> ReactionRule:
+    """Leaf rule that built this site info (``info["rule"][0]``)."""
+
+    return info["rule"][0]
+
+
 def _as_site(value: Site | None) -> Site:
     """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first.
 
@@ -476,9 +482,11 @@ def _as_site(value: Site | None) -> Site:
 def _trace_info(info: SiteInfo) -> TraceInfo:
     """Pattern fields worth keeping, without a second copy of the rule object."""
 
+    chain = info["rule"]
     kept: TraceInfo = {
         "site": info["site"],
-        "rule": _rule_name(info["rule"]),
+        "rule": _rule_name(_emitting_rule(info)),
+        "rule_chain": tuple(_rule_name(rule) for rule in chain),
     }
     if "discovered_site" in info:
         kept["discovered_site"] = info["discovered_site"]
@@ -566,7 +574,10 @@ def _apply_forest_trace(
     the site is written in.
     """
 
-    rule = info["rule"]
+    chain = list(info["rule"])
+    if executed is not None and all(executed is not seen for seen in chain):
+        chain.insert(0, executed)
+    leaf = chain[0] if chain else None
     site = _as_site(info["site"])
     parent = reactant.xf.tracing._stamp()
     held = product.xf.forestmol
@@ -582,11 +593,6 @@ def _apply_forest_trace(
 
     depth = trace["depth"] = trace["depth"] + 1
     frame = depth - 1
-    chain: list[ReactionRule] = []
-    if executed is not None and executed is not rule:
-        chain.append(executed)
-    if all(rule is not seen for seen in chain):
-        chain.append(rule)
 
     before = trace.get("formula") or reactant.xf.formula
     after = held.xf.formula
@@ -605,7 +611,7 @@ def _apply_forest_trace(
         "rules": tuple(chain),
         "info": _trace_info(info),
         "effect": _as_effect(info["options"]),
-        "name": _rule_name(rule),
+        "name": _rule_name(leaf),
         "phase1": None,
         "depth": frame,
         "pattern": pattern,
@@ -1165,7 +1171,7 @@ class SmirksReactionRule(ReactionRule):
                 effect = resolve_effect(context, mapped, pattern)
                 info: SmirksSiteInfo = {
                     "site": site,
-                    "rule": self,
+                    "rule": [self],
                     "options": effect,
                     "rxn_num": rxn_num,
                     "pattern": pattern,
@@ -1384,7 +1390,7 @@ def _pattern_dedup_token(info: SiteInfo) -> str | None:
     name = pattern.get("name")
     if name:
         return name
-    rule = info["rule"]
+    rule = _emitting_rule(info)
     if "rxn_num" in info:
         rxns = getattr(rule, "rxns", None) or ()
         rxn_num = info["rxn_num"]
@@ -1411,7 +1417,7 @@ def _unique_csmi_key(
     (pair sites). The frozenset matches the check-layer emission set.
     """
 
-    rule = info["rule"]
+    rule = _emitting_rule(info)
     rule_name = getattr(rule, "name", None) or type(rule).__name__
     return (rule_name, _pattern_dedup_token(info), emission_csmi)
 
@@ -1462,7 +1468,7 @@ _logger = logging.getLogger(__name__)
 def _report_csmi_dedup_drop(substrate: Mol, info: SiteInfo, product_csmi: str) -> None:
     """Warn once-per-rule (generic) and log INFO on a unique-edit miss check hit."""
 
-    rule_name = _rule_dedup_name(info["rule"])
+    rule_name = _rule_dedup_name(_emitting_rule(info))
     warnings.warn(
         _csmi_dedup_warning_message(rule_name),
         SiteDeduplicationWarning,
@@ -1491,7 +1497,7 @@ def _report_redundant_rules_drop(
     ``SiteDeduplicationWarning`` miss. No ``warnings.warn`` on this path.
     """
 
-    dropped_rule = _rule_dedup_name(dropped_info["rule"])
+    dropped_rule = _rule_dedup_name(_emitting_rule(dropped_info))
     _logger.info(
         "Redundant rules drop: substrate=%s kept_rule=%s dropped_rule=%s "
         "site=%s pattern=%s product=%s",
@@ -1842,7 +1848,7 @@ class ResonanceRule(SmirksReactionRule):
                 effect = resolve_effect(context, mapped, pattern)
                 info: SmirksSiteInfo = {
                     "site": site,
-                    "rule": self,
+                    "rule": [self],
                     "options": effect,
                     "rxn_num": rxn_num,
                     "pattern": pattern,
@@ -2055,7 +2061,7 @@ class ResonancePairRule(ResonanceRule):
                         continue
                     preview: PairSiteInfo = {
                         "site": site,
-                        "rule": self,
+                        "rule": [self],
                         "options": merge_effects(end1, end2, system_aromatic),
                         "ends": (end1, end2),
                         "end_atoms": (site_a, site_b),

@@ -170,7 +170,7 @@ def test_ruleset_cross_rule_bubble_then_parent_yield(caplog) -> None:
             warnings.simplefilter("error", SiteDeduplicationWarning)
             products = list(ruleset.metabolize(mol, unique_csmi=True))
     assert _flat_csmis(products) == ["CCO"]
-    assert {type(info["rule"]).__name__ for _, info in products} == {
+    assert {type(info["rule"][0]).__name__ for _, info in products} == {
         "OverlapOhA"
     }
     assert not caught
@@ -188,7 +188,7 @@ def test_ruleset_unique_csmi_false_keeps_both_rules() -> None:
     products = list(
         ruleset.metabolize(Chem.MolFromSmiles("CC"), unique_csmi=False)
     )
-    names = [type(info["rule"]).__name__ for _, info in products]
+    names = [type(info["rule"][0]).__name__ for _, info in products]
     assert names == ["OverlapOhA", "OverlapOhB"]
     assert _flat_csmis(products) == ["CCO", "CCO"]
 
@@ -205,7 +205,8 @@ def test_nested_ruleset_outermost_yield_only(caplog) -> None:
     # Inner forced unique_csmi=False by outer, so both children reach inner;
     # inner also forced False by outer, so both reach outer; outer yield keeps one.
     assert _flat_csmis(products) == ["CCO"]
-    assert isinstance(products[0][1]["rule"], ReactionRule)
+    assert isinstance(products[0][1]["rule"], list)
+    assert isinstance(products[0][1]["rule"][0], ReactionRule)
     assert any(
         "kept_rule" in r.getMessage() and "dropped_rule" in r.getMessage()
         for r in caplog.records
