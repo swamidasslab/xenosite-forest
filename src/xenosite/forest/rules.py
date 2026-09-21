@@ -37,11 +37,15 @@ from xenosite.forest.rdkit_api import (
     RenumberAtoms,
 )
 from xenosite.forest.rdkitutil import (
+    KEKULE_ALL,
     Atom,
     Bond,
     BondType,
     Mol,
+    ResonanceMolSupplier,
     RWMol,
+    SanitizeFlags,
+    SanitizeMol,
     TracingMol,
     _bond_key,
     _current_bond_map,
@@ -1156,7 +1160,8 @@ class SmirksReactionRule(ReactionRule):
         context = mol if context_mol is None else context_mol
         live = cast(TracingMol, context)
         _bump(counters, "rule_expansions")
-        seen: set[SiteSignature] = set()
+        seen_arg = kwargs.get("seen")
+        seen: set[SiteSignature] = seen_arg if isinstance(seen_arg, set) else set()
         ranks = context.xf.topol_equiv
 
         for rxn_num, (smirks, _rxn, pattern) in enumerate(self.rxns):
@@ -1181,9 +1186,11 @@ class SmirksReactionRule(ReactionRule):
                 if not filter_sites(live, site, info):
                     _bump(counters, "sites_skipped")
                     continue
+                # incident_orders stay on the aromatic parent (context), not the
+                # kekulé form, so bond-order flips do not split equivalent sites.
                 signature = site_signature(
                     context,
-                    mol,
+                    context,
                     mapped,
                     ranks,
                     site,
@@ -1351,30 +1358,41 @@ def _alternating_from(
 
 
 def _kekule_forms(mol: Mol) -> tuple[Mol, ...]:
-    """Kekulé copies when any atom is aromatic. Indexes stay put.
+    """Kekulé mols from the resonance supplier. Indexes stay put.
 
-    One form is not enough: a ring-bond cleavage on the other Kekulé writing
-    is a different product, and it will not sanitize while atoms stay
-    aromatic. A mol that is already kekulé is returned as given. Forest
-    labels are copied so the product can be traced.
+    These are the supplier structures, not bond orders laid back onto the
+    aromatic parent. One form is not enough: a ring-bond cleavage on the
+    other Kekulé writing is a different product. A mol that is already
+    kekulé is returned as given. Forest labels are copied so the product
+    can be traced.
     """
 
     if not any(atom.GetIsAromatic() for atom in mol.GetAtoms()):
         return (mol,)
-    maps = resonance_bond_maps(mol)
-    if not maps:
-        return (mol,)
-    forms = []
-    for bond_map in maps:
-        work = overlay_kekule(mol, bond_map).GetMol()
-        for atom in mol.GetAtoms():
-            if not atom.HasProp("forestLabel"):
+    base = Mol(mol)
+    forms: list[Mol] = []
+    try:
+        if SanitizeMol(base, catchErrors=True):
+            return (mol,)
+        seen: set[tuple[tuple[tuple[int, int], float], ...]] = set()
+        for res in ResonanceMolSupplier(base, KEKULE_ALL):
+            if res is None:
                 continue
-            work.GetAtomWithIdx(atom.GetIdx()).SetProp(
-                "forestLabel", atom.GetProp("forestLabel")
-            )
-        forms.append(work)
-    return tuple(forms)
+            key = tuple(sorted(_current_bond_map(res).items()))
+            if key in seen:
+                continue
+            seen.add(key)
+            SanitizeMol(res, SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
+            for atom in mol.GetAtoms():
+                if not atom.HasProp("forestLabel"):
+                    continue
+                res.GetAtomWithIdx(atom.GetIdx()).SetProp(
+                    "forestLabel", atom.GetProp("forestLabel")
+                )
+            forms.append(res)
+    except (ValueError, RuntimeError):
+        return (mol,)
+    return tuple(forms) if forms else (mol,)
 
 
 def _pattern_dedup_token(info: SiteInfo) -> str | None:
@@ -1807,6 +1825,9 @@ class ResonanceRule(SmirksReactionRule):
     maps 1–2 have the bond order the SMARTS implies. Other systems stay
     aromatic. The dict is stored on the molecule's forest. The helpers that
     fill it do not read ``_forest``.
+
+    Epoxidation does not use this. Its SMARTS is a double bond, so it runs
+    on each resonance-supplier mol instead.
     """
 
     def metabolites(
@@ -3182,10 +3203,10 @@ class SulfurReduction(SmirksReactionRule):
 class Epoxidation(ResonanceRule):
     """Adds an epoxide across a C=C or C=N bond.
 
-    The reactant bond is ``=,:``, so an aromatic bond matches on the parent.
-    The reaction runs on the cached kekulé parent for that bond. The site is
-    the undirected bond (``site_kind="bond"``); unique-edit keys unordered
-    bond-end ranks so symmetry-related embeddings collapse.
+    The reactant bond is a double bond, so the SMARTS runs on each kekulé
+    form rather than on the aromatic parent. The site is the undirected bond
+    (``site_kind="bond"``); unique-edit keys unordered bond-end ranks so
+    symmetry-related embeddings collapse.
 
     Forest ``phase1_steps`` is a degenerate singleton naming this rule; the
     default :meth:`canonical_plan` matches that (not StableOxygenation).
@@ -3201,7 +3222,7 @@ class Epoxidation(ResonanceRule):
     _example_substrates: tuple[str, ...] = ('C=C', 'c1ccccc1')
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            Smirks("[#6:1]=,:[#6,#7:2]>>[*:1]1-[*:2][O]1"),
+            Smirks("[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1"),
             describe(
                 *branches(
                     ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
@@ -3212,6 +3233,35 @@ class Epoxidation(ResonanceRule):
             ),
         ),
     )
+
+    def metabolites(
+        self,
+        mol: Mol,
+        filter_rules: FilterRules = _accept_all_rules,
+        filter_sites: FilterSites = _accept_all_sites,
+        context_mol: Mol | None = None,
+        **kwargs: Any,
+    ) -> Generator[ProductsOfReaction, None, None]:
+        """Run the double-bond SMARTS on each resonance-supplier mol.
+
+        ``seen`` is shared across forms so a bond that is double in more than
+        one writing is one site. ``context_mol`` stays the aromatic parent.
+        """
+
+        if not self.rxns:
+            return
+        context = mol if context_mol is None else context_mol
+        seen: set[SiteSignature] = set()
+        for form in _kekule_forms(mol):
+            yield from SmirksReactionRule.metabolites(
+                self,
+                form,
+                filter_rules=filter_rules,
+                filter_sites=filter_sites,
+                context_mol=context,
+                seen=seen,
+                **kwargs,
+            )
 
 
 class SulfurOxidation(SmirksReactionRule):

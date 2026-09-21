@@ -2,6 +2,21 @@
 
 ## 2026-09-20
 
+- **Epoxidation uses supplier kekulé mols again.** SMARTS is `[#6:1]=[#6,#7:2]`, not `=,:`. `Epoxidation.metabolites` runs that SMARTS on each `ResonanceMolSupplier(..., KEKULE_ALL)` mol. Bond orders are not laid back onto the aromatic parent, and the cached conjugated-component parent is not used. Unique-edit `seen` is shared across those forms; `incident_orders` stay on the aromatic context. Other `ResonanceRule`s still use the cached parent: walking supplier forms dropped anisole and pyridine ring-open products that parity requires. Six neutral goldens are in `tests/forest/test_epoxidation_golden_products.py`. `pytest tests/forest`: 1626 passed, 1 skipped, 2 xfailed. Quinone neutral golden is still absent; pointing its pair parents at the same supplier mols did not restore it.
+
+- **Archive vs live on the current tree (no checkout).** `_fragments` from `tests/forest/test_phase1_correspondence.py` on `metabolites`, and the same fragments from `metabolize`. Sets are identical for every case below; live `xf.csmi` matches. Archive has every neutral golden. Live does not. The earlier “both contain thiazole and coumarin” line on `b45a597` is not reproduced. Log: `artifacts/epox_archive_vs_live.live.log`.
+  - Thiazole: archive 7 includes `CSC1=CC2OC23SC(N)=NC3=C1` (no formal charge). Live 8, golden absent: 5 nonzero formal charge (`[NH2+]` / `[S+]`), 3 `[SH]` tautomers.
+  - Aryl sulfate: golden `O=S(=O)(O)OC1=CC=C(O)C2OC12` archive only. Live keeps the other two neutral regioisomers and replaces that one with `O=S(=O)(O)[O+]=C1C=CC(=[OH+])C2OC12`.
+  - Sulfonamide: golden and both other regioisomers neutral in archive. Live emits only `[S-2](N)([O-])[O-]` analogues (net −4).
+  - Nitro: archive epoxides keep `[N+](=O)[O-]` (net 0). Live same skeletons as `N([O-])[O-]` (net −2).
+  - Nitroimidazole: both goldens in archive, plus two extra net-0 zwitterions live does not emit. Live’s only product is `CC1N(CCO)C([N+](=O)[O-])C2ON21` (nitro kept, not a golden).
+  - Coumarin: pyrone epoxide in archive (7). Live emits nothing.
+  - Quinone `CS(=O)(=O)c1ccc(-c2cn3ccccc3n2)cc1` (`QuinoneFormation`): neutral golden in archive (14, no formal charge). Live 9 lacks it and adds `CS(=O)(=O)c1ccc(C2=Nc3cccc[n+]3C2=O)cc1`.
+
+- **Bisect, no fix.** Reproducing call is `Rule().metabolites` then canonical fragment SMILES (same loss at `b45a597` via `metabolize` + `p.xf.csmi`): thiazole 8/8 charged, coumarin empty, quinone golden absent with `[n+]`. Archive still has all three goldens. Epoxide neutrals first disappear at `7ef23ae` (parent `e524683` still has both). That commit still picks kekulé order 2.0; it replaces RDKit `KEKULE_ALL` plus SMARTS `=` with a cached assignment and `=,:`, not a single-bond start. Quinone golden is already missing in the first poc rules (`891a2c2`); `[n+]` first appears at `dd9c8ef` (parent `4ea915a` clean). Seed bond stays double there; the diff scopes parents to aromatic atoms.
+
+- **Epoxidation poc/archive parity does not cover the bioactivation golds.** Live-vs-archive product equality is `tests/forest/test_parity.py` (no Epoxidation; quinone is benzene/phenol only) and `tests/forest/test_phase1_correspondence.py` (Epoxidation is only `CC=C` → `CC1CO1`). Not xfail. On HEAD `b45a597`, single-rule canonical fragments: coumarin sets match and both contain the pyrone epoxide; thiazole live is a subset of archive (4 vs 7) and both contain `CSC1=CC2OC23SC(N)=NC3=C1`. Neither set is charged on those two. Nitroimidazole archive adds two charged products live drops; both still emit the two golden epoxides. A set-equality test on thiazole or nitroimidazole would fail, not pass.
+
 - **0.7.2 hotfix:** ``info["rule"]`` is ``list[ReactionRule]`` (leaf first; RuleSet appends ``self``), matching ``addition["rules"]``.
 
 - **CI 3.14 SIGILL = pynauty `-march=native`, not per-Python uv cache.**
