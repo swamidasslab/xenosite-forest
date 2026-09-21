@@ -12,6 +12,7 @@ from typing import (
     Protocol,
     TypeAlias,
     TypedDict,
+    TypeGuard,
 )
 
 if TYPE_CHECKING:
@@ -110,6 +111,40 @@ BondPairSite: TypeAlias = frozenset[frozenset[int]]
 Site: TypeAlias = (
     AtomSite | DirectedBondSite | BondSite | AtomPairSite | BondPairSite
 )
+
+
+def _is_atom_site(value: object) -> TypeGuard[AtomSite]:
+    """``AtomSite``: one known atom index. ``bool`` counts, same as ``int``."""
+
+    return isinstance(value, int)
+
+
+def _is_directed_bond_site(value: object) -> TypeGuard[DirectedBondSite]:
+    """``DirectedBondSite``: map-ordered ends."""
+
+    return isinstance(value, tuple) and all(isinstance(item, int) for item in value)
+
+
+def _is_index_set_site(value: object) -> TypeGuard[BondSite]:
+    """``BondSite`` or ``AtomPairSite``. Both are ``frozenset[int]``.
+
+    An empty frozenset matches this, not :func:`_is_bond_pair_site`.
+    """
+
+    return isinstance(value, frozenset) and all(isinstance(item, int) for item in value)
+
+
+def _is_bond_pair_site(value: object) -> TypeGuard[BondPairSite]:
+    """``BondPairSite``: a frozenset of int-frozensets. Empty is an index set."""
+
+    return (
+        isinstance(value, frozenset)
+        and bool(value)
+        and all(
+            isinstance(item, frozenset) and all(isinstance(inner, int) for inner in item)
+            for item in value
+        )
+    )
 
 # Same nesting as Site. Top-level single deferred atom is AtomRef only
 # (bare int belongs to Site). Nested leaves may be int or AtomRef.
@@ -260,11 +295,12 @@ class _SiteInfoCore(TypedDict):
     When remapping ran, ``discovered_site`` holds the pre-canonical discovery
     indexes (escape hatch for callers that need discovery).
 
-    For ``site_kind="directed_bond"``, public ``site`` is always a frozenset
-    and ``discovered_site`` is always the ordered map-order tuple (orientation;
-    same ``Site`` union). With ``canonical_emitted_sites``, ``site`` is the
-    frozenset of the lex representative and ``discovered_site`` remains the
-    directed discovery tuple.
+    For ``site_kind="directed_bond"``, public ``site`` is the undirected
+    frozenset (only conversion: raw tuple → frozenset). ``discovered_site``
+    is the raw discovery site with no conversion (the ordered map-order
+    tuple). With ``canonical_emitted_sites``, ``site`` is the frozenset of
+    the lex representative and ``discovered_site`` remains the raw directed
+    discovery tuple.
     """
 
     site: Site
@@ -428,7 +464,7 @@ class AtomTrace(TypedDict):
 
 
 class InitializedAtomTrace(TypedDict):
-    """The ``atom_trace`` dict ``install_forest`` writes.
+    """The ``atom_trace`` dict ``xf.tracing._stamp`` writes.
 
     Same fields as :class:`AtomTrace`. Every key is present. Not a second schema.
     """

@@ -121,7 +121,6 @@ _ORBIT_FAMILIES: tuple[OrbitFamily, ...] = (
 )
 _CACHE_NAUTY = "site_pair_orbits_nauty"
 _CACHE_NAUTY_FAMILIES = "site_pair_orbits_nauty_families"
-_CACHE_SMILES = "site_pair_orbits_smiles"
 _CACHE_LEX_REPS = "lexical_orbit_representatives"
 _MEMBERSHIP_BASE = 4
 # Documented trivial pair_group when either end is a singleton topeqiv group.
@@ -561,19 +560,6 @@ def atom_pair_orbit_pynauty(mol: Mol, left: int, right: int) -> NautyPairGroup:
     raise KeyError((left, right))
 
 
-def atom_pair_orbit_pynauty_ordered(
-    mol: Mol, left: int, right: int
-) -> NautyPairGroup:
-    """Ordered atom–atom orbit membership (asymmetric end roles)."""
-
-    families = all_site_pair_orbits_nauty(mol)
-    needle = (left, right)
-    for group in families["atom_atom_ordered"]:
-        if needle in group:
-            return tuple(sorted(group))
-    raise KeyError((left, right))
-
-
 def bond_pair_orbit_pynauty(mol: Mol, bond_a: int, bond_b: int) -> NautyPairGroup:
     """Recipe 3 for one unordered bond pair."""
 
@@ -779,26 +765,6 @@ def _ensure_nauty_tables(mol: Mol) -> SitePairOrbitTables:
     orbits = site_pair_orbits_nauty(mol)
     tables = _nested_tables_from_groups(mol, orbits, include_stereo=True)
     structure[_CACHE_NAUTY] = tables
-    return tables
-
-
-def _ensure_smiles_tables(mol: Mol) -> SitePairOrbitTables:
-    structure = _structure(mol)
-    cached = structure.get(_CACHE_SMILES)
-    if cached is not None:
-        return cast(SitePairOrbitTables, cached)
-    # Only multi-group ends: singleton pairs never need pair_group materialization.
-    atom_indices = tuple(
-        i for i in range(mol.GetNumAtoms()) if _atom_group_size(mol, i) > 1
-    )
-    bond_indices = tuple(
-        i for i in range(mol.GetNumBonds()) if _bond_group_size(mol, i) > 1
-    )
-    orbits = site_pair_orbits_smiles(
-        mol, atom_indices=atom_indices, bond_indices=bond_indices
-    )
-    tables = _nested_tables_from_groups(mol, orbits, include_stereo=True)
-    structure[_CACHE_SMILES] = tables
     return tables
 
 
@@ -1428,21 +1394,6 @@ def remap_mapped_atoms(
     """Apply an atom automorphism to a SMARTS mapno → atom-index match."""
 
     return {mapno: int(atom_map[idx]) for mapno, idx in mapped.items()}
-
-
-def is_canonical_orbit_candidate(
-    candidate: OrbitCandidate,
-    representative_of: LexicalRepTable,
-    *,
-    kind: OrbitKind,
-    ordered: bool = False,
-) -> bool:
-    """True when ``candidate`` is already the lex representative of its orbit."""
-
-    normalized = normalize_orbit_candidate(
-        candidate, kind=kind, ordered=ordered
-    )
-    return representative_of.get(normalized) == normalized
 
 
 def select_rep_table(

@@ -106,7 +106,7 @@ DisableLog("rdApp.*")
 _REACTION_CACHE: dict[Smirks, ChemicalReaction] = {}
 _MolT = TypeVar("_MolT", bound=Mol)
 
-# Keys install_forest writes. is_tracing is true only when all of them are present.
+# Keys xf.tracing._stamp writes. is_tracing is true only when all of them are present.
 _TRACE_KEYS = (
     "records",
     "deletes",
@@ -1581,7 +1581,7 @@ def _sanitize_piece(frag: Mol) -> bool:
 def carry_forest(src: Mol, dst: Mol) -> Mol:
     """Deep-copy ``src._forest`` onto ``dst``, remapped by ``forestLabel``.
 
-    Prefer react → split → :func:`~xenosite.forest.rules.forest_trace`,
+    Prefer react → split → ``mol.xf._of_products`` (traces each piece),
     so fragments are usually untraced when split and tracing is installed per
     piece. When ``src`` is already traced (copy / rare re-split), each call
     still installs a new forest dict: live ``records`` keep only labels on

@@ -40,7 +40,6 @@ from xenosite.forest.rdkitutil import (
     Atom,
     Bond,
     BondType,
-    ForestMol,
     Mol,
     RWMol,
     TracingMol,
@@ -80,6 +79,10 @@ from xenosite.forest.records import (
     TraceAddition,
     TraceInfo,
     When,
+    _is_atom_site,
+    _is_bond_pair_site,
+    _is_directed_bond_site,
+    _is_index_set_site,
 )
 
 
@@ -95,14 +98,6 @@ def _copy_when(raw: When | Mapping[str, int]) -> When:
     if isinstance(hydrogens, int):
         copied["h"] = hydrogens
     return copied
-
-
-def set_terminal_product(mol: Mol, value: bool = True) -> ForestMol:
-    """Mark ``mol`` terminal on the forest. Prefer ``mol.xf._mark_terminal``."""
-
-    held = mol.xf.forestmol
-    held.xf._mark_terminal(value)
-    return held
 
 
 class ProductsOfReaction(NamedTuple):
@@ -143,8 +138,8 @@ class ReactionRule:
     # RuleSets erase the param; pyright cannot enforce container size).
     # ``"atom"`` singleton frozenset; ``"bond"`` undirected frozenset;
     # ``"directed_bond"``: unique-edit uses map-order tuple; public ``site``
-    # is frozenset and ``discovered_site`` is the ordered tuple (same Site
-    # union). ``"atom_pair"`` ResonancePair ends only (frozenset).
+    # is frozenset (tuple→frozenset only); ``discovered_site`` is the raw
+    # ordered tuple. ``"atom_pair"`` ResonancePair ends only (frozenset).
     site_kind: RuleSiteKind = "atom"
     # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
     # TODO: expand so examples cover all patterns/whens on this rule.
@@ -272,13 +267,13 @@ class ReactionRule:
         Filters must not assume ``info["site"]`` equals discovery — use
         ``discovered_site`` when present. See docs/forest/PAIR_ORBITS.md / HEURISTICS.
 
-        For ``site_kind="directed_bond"``, public ``info["site"]`` is always a
-        frozenset (API stays unordered-site shaped). Orientation lives on
-        ``info["discovered_site"]`` as the ordered map-order tuple (same
-        ``Site`` union — no extra field). With ``canonical_emitted_sites``,
-        ``site`` is the frozenset of the lex representative and
-        ``discovered_site`` remains the directed discovery tuple. Unique-edit
-        keys directed ``MapRankKey`` before presentation.
+        For ``site_kind="directed_bond"``, public ``info["site"]`` is a
+        frozenset (only conversion: raw tuple → frozenset). Orientation is
+        the raw discovery on ``info["discovered_site"]`` (ordered tuple, no
+        conversion). With ``canonical_emitted_sites``, ``site`` is the
+        frozenset of the lex representative and ``discovered_site`` remains
+        the raw directed discovery tuple. Unique-edit keys directed
+        ``MapRankKey`` before presentation.
         """
         if mol is None:
             raise ValueError("mol is required")
@@ -286,7 +281,7 @@ class ReactionRule:
         # at its current depth, so products can sit one step below it.
         mol = mol.xf.tracing._stamp()
         # Matching, map clearing, and forest stamps happen on a copy.
-        mol = _work_copy(mol).xf.tracing._stamp()
+        mol = copy_mol(mol).xf.tracing._stamp()
 
         if self.is_terminal_product(mol):
             return
@@ -373,35 +368,12 @@ class ReactionRule:
 
             yield finished, cast(ProductInfo, dict(info))
 
-    def _top_site(self, site: Site, mol: Mol) -> Site:
-        te = mol.xf.topol_equiv
-        match site:
-            case int():
-                return te[site]
-            case tuple():
-                # Preserve map order for directed_bond emission.
-                return tuple(int(te[s]) for s in site)
-            case frozenset():
-                nested: list[frozenset[int]] = []
-                flat: list[int] = []
-                for item in site:
-                    match item:
-                        case frozenset():
-                            nested.append(frozenset(int(te[index]) for index in item))
-                        case int():
-                            flat.append(int(te[item]))
-                if nested:
-                    return frozenset(nested)
-                return frozenset(flat)
-            case _:
-                return site
-
     def is_terminal_product(self, mol: Mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search.
 
         Reads the forest-level ``is_terminal_product`` flag (survives
         ``clear_structure``). Prefer ``mol.xf.is_terminal`` at call sites that
-        already hold a :class:`ForestMol`.
+        already hold a :class:`~xenosite.forest.rdkitutil.ForestMol`.
         """
 
         return mol.xf.is_terminal
@@ -427,8 +399,8 @@ class ReactionRule:
           substituted for it.
         - ``info["options"]`` is the one resolved effect at that site.
         - ``products`` is a list of connected mols. Cleavage puts each
-          fragment in that list before :meth:`metabolize` runs
-          ``forest_trace``. It does not return one mol that is several pieces.
+          fragment in that list before :meth:`metabolize` finishes the
+          trace. It does not return one mol that is several pieces.
 
         ``filter_rules(mol, rule, pattern_info)`` is called before a match and
         can see the pattern's ``span``. False means that pattern is skipped.
@@ -482,83 +454,23 @@ def _rule_name(rule: ReactionRule | str | None) -> str | None:
     return getattr(rule, "name", type(rule).__name__)
 
 
-def _work_copy(mol: Mol) -> Mol:
-    """A mol the rule may stamp. The caller's object is left alone."""
-
-    return copy_mol(mol)
-
-
-def stamp_forest_labels(mol: Mol) -> TracingMol:
-    """Ensure tracing and stamp labels. Prefer ``mol.xf.tracing._stamp()``.
-
-    Thin shim for tests that still take a bare ``Mol``. ``install_forest`` /
-    ``ensure_tracing`` / ``install_forest`` are gone — use ``mol.xf.tracing._stamp``.
-    """
-
-    return mol.xf.tracing._stamp()
-
-
-def install_forest(mol: Mol) -> TracingMol:
-    """Deprecated alias of :func:`stamp_forest_labels` (tests)."""
-
-    return stamp_forest_labels(mol)
-
-
-def reordered_forest_labels(mol: TracingMol) -> None:
-    trace = mol._forest["atom_trace"]
-    # if "atom_trace" not in forest:
-    #     install_forest(mol)
-
-    for atom in mol.GetAtoms():
-        i = atom.GetIdx()
-
-        if atom.GetAtomicNum() != 1:
-            assert atom.HasProp("forestLabel")
-            tag = atom.GetProp("forestLabel")
-            record = trace["records"][tag]
-            idx = record.get("idx")
-            if not idx:
-                raise KeyError("idx")
-            idx[-1] = i
-
-
 def _as_site(value: Site | None) -> Site:
-    """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first."""
+    """Narrow a known-index :class:`Site`. Resolve AtomRef leaves first.
 
-    match value:
-        case int():
-            return value
-        case tuple() if all(isinstance(item, int) for item in value):
-            return value
-        case frozenset() if all(isinstance(item, int) for item in value):
-            return value
-        case frozenset() if all(
-            isinstance(item, frozenset) and all(isinstance(inner, int) for inner in item)
-            for item in value
-        ):
-            return value
-        case _:
-            raise TypeError(value)
-
-
-def _site_tuple(site: Site) -> Site:
-    """Normalize a site for undirected trace bookkeeping (sorted ends).
-
-    Do **not** use for ``discovered_site`` on ``directed_bond`` — that field
-    keeps map order. Callers that need order preserved should copy the tuple.
+    ``AtomSite`` and the other site names are aliases, not runtime classes,
+    so this dispatches through the predicates in :mod:`xenosite.forest.records`.
+    ``BondSite`` and ``AtomPairSite`` share one shape (:func:`_is_index_set_site`).
     """
 
-    match site:
-        case int():
-            return (site,)
-        case tuple():
-            return tuple(sorted(site))
-        case _:
-            sample = next(iter(site), None)
-            if isinstance(sample, frozenset):
-                return site
-            indexes = [item for item in site if isinstance(item, int)]
-            return tuple(sorted(indexes))
+    if _is_atom_site(value):
+        return value
+    if _is_directed_bond_site(value):
+        return value
+    if _is_index_set_site(value):
+        return value
+    if _is_bond_pair_site(value):
+        return value
+    raise TypeError(value)
 
 
 def _trace_info(info: SiteInfo) -> TraceInfo:
@@ -569,7 +481,6 @@ def _trace_info(info: SiteInfo) -> TraceInfo:
         "rule": _rule_name(info["rule"]),
     }
     if "discovered_site" in info:
-        # Preserve tuple order (directed_bond orientation).
         kept["discovered_site"] = info["discovered_site"]
     if "rxn_num" in info:
         kept["rxn_num"] = info["rxn_num"]
@@ -641,21 +552,6 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     return effect
 
 
-def forest_trace(
-    reactant: Mol,
-    product: Mol,
-    info: SiteInfo,
-    executed: ReactionRule | None = None,
-) -> InitializedAtomTrace:
-    """Record one transform on the product's atom trace.
-
-    Thin wrapper over ``product.xf.tracing._trace(...)``. Prefer
-    ``reactant.xf._of_products(product, info)`` for the finishing path.
-    """
-
-    return product.xf.tracing._trace(reactant, info, executed=executed)
-
-
 def _apply_forest_trace(
     reactant: Mol,
     product: Mol,
@@ -703,7 +599,9 @@ def _apply_forest_trace(
     else:
         pattern = None
     addition: TraceAddition = {
-        "site": _site_tuple(site),
+        # Emitted / forest-label site: already undirected (frozenset for
+        # directed_bond via _present_site_info). Never re-wrap.
+        "site": site,
         "rules": tuple(chain),
         "info": _trace_info(info),
         "effect": _as_effect(info["options"]),
@@ -713,11 +611,8 @@ def _apply_forest_trace(
         "pattern": pattern,
     }
     if "discovered_site" in info:
-        # Preserve map order for directed_bond (do not sort via _site_tuple).
-        disc = info["discovered_site"]
-        addition["discovered_site"] = (
-            disc if isinstance(disc, tuple) else _site_tuple(disc)
-        )
+        # Raw discovery site unchanged (directed_bond keeps its tuple).
+        addition["discovered_site"] = info["discovered_site"]
     trace["additions"][transform_id] = addition
     trace["transforms"].append(transform_id)
 
@@ -890,49 +785,6 @@ def _assign_pattern_names(patterns: Iterable[PatternInfo]) -> None:
             continue
         pattern["name"] = str(next_num)
         next_num += 1
-
-
-def may(info: PatternInfo, key: str, value: EffectField = True) -> bool:
-    """True if any possibility has this outcome.
-
-    For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring.
-    """
-
-    for possibility in info.get("possibilities") or ():
-        have = possibility.get(key, _EFFECT_DEFAULTS.get(key))
-        if (
-            isinstance(value, str)
-            and isinstance(have, str)
-            and key
-            in (
-                "adds",
-                "removes",
-                "needs",
-            )
-        ):
-            if value in have:
-                return True
-        elif have == value:
-            return True
-    return False
-
-
-def must(info: PatternInfo, key: str, value: EffectField = True) -> bool:
-    """True if every possibility has this outcome."""
-
-    possibilities = info.get("possibilities") or ()
-    if not possibilities:
-        return False
-    return all(
-        (
-            isinstance(value, str)
-            and isinstance(possibility.get(key, ""), str)
-            and key in ("adds", "removes", "needs")
-            and value in possibility.get(key, "")
-        )
-        or possibility.get(key, _EFFECT_DEFAULTS.get(key)) == value
-        for possibility in possibilities
-    )
 
 
 def _when_matches(mol: Mol, mapped: Mapping[int, int], when: When) -> bool:
@@ -1149,9 +1001,9 @@ def _site_indexes(
 
     ``directed_bond`` keeps ``site_map`` order as a tuple (map 1 first when
     that is the chemically distinct end) for unique-edit. Public yield
-    coerces via :func:`_present_site_info` (frozenset ``site`` + ordered
-    ``discovered_site``). Other kinds are already a frozenset (undirected
-    ``bond`` / singleton ``atom``).
+    via :func:`_present_site_info` turns emitted ``site`` into a frozenset
+    and sets ``discovered_site`` to that raw tuple. Other kinds are already
+    a frozenset (undirected ``bond`` / singleton ``atom``).
     """
 
     key = pattern.get("site_map", 1)
@@ -1175,29 +1027,24 @@ def _present_site_info(
     *,
     site_kind: RuleSiteKind,
 ) -> SmirksSiteInfo:
-    """Yield-only presentation of ``site`` / ``discovered_site``.
+    """Present emitted ``site`` vs raw ``discovered_site``.
 
-    Unique-edit ``seen`` must already have keyed on ``discovery`` (directed
-    tuple + ``MapRankKey`` for ``directed_bond``).
-
-    For ``directed_bond``:
-    - ``site`` = ``frozenset(emit_site)`` (lex-canonical when
-      ``canonical_emitted_sites`` remapped ``emit_site``)
-    - ``discovered_site`` = ordered discovery tuple (orientation; always set)
-
-    For other kinds, leave canonical ``discovered_site`` semantics unchanged
-    (only when remap already set it on ``info``); ensure ``site`` is
-    ``emit_site``.
+    ``discovered_site`` is always the raw discovery site (no conversion).
+    The only conversion of emitted ``site`` here is directed_bond:
+    ``frozenset(emit_site)`` so forest labels stay undirected. Lex-orbit
+    remapping of ``site`` (when ``canonical_emitted_sites`` is on) happens
+    upstream before this call — not unique-edit / ``unique_csmi`` dedup.
     """
 
     if site_kind == "directed_bond" and isinstance(discovery, tuple):
-        public_emit = (
+        # site = frozenset(emit_site)  — only conversion on this path
+        public_site: Site = (
             frozenset(emit_site) if isinstance(emit_site, tuple) else emit_site
         )
         return {
             **info,
-            "site": public_emit,
-            "discovered_site": discovery,
+            "site": public_site,
+            "discovered_site": discovery,  # raw; never converted
         }
     if info.get("site") is emit_site:
         return info
@@ -1344,6 +1191,8 @@ class SmirksReactionRule(ReactionRule):
                 emit_mapped: dict[int, int] = dict(mapped)
                 emit_site = site
                 if want_canonical:
+                    # canonical_emitted_sites: remap chemistry + emitted site
+                    # to lex orbit (not unique-edit / unique_csmi dedup).
                     remapped = canonicalize_smarts_match(
                         context,
                         mapped,
@@ -1358,7 +1207,7 @@ class SmirksReactionRule(ReactionRule):
                         info = {
                             **info,
                             "site": emit_site,
-                            "discovered_site": site,
+                            "discovered_site": site,  # raw discovery
                         }
                     else:
                         info = {**info, "site": emit_site}
@@ -1373,8 +1222,7 @@ class SmirksReactionRule(ReactionRule):
                 if not products:
                     continue
                 # Unique-edit ``seen`` already keyed on directed signature.
-                # Presentation: frozenset site; directed_bond orientation on
-                # discovered_site (ordered tuple).
+                # site: frozenset for directed_bond; discovered_site: raw.
                 seen.add(signature)
                 info = _present_site_info(
                     info,
@@ -1407,43 +1255,6 @@ class SmirksReactionRule(ReactionRule):
 
         return product
 
-    # this method should probably stay here, because it has to do with how
-    # reactions are process.
-    # TODO: A reaction helper in rdkitutil could apply reactions and return
-    # products while maintaining the forest instead of maintaing that logic here.
-    def _get_product_mappings(
-        self, product: Mol
-    ) -> tuple[dict[int, int], dict[int, int]]:
-        mapno2idx: dict[int, int] = {}
-        reactant2idx: dict[int, int] = {}
-        for a in product.GetAtoms():
-            prod_idx = a.GetIdx()
-            react_idx = (
-                int(a.GetProp("react_atom_idx"))
-                if a.HasProp("react_atom_idx")
-                else None
-            )
-            mapno = int(a.GetProp("old_mapno")) if a.HasProp("old_mapno") else None
-
-            if react_idx is not None and mapno is not None:
-                mapno2idx[mapno] = react_idx
-
-            if react_idx is not None:
-                reactant2idx[react_idx] = prod_idx
-
-        return mapno2idx, reactant2idx
-
-    def _get_site(self, products: Sequence[Mol]) -> frozenset[int]:
-        """Return the sites in product based on the reactant_idx property assigned by
-        rxns.RunReactants in self.metabolites."""
-
-        site: set[int] = set()
-        for product in products:
-            mapno2idx, _ = self._get_product_mappings(product)
-            site = site | set(mapno2idx.values())
-        return frozenset(site)
-
-
 # Bond order stored in the structure cache. Not RDKit mols: those do not
 # belong in a dict that is deep-copied onto every product.
 # Int keys: 1.0, 2.0, and 3.0 hash the same as 1, 2, and 3, so a
@@ -1467,47 +1278,6 @@ def system_neighbors(mol: Mol, system: Iterable[int]) -> dict[int, list[int]]:
                 neighbors[i].append(j)
                 neighbors[j].append(i)
     return neighbors
-
-
-def odd_anchor_pairs(
-    anchors: Sequence[int], neighbors: Mapping[int, Sequence[int]]
-) -> list[tuple[int, int]]:
-    """Pairs of anchors separated by an odd number of bonds.
-
-    Ortho (1) and para (3) pass. Meta (2) does not. The walk may cross
-    non-anchor atoms; ``neighbors`` is the whole system.
-    """
-
-    anchors = [a for a in anchors if a in neighbors]
-    pairs: list[tuple[int, int]] = []
-    for i, start in enumerate(anchors):
-        dist = {start: 0}
-        queue = deque([start])
-        while queue:
-            node = queue.popleft()
-            for nbr in neighbors[node]:
-                if nbr not in dist:
-                    dist[nbr] = dist[node] + 1
-                    queue.append(nbr)
-        for end in anchors[i + 1 :]:
-            d = dist.get(end)
-            if d is not None and d % 2 == 1:
-                pairs.append((start, end))
-    return pairs
-
-
-def alternating_path(
-    bond_map: Mapping[tuple[int, int], float],
-    start: int,
-    end: int,
-    neighbors: Mapping[int, Sequence[int]],
-) -> list[int] | None:
-    """Shortest double-first alternating path. Either end may hold the opening double."""
-
-    paths = alternating_paths(bond_map, start, end, neighbors)
-    if not paths:
-        return None
-    return min(paths, key=len)
 
 
 def alternating_paths(
@@ -1656,15 +1426,16 @@ def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:
 
     ranks = mol.xf.topol_equiv
     site = info.get("discovered_site", info.get("site"))
-    match site:
-        case int():
-            return (int(ranks[site]),)
-        case tuple():
-            return tuple(int(ranks[i]) for i in site)
-        case frozenset():
-            return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
-        case _:
-            return ()
+    if _is_atom_site(site):
+        return (int(ranks[site]),)
+    if _is_directed_bond_site(site):
+        return tuple(int(ranks[i]) for i in site)
+    if _is_index_set_site(site):
+        return tuple(sorted(int(ranks[i]) for i in site))
+    # BondPairSite has no bare int ends; ranks stay empty (same as a miss).
+    if isinstance(site, frozenset):
+        return tuple(sorted(int(ranks[i]) for i in site if isinstance(i, int)))
+    return ()
 
 
 class SiteDeduplicationWarning(UserWarning):
@@ -1927,12 +1698,6 @@ EDITS: dict[
 }
 
 
-def _merge_options(
-    left: Effect, right: Effect, dearomatizes: bool
-) -> Effect:
-    return merge_effects(left, right, dearomatizes)
-
-
 def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:
     key = info.get("site_map", 1)
     if not isinstance(key, int) or key not in mapped:
@@ -2108,6 +1873,8 @@ class ResonanceRule(SmirksReactionRule):
                 emit_mapped: dict[int, int] = dict(mapped)
                 emit_site = site
                 if want_canonical:
+                    # canonical_emitted_sites: remap chemistry + emitted site
+                    # to lex orbit (not unique-edit / unique_csmi dedup).
                     remapped = canonicalize_smarts_match(
                         context,
                         mapped,
@@ -2122,7 +1889,7 @@ class ResonanceRule(SmirksReactionRule):
                         info = {
                             **info,
                             "site": emit_site,
-                            "discovered_site": site,
+                            "discovered_site": site,  # raw discovery
                         }
                     else:
                         info = {**info, "site": emit_site}
@@ -2141,8 +1908,7 @@ class ResonanceRule(SmirksReactionRule):
                 if not products:
                     continue
                 # Unique-edit ``seen`` already keyed on directed signature.
-                # Presentation: frozenset site; directed_bond orientation on
-                # discovered_site (ordered tuple).
+                # site: frozenset for directed_bond; discovered_site: raw.
                 seen.add(signature)
                 info = _present_site_info(
                     info,
@@ -2347,7 +2113,7 @@ class ResonancePairRule(ResonanceRule):
                             "path_ends": frozenset((emit_start, emit_end)),
                         }
                         if emit_site != site:
-                            preview = {**preview, "discovered_site": site}
+                            preview = {**preview, "discovered_site": site}  # raw
                     # Reserve the unique-edit slot once per swappable/ordered site.
                     seen.add(signature)
                     combos.append(

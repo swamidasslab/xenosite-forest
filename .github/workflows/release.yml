@@ -23,6 +23,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Same portable pynauty/nauty build as test.yml (pdobsan/pynauty#49).
+    env:
+      CC: "gcc -march=x86-64 -mtune=generic"
+      CXX: "g++ -march=x86-64 -mtune=generic"
     strategy:
       fail-fast: true
       matrix:
@@ -34,6 +38,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          # Tag events disable setup-uv cache by default; suffix still documents intent.
+          cache-suffix: portable-x86-64
       - name: Install package and test extras
         run: uv sync --extra network --group dev
       - name: Show package version
