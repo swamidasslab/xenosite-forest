@@ -10,6 +10,25 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.7.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.1) - 2026-09-21
+
+### Added
+
+- Declare and CI-test Python 3.14 support (requires-python already >=3.11). ([#20](https://github.com/swamidasslab/xenosite-forest/issues/20))
+
+### Changed
+
+- Post-3.10 cleanup: pin pyright ``pythonVersion = "3.11"``; enable ruff ``UP``
+  (pyupgrade) with ``UP031`` ignored; ``match`` for ``Site`` shape checks in forest
+  rules. Audit found no remaining ``typing_extensions`` / ``tomli`` / ``Self`` TypeVar
+  shims in live forest. ([#21](https://github.com/swamidasslab/xenosite-forest/issues/21))
+- Emitted ``site``: directed_bond tuple→frozenset; under ``canonical_emitted_sites``, lex-orbit remap (not unique-edit / CSMI dedup). ``discovered_site`` is always the raw discovery site. Dropped ``_site_tuple`` and unused internal stamp helpers. ([#22](https://github.com/swamidasslab/xenosite-forest/issues/22))
+
+### Fixed
+
+- CI builds pynauty with portable ``CC=-march=x86-64`` so uv-cached wheels do not SIGILL on GitHub runners (``pdobsan/pynauty#49``). pynauty is not bundled into forest wheels. ([#23](https://github.com/swamidasslab/xenosite-forest/issues/23))
+
+
 ## [0.7.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.0) - 2026-09-20
 
 ### Deprecated
