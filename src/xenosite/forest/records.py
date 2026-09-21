@@ -428,7 +428,7 @@ class AtomTrace(TypedDict):
 
 
 class InitializedAtomTrace(TypedDict):
-    """The ``atom_trace`` dict ``install_forest`` writes.
+    """The ``atom_trace`` dict ``xf.tracing._stamp`` writes.
 
     Same fields as :class:`AtomTrace`. Every key is present. Not a second schema.
     """

@@ -2,6 +2,23 @@
 
 ## 2026-09-20
 
+- **Dead forest shims (coverage).** CI-shaped
+  `uv run pytest tests/forest src/xenosite/forest -n auto --cov=xenosite.forest`
+  (1616 passed). 0-hit and uncalled: `_top_site` (wrong `topol_equiv` remap;
+  canonical path is `canonical_emitted_site`), `stamp_forest_labels` /
+  `install_forest` / `forest_trace` / `set_terminal_product` / `_work_copy`
+  (inlined `copy_mol`), `reordered_forest_labels` (live helper is
+  `rdkitutil._reordered_forest_labels`), `may` / `must`,
+  `SmirksReactionRule._get_site` / `_get_product_mappings`,
+  `odd_anchor_pairs`, `alternating_path` (plural stays), `_merge_options`,
+  `is_canonical_orbit_candidate`, `atom_pair_orbit_pynauty_ordered`,
+  `_ensure_smiles_tables`. Left: `ReactionRule.metabolites` base,
+  `bfs.main`, AtomTracker facade, xf orbit plumbing, isotope/pynauty
+  profile oracles, `cannonicalize_order`, `ordered_bond_pair_orbit`,
+  `XfTracing._install`. `_rule_name` stays (trace bookkeeping).
+
+## 2026-09-20
+
 - **Tooling toward 3.11+ typing.** Ruff: keep `target-version=py311`; enable
   `UP` (pyupgrade); ignore `UP031` (printf→format flood). `UP040`/`UP046`/
   `UP047` (`type` aliases / PEP 695) stay off via target until floor ≥3.12.

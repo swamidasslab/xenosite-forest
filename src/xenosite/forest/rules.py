@@ -40,7 +40,6 @@ from xenosite.forest.rdkitutil import (
     Atom,
     Bond,
     BondType,
-    ForestMol,
     Mol,
     RWMol,
     TracingMol,
@@ -95,14 +94,6 @@ def _copy_when(raw: When | Mapping[str, int]) -> When:
     if isinstance(hydrogens, int):
         copied["h"] = hydrogens
     return copied
-
-
-def set_terminal_product(mol: Mol, value: bool = True) -> ForestMol:
-    """Mark ``mol`` terminal on the forest. Prefer ``mol.xf._mark_terminal``."""
-
-    held = mol.xf.forestmol
-    held.xf._mark_terminal(value)
-    return held
 
 
 class ProductsOfReaction(NamedTuple):
@@ -286,7 +277,7 @@ class ReactionRule:
         # at its current depth, so products can sit one step below it.
         mol = mol.xf.tracing._stamp()
         # Matching, map clearing, and forest stamps happen on a copy.
-        mol = _work_copy(mol).xf.tracing._stamp()
+        mol = copy_mol(mol).xf.tracing._stamp()
 
         if self.is_terminal_product(mol):
             return
@@ -373,35 +364,12 @@ class ReactionRule:
 
             yield finished, cast(ProductInfo, dict(info))
 
-    def _top_site(self, site: Site, mol: Mol) -> Site:
-        te = mol.xf.topol_equiv
-        match site:
-            case int():
-                return te[site]
-            case tuple():
-                # Preserve map order for directed_bond emission.
-                return tuple(int(te[s]) for s in site)
-            case frozenset():
-                nested: list[frozenset[int]] = []
-                flat: list[int] = []
-                for item in site:
-                    match item:
-                        case frozenset():
-                            nested.append(frozenset(int(te[index]) for index in item))
-                        case int():
-                            flat.append(int(te[item]))
-                if nested:
-                    return frozenset(nested)
-                return frozenset(flat)
-            case _:
-                return site
-
     def is_terminal_product(self, mol: Mol) -> bool:
         """True if ``mol`` must not be expanded further in guided path search.
 
         Reads the forest-level ``is_terminal_product`` flag (survives
         ``clear_structure``). Prefer ``mol.xf.is_terminal`` at call sites that
-        already hold a :class:`ForestMol`.
+        already hold a :class:`~xenosite.forest.rdkitutil.ForestMol`.
         """
 
         return mol.xf.is_terminal
@@ -427,8 +395,8 @@ class ReactionRule:
           substituted for it.
         - ``info["options"]`` is the one resolved effect at that site.
         - ``products`` is a list of connected mols. Cleavage puts each
-          fragment in that list before :meth:`metabolize` runs
-          ``forest_trace``. It does not return one mol that is several pieces.
+          fragment in that list before :meth:`metabolize` finishes the
+          trace. It does not return one mol that is several pieces.
 
         ``filter_rules(mol, rule, pattern_info)`` is called before a match and
         can see the pattern's ``span``. False means that pattern is skipped.
@@ -480,46 +448,6 @@ def _rule_name(rule: ReactionRule | str | None) -> str | None:
     if isinstance(rule, str):
         return rule
     return getattr(rule, "name", type(rule).__name__)
-
-
-def _work_copy(mol: Mol) -> Mol:
-    """A mol the rule may stamp. The caller's object is left alone."""
-
-    return copy_mol(mol)
-
-
-def stamp_forest_labels(mol: Mol) -> TracingMol:
-    """Ensure tracing and stamp labels. Prefer ``mol.xf.tracing._stamp()``.
-
-    Thin shim for tests that still take a bare ``Mol``. ``install_forest`` /
-    ``ensure_tracing`` / ``install_forest`` are gone — use ``mol.xf.tracing._stamp``.
-    """
-
-    return mol.xf.tracing._stamp()
-
-
-def install_forest(mol: Mol) -> TracingMol:
-    """Deprecated alias of :func:`stamp_forest_labels` (tests)."""
-
-    return stamp_forest_labels(mol)
-
-
-def reordered_forest_labels(mol: TracingMol) -> None:
-    trace = mol._forest["atom_trace"]
-    # if "atom_trace" not in forest:
-    #     install_forest(mol)
-
-    for atom in mol.GetAtoms():
-        i = atom.GetIdx()
-
-        if atom.GetAtomicNum() != 1:
-            assert atom.HasProp("forestLabel")
-            tag = atom.GetProp("forestLabel")
-            record = trace["records"][tag]
-            idx = record.get("idx")
-            if not idx:
-                raise KeyError("idx")
-            idx[-1] = i
 
 
 def _as_site(value: Site | None) -> Site:
@@ -639,21 +567,6 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     if isinstance(when, dict):
         effect["when"] = _copy_when(when)
     return effect
-
-
-def forest_trace(
-    reactant: Mol,
-    product: Mol,
-    info: SiteInfo,
-    executed: ReactionRule | None = None,
-) -> InitializedAtomTrace:
-    """Record one transform on the product's atom trace.
-
-    Thin wrapper over ``product.xf.tracing._trace(...)``. Prefer
-    ``reactant.xf._of_products(product, info)`` for the finishing path.
-    """
-
-    return product.xf.tracing._trace(reactant, info, executed=executed)
 
 
 def _apply_forest_trace(
@@ -890,49 +803,6 @@ def _assign_pattern_names(patterns: Iterable[PatternInfo]) -> None:
             continue
         pattern["name"] = str(next_num)
         next_num += 1
-
-
-def may(info: PatternInfo, key: str, value: EffectField = True) -> bool:
-    """True if any possibility has this outcome.
-
-    For ``adds`` / ``removes`` / ``needs``, ``value`` may be a substring.
-    """
-
-    for possibility in info.get("possibilities") or ():
-        have = possibility.get(key, _EFFECT_DEFAULTS.get(key))
-        if (
-            isinstance(value, str)
-            and isinstance(have, str)
-            and key
-            in (
-                "adds",
-                "removes",
-                "needs",
-            )
-        ):
-            if value in have:
-                return True
-        elif have == value:
-            return True
-    return False
-
-
-def must(info: PatternInfo, key: str, value: EffectField = True) -> bool:
-    """True if every possibility has this outcome."""
-
-    possibilities = info.get("possibilities") or ()
-    if not possibilities:
-        return False
-    return all(
-        (
-            isinstance(value, str)
-            and isinstance(possibility.get(key, ""), str)
-            and key in ("adds", "removes", "needs")
-            and value in possibility.get(key, "")
-        )
-        or possibility.get(key, _EFFECT_DEFAULTS.get(key)) == value
-        for possibility in possibilities
-    )
 
 
 def _when_matches(mol: Mol, mapped: Mapping[int, int], when: When) -> bool:
@@ -1407,43 +1277,6 @@ class SmirksReactionRule(ReactionRule):
 
         return product
 
-    # this method should probably stay here, because it has to do with how
-    # reactions are process.
-    # TODO: A reaction helper in rdkitutil could apply reactions and return
-    # products while maintaining the forest instead of maintaing that logic here.
-    def _get_product_mappings(
-        self, product: Mol
-    ) -> tuple[dict[int, int], dict[int, int]]:
-        mapno2idx: dict[int, int] = {}
-        reactant2idx: dict[int, int] = {}
-        for a in product.GetAtoms():
-            prod_idx = a.GetIdx()
-            react_idx = (
-                int(a.GetProp("react_atom_idx"))
-                if a.HasProp("react_atom_idx")
-                else None
-            )
-            mapno = int(a.GetProp("old_mapno")) if a.HasProp("old_mapno") else None
-
-            if react_idx is not None and mapno is not None:
-                mapno2idx[mapno] = react_idx
-
-            if react_idx is not None:
-                reactant2idx[react_idx] = prod_idx
-
-        return mapno2idx, reactant2idx
-
-    def _get_site(self, products: Sequence[Mol]) -> frozenset[int]:
-        """Return the sites in product based on the reactant_idx property assigned by
-        rxns.RunReactants in self.metabolites."""
-
-        site: set[int] = set()
-        for product in products:
-            mapno2idx, _ = self._get_product_mappings(product)
-            site = site | set(mapno2idx.values())
-        return frozenset(site)
-
-
 # Bond order stored in the structure cache. Not RDKit mols: those do not
 # belong in a dict that is deep-copied onto every product.
 # Int keys: 1.0, 2.0, and 3.0 hash the same as 1, 2, and 3, so a
@@ -1467,47 +1300,6 @@ def system_neighbors(mol: Mol, system: Iterable[int]) -> dict[int, list[int]]:
                 neighbors[i].append(j)
                 neighbors[j].append(i)
     return neighbors
-
-
-def odd_anchor_pairs(
-    anchors: Sequence[int], neighbors: Mapping[int, Sequence[int]]
-) -> list[tuple[int, int]]:
-    """Pairs of anchors separated by an odd number of bonds.
-
-    Ortho (1) and para (3) pass. Meta (2) does not. The walk may cross
-    non-anchor atoms; ``neighbors`` is the whole system.
-    """
-
-    anchors = [a for a in anchors if a in neighbors]
-    pairs: list[tuple[int, int]] = []
-    for i, start in enumerate(anchors):
-        dist = {start: 0}
-        queue = deque([start])
-        while queue:
-            node = queue.popleft()
-            for nbr in neighbors[node]:
-                if nbr not in dist:
-                    dist[nbr] = dist[node] + 1
-                    queue.append(nbr)
-        for end in anchors[i + 1 :]:
-            d = dist.get(end)
-            if d is not None and d % 2 == 1:
-                pairs.append((start, end))
-    return pairs
-
-
-def alternating_path(
-    bond_map: Mapping[tuple[int, int], float],
-    start: int,
-    end: int,
-    neighbors: Mapping[int, Sequence[int]],
-) -> list[int] | None:
-    """Shortest double-first alternating path. Either end may hold the opening double."""
-
-    paths = alternating_paths(bond_map, start, end, neighbors)
-    if not paths:
-        return None
-    return min(paths, key=len)
 
 
 def alternating_paths(
@@ -1925,12 +1717,6 @@ EDITS: dict[
     "dealkylate": edit_dealkylate,
     "keep": edit_keep,
 }
-
-
-def _merge_options(
-    left: Effect, right: Effect, dearomatizes: bool
-) -> Effect:
-    return merge_effects(left, right, dearomatizes)
 
 
 def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:

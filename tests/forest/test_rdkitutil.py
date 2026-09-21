@@ -152,9 +152,10 @@ def test_fragment_split_uses_pieces():
 
 def test_carry_forest_drops_sibling_records_and_clears_structure():
     from xenosite.forest.rdkitutil import GetMolFrags, carry_forest
-    from xenosite.forest.rules import stamp_forest_labels
 
-    parent = stamp_forest_labels(Chem.MolFromSmiles("C.O"))
+    parent = Chem.MolFromSmiles("C.O")
+    assert parent is not None
+    parent.xf.tracing._stamp()
     parent._forest["cache"]["csmi"] = "stale"
     frags = list(GetMolFrags(parent, asMols=True, sanitizeFrags=False))
     assert len(frags) == 2
