@@ -2,6 +2,15 @@
 
 ## 2026-09-20
 
+- **Tooling toward 3.11+ typing.** Ruff: keep `target-version=py311`; enable
+  `UP` (pyupgrade); ignore `UP031` (printf→format flood). `UP040`/`UP046`/
+  `UP047` (`type` aliases / PEP 695) stay off via target until floor ≥3.12.
+  No FA rules that strip `from __future__ import annotations`. Pyright:
+  `pythonVersion = "3.11"` (already). Skip `reportImplicitOverride` while
+  floor is 3.11 (`typing.override` is 3.12+; do not re-add
+  `typing_extensions` just for `@override`). One UP fix: `Sequence` import
+  in `bfs.py` → `collections.abc` (UP035).
+
 - **Post-3.10 antipattern audit (live forest).** Drop commit `7d61dde` already
   removed `typing-extensions` and moved `NotRequired` to stdlib `typing`;
   ruff `target-version=py311`. Re-scan of `src/xenosite/forest` + tests +

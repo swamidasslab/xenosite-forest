@@ -8,7 +8,7 @@ when only a reactant is given.
 from __future__ import annotations
 
 import argparse
-from typing import Sequence
+from collections.abc import Sequence
 
 from .find_path import bfs, dfs, find_path
 from .rdkitutil import canon_smiles
