@@ -118,9 +118,9 @@ Old tests: `tests/test_conjugates.py`, `tests/test_star_expand.py`.
 
 Status: approved to drop the opt-in. Methide itself is not dropped.
 
-The rule's data always offers methide. `PatternInfo` resolves at most one
-methide site. A caller who wants none uses `filter_sites`. There is no
-`pathways=("methide",)` flag.
+The rule's data always offers methide. Both methide ends resolve; the
+one-side limit was a mistake, not a drop. There is no separate "no
+methides" mode. There is no `pathways=("methide",)` flag.
 
 Old tests: `tests/test_dh_methide_pathways.py`.
 

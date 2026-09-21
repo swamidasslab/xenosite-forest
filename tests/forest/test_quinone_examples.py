@@ -39,6 +39,51 @@ def test_quinone_emits_historical_product(name, reactant, product, site):
     assert False, f"Failed to find {product} in {reactant} ({name})"
 
 
+def test_carbamazepine_does_not_emit_two_double_nitrogen():
+    """Iminium plus dealkylation must not leave ``C=[N+]=C``.
+
+    Charge on a tertiary nitrogen with one double bond is still an iminium.
+    Chlorpromazine keeps that product. Carbamazepine site ``{4, 17}`` does not.
+    """
+
+    bad = "C1=c2ccccc2=[N+]=c2ccccc2=C1"
+    cbz = MolFromSmiles("NC(=O)N1c2ccccc2C=Cc2ccccc21")
+    assert cbz is not None
+    cbz_products = {
+        p.xf.csmi
+        for products, _info in QuinoneFormation().metabolize(cbz)
+        for p in products
+    }
+    assert bad not in cbz_products
+
+    cpz = MolFromSmiles("CN(C)CCCN1c2ccccc2Sc2ccc(Cl)cc21")
+    assert cpz is not None
+    cpz_products = {
+        p.xf.csmi
+        for products, _info in QuinoneFormation().metabolize(cpz)
+        for p in products
+    }
+    assert any("[n+]" in smi or "[N+]" in smi for smi in cpz_products)
+
+
+def test_alprazolam_re_aromatized_cation_is_not_a_quinone():
+    """The kekulized system came back aromatic, with no localized double bond.
+
+    ``Cc1nnc2cnc(-c3ccccc3)c3cc(Cl)ccc3[n+]1-2`` has no carbonyl. The pendant
+    phenyl can stay aromatic. The system that was kekulized cannot.
+    """
+
+    bad = "Cc1nnc2cnc(-c3ccccc3)c3cc(Cl)ccc3[n+]1-2"
+    mol = MolFromSmiles("Cc1nnc2n1-c1ccc(Cl)cc1C(c1ccccc1)=NC2")
+    assert mol is not None
+    products = {
+        p.xf.csmi
+        for pieces, _info in QuinoneFormation().metabolize(mol)
+        for p in pieces
+    }
+    assert bad not in products
+
+
 def test_nonaromatic_conjugate_is_not_dearomatizing():
     """A ring enol pair is the same edit. No aromatic atom, so not a quinone."""
 

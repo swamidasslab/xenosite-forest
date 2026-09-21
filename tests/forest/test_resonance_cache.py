@@ -8,7 +8,7 @@ from xenosite.forest.rdkitutil import (
     parents_for_ends,
 )
 from xenosite.forest.records import KekuleParents
-from xenosite.forest.rules import Epoxidation, OxygenReduction
+from xenosite.forest.rules import Dealkylation, Epoxidation, OxygenReduction
 
 _ANTHRACENE = "c1ccc2cc3ccccc3cc2c1"
 _POLYPHENYL = "c1ccc(-c2ccc(-c3ccc(-c4ccc(-c5ccc(-c6ccccc6)cc5)cc4)cc3)cc2)cc1"
@@ -69,12 +69,22 @@ def test_polyphenyl_is_twelve_parents_not_sixty_four():
         assert aromatic == 30
 
 
+def test_epoxidation_does_not_store_kekule_parents():
+    """Epoxidation reacts on supplier mols. It does not fill the parent cache."""
+
+    mol = Chem.MolFromSmiles("c1ccccc1")
+    assert mol is not None
+    list(Epoxidation().metabolites(mol))
+    structure = ensure_forest(mol).xf.forest.get("cache") or {}
+    assert structure.get("kekule_parents") is None
+
+
 def test_rule_stores_the_dict_and_forest_copy_keeps_the_mols():
     from xenosite.forest.forest_copy import forest_copy
 
     mol = Chem.MolFromSmiles("c1ccccc1")
     assert mol is not None
-    list(Epoxidation().metabolites(mol))
+    list(Dealkylation().metabolites(mol))
     structure = ensure_forest(mol).xf.forest.get("cache")
     assert structure is not None
     cache = structure.get("kekule_parents")
