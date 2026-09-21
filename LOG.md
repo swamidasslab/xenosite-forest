@@ -2,6 +2,8 @@
 
 ## 2026-09-20
 
+- **0.7.2 hotfix:** ``info["rule"]`` is ``list[ReactionRule]`` (leaf first; RuleSet appends ``self``), matching ``addition["rules"]``.
+
 - **CI 3.14 SIGILL = pynauty `-march=native`, not per-Python uv cache.**
   `astral-sh/setup-uv` keys already include Python (`…-gnu-3.14-<hash>` vs
   `3.11`/`3.12`/`3.13`); Hypothesis cache is also per-py. Do **not** add a
@@ -10,7 +12,7 @@
   `nautywrap…so` on Ubuntu GHA; 3.12 stays green (manylinux wheel). Sdist
   `Makefile.nauty` runs `./configure CFLAGS='-O4 -fPIC'`; nauty then adds
   `-march=native`. Same uv cache hit can pass or SIGILL on different runner
-  CPUs. Upstream: https://github.com/pdobsan/pynauty/issues/49 (refs #39).
+  CPUs. Upstream: https://github.com/pdobsan/pynauty/issues/49 (refs #39); fix PR: https://github.com/pdobsan/pynauty/pull/50.
   Workaround on PR #18: `CC`/`CXX` with `-march=x86-64 -mtune=generic` plus
   `cache-suffix: portable-x86-64` in `test.yml` / `release.yml`.
 

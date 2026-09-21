@@ -78,7 +78,7 @@ for site, products in rule.metabolize(mol, tag_atoms=False):
 # New — still a list per emission; site lives on info
 for products, info in rule.metabolize(mol):
     site = info["site"]          # not (name, site)
-    rule_name = info["rule"].name
+    rule_name = info["rule"][0].name
     for product in products:
         use(site, product)
 ```

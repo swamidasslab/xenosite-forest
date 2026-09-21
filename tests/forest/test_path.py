@@ -415,7 +415,7 @@ def test_leave_count_one_refuses_a_larger_leaving_fragment():
     diff = atom_diff(mol, "CNC")
     info = {
         "site": (1, 2),
-        "rule": NDealkylation(),
+        "rule": [NDealkylation()],
         "options": {"cleaves": True, "leave_count": 1},
         "rxn_num": 0,
         "pattern": NDealkylation().smirks[0][1],

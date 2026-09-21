@@ -621,7 +621,10 @@ class Xf:
             products: Sequence[Mol] = (product_or_product_list,)
         else:
             products = product_or_product_list
-        rule = executed if executed is not None else site_info.get("rule")
+        leaf = site_info.get("rule")
+        if isinstance(leaf, list):
+            leaf = leaf[0] if leaf else None
+        rule = executed if executed is not None else leaf
         mark_terminal = bool(getattr(rule, "is_terminal_rule", False))
         finished: list[TracingMol] = []
         for product in products:

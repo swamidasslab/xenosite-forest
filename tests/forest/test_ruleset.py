@@ -49,7 +49,7 @@ def test_ruleset_metabolize_runs_each_child():
     assert isinstance(ruleset, ReactionRule)
 
     products = list(ruleset.metabolize(Chem.MolFromSmiles("CC")))
-    names = {type(info["rule"]).__name__ for _product, info in products}
+    names = {type(info["rule"][0]).__name__ for _product, info in products}
 
     assert names == {"Hydroxylation", "Dealkylation"}
 
@@ -66,7 +66,7 @@ def test_ruleset_redundant_rules_info_names_both_rules(caplog):
             products = list(ruleset.metabolize(mol))
 
     assert [p.xf.csmi for pl, _ in products for p in pl] == ["CCO"]
-    assert {type(info["rule"]).__name__ for _, info in products} == {"OverlapOhA"}
+    assert {type(info["rule"][0]).__name__ for _, info in products} == {"OverlapOhA"}
     assert not caught
 
     info_msgs = [
@@ -109,7 +109,7 @@ def test_filter_rules_refuses_one_child_and_keeps_the_other():
     products = list(
         ruleset.metabolize(Chem.MolFromSmiles("CC"), filter_rules=filter_rules)
     )
-    names = {type(info["rule"]).__name__ for _product, info in products}
+    names = {type(info["rule"][0]).__name__ for _product, info in products}
 
     assert names == {"Dealkylation"}
     assert "Hydroxylation" in seen

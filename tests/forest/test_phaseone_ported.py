@@ -151,7 +151,7 @@ def test_histidine_phase1_does_not_emit_invalid_metabolites():
     products = list(PhaseOne.metabolize(mol))
     assert products
     invalid = [
-        (type(info["rule"]).__name__, info["site"], MolToSmiles(product))
+        (type(info["rule"][0]).__name__, info["site"], MolToSmiles(product))
         for products, info in products
         for product in products
         if MolFromSmiles(MolToSmiles(product)) is None

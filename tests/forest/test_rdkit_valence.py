@@ -30,7 +30,7 @@ def test_bfs_phaseone_issue3_parent_does_not_crash():
 
     rows = list(bfs(ISSUE3_PARENT, ruleset=PhaseOne, depth=1))
     assert len(rows) > 7
-    names = {info["rule"].name for _mol, info in rows}
+    names = {info["rule"][0].name for _mol, info in rows}
     assert "Dehydrogenation" in names
     assert any(name != "Dehydrogenation" for name in names)
 

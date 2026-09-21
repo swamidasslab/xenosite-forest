@@ -237,7 +237,7 @@ bare, ranks = AtomTracker.site_to_topol_site(
 te = mol.xf.topol_equiv  # dict[int, int]: GetIdx → class
 site = info["site"]      # frozenset[int] on live metabolize
 ranks = tuple(sorted(te[i] for i in site))
-# Rule name lives on info["rule"].name — not packed into the site tuple
+# Rule name lives on info["rule"][0].name — not packed into the site tuple
 ```
 
 ### Tag dicts → per-atom history

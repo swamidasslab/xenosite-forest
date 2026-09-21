@@ -80,9 +80,11 @@ def test_each_product_is_one_depth_below_its_parent():
         assert child["formula"] == product.xf.formula
         assert product.xf.csmi == Chem.MolToSmiles(product, isomericSmiles=False)
         assert "csmi" not in info
-        rule = info["rule"]
-        assert isinstance(rule, ReactionRule)
-        assert rule.name == "Hydroxylation"
+        rules = info["rule"]
+        assert isinstance(rules, list)
+        assert len(rules) == 1
+        assert isinstance(rules[0], ReactionRule)
+        assert rules[0].name == "Hydroxylation"
 
 
 def test_canonical_smiles_are_not_repeated():

@@ -8,7 +8,7 @@ filter refuses is not run. A pattern it accepts is.
 from __future__ import annotations
 
 from collections.abc import Callable, Generator, Iterator
-from typing import Any
+from typing import Any, cast
 
 from xenosite.forest.rdkit_api import TracingMol
 from xenosite.forest.rdkitutil import Mol
@@ -150,13 +150,16 @@ class RuleSet(ReactionRule):
                 **kwargs,
                 unique_csmi=False,
             ):
+                # Append this set onto the leaf's rule list (and the product
+                # addition chain). Copy so nested yields do not share lists.
+                info = cast(ProductInfo, {**info, "rule": list(info["rule"]) + [self]})
                 for product in products:
                     trace = product._forest["atom_trace"]
                     addition = trace["additions"][trace["transforms"][-1]]
                     addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
                     emission_csmi = frozenset(p.xf.csmi for p in products)
-                    rule_name = _rule_dedup_name(info["rule"])
+                    rule_name = _rule_dedup_name(info["rule"][0])
                     kept = seen_csmi.get(emission_csmi)
                     if kept is not None and kept != rule_name:
                         _report_redundant_rules_drop(
