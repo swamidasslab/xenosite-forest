@@ -31,6 +31,9 @@ src/xenosite/forest/_version.py
 .env
 .env.*
 
+# Local mailbox between agents. Not a release artifact.
+agent-exchange/
+
 # Local data (never ship)
 data/
 _api

@@ -1565,20 +1565,42 @@ def _bump(counters: EditCounters | None, name: str, amount: int = 1) -> None:
     setattr(counters, name, current + amount)
 
 
+def _nitrogen_two_doubles(mol: Mol) -> bool:
+    """True when a nitrogen has two double bonds.
+
+    ``C=[N+]=C`` sanitizes. It is not an iminium. An iminium has one
+    double bond and two single bonds. Two double bonds are not a product.
+    """
+
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() != 7:
+            continue
+        doubles = 0
+        for bond in atom.GetBonds():
+            if bond.GetBondType() == BondType.DOUBLE:
+                doubles += 1
+                if doubles >= 2:
+                    return True
+    return False
+
+
 def _sanitize_piece(frag: Mol) -> bool:
     """True when ``frag`` sanitizes. The second try drops explicit H.
 
     Pair edits can leave ``[CH2]`` on a carbon whose new bonds already
     use those hydrogens. ``O=[CH2][CH2]=O`` is that draft of glyoxal.
     The bond orders are the product. The explicit count is not.
+    A nitrogen with two double bonds is dropped even when it sanitizes.
     """
 
     if not SanitizeMol(frag, catchErrors=True):
-        return True
+        return not _nitrogen_two_doubles(frag)
     for atom in frag.GetAtoms():
         atom.SetNumExplicitHs(0)
         atom.SetNoImplicit(False)
-    return not SanitizeMol(frag, catchErrors=True)
+    if SanitizeMol(frag, catchErrors=True):
+        return False
+    return not _nitrogen_two_doubles(frag)
 
 
 def carry_forest(src: Mol, dst: Mol) -> Mol:
@@ -1665,10 +1687,12 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
 
 
 def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> FragmentSplit:
-    """Split, drop the dealkylation leaving group, sanitize, carry forest.
+    """Split every piece, including a dealkylation fragment, and sanitize.
 
-    Each piece is a connected mol. Empty pieces when any fragment fails
-    sanitize. Callers read ``pieces``.
+    The ``dealk-noncarbon`` mark stays on the cleaved atom. That piece is a
+    product, not something to drop. A ring opening is one piece and is kept
+    the same way. Empty pieces when any fragment fails sanitize. Callers
+    read ``pieces``.
     """
 
     if isinstance(mol, RWMol):
@@ -1676,8 +1700,6 @@ def sanitized_fragments(mol: Mol, counters: EditCounters | None = None) -> Fragm
     frags = list(GetMolFrags(mol, asMols=True, sanitizeFrags=False)) or [mol]
     out = []
     for frag in frags:
-        if any(atom.HasProp("dealk-noncarbon") for atom in frag.GetAtoms()):
-            continue
         if not _sanitize_piece(frag):
             _bump(counters, "sanitize_dropped")
             return FragmentSplit(pieces=())

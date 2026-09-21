@@ -1,10 +1,7 @@
-"""Methide is always in rule data; refuse via filter_sites (no pathways= opt-in).
+"""Methide is always in rule data. There is no pathways= opt-in and no
+"no methides" mode.
 
-Adapted from ``tests/test_dh_methide_pathways.py``. Forest gated methide with
-``pathways=("methide",)`` — approved drop (docs/forest/DROPPED.md). Forest offers methide on
-Dehydrogenation / QuinoneFormation PatternInfo. At most one methide end is
-resolved (both-methide pairs are not built). Callers who want none pass
-``filter_sites`` that reads ``options["methide"]``.
+Adapted from ``tests/test_dh_methide_pathways.py``. Both ends may be methide.
 """
 
 from __future__ import annotations
@@ -17,10 +14,6 @@ from xenosite.forest.rulesets import PhaseOne, RuleSet
 from .helpers import canon, product_smiles
 
 _O_QM = "C=C1C=CC=CC1=O"
-
-
-def _no_methide(mol, site, info) -> bool:
-    return not (info.get("options") or {}).get("methide")
 
 
 def test_methide_is_always_in_rule_data():
@@ -45,39 +38,19 @@ def test_dh_methide_emits_o_quinone_methide_from_o_cresol():
     assert canon(_O_QM) in product_smiles(Dehydrogenation(), "Oc1ccccc1C")
 
 
-def test_filter_sites_refuses_methide():
-    """Caller who wants no methides filters the effect — not a pathways= branch."""
+def test_both_methide_ends_resolve():
+    """Xylene: two alkyl ends are a quinodimethane, not a refused pair."""
 
-    assert canon(_O_QM) not in {
-        p.xf.csmi
-        for products, _info in Dehydrogenation().metabolize(
-            MolFromSmiles("Oc1ccccc1C"), filter_sites=_no_methide
-        )
-        for p in products
-    }
-    assert canon(_O_QM) not in {
-        p.xf.csmi
-        for products, _info in QuinoneFormation().metabolize(
-            MolFromSmiles("Cc1ccccc1"), filter_sites=_no_methide
-        )
-        for p in products
-    }
+    assert canon("C=c1ccccc1=C") in product_smiles(QuinoneFormation(), "Cc1ccccc1C")
 
-
-def test_at_most_one_methide_end():
-    """Xylene: no bis-methide pair; every methide product has exactly one end."""
-
-    assert product_smiles(Dehydrogenation(), "Cc1ccccc1C") == set()
-
+    saw_two = False
     for products, info in QuinoneFormation().metabolize(MolFromSmiles("Cc1ccccc1C")):
-        opts = info.get("options") or {}
         ends = info.get("ends") or ()
         n_methide = sum(1 for end in ends if end.get("methide"))
-        assert n_methide <= 1, frozenset(p.xf.csmi for p in products)
-        if opts.get("methide"):
-            assert n_methide == 1, frozenset(p.xf.csmi for p in products)
-        for product in products:
-            assert product.xf.csmi != canon("C=c1ccccc1=C")
+        if n_methide == 2:
+            saw_two = True
+            assert (info.get("options") or {}).get("methide")
+    assert saw_two
 
 
 def test_find_path_o_cresol_to_o_qm_via_dehydrogenation():

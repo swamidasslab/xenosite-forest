@@ -180,6 +180,20 @@ def test_methyl_acetate_hydrolysis_matches_old():
     assert new == old == {"CC(=O)O", "CC=O", "CO"}
 
 
+def test_aspirin_hydrolysis_site_is_the_ester_bond():
+    """The ester emission is the cleaved bond ``{1, 3}``."""
+
+    mol = Chem.MolFromSmiles("CC(=O)Oc1ccccc1C(=O)O")
+    assert mol is not None
+    ester = frozenset({"CC(=O)O", "O=C(O)c1ccccc1O"})
+    sites = {
+        info["site"]
+        for products, info in Hydrolysis().metabolize(mol)
+        if frozenset(p.xf.csmi for p in products) == ester
+    }
+    assert sites == {frozenset({1, 3})}
+
+
 def test_ethanol_dehydration_matches_old():
     old = _old(OldDehydration(), "CCO")
     new = _new(Dehydration(), "CCO")

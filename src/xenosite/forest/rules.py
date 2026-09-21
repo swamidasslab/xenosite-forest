@@ -239,8 +239,11 @@ class ReactionRule:
           A new atom's ``added_by`` is that id. The site, the rule
           hierarchy, the resolved effect, the name, ``phase1``, and the
           depth of the site's index frame live under
-          ``atom_trace["additions"][id]``. The change in formula lives
-          under ``atom_trace["delta_formula"][id]``.
+          ``atom_trace["additions"][id]``. That site is parent atom
+          indexes, the same value on ``info["site"]`` and on every
+          fragment of the emission. A cleavage does not renumber it onto
+          either piece. The change in formula lives under
+          ``atom_trace["delta_formula"][id]``.
         - Product SMILES live on each mol via ``product.xf.csmi`` (not on
           ``info``). Emission identity for **check** / **yield** is
           ``frozenset(p.xf.csmi for p in products)`` computed at yield from
@@ -901,7 +904,7 @@ def merge_effects(
         "removes": left.get("removes", "") + right.get("removes", ""),
         "cleaves": bool(left.get("cleaves") or right.get("cleaves")),
         "dearomatizes": bool(can and system_aromatic),
-        "methide": bool(left.get("methide")) ^ bool(right.get("methide")),
+        "methide": bool(left.get("methide") or right.get("methide")),
         "needs": needs,
     }
 
@@ -1664,7 +1667,7 @@ def edit_iminium(
     info: PatternInfo,
     rings: Mapping[int, tuple[tuple[int, ...], ...]],
 ) -> bool:
-    if not edit_single_to_double(rw, mapped, {}, rings):
+    if not edit_single_to_double(rw, mapped, info, rings):
         return False
     rw.GetAtomWithIdx(mapped[2]).SetFormalCharge(1)
     return True
@@ -2075,11 +2078,8 @@ class ResonancePairRule(ResonanceRule):
                     site = frozenset((site_a, site_b))
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
-                    # At most one methide end is data: two methide ends do not
-                    # resolve (docs/forest/DROPPED.md / data-not-branches). Not a search
-                    # filter — the pair is never built.
-                    if end1.get("methide") and end2.get("methide"):
-                        continue
+                    # Both ends may be methide. A para-quinodimethane is two
+                    # alkyl single-to-double ends. The one-side skip was wrong.
                     preview: PairSiteInfo = {
                         "site": site,
                         "rule": [self],
@@ -2250,7 +2250,64 @@ class ResonancePairRule(ResonanceRule):
                             emitted_csmi.add(csmi)
                             fresh.append(product)
                         if fresh:
+                            if preview["options"].get(
+                                "dearomatizes"
+                            ) and _kekulized_system_stayed_aromatic(
+                                mol, fresh, system
+                            ):
+                                continue
                             yield ProductsOfReaction(info=preview, products=fresh)
+
+
+def _kekulized_system_stayed_aromatic(
+    parent: Mol,
+    products: Sequence[Mol],
+    system: Iterable[int],
+) -> bool:
+    """True when the kekulized system is aromatic again after sanitize.
+
+    Other aromatic systems may stay. The kekulized one did not if any of
+    its aromatic atoms is no longer aromatic, or a non-aromatic double or
+    triple bond still touches it (carbonyl, exocyclic methide).
+    """
+
+    labels: dict[str, int] = {}
+    for idx in system:
+        atom = parent.GetAtomWithIdx(idx)
+        if not atom.GetIsAromatic() or not atom.HasProp("forestLabel"):
+            continue
+        labels[atom.GetProp("forestLabel")] = idx
+    if len(labels) < 2:
+        return False
+
+    found: dict[str, Atom] = {}
+    for product in products:
+        for atom in product.GetAtoms():
+            if not atom.HasProp("forestLabel"):
+                continue
+            label = atom.GetProp("forestLabel")
+            if label in labels and label not in found:
+                found[label] = atom
+    if len(found) != len(labels):
+        return False
+    if any(not atom.GetIsAromatic() for atom in found.values()):
+        return False
+
+    for product in products:
+        idx_label: dict[int, str] = {}
+        for atom in product.GetAtoms():
+            if atom.HasProp("forestLabel"):
+                idx_label[atom.GetIdx()] = atom.GetProp("forestLabel")
+        for bond in product.GetBonds():
+            if bond.GetIsAromatic():
+                continue
+            if bond.GetBondType() not in (BondType.DOUBLE, BondType.TRIPLE):
+                continue
+            left = idx_label.get(bond.GetBeginAtomIdx())
+            right = idx_label.get(bond.GetEndAtomIdx())
+            if left in labels or right in labels:
+                return False
+    return True
 
 
 class Hydroxylation(SmirksReactionRule):
@@ -2895,11 +2952,15 @@ class EpoxideOpening(SmirksReactionRule):
 
 
 class Hydrolysis(SmirksReactionRule):
-    """Cleaves the single bond of a carboxylic derivative. One pattern also adds O."""
+    """Cleaves the single bond of a carboxylic derivative. One pattern also adds O.
+
+    The site is that bond: carbonyl carbon (map 2) and the leaving heteroatom
+    (map 3). Aspirin’s ester is ``{1, 3}``, not the carbonyl carbon alone.
+    """
 
     phase1_sites_on = "bonds"
     sites_on = "bonds"
-    site_kind: RuleSiteKind = "atom"
+    site_kind: RuleSiteKind = "bond"
     _example_substrates: tuple[str, ...] = ('CC(=O)OC',)
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
@@ -2911,7 +2972,7 @@ class Hydrolysis(SmirksReactionRule):
                     adds="O",
                     cleaves=True,
                 ),
-                site_map=2,
+                site_map=(2, 3),
                 name="add_water",
             ),
         ),
@@ -2923,7 +2984,7 @@ class Hydrolysis(SmirksReactionRule):
                     site_map=2,
                     cleaves=True,
                 ),
-                site_map=2,
+                site_map=(2, 3),
                 name="cleave",
             ),
         ),

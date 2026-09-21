@@ -181,3 +181,50 @@ def test_a_ruleset_iterates_its_children():
     ruleset = RuleSet((Hydroxylation, Dealkylation), name="Forest")
     assert [type(rule) for rule in ruleset] == [Hydroxylation, Dealkylation]
     assert ruleset.name is not None and "_" not in ruleset.name
+
+
+def test_every_fragment_records_the_parent_site():
+    """A site is parent atom indexes. Every fragment of an emission records it."""
+
+    from xenosite.forest.records import _flat_ints
+    from xenosite.forest.rules import TautomerRule
+
+    from .pattern_info_inventory import (
+        PATTERNLESS_REACTION_RULE_BASES,
+        discover_reaction_rule_classes,
+        instantiate_rule,
+    )
+
+    saw_cleavage = False
+    for rule_cls in discover_reaction_rule_classes():
+        if rule_cls in PATTERNLESS_REACTION_RULE_BASES or rule_cls is TautomerRule:
+            continue
+        examples = getattr(rule_cls, "_example_substrates", ())
+        if not examples:
+            continue
+        rule = instantiate_rule(rule_cls)
+        for smiles in examples:
+            mol = Chem.MolFromSmiles(smiles)
+            assert mol is not None, smiles
+            parent_n = mol.GetNumAtoms()
+            for products, info in rule.metabolize(mol):
+                site = info["site"]
+                indexes = tuple(_flat_ints(site))
+                assert indexes, (rule_cls.__name__, smiles)
+                assert all(0 <= idx < parent_n for idx in indexes), (
+                    rule_cls.__name__,
+                    smiles,
+                    site,
+                )
+                if len(products) > 1:
+                    saw_cleavage = True
+                for product in products:
+                    additions = product._forest["atom_trace"]["additions"]
+                    assert additions, (rule_cls.__name__, smiles, product.xf.csmi)
+                    for detail in additions.values():
+                        assert detail["site"] == site, (
+                            rule_cls.__name__,
+                            smiles,
+                            product.xf.csmi,
+                        )
+    assert saw_cleavage

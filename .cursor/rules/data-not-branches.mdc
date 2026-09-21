@@ -12,8 +12,7 @@ The schema is where a reader learns the categories of the problem. A field on `P
 Methide is the example. Repeat the split. Do not copy it as a one-off.
 
 - The rule's data offers methide as an effect. There is no `pathways=("methide",)` flag and no block that turns methide on.
-- At most one methide site is also data. `PatternInfo` resolves one methide end and does not resolve two. That limit is not a filter and not an `if` in the search.
-- A caller who wants no methides passes `filter_sites`. The filter reads the effect the rule already declared. It does not grow a methide branch of its own.
+- Two methide ends resolve. A para-quinodimethane is two alkyl single-to-double ends. Do not add an `if` that refuses that pair. The one-side limit was a mistake.
 
 An exception is allowed only with a good reason. Record it in `docs/forest/HEURISTICS.md` with `Status: approved`, `not approved`, or `not decided`. A silent branch is not an exception. None are approved.
 
