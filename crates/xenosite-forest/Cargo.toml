@@ -15,6 +15,8 @@ crate-type = ["cdylib", "rlib"]
 default = []
 # JS bindings. wasm32 getrandom backend is in the target-specific dep below.
 wasm = ["dep:wasm-bindgen"]
+# CPython class wrap (`#[pyclass]`). Native only; not wasm32-unknown-unknown.
+python = ["dep:pyo3"]
 
 [dependencies]
 chematic = { version = "1.0.21", default-features = false, features = [
@@ -25,6 +27,7 @@ chematic = { version = "1.0.21", default-features = false, features = [
 ] }
 canonaut = "1.0.0"
 wasm-bindgen = { version = "0.2", optional = true }
+pyo3 = { version = "0.26", optional = true }
 
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }

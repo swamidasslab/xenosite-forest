@@ -53,12 +53,19 @@ jobs:
           toolchain: "1.88.0"
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy -p xenosite-forest --all-targets -- -D warnings
       - name: Test
         run: cargo test -p xenosite-forest
+      - name: PyO3
+        run: |
+          cargo clippy -p xenosite-forest --all-targets --features python -- -D warnings
+          cargo test -p xenosite-forest --features python
       - name: WASM
         run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
 

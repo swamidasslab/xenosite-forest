@@ -1,8 +1,8 @@
 //! Cross-seam derisk tests: MCS, WASM-shaped public API, SMARTS used by live rules.
 
 use xenosite_forest::{
-    apply_smirks_at, canon_of, canon_smiles, dehydrogenate_hydroquinone, hydroxylate, parse_mol,
-    smarts_matches, unique_atom_sites, unordered_atom_pair_orbit_sizes,
+    ForestMol, apply_smirks_at, canon_of, canon_smiles, dehydrogenate_hydroquinone, hydroxylate,
+    parse_mol, smarts_matches, unique_atom_sites, unordered_atom_pair_orbit_sizes,
 };
 
 #[test]
@@ -47,4 +47,15 @@ fn unique_edit_plus_hydroxylate_are_the_public_door() {
 fn hydroquinone_pair_edit_is_nonempty() {
     let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
     assert!(!dehydrogenate_hydroquinone(&mol).unwrap().is_empty());
+}
+
+#[test]
+fn forest_mol_cache_is_per_held_mol() {
+    let mol = ForestMol::parse("CCC").unwrap();
+    assert!(!mol.xf().has_forest());
+    let csmi = mol.xf().csmi();
+    assert!(mol.xf().has_forest());
+    assert!(std::rc::Rc::ptr_eq(&csmi, &mol.xf().csmi()));
+    assert!(mol.copy_mol().shares_cache(&mol));
+    assert!(!mol.rw_copy().has_forest());
 }
