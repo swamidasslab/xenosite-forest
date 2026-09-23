@@ -1,13 +1,13 @@
 //! Browser WASM exports. Enabled with `--features wasm`.
 //!
-//! `#[wasm_bindgen]` wraps [`crate::xf::ForestMol`] as a JS class the same
+//! `#[wasm_bindgen]` wraps [`crate::forest_mol::ForestMol`] as a JS class the same
 //! way PyO3 wraps it as a Python class: one JS object holds one Rust payload.
 
 use wasm_bindgen::prelude::wasm_bindgen;
 
+use crate::forest_mol::ForestMol as Held;
 use crate::pattern::PatternInfo;
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
-use crate::xf::ForestMol as Held;
 use crate::{canon_smiles, hydroxylate, parse_mol};
 
 #[wasm_bindgen]
@@ -39,18 +39,13 @@ impl JsForestMol {
     }
 
     #[wasm_bindgen(getter)]
-    pub fn has_forest(&self) -> bool {
-        self.inner.xf().has_forest()
-    }
-
-    #[wasm_bindgen(getter)]
     pub fn csmi(&self) -> String {
-        self.inner.xf().csmi().to_string()
+        self.inner.csmi().to_string()
     }
 
     #[wasm_bindgen]
     pub fn clear_structure(&self) {
-        self.inner.xf().clear_structure();
+        self.inner.clear_structure();
     }
 
     #[wasm_bindgen]
@@ -60,16 +55,11 @@ impl JsForestMol {
         }
     }
 
-    #[wasm_bindgen(js_name = rwCopy)]
-    pub fn rw_copy(&self) -> JsForestMol {
+    #[wasm_bindgen(js_name = editCopy)]
+    pub fn edit_copy(&self) -> JsForestMol {
         Self {
-            inner: self.inner.rw_copy(),
+            inner: self.inner.edit_copy(),
         }
-    }
-
-    #[wasm_bindgen(js_name = wipeForest)]
-    pub fn wipe_forest(&self) {
-        self.inner.wipe_forest();
     }
 }
 

@@ -51,14 +51,14 @@ fn hydroquinone_pair_edit_is_nonempty() {
 }
 
 #[test]
-fn forest_mol_cache_is_per_held_mol() {
+fn forest_mol_owns_caches() {
     let mol = ForestMol::parse("CCC").unwrap();
-    assert!(!mol.xf().has_forest());
-    let csmi = mol.xf().csmi();
-    assert!(mol.xf().has_forest());
-    assert!(std::rc::Rc::ptr_eq(&csmi, &mol.xf().csmi()));
-    assert!(mol.copy_mol().shares_cache(&mol));
-    assert!(!mol.rw_copy().has_forest());
+    let csmi = mol.csmi();
+    assert!(std::rc::Rc::ptr_eq(&csmi, &mol.csmi()));
+    assert!(mol.copy_mol().shares_structure(&mol));
+    assert!(mol.copy_mol().shares_kekule(&mol));
+    assert!(!mol.edit_copy().shares_structure(&mol));
+    assert!(mol.edit_copy().shares_kekule(&mol));
 }
 
 #[test]

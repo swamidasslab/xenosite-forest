@@ -1,8 +1,7 @@
-//! PyO3 class wrap of [`crate::xf::ForestMol`].
+//! PyO3 class wrap of [`crate::forest_mol::ForestMol`].
 //!
 //! `#[pyclass]` stores the Rust struct as the Python instance payload. One
-//! Python object ↔ one `ForestMol`. Getters are methods on that payload;
-//! they fill `_forest["cache"]` the same way native `xf` does.
+//! Python object ↔ one `ForestMol`. Getters are methods on that payload.
 //!
 //! Native-only: CPython C-API. Not compiled for `wasm32-unknown-unknown`.
 
@@ -14,10 +13,10 @@ use pyo3::prelude::*;
 use pyo3::types::PyString;
 
 use crate::forest::Formula;
+use crate::forest_mol::ForestMol;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
-use crate::xf::ForestMol;
 
 fn py_err(err: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(err.to_string())
@@ -70,18 +69,13 @@ impl PyForestMol {
         Ok(Self::wrap(ForestMol::parse(smiles).map_err(py_err)?))
     }
 
-    #[getter]
-    fn has_forest(&self) -> bool {
-        self.inner.xf().has_forest()
-    }
-
     /// Cached canonical SMILES. Interned so `mol.csmi is mol.csmi`.
     #[getter]
     fn csmi(&mut self, py: Python<'_>) -> Py<PyString> {
         if let Some(held) = &self.csmi {
             return held.clone_ref(py);
         }
-        let s = self.inner.xf().csmi();
+        let s = self.inner.csmi();
         let interned = PyString::intern(py, s.as_ref()).unbind();
         self.csmi = Some(interned.clone_ref(py));
         interned
@@ -92,13 +86,13 @@ impl PyForestMol {
         if let Some(held) = &self.formula {
             return Ok(held.clone_ref(py));
         }
-        let obj = Py::new(py, PyFormula::from(self.inner.xf().formula().as_ref()))?;
+        let obj = Py::new(py, PyFormula::from(self.inner.formula().as_ref()))?;
         self.formula = Some(obj.clone_ref(py));
         Ok(obj)
     }
 
     fn clear_structure(&mut self) {
-        self.inner.xf().clear_structure();
+        self.inner.clear_structure();
         self.csmi = None;
         self.formula = None;
     }
@@ -110,18 +104,12 @@ impl PyForestMol {
         out
     }
 
-    fn rw_copy(&self) -> Self {
-        Self::wrap(self.inner.rw_copy())
-    }
-
-    fn wipe_forest(&mut self) {
-        self.inner.wipe_forest();
-        self.csmi = None;
-        self.formula = None;
+    fn edit_copy(&self) -> Self {
+        Self::wrap(self.inner.edit_copy())
     }
 
     fn smarts_matches(&self, smarts: &str) -> PyResult<Vec<HashMap<u16, usize>>> {
-        let hits = self.inner.xf().smarts_matches(smarts).map_err(py_err)?;
+        let hits = self.inner.smarts_matches(smarts).map_err(py_err)?;
         Ok(hits
             .iter()
             .map(|mapped| mapped.iter().map(|(&k, &v)| (k, v)).collect())
@@ -129,11 +117,7 @@ impl PyForestMol {
     }
 
     fn __repr__(&self) -> String {
-        if self.inner.has_forest() {
-            format!("ForestMol({:?})", self.inner.xf().csmi())
-        } else {
-            "ForestMol(<no forest>)".to_string()
-        }
+        format!("ForestMol({:?})", self.inner.csmi())
     }
 }
 
@@ -422,19 +406,7 @@ mod tests {
             let class = module.getattr("ForestMol").unwrap();
             let mol = class.call1(("CCO",)).unwrap();
             assert_eq!(mol.get_type().name().unwrap(), "ForestMol");
-            assert!(
-                !mol.getattr("has_forest")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
-            );
             let csmi = mol.getattr("csmi").unwrap();
-            assert!(
-                mol.getattr("has_forest")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
-            );
             let again = mol.getattr("csmi").unwrap();
             assert!(
                 csmi.is(&again),
@@ -450,21 +422,13 @@ mod tests {
             let charge: i32 = formula.getattr("charge").unwrap().extract().unwrap();
             assert_eq!(charge, 0);
             let copied = mol.call_method0("copy").unwrap();
-            assert!(
-                copied
-                    .getattr("has_forest")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
-            );
-            let rw = mol.call_method0("rw_copy").unwrap();
-            assert!(!rw.getattr("has_forest").unwrap().extract::<bool>().unwrap());
-            mol.call_method0("wipe_forest").unwrap();
-            assert!(
-                !mol.getattr("has_forest")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
+            assert!(copied.getattr("csmi").unwrap().is(&csmi));
+            let _edited = mol.call_method0("edit_copy").unwrap();
+            mol.call_method0("clear_structure").unwrap();
+            let after = mol.getattr("csmi").unwrap();
+            assert_eq!(
+                after.extract::<String>().unwrap(),
+                csmi.extract::<String>().unwrap()
             );
         });
     }

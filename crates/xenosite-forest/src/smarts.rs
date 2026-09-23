@@ -6,7 +6,7 @@ use chematic::smarts::{find_matches, parse_smarts};
 
 use crate::mol::{ForestError, Molecule, atom_usize};
 
-/// Forest `xf.smarts_matches`: each hit is map number → target atom index.
+/// [`ForestMol::smarts_matches`](crate::forest_mol::ForestMol::smarts_matches): each hit is map number → target atom index.
 /// Hits without map 1 are dropped, matching the Python door.
 pub fn smarts_matches(
     mol: &Molecule,

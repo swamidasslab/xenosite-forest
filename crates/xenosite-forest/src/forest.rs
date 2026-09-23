@@ -1,13 +1,7 @@
-//! `_forest` schema: three layers, like `records.Forest`.
+//! Formula and structure-answer bags held by [`crate::forest_mol::ForestMol`].
 //!
-//! - `cache` — structure-dependent answers (`records.Structure`)
-//! - `is_terminal_product` — mutable flag
-//! - `immutable` / `atom_trace` wait on a full port
-//!
-//! `forest_copy(same_structure=true)` keeps `cache` by identity.
-//! A different structure drops it.
+//! Not a Python `_forest` dict. [`ForestMol`] owns these as fields.
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -20,42 +14,14 @@ pub struct Formula {
     pub charge: i32,
 }
 
-/// Schema of `_forest["cache"]`. Keys fill in on first read.
+/// Structure-dependent answers, filled on first read. Shared by `Rc` when
+/// the chemistry is the same; a new bag after an edit.
 #[derive(Clone, Debug, Default)]
 pub struct Structure {
     pub csmi: Option<Rc<str>>,
     pub formula: Option<Rc<Formula>>,
     pub topol_equiv: Option<Rc<Vec<usize>>>,
     pub smarts_matches: BTreeMap<String, Rc<Vec<BTreeMap<u16, usize>>>>,
-}
-
-/// The molecule's `_forest`. `cache` is the structure bag.
-#[derive(Clone, Debug)]
-pub struct Forest {
-    pub cache: Rc<RefCell<Structure>>,
-    pub is_terminal_product: bool,
-}
-
-/// Fresh forest shell: empty mutable cache.
-pub fn empty_forest() -> Forest {
-    Forest {
-        cache: Rc::new(RefCell::new(Structure::default())),
-        is_terminal_product: false,
-    }
-}
-
-/// Copy a forest with the three-layer policy.
-///
-/// `same_structure`: keep `cache` by identity. Otherwise drop it.
-pub fn forest_copy(forest: &Forest, same_structure: bool) -> Forest {
-    Forest {
-        cache: if same_structure {
-            Rc::clone(&forest.cache)
-        } else {
-            Rc::new(RefCell::new(Structure::default()))
-        },
-        is_terminal_product: forest.is_terminal_product,
-    }
 }
 
 pub fn molecule_formula(mol: &Molecule) -> Formula {
@@ -73,27 +39,4 @@ pub fn molecule_formula(mol: &Molecule) -> Formula {
         charge += i32::from(atom.charge);
     }
     Formula { counts, charge }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn same_structure_copy_shares_cache() {
-        let forest = empty_forest();
-        forest.cache.borrow_mut().csmi = Some(Rc::from("CC"));
-        let kept = forest_copy(&forest, true);
-        assert!(Rc::ptr_eq(&forest.cache, &kept.cache));
-        assert_eq!(kept.cache.borrow().csmi.as_deref(), Some("CC"));
-    }
-
-    #[test]
-    fn different_structure_copy_drops_cache() {
-        let forest = empty_forest();
-        forest.cache.borrow_mut().csmi = Some(Rc::from("stale"));
-        let dropped = forest_copy(&forest, false);
-        assert!(!Rc::ptr_eq(&forest.cache, &dropped.cache));
-        assert!(dropped.cache.borrow().csmi.is_none());
-    }
 }

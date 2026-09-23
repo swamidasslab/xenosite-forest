@@ -55,8 +55,8 @@ fn main() {
         let mol = parse_mol(smiles).unwrap();
         let held = ForestMol::parse(smiles).unwrap();
         let csmi = mean_ns(800, || {
-            held.xf().clear_structure();
-            let _ = held.xf().csmi();
+            held.clear_structure();
+            let _ = held.csmi();
         });
         let smarts = mean_ns(400, || {
             let _ = smarts_matches(&mol, "[#6h1:1]").unwrap();

@@ -12,22 +12,25 @@ The Python engine is RDKit + pynauty. This crate checks the seams that would blo
 - kekulé parents for ResonanceRule
 - valence gate (two-double nitrogen)
 - hydroquinone pair-path edit
-- `_forest` cache / `xf` facade (same-object answers; `copy_mol` shares cache; `rw_copy` does not)
+- `ForestMol` owns the chematic mol plus caches (no `_forest` / `xf` facade)
+- kekulé parents: one conjugated system, on demand, shared `Rc` across relatives; an edit that changes a system’s shape starts a new bag
 - PyO3 `#[pyclass]` wrap of `ForestMol` (native) and wasm-bindgen JS class (WASM)
 - `RuleSet` of `PatternInfo` records, with `FilterRules` / `FilterSites` as `impl Fn` or `Box<dyn Fn>`
 - `wasm32-unknown-unknown` (no C FFI: no `inchi` native, no canonaut `c-nauty-bench`)
 
-Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`). Canonical SMILES is chematic’s, not RDKit’s (`C(C)O` vs `CCO`). Tests compare `canon_of` identities, not a spelling. Kekulé parents are integer-order graphs with aromatic atom flags cleared so aliphatic SMIRKS can match.
+Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`). Canonical SMILES is chematic’s, not RDKit’s (`C(C)O` vs `CCO`). Tests compare `canon_of` identities, not a spelling. Kekulé parents stamp integer orders onto **one** conjugated system; other systems stay aromatic.
 
-## Cache (`ForestMol` / `xf`)
+## `ForestMol`
 
-Python stores answers on `mol._forest["cache"]` and mints a new `Xf` on every `mol.xf` read ([`docs/forest/XF.md`](XF.md)). The Rust door copies that:
+Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Rust does not need that. [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) **is** the object:
 
-- `ForestMol::parse` does **not** install a forest (`has_forest` is false).
-- `mol.xf()` is a facade. Answers live on `Forest` (`cache` is `Rc<RefCell<Structure>>`).
-- First `csmi` / `formula` / `topol_equiv` / `smarts_matches` fills the structure bag; later reads return the same `Rc`.
-- `copy_mol` keeps `cache` by identity. `rw_copy` / `from_molecule` carry no forest (the copy is about to be edited).
-- `clear_structure` drops the bag; labels would stay (trace not in this crate yet). `wipe_forest` removes the forest.
+- Owns a chematic `Molecule`.
+- Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Rc<RefCell<Structure>>`, filled on first read.
+- Kekulé assignments live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
+- `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
+- `clear_structure` drops `csmi`/formula/SMARTS, not the kekulé `Rc`.
+
+There is no `has_forest`, no `wipe_forest`, and no `xf()` facade.
 
 ## Wrapping the class (PyO3 and wasm-bindgen)
 
