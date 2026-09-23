@@ -9,6 +9,7 @@ compile_error!(
     "features `python` and `wasm` are mutually exclusive (CPython vs wasm-bindgen cdylib)"
 );
 
+pub mod atom_tracker;
 pub mod chematic_vendor;
 pub mod forest;
 pub mod forest_mol;
@@ -31,6 +32,7 @@ mod python_api;
 #[cfg(feature = "wasm")]
 mod wasm_api;
 
+pub use atom_tracker::AtomTracker;
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};

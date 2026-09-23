@@ -181,7 +181,9 @@ The patch adds:
 
 `ForestMol` still keeps a tag sidecar today (derisk continuity). Chematic
 `Atom.tag` is the path for production atom-trace: stamp before apply, read
-after. Visit order covers write/parse without isotope probes.
+after. Visit order covers write/parse without isotope probes. POC:
+[`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs)
+(`stamp` / `src_to_new` / `adopt_born` / `write_parse`).
 
 Apply does not yet return `src_to_new`; with tags on the atom that map is
 optional. `fragments` still drops its private `old_to_new`; tags survive the
@@ -192,6 +194,8 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 
 ## Not in this crate
 
-Full `find_path`, every Phase I rule, production atom-trace on `Atom.tag`.
-A `RuleSet` of `PatternInfo` plus closures is in the crate as a door; it is
-not the live Python `RuleSet` / `find_path` filters.
+Full `find_path`, every Phase I rule. Production atom-trace can use
+[`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs) on
+`Atom.tag`; `ForestMol` has not switched off its sidecar yet. A `RuleSet` of
+`PatternInfo` plus closures is in the crate as a door; it is not the live
+Python `RuleSet` / `find_path` filters.
