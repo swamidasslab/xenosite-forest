@@ -9,6 +9,7 @@ compile_error!(
     "features `python` and `wasm` are mutually exclusive (CPython vs wasm-bindgen cdylib)"
 );
 
+pub mod chematic_vendor;
 pub mod forest;
 pub mod forest_mol;
 pub mod hydroxylation;

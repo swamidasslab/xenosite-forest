@@ -163,26 +163,35 @@ Estimate, not a promise:
 
 Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --release`.
 
-## Atom identity: chematic has no public correspondence
+## Atom identity (vendored chematic patch)
 
-RDKit `RunReactants` copies atom props, so Python can hang `forestLabel` on the atom. Chematic `Atom` has no userdata. `apply_reaction_match` clones `Atom` then **clears** `atom_map`. `write` / `canonical_smiles` return a `String`. `canonical_atom_order` is a Morgan rank **sort**, not the SMILES DFS. `fragments()` rebuilds and drops `old_to_new`. The maps Forest needs already exist inside chematic (`src_to_new` in `build_product`, DFS visit in the writers) and are **private**.
+Chematic on crates.io still has no atom userdata and no public SMILES visit
+order. This repo vendors `chematic` @ `v1.0.21` as a **sparse submodule**
+(`vendor/chematic`) and applies
+[`patches/chematic-v1.0.21-atom-tag-visit-order.patch`](../../patches/chematic-v1.0.21-atom-tag-visit-order.patch)
+via `./scripts/vendor-chematic.sh`.
 
-Do **not** call those private functions (they are not reachable without a fork) and do **not** ship a copied writer as the production remap. That is the drift risk.
+The patch adds:
 
-What the door uses instead:
+- `Atom.tag: Option<u32>` — non-chemical; copied by clone / apply / fragments;
+  ignored by SMILES write and canon; not emitted as `:n`. `atom_map` is still
+  cleared on apply.
+- `write_with_order` / `canonical_smiles_with_order` — string plus DFS visit
+  order (`order[k]` = mol index of the k-th atom in the string).
 
-- **Public, test-only probe:** unique `set_isotope` survives apply and write/parse. Tests recover `src_to_new` and SMILES visit that way. Isotopes are chemistry; they are not tags.
-- **Live mols:** keep apply-time indexes; `csmi` is a string. Do not reparse to “canonicalize indexes” on the hot path (Python already dropped `cannonicalize_order` from metabolize).
-- **Index-stable edits** (`clone`, `with_atom_added`) keep labels without a map.
+`ForestMol` still keeps a tag sidecar today (derisk continuity). Chematic
+`Atom.tag` is the path for production atom-trace: stamp before apply, read
+after. Visit order covers write/parse without isotope probes.
 
-Atom-trace through SMIRKS is blocked until chematic returns, as public API:
+Apply does not yet return `src_to_new`; with tags on the atom that map is
+optional. `fragments` still drops its private `old_to_new`; tags survive the
+clone into each fragment.
 
-1. apply: reactant index → product index (`src_to_new`), plus born atoms
-2. `fragments`: old index → new index
-3. `write` / `canonical_smiles`: visit order (or write+order together)
-
-A non-chemical field on `Atom` that clone/apply copies and SMILES/canon ignore would also do it. Until one of those exists, Forest cannot follow tags through a reaction on the public crate.
+Do **not** call private chematic writers or `build_product` maps, and do not
+commit a patched submodule tree — only the pin SHA and the patch file.
 
 ## Not in this crate
 
-Full `find_path`, every Phase I rule, atom-trace. Atom-trace waits on the chematic correspondence seam above. A `RuleSet` of `PatternInfo` plus closures is in the crate as a door; it is not the live Python `RuleSet` / `find_path` filters.
+Full `find_path`, every Phase I rule, production atom-trace on `Atom.tag`.
+A `RuleSet` of `PatternInfo` plus closures is in the crate as a door; it is
+not the live Python `RuleSet` / `find_path` filters.

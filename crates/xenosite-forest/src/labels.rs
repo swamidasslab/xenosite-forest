@@ -1,14 +1,13 @@
 //! Atom identity beside the chematic graph.
 //!
-//! Chematic `Atom` has no userdata. `atom_map` is a SMIRKS match key: apply
-//! clears it, and the canonical writer emits `:n`. Tags live on [`ForestMol`]
-//! as a sidecar, remapped by a correspondence from each rewrite.
+//! Chematic on crates.io has no userdata; `atom_map` is a SMIRKS match key
+//! (apply clears it; canonical write emits `:n`). This repo vendors chematic
+//! with `Atom.tag` and SMILES visit-order helpers — see
+//! [`crate::chematic_vendor`] and `patches/README.md`.
 //!
-//! Chematic's public apply/write functions do not return that correspondence.
-//! The maps exist inside `build_product` / the SMILES writers and are private.
-//! Forest does not call them. Tests recover a map with public `set_isotope`
-//! plus write/parse or apply. Production atom-trace waits on chematic exposing
-//! `src_to_new` (apply), `old_to_new` (fragments), and SMILES visit order.
+//! [`ForestMol`] still keeps a tag sidecar for derisk continuity. Tags are
+//! remapped by a correspondence from each rewrite when one is supplied.
+//! Tests can also recover maps with public `set_isotope` plus write/parse.
 
 #[cfg(test)]
 use std::collections::HashSet;
