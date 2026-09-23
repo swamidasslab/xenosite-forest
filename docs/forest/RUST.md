@@ -52,6 +52,8 @@ pub struct PyForestMol {
 cargo test -p xenosite-forest --features python
 ```
 
+`python3-dev` (libpython) is required to link the test binary. `#[pyclass]` is CPython; it is not WASM.
+
 **wasm-bindgen** (`--features wasm`): the same payload, a JS class named `ForestMol`. `python` and `wasm` are mutually exclusive (both want the `cdylib`).
 
 
