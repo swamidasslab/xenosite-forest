@@ -82,6 +82,36 @@ fn main() {
         );
     }
 
+    println!("\nHydroxylate breakdown (sites × canon, not a faster graph edit)\n");
+    println!(
+        "{:<14} {:>6} {:>6} {:>10} {:>10} {:>10}",
+        "mol", "sites", "prods", "unique", "hydrox", "per prod"
+    );
+    for (name, smiles) in cases {
+        let mol = parse_mol(smiles).unwrap();
+        let n_h1 = unique_atom_sites(&mol, "[#6h1:1]").unwrap().len();
+        let n_h2 = unique_atom_sites(&mol, "[#6h2,#6h3:1]").unwrap().len();
+        let sites = n_h1 + n_h2;
+        let products = hydroxylate(&mol).unwrap();
+        let unique_both = mean_ns(200, || {
+            let _ = unique_atom_sites(&mol, "[#6h1:1]").unwrap();
+            let _ = unique_atom_sites(&mol, "[#6h2,#6h3:1]").unwrap();
+        });
+        let hydrox = mean_ns(200, || {
+            let _ = hydroxylate(&mol).unwrap();
+        });
+        let n = products.len().max(1) as f64;
+        println!(
+            "{:<14} {:>6} {:>6} {:>10} {:>10} {:>10}",
+            name,
+            sites,
+            products.len(),
+            fmt_ns(unique_both),
+            fmt_ns(hydrox),
+            fmt_ns(hydrox / n)
+        );
+    }
+
     let hq = parse_mol("Oc1ccc(O)cc1").unwrap();
     let dh = mean_ns(80, || {
         let _ = dehydrogenate_hydroquinone(&hq).unwrap();

@@ -126,10 +126,12 @@ Same five molecules, release Rust vs live Python/RDKit/pynauty (this VM):
 | Parse benzene | 1.7 µs | 15 µs | ~9× |
 | Uncached `csmi` | 8–17 µs | 9–21 µs | ~1× |
 | SMARTS `[#6h1:1]` | 0.9–1.4 µs | 0.34 µs | RDKit **~3× faster** |
-| Hydroxylation graph-edit / `RunReactants` OH | 13–154 µs | 24–100 µs | ~1× (same ballpark) |
+| Hydroxylation (all unique sites) | 13–154 µs | 24–100 µs `RunReactants` | ~1×; see below |
 | Full `Hydroxylation.metabolize` | (not in crate) | 0.5–4.3 ms | Python+trace+copy |
 | Nauty generators / unordered pair orbits | 7–30 µs | 53–107 µs gens; 0.2–1.0 ms six-family | ~4–6× gens |
 | Anisole dealkylation apply | 8.3 µs | 6.9 µs | RDKit slightly faster |
+
+The 13–154 µs hydroxylation range is **how many unique carbons**, not a slower edit. Benzene and hydroquinone have 1 site (~12 µs). Phenol 3, anisole 4, ibuprofen 7. Each product pays `canon_smiles` (write, reparse, aromatize, write again). Per product is ~11–14 µs on the small aromatics and ~22 µs on ibuprofen. Unique-edit itself stays 3–7 µs.
 
 `find_path` hits today are **8–200 ms** ([PERFORMANCE.md](PERFORMANCE.md)). Cheap one-step paths are already RDKit-bound; a chematic door alone would not make those 10×. MeOPhOH-style bills spend that time in **many** Python `metabolize` / unique-edit / nauty calls — that is where a full Rust port would show.
 
