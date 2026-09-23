@@ -9,6 +9,9 @@ use crate::valence::accept_product;
 
 /// Run `smirks` on the match whose atom maps equal `mapped`.
 ///
+/// Maps on `mapped` that the SMIRKS does not use are ignored. Aromatic SMARTS
+/// may name a ring; the apply template names only the reacting atoms.
+///
 /// Products are split into connected fragments and dropped when the forest
 /// valence gate refuses them.
 pub fn apply_smirks_at(
@@ -25,7 +28,7 @@ pub fn apply_smirks_at(
         let same = mapped.iter().all(|(&mapno, &atom)| {
             positions
                 .get(&mapno)
-                .is_some_and(|(_slot, idx)| atom_usize(*idx) == atom)
+                .is_none_or(|(_slot, idx)| atom_usize(*idx) == atom)
         });
         if !same {
             continue;

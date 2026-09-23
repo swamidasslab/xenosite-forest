@@ -58,6 +58,16 @@ pub fn smirks_mapped_bond_order(smirks: &str) -> Option<f32> {
     implied_order(&bond.query)
 }
 
+fn clear_aromatic(mol: &Molecule) -> Molecule {
+    let mut out = mol.clone();
+    for (idx, atom) in mol.atoms() {
+        if atom.aromatic {
+            out = out.with_atom_aromatic(idx, false);
+        }
+    }
+    out
+}
+
 fn apply_orders(mol: &Molecule, orders: &BTreeMap<(usize, usize), BondOrder>) -> Molecule {
     let mut out = mol.clone();
     for (bond_idx, bond) in mol.bonds() {
@@ -68,12 +78,7 @@ fn apply_orders(mol: &Molecule, orders: &BTreeMap<(usize, usize), BondOrder>) ->
             }
         }
     }
-    for (idx, atom) in mol.atoms() {
-        if atom.aromatic {
-            out = out.with_atom_aromatic(idx, false);
-        }
-    }
-    out
+    clear_aromatic(&out)
 }
 
 fn swap_even_ring(
@@ -106,7 +111,9 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         return Ok(vec![mol.clone()]);
     }
     let assignment = kekulize(mol).map_err(|err| ForestError::Kekule(err.to_string()))?;
-    let primary = apply_kekule(mol, &assignment);
+    // apply_kekule keeps aromatic atom flags; ResonanceRule parents are
+    // integer-order graphs, so aliphatic SMIRKS ([S:1], [C:1]=[C:2]) can match.
+    let primary = clear_aromatic(&apply_kekule(mol, &assignment));
     let mut forms = vec![primary.clone()];
     let base_orders = bond_order_map(&primary);
     let rings = find_sssr(mol);
