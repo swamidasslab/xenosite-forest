@@ -32,6 +32,8 @@ uv add "xenosite-forest[predict]"
 
 Requires **Python 3.11–3.14** and **RDKit 2022.03+**.
 
+A WASM-clean Rust derisk crate (chematic + canonaut) lives in [`crates/xenosite-forest`](crates/xenosite-forest). See [`docs/forest/RUST.md`](docs/forest/RUST.md).
+
 ## Quick start
 
 ```python

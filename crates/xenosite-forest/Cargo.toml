@@ -1,0 +1,30 @@
+[package]
+name = "xenosite-forest"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+description = "Derisk crate: Metabolic Forest on chematic + canonaut, WASM-clean"
+repository = "https://github.com/swamidasslab/xenosite-forest"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# JS bindings. wasm32 getrandom backend is in the target-specific dep below.
+wasm = ["dep:wasm-bindgen"]
+
+[dependencies]
+chematic = { version = "1.0.21", default-features = false, features = [
+    "smiles",
+    "smarts",
+    "rxn",
+    "perception",
+] }
+canonaut = "1.0.0"
+wasm-bindgen = { version = "0.2", optional = true }
+
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

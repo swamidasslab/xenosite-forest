@@ -44,6 +44,24 @@ jobs:
       - name: Run tests in parallel
         run: uv run pytest tests/forest src/xenosite/forest -n auto --cov=xenosite.forest --cov-report=term-missing
 
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy -p xenosite-forest --all-targets -- -D warnings
+      - name: Test
+        run: cargo test -p xenosite-forest
+      - name: WASM
+        run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
+
   lint:
     runs-on: ubuntu-latest
     steps:

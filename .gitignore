@@ -18,6 +18,7 @@ __pycache__/
 # Build artifacts
 build/
 dist/
+target/
 src/xenosite/forest/_version.py
 
 # Editors and OS

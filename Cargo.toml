@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/xenosite-forest"]
+resolver = "2"
