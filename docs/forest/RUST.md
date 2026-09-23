@@ -115,6 +115,33 @@ maturin build --profile wasm-size
 
 The size-profile wheel is already zip-compressed, so compare it to gzip WASM (~217 KiB), not to the raw `.wasm`. Native x86_64 + PyO3 is a bit larger than the WASM module; it is still well under a megabyte. This is not a manylinux2014 auditwheel rebuild — tags follow the builder (`manylinux_2_34` here).
 
+## Speed (measured on this machine)
+
+RDKit is already C++. Chematic is not a free 10× on SMARTS/SMIRKS. The gain is dropping Python around unique-edit, nauty glue, forest copy, and `find_path`.
+
+Same five molecules, release Rust vs live Python/RDKit/pynauty (this VM):
+
+| Step | Rust | Python | Ratio |
+| ---- | ---- | ------ | ----- |
+| Parse benzene | 1.7 µs | 15 µs | ~9× |
+| Uncached `csmi` | 8–17 µs | 9–21 µs | ~1× |
+| SMARTS `[#6h1:1]` | 0.9–1.4 µs | 0.34 µs | RDKit **~3× faster** |
+| Hydroxylation graph-edit / `RunReactants` OH | 13–154 µs | 24–100 µs | ~1× (same ballpark) |
+| Full `Hydroxylation.metabolize` | (not in crate) | 0.5–4.3 ms | Python+trace+copy |
+| Nauty generators / unordered pair orbits | 7–30 µs | 53–107 µs gens; 0.2–1.0 ms six-family | ~4–6× gens |
+| Anisole dealkylation apply | 8.3 µs | 6.9 µs | RDKit slightly faster |
+
+`find_path` hits today are **8–200 ms** ([PERFORMANCE.md](PERFORMANCE.md)). Cheap one-step paths are already RDKit-bound; a chematic door alone would not make those 10×. MeOPhOH-style bills spend that time in **many** Python `metabolize` / unique-edit / nauty calls — that is where a full Rust port would show.
+
+Estimate, not a promise:
+
+- **Door only (PyO3, Python still runs `find_path`)**: ~1–2×. FFI still pays per call; SMARTS may regress.
+- **Full native `find_path` + unique-edit**: typically **~3–5×**, more like **5–10×** when pair-orbit unique-edit dominates, little when a single RDKit reaction is the whole path.
+- **BFS-style enum** (Python loop over hundreds of `metabolize`): **~10×** is plausible; live search already avoided that factorial blow-up.
+- **WASM in the browser**: native-rust numbers times ~1.5–3×, plus JIT warmup. Still faster than Python loops; not faster than RDKit VF2.
+
+Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --release`.
+
 ## Not in this crate
 
 Full `find_path`, every Phase I rule, atom-trace, RuleSet. Those wait on these tests staying green.
