@@ -97,6 +97,24 @@ wasm-opt -Oz --enable-bulk-memory --enable-sign-ext --enable-mutable-globals \
 
 `wasm-opt` is optional (binaryen). gzip of the cargo-only wasm-size artifact is already close to gzip of the wasm-opt output.
 
+## Wheel size
+
+The PyPI package is still pure Python (hatchling + RDKit). The native door wheel is a separate maturin artifact from `crates/xenosite-forest` (`xenosite-forest-native`, import `xenosite_forest`). Same size profile as WASM.
+
+Measured CPython 3.12 linux x86_64 (`--features python,extension-module`):
+
+| Build | Wheel (zip) | `.so` uncompressed |
+| ----- | ----------- | ------------------ |
+| `--release` | 576 KiB (589 373 B) | 1.37 MiB |
+| `--profile wasm-size` | 347 KiB (355 072 B) | 741 KiB |
+
+```bash
+cd crates/xenosite-forest
+maturin build --profile wasm-size
+```
+
+The size-profile wheel is already zip-compressed, so compare it to gzip WASM (~217 KiB), not to the raw `.wasm`. Native x86_64 + PyO3 is a bit larger than the WASM module; it is still well under a megabyte. This is not a manylinux2014 auditwheel rebuild — tags follow the builder (`manylinux_2_34` here).
+
 ## Not in this crate
 
 Full `find_path`, every Phase I rule, atom-trace, RuleSet. Those wait on these tests staying green.

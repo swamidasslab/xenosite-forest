@@ -9,6 +9,7 @@ repository = "https://github.com/swamidasslab/xenosite-forest"
 publish = false
 
 [lib]
+name = "xenosite_forest"
 crate-type = ["cdylib", "rlib"]
 
 [features]
@@ -17,6 +18,8 @@ default = []
 wasm = ["dep:wasm-bindgen"]
 # CPython class wrap (`#[pyclass]`). Native only; not wasm32-unknown-unknown.
 python = ["dep:pyo3"]
+# Wheel/cdylib: do not link libpython. cargo test --features python omits this.
+extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
 chematic = { version = "1.0.21", default-features = false, features = [
