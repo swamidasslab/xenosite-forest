@@ -27,6 +27,7 @@ Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Ru
 - Owns a chematic `Molecule`.
 - Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Rc<RefCell<Structure>>`, filled on first read.
 - Kekulé assignments live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
+- Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them with `src_to_new`. SMILES write visit order is a DFS (`write_visit_order`); it is not mol index order and not `canonical_atom_order` (Morgan rank sort). Canonical SMILES DFS is a third permutation.
 - `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
 - `clear_structure` drops `csmi`/formula/SMARTS, not the kekulé `Rc`.
 

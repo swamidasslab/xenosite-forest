@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use crate::forest::{Formula, Structure, molecule_formula};
 use crate::kekule::{KekuleCache, ensure_kekule_parents};
+use crate::labels::{self, Tag};
 use crate::mol::{ForestError, Molecule, canon_smiles, parse_mol, ranks};
 use crate::smarts::smarts_matches;
 
@@ -17,6 +18,8 @@ use crate::smarts::smarts_matches;
 #[derive(Clone)]
 pub struct ForestMol {
     mol: Molecule,
+    labels: Vec<Option<Tag>>,
+    tag_gen: Rc<Cell<u32>>,
     structure: Rc<RefCell<Structure>>,
     kekule: Rc<RefCell<KekuleCache>>,
     pub is_terminal_product: Cell<bool>,
@@ -29,8 +32,11 @@ impl ForestMol {
 
     /// Wrap chemistry with **new** caches (disconnected from any parent tree).
     pub fn new(mol: Molecule) -> Self {
+        let (labels, next) = labels::stamp(mol.atom_count());
         Self {
             mol,
+            labels,
+            tag_gen: Rc::new(Cell::new(next)),
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::new(RefCell::new(KekuleCache::default())),
             is_terminal_product: Cell::new(false),
@@ -39,15 +45,62 @@ impl ForestMol {
 
     /// Product of an edit: new structure bag, **same** kekulé cache `Rc`.
     ///
+    /// Indexes of atoms that still exist are assumed stable (clone / append).
+    /// SMIRKS apply that rewrites indexes must use [`Self::from_apply`].
+    ///
     /// Unmodified systems still hit. An edit that changes a system's shape
     /// is a new [`crate::kekule::SystemKey`] and starts an empty bag.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
+        let next = parent.tag_gen.get();
+        let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), next);
+        parent.tag_gen.set(next);
         Self {
             mol,
+            labels,
+            tag_gen: Rc::clone(&parent.tag_gen),
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&parent.kekule),
             is_terminal_product: Cell::new(false),
         }
+    }
+
+    /// Product of a reindexing apply. `src_to_new[src] = Some(dst)` or `None`.
+    pub fn from_apply(&self, mol: Molecule, src_to_new: &[Option<usize>]) -> Self {
+        let next = self.tag_gen.get();
+        let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), next);
+        self.tag_gen.set(next);
+        Self {
+            mol,
+            labels,
+            tag_gen: Rc::clone(&self.tag_gen),
+            structure: Rc::new(RefCell::new(Structure::default())),
+            kekule: Rc::clone(&self.kekule),
+            is_terminal_product: Cell::new(false),
+        }
+    }
+
+    /// Same tags after a permutation: `old_at_new[new] = old`.
+    pub fn after_permute(&self, mol: &Molecule, old_at_new: &[usize]) -> Self {
+        Self {
+            mol: mol.clone(),
+            labels: labels::remap_permute(&self.labels, old_at_new),
+            tag_gen: Rc::clone(&self.tag_gen),
+            structure: Rc::new(RefCell::new(Structure::default())),
+            kekule: Rc::clone(&self.kekule),
+            is_terminal_product: Cell::new(false),
+        }
+    }
+
+    pub fn tag_of(&self, idx: usize) -> Option<Tag> {
+        self.labels.get(idx).copied().flatten()
+    }
+
+    pub fn index_of(&self, tag: Tag) -> Option<usize> {
+        self.labels.iter().position(|&held| held == Some(tag))
+    }
+
+    pub fn shares_tag_gen(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.tag_gen, &other.tag_gen)
     }
 
     pub fn mol(&self) -> &Molecule {
@@ -58,6 +111,8 @@ impl ForestMol {
     pub fn copy_mol(&self) -> Self {
         Self {
             mol: self.mol.clone(),
+            labels: self.labels.clone(),
+            tag_gen: Rc::clone(&self.tag_gen),
             structure: Rc::clone(&self.structure),
             kekule: Rc::clone(&self.kekule),
             is_terminal_product: Cell::new(self.is_terminal_product.get()),
