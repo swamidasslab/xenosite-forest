@@ -75,6 +75,28 @@ cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm -
 
 `.cargo/config.toml` sets `getrandom_backend="wasm_js"` so canonaut’s `rand` compiles on `wasm32-unknown-unknown`. The crate does not call C.
 
+## WASM size
+
+`[profile.wasm-size]` in the workspace `Cargo.toml` is opt-level `z`, fat LTO, one codegen unit, stripped symbols.
+
+Measured `xenosite_forest.wasm` (`--features wasm`):
+
+| Build | Raw | gzip -9 |
+| ----- | --- | ------- |
+| debug | 39 MiB | — |
+| `--release` | 1.07 MiB (1 126 646 B) | 300 KiB |
+| `--profile wasm-size` | 782 KiB (801 241 B) | 217 KiB |
+| then `wasm-opt -Oz` | 645 KiB (660 208 B) | 213 KiB |
+
+```bash
+cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm --profile wasm-size
+wasm-opt -Oz --enable-bulk-memory --enable-sign-ext --enable-mutable-globals \
+  --enable-nontrapping-float-to-int --enable-multivalue --enable-reference-types \
+  target/wasm32-unknown-unknown/wasm-size/xenosite_forest.wasm -o xenosite_forest.wasm
+```
+
+`wasm-opt` is optional (binaryen). gzip of the cargo-only wasm-size artifact is already close to gzip of the wasm-opt output.
+
 ## Not in this crate
 
 Full `find_path`, every Phase I rule, atom-trace, RuleSet. Those wait on these tests staying green.

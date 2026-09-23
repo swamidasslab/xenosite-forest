@@ -1,3 +1,12 @@
 [workspace]
 members = ["crates/xenosite-forest"]
 resolver = "2"
+
+# Size-tuned WASM (does not change native `cargo test`).
+[profile.wasm-size]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
