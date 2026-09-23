@@ -49,7 +49,19 @@ pub fn parse_mol(smiles: &str) -> Result<CoreMolecule, ForestError> {
 }
 
 pub fn canon_smiles(mol: &CoreMolecule) -> String {
-    canonical_smiles(mol)
+    let raw = canonical_smiles(mol);
+    match parse_mol(&raw) {
+        Ok(reparsed) => canonical_smiles(&reparsed),
+        Err(_) => raw,
+    }
+}
+
+/// Canonical SMILES of any parseable writing of a structure.
+///
+/// Tests compare this, not a chematic spelling. `CCO` and `C(C)O` are the
+/// same molecule once both sides go through here.
+pub fn canon_of(smiles: &str) -> Result<String, ForestError> {
+    Ok(canon_smiles(&parse_mol(smiles)?))
 }
 
 /// Topological equivalence classes (chematic's `CanonicalRankAtoms(breakTies=False)` analogue).
@@ -66,15 +78,29 @@ mod tests {
         let aromatic = parse_mol("c1ccccc1").unwrap();
         let kekule = parse_mol("C1=CC=CC=C1").unwrap();
         assert_eq!(canon_smiles(&aromatic), canon_smiles(&kekule));
+        assert_eq!(
+            canon_of("c1ccccc1").unwrap(),
+            canon_of("C1=CC=CC=C1").unwrap()
+        );
         assert!(aromatic.atoms().all(|(_, atom)| atom.aromatic));
         assert!(kekule.atoms().all(|(_, atom)| atom.aromatic));
     }
 
     #[test]
+    fn writings_share_canonical_form() {
+        assert_eq!(canon_of("CCO").unwrap(), canon_of("C(C)O").unwrap());
+        assert_eq!(
+            canon_of("Oc1ccccc1").unwrap(),
+            canon_of("c1(O)ccccc1").unwrap()
+        );
+    }
+
+    #[test]
     fn ethane_and_propane_parse() {
-        assert_eq!(canon_smiles(&parse_mol("CC").unwrap()), "CC");
+        assert_eq!(canon_of("CC").unwrap(), canon_of("C-C").unwrap());
         let propane = parse_mol("CCC").unwrap();
         assert_eq!(propane.atom_count(), 3);
+        assert_eq!(canon_of("CCC").unwrap(), canon_of("C(C)C").unwrap());
         let classes = ranks(&propane);
         assert_eq!(classes[0], classes[2]);
         assert_ne!(classes[0], classes[1]);

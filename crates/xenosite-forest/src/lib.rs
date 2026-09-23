@@ -18,7 +18,7 @@ pub mod valence;
 mod wasm_api;
 
 pub use hydroxylation::hydroxylate;
-pub use mol::{ForestError, Molecule, canon_smiles, parse_mol, ranks};
+pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
 pub use pair_edit::dehydrogenate_hydroquinone;
 pub use smarts::smarts_matches;

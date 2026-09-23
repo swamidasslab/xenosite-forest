@@ -116,7 +116,7 @@ fn flip_path(mol: &mut Molecule, path: &[usize]) -> bool {
 
 /// Path dehydrogenation of para-hydroquinone. Derisks ResonancePairRule.
 pub fn dehydrogenate_hydroquinone(mol: &Molecule) -> Result<Vec<String>, ForestError> {
-    let hits = smarts_matches(mol, "[#6:1]-[#8H:2]")?;
+    let hits = smarts_matches(mol, "[#6:1][#8H1:2]")?;
     if hits.len() < 2 {
         return Ok(Vec::new());
     }
@@ -140,7 +140,8 @@ pub fn dehydrogenate_hydroquinone(mol: &Molecule) -> Result<Vec<String>, ForestE
                 let mut paths = alternating_from(&bond_map, start, end, &neighbors, 2);
                 paths.extend(alternating_from(&bond_map, end, start, &neighbors, 2));
                 for path in paths {
-                    if path.len() % 2 == 0 {
+                    // Odd bond count ⇔ even atom count. Even walks are not a pair flip.
+                    if path.len() % 2 == 1 {
                         continue;
                     }
                     let mut rw = form.clone();
@@ -176,17 +177,16 @@ pub fn dehydrogenate_hydroquinone(mol: &Molecule) -> Result<Vec<String>, ForestE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mol::parse_mol;
+    use crate::mol::{canon_of, parse_mol};
 
     #[test]
     fn hydroquinone_yields_benzoquinone() {
         let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
         let products = dehydrogenate_hydroquinone(&mol).unwrap();
+        let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
         assert!(
-            products
-                .iter()
-                .any(|s| s == "O=C1C=CC(=O)C=C1" || s.contains("O=C1C=CC(=O)")),
-            "{products:?}"
+            products.iter().any(|s| canon_of(s).unwrap() == want),
+            "want {want}, got {products:?}"
         );
     }
 }

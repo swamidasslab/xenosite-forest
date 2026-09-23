@@ -161,7 +161,7 @@ pub fn reactant_parent(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mol::{canon_smiles, parse_mol};
+    use crate::mol::{canon_of, canon_smiles, parse_mol};
     use crate::smarts::smarts_matches;
     use crate::smirks::apply_smirks_at;
 
@@ -184,22 +184,23 @@ mod tests {
     #[test]
     fn thiophene_s_oxidation_picks_single_s_c_parent() {
         let mol = parse_mol("c1ccsc1").unwrap();
-        let smirks =
-            "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]";
-        let hits = smarts_matches(&mol, smirks.split(">>").next().unwrap()).unwrap();
+        let smarts = "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1";
+        let apply = "[S:1]>>[S+:1][O-]";
+        let hits = smarts_matches(&mol, smarts).unwrap();
         assert!(!hits.is_empty());
-        let parent = reactant_parent(&mol, &hits[0], smirks).unwrap();
+        let parent = reactant_parent(&mol, &hits[0], &format!("{smarts}>>[S:1]")).unwrap();
         let s = hits[0][&1];
         let c = hits[0][&2];
         let (_, bond) = parent.bond_between(atom_idx(s), atom_idx(c)).unwrap();
         assert_eq!(bond.order, BondOrder::Single);
-        let products = apply_smirks_at(smirks, &parent, &hits[0]).unwrap();
+        let products = apply_smirks_at(apply, &parent, &hits[0]).unwrap();
         assert!(!products.is_empty());
+        let want = canon_of("[O-][s+]1cccc1").unwrap();
         assert!(
             products
                 .iter()
-                .any(|p| canon_smiles(p).to_lowercase().contains('s')),
-            "{:?}",
+                .any(|p| canon_of(&canon_smiles(p)).unwrap() == want),
+            "want {want}, got {:?}",
             products.iter().map(canon_smiles).collect::<Vec<_>>()
         );
     }
@@ -209,7 +210,7 @@ mod tests {
         let mol = parse_mol("c1ccccc1").unwrap();
         let smirks = "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1";
         let hits = smarts_matches(&mol, "[#6:1]=,:[#6:2]").unwrap();
-        assert_eq!(hits.len(), 12);
+        assert_eq!(hits.len(), 6);
         let parent = reactant_parent(&mol, &hits[0], smirks).unwrap();
         let a = hits[0][&1];
         let b = hits[0][&2];

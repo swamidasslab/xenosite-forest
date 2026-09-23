@@ -13,14 +13,19 @@ thread_local! {
 }
 
 fn on_automorphism(
-    n: u32,
+    _count: u32,
     perm: &mut [u32],
     _orbits: &mut [u32],
     _num_orbits: u32,
     _stabvert: u32,
-    _index: u32,
+    n: u32,
 ) {
-    GENERATORS.with(|slot| slot.borrow_mut().push(perm[..n as usize].to_vec()));
+    // Canonaut mirrors nauty userautomproc: last argument is n, first is generator count.
+    let n = n as usize;
+    if perm.len() < n {
+        return;
+    }
+    GENERATORS.with(|slot| slot.borrow_mut().push(perm[..n].to_vec()));
 }
 
 fn color_id(colors: &mut HashMap<String, u32>, label: String) -> u32 {

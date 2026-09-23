@@ -14,7 +14,7 @@ The Python engine is RDKit + pynauty. This crate checks the seams that would blo
 - hydroquinone pair-path edit
 - `wasm32-unknown-unknown` (no C FFI: no `inchi` native, no canonaut `c-nauty-bench`)
 
-Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`).
+Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`). Canonical SMILES is chematic’s, not RDKit’s (`C(C)O` vs `CCO`). Tests compare `canon_of` identities, not a spelling.
 
 ## Build
 

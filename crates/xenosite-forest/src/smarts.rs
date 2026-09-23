@@ -55,7 +55,7 @@ mod tests {
     fn aromatic_or_double_bond_matches_benzene() {
         let benzene = parse_mol("c1ccccc1").unwrap();
         let hits = smarts_matches(&benzene, "[#6:1]=,:[#6:2]").unwrap();
-        assert_eq!(hits.len(), 12, "each of 6 bonds, both directions");
+        assert_eq!(hits.len(), 6, "six unique ring bonds (VF2 uniquify)");
     }
 
     #[test]

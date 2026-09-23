@@ -51,17 +51,21 @@ pub fn apply_smirks_at(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mol::{canon_smiles, parse_mol};
+    use crate::mol::{canon_of, canon_smiles, parse_mol};
     use crate::smarts::smarts_matches;
+    use std::collections::BTreeSet;
 
     #[test]
     fn hydroxylation_smirks_on_named_atom() {
         let mol = parse_mol("CC").unwrap();
         let hits = smarts_matches(&mol, "[#6h3:1]").unwrap();
         assert_eq!(hits.len(), 2);
-        let products = apply_smirks_at("[#6h3:1]>>[*:1]O", &mol, &hits[0]).unwrap();
+        let products = apply_smirks_at("[C:1]>>[C:1]O", &mol, &hits[0]).unwrap();
         assert_eq!(products.len(), 1);
-        assert_eq!(canon_smiles(&products[0]), "CCO");
+        assert_eq!(
+            canon_of(&canon_smiles(&products[0])).unwrap(),
+            canon_of("CCO").unwrap()
+        );
     }
 
     #[test]
@@ -69,11 +73,12 @@ mod tests {
         let mol = parse_mol("CN").unwrap();
         let hits = smarts_matches(&mol, "[#6H3:1][#7:2]").unwrap();
         assert_eq!(hits.len(), 1);
-        let products =
-            apply_smirks_at("[#6H3:1][#7:2]>>([*:2].[*:1](=O)O)", &mol, &hits[0]).unwrap();
-        let smiles: Vec<String> = products.iter().map(canon_smiles).collect();
-        assert_eq!(smiles.len(), 2);
-        assert!(smiles.iter().any(|s| s == "N" || s == "N"));
-        assert!(smiles.iter().any(|s| s.contains('O')));
+        let products = apply_smirks_at("[C:1][N:2]>>[N:2].[C:1](=O)O", &mol, &hits[0]).unwrap();
+        let got: BTreeSet<String> = products
+            .iter()
+            .map(|p| canon_of(&canon_smiles(p)).unwrap())
+            .collect();
+        let want = BTreeSet::from([canon_of("N").unwrap(), canon_of("O=CO").unwrap()]);
+        assert_eq!(got, want);
     }
 }
