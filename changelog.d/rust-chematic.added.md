@@ -1,1 +1,1 @@
-A WASM-clean Rust derisk crate (`crates/xenosite-forest`) on chematic and canonaut: SMARTS/SMIRKS, unique-edit, pair orbits, kekulé parents, `_forest` cache / `xf` facade, PyO3 class wrap, and `wasm32-unknown-unknown`.
+A WASM-clean Rust derisk crate (`crates/xenosite-forest`) on chematic and canonaut: SMARTS/SMIRKS, unique-edit, pair orbits, kekulé parents, `_forest` cache / `xf` facade, PyO3 class wrap, `wasm32-unknown-unknown`, and a size-tuned native wheel.
