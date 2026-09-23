@@ -550,6 +550,48 @@ mod tests {
     }
 
     #[test]
+    fn smarts_match_count_unchanged_after_stamp() {
+        // VF2 evaluates AtomQuery primitives (element, charge, …) — never
+        // Atom: PartialEq and never `.tag`. Stamping must not change hits.
+        let cases = [
+            ("c1ccccc1", "[#6]"),
+            ("c1ccccc1", "a"),
+            ("CCO", "[#6h3:1]"),
+            ("CCC", "[#6h2:1]"),
+            ("c1ccc(O)cc1", "[OH:1]"),
+            ("CC(=O)Oc1ccccc1C(=O)O", "[#6]=O"),
+        ];
+        for (smi, smarts) in cases {
+            let mut mol = parse(smi).unwrap();
+            let before = crate::smarts::smarts_matches(&mol, smarts).unwrap();
+            let raw_before = chematic::smarts::find_matches(
+                &chematic::smarts::parse_smarts(smarts).unwrap(),
+                &mol,
+            );
+            let _ = AtomTracker::stamp(&mut mol);
+            assert!(mol.atoms().all(|(_, a)| a.tag.is_some()));
+            let after = crate::smarts::smarts_matches(&mol, smarts).unwrap();
+            let raw_after = chematic::smarts::find_matches(
+                &chematic::smarts::parse_smarts(smarts).unwrap(),
+                &mol,
+            );
+            assert_eq!(
+                before, after,
+                "forest smarts hits changed for {smi} / {smarts}"
+            );
+            assert_eq!(
+                raw_before.len(),
+                raw_after.len(),
+                "raw find_matches count changed for {smi} / {smarts}"
+            );
+            assert_eq!(
+                raw_before, raw_after,
+                "embeddings changed for {smi} / {smarts}"
+            );
+        }
+    }
+
+    #[test]
     fn apply_then_write_parse_preserves_identity() {
         let mut parent = parse("CC").unwrap();
         let mut tracker = AtomTracker::stamp(&mut parent);
