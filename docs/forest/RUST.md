@@ -27,7 +27,7 @@ Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Ru
 - Owns a chematic `Molecule`.
 - Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Rc<RefCell<Structure>>`, filled on first read.
 - Kekulé assignments live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
-- Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them with `src_to_new`. SMILES write visit order is a DFS (`write_visit_order`); it is not mol index order and not `canonical_atom_order` (Morgan rank sort). Canonical SMILES DFS is a third permutation.
+- Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them when a correspondence is supplied. Chematic's public apply/write do not return that map (see [Atom identity](#atom-identity-chematic-has-no-public-correspondence)).
 - `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
 - `clear_structure` drops `csmi`/formula/SMARTS, not the kekulé `Rc`.
 
@@ -163,6 +163,26 @@ Estimate, not a promise:
 
 Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --release`.
 
+## Atom identity: chematic has no public correspondence
+
+RDKit `RunReactants` copies atom props, so Python can hang `forestLabel` on the atom. Chematic `Atom` has no userdata. `apply_reaction_match` clones `Atom` then **clears** `atom_map`. `write` / `canonical_smiles` return a `String`. `canonical_atom_order` is a Morgan rank **sort**, not the SMILES DFS. `fragments()` rebuilds and drops `old_to_new`. The maps Forest needs already exist inside chematic (`src_to_new` in `build_product`, DFS visit in the writers) and are **private**.
+
+Do **not** call those private functions (they are not reachable without a fork) and do **not** ship a copied writer as the production remap. That is the drift risk.
+
+What the door uses instead:
+
+- **Public, test-only probe:** unique `set_isotope` survives apply and write/parse. Tests recover `src_to_new` and SMILES visit that way. Isotopes are chemistry; they are not tags.
+- **Live mols:** keep apply-time indexes; `csmi` is a string. Do not reparse to “canonicalize indexes” on the hot path (Python already dropped `cannonicalize_order` from metabolize).
+- **Index-stable edits** (`clone`, `with_atom_added`) keep labels without a map.
+
+Atom-trace through SMIRKS is blocked until chematic returns, as public API:
+
+1. apply: reactant index → product index (`src_to_new`), plus born atoms
+2. `fragments`: old index → new index
+3. `write` / `canonical_smiles`: visit order (or write+order together)
+
+A non-chemical field on `Atom` that clone/apply copies and SMILES/canon ignore would also do it. Until one of those exists, Forest cannot follow tags through a reaction on the public crate.
+
 ## Not in this crate
 
-Full `find_path`, every Phase I rule, atom-trace. Those wait on these tests staying green. A `RuleSet` of `PatternInfo` plus closures is in the crate as a door; it is not the live Python `RuleSet` / `find_path` filters.
+Full `find_path`, every Phase I rule, atom-trace. Atom-trace waits on the chematic correspondence seam above. A `RuleSet` of `PatternInfo` plus closures is in the crate as a door; it is not the live Python `RuleSet` / `find_path` filters.

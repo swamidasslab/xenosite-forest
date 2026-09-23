@@ -4,16 +4,19 @@
 //! clears it, and the canonical writer emits `:n`. Tags live on [`ForestMol`]
 //! as a sidecar, remapped by a correspondence from each rewrite.
 //!
-//! [`write_visit_order`] is the non-canonical SMILES DFS (start at the first
-//! unwritten index, adjacency order). That is not `0..n`, and it is not
-//! [`chematic::smiles::canonical_atom_order`] (Morgan rank sort). Canonical
-//! SMILES DFS is a third permutation: rank order only picks the start and
-//! the neighbor tie-break.
+//! Chematic's public apply/write functions do not return that correspondence.
+//! The maps exist inside `build_product` / the SMILES writers and are private.
+//! Forest does not call them. Tests recover a map with public `set_isotope`
+//! plus write/parse or apply. Production atom-trace waits on chematic exposing
+//! `src_to_new` (apply), `old_to_new` (fragments), and SMILES visit order.
 
+#[cfg(test)]
 use std::collections::HashSet;
 
+#[cfg(test)]
 use chematic::core::{BondIdx, Molecule};
 
+#[cfg(test)]
 use crate::mol::{atom_idx, atom_usize};
 
 /// Stable atom id in one `ForestMol` copy tree. Not a SMIRKS map number.
@@ -77,11 +80,12 @@ pub fn remap_index_stable(
     (labels, next)
 }
 
-/// Non-canonical SMILES visit order: the permutation `write` uses.
+/// Non-canonical SMILES visit order: a **test clone** of chematic `write` DFS.
 ///
-/// `order[k]` is the mol index of the k-th atom the writer emits. After
-/// `parse(write(mol))`, the new mol's index `k` is that atom.
-pub fn write_visit_order(mol: &Molecule) -> Vec<usize> {
+/// Not a public Forest seam. If this disagrees with isotope write/parse, the
+/// writer changed; do not "fix" it by reaching into chematic-smiles.
+#[cfg(test)]
+fn write_visit_order(mol: &Molecule) -> Vec<usize> {
     let n = mol.atom_count();
     if n == 0 {
         return Vec::new();
@@ -98,6 +102,7 @@ pub fn write_visit_order(mol: &Molecule) -> Vec<usize> {
     order
 }
 
+#[cfg(test)]
 fn ring_closure_bonds(mol: &Molecule) -> HashSet<BondIdx> {
     let n = mol.atom_count();
     let mut ring_bonds = HashSet::new();
@@ -119,6 +124,7 @@ fn ring_closure_bonds(mol: &Molecule) -> HashSet<BondIdx> {
     ring_bonds
 }
 
+#[cfg(test)]
 fn mark_rings(
     mol: &Molecule,
     ring_bonds: &mut HashSet<BondIdx>,
@@ -143,6 +149,7 @@ fn mark_rings(
     in_stack[atom] = false;
 }
 
+#[cfg(test)]
 fn write_chain(
     mol: &Molecule,
     ring_bonds: &HashSet<BondIdx>,
@@ -170,7 +177,8 @@ fn write_chain(
 ///
 /// Test probe only. Production tags are the sidecar; chematic apply does
 /// not return `src_to_new`, but it does clone `Atom` (so isotope survives).
-pub fn src_to_new_from_isotopes(parent: &Molecule, product: &Molecule) -> Vec<Option<usize>> {
+#[cfg(test)]
+fn src_to_new_from_isotopes(parent: &Molecule, product: &Molecule) -> Vec<Option<usize>> {
     let mut src_to_new = vec![None; parent.atom_count()];
     for (src, atom) in parent.atoms() {
         let Some(iso) = atom.isotope else {
@@ -185,7 +193,8 @@ pub fn src_to_new_from_isotopes(parent: &Molecule, product: &Molecule) -> Vec<Op
 }
 
 /// `old_at_new[new_idx] = old_idx` using unique isotopes on both mols.
-pub fn permute_from_isotopes(old: &Molecule, new: &Molecule) -> Vec<usize> {
+#[cfg(test)]
+fn permute_from_isotopes(old: &Molecule, new: &Molecule) -> Vec<usize> {
     let n = new.atom_count();
     (0..n)
         .map(|new_i| {
@@ -197,7 +206,8 @@ pub fn permute_from_isotopes(old: &Molecule, new: &Molecule) -> Vec<usize> {
         .collect()
 }
 
-pub fn stamp_unique_isotopes(mol: &mut Molecule) {
+#[cfg(test)]
+fn stamp_unique_isotopes(mol: &mut Molecule) {
     for i in 0..mol.atom_count() {
         mol.set_isotope(atom_idx(i), Some(200 + i as u16));
     }

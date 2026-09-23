@@ -33,7 +33,7 @@ mod wasm_api;
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};
-pub use labels::{Tag, write_visit_order};
+pub use labels::Tag;
 pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
 pub use pair_edit::dehydrogenate_hydroquinone;
