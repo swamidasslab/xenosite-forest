@@ -1,7 +1,8 @@
 //! Cross-seam derisk tests: MCS, WASM-shaped public API, SMARTS used by live rules.
 
 use xenosite_forest::{
-    ForestMol, apply_smirks_at, canon_of, canon_smiles, dehydrogenate_hydroquinone, hydroxylate,
+    ForestMol, Molecule, PatternInfo, RuleSet, accept_all_rules, accept_all_sites, apply_smirks_at,
+    canon_of, canon_smiles, dehydrogenate_hydroquinone, hydroxylate, hydroxylation, o_dealkylation,
     parse_mol, smarts_matches, unique_atom_sites, unordered_atom_pair_orbit_sizes,
 };
 
@@ -58,4 +59,28 @@ fn forest_mol_cache_is_per_held_mol() {
     assert!(std::rc::Rc::ptr_eq(&csmi, &mol.xf().csmi()));
     assert!(mol.copy_mol().shares_cache(&mol));
     assert!(!mol.rw_copy().has_forest());
+}
+
+#[test]
+fn ruleset_compose_and_closures_are_the_public_door() {
+    let set = RuleSet::compose(Some("probe".into()), [hydroxylation(), o_dealkylation()]);
+    assert_eq!(set.patterns().len(), 3);
+    let mol = parse_mol("COc1ccccc1").unwrap();
+    let only_cleave = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| p.effect.cleaves;
+    let emissions = set
+        .metabolize(&mol, only_cleave, accept_all_sites, true)
+        .unwrap();
+    assert_eq!(emissions.len(), 1);
+    assert_eq!(emissions[0].pattern_name, "O-Me");
+    let phenol = canon_of("Oc1ccccc1").unwrap();
+    assert!(
+        emissions[0]
+            .products
+            .iter()
+            .any(|s| canon_of(s).unwrap() == phenol)
+    );
+    let unfiltered = set
+        .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+        .unwrap();
+    assert!(unfiltered.len() > 1);
 }

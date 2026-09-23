@@ -15,6 +15,8 @@ pub mod kekule;
 pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
+pub mod pattern;
+pub mod ruleset;
 pub mod smarts;
 pub mod smirks;
 pub mod unique_edit;
@@ -28,10 +30,15 @@ mod python_api;
 mod wasm_api;
 
 pub use forest::{Forest, Formula, Structure, empty_forest, forest_copy};
-pub use hydroxylation::hydroxylate;
+pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
 pub use pair_edit::dehydrogenate_hydroquinone;
+pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
+pub use ruleset::{
+    BoxedFilters, FilterRules, FilterSites, RuleSet, accept_all_rules, accept_all_sites,
+    o_dealkylation,
+};
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;
 pub use unique_edit::unique_atom_sites;

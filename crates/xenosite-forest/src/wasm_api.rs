@@ -5,6 +5,8 @@
 
 use wasm_bindgen::prelude::wasm_bindgen;
 
+use crate::pattern::PatternInfo;
+use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 use crate::xf::ForestMol as Held;
 use crate::{canon_smiles, hydroxylate, parse_mol};
 
@@ -68,5 +70,57 @@ impl JsForestMol {
     #[wasm_bindgen(js_name = wipeForest)]
     pub fn wipe_forest(&self) {
         self.inner.wipe_forest();
+    }
+}
+
+/// JS wrap of [`RuleSet`]. Patterns live on the Rust payload after `add_*`.
+#[wasm_bindgen(js_name = RuleSet)]
+pub struct JsRuleSet {
+    inner: RuleSet,
+}
+
+#[wasm_bindgen(js_class = RuleSet)]
+impl JsRuleSet {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> JsRuleSet {
+        Self {
+            inner: RuleSet::new(None, []),
+        }
+    }
+
+    #[wasm_bindgen(js_name = hydroxylation)]
+    pub fn hydroxylation() -> JsRuleSet {
+        Self {
+            inner: crate::hydroxylation::hydroxylation(),
+        }
+    }
+
+    #[wasm_bindgen(js_name = addHydroxyl)]
+    pub fn add_hydroxyl(&mut self, name: &str, smarts: &str) {
+        self.inner.push(PatternInfo::hydroxyl(name, smarts));
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn len(&self) -> usize {
+        self.inner.patterns().len()
+    }
+
+    pub fn metabolize(&self, smiles: &str) -> Result<String, String> {
+        let mol = parse_mol(smiles).map_err(|err| err.to_string())?;
+        let emissions = self
+            .inner
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .map_err(|err| err.to_string())?;
+        Ok(emissions
+            .into_iter()
+            .flat_map(|emission| emission.products)
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+
+impl Default for JsRuleSet {
+    fn default() -> Self {
+        Self::new()
     }
 }

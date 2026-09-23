@@ -1,42 +1,33 @@
 //! Hydroxylation: unique-edit then add OH (graph edit, SMIRKS dialect aside).
+//!
+//! The patterns are [`PatternInfo`] data. [`hydroxylate`] runs them through
+//! [`crate::ruleset::RuleSet::metabolize`].
 
-use chematic::core::{Atom, BondOrder, Element};
-
-use crate::mol::{ForestError, Molecule, atom_idx, canon_smiles};
-use crate::unique_edit::unique_atom_sites;
-use crate::valence::accept_product;
+use crate::mol::{ForestError, Molecule};
+use crate::pattern::PatternInfo;
+use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
 const H: &str = "[#6h1:1]";
 const H2: &str = "[#6h2,#6h3:1]";
 
-fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> {
-    let (mut product, oxygen) = mol.with_atom_added(Atom::organic(Element::O));
-    product
-        .add_bond(atom_idx(carbon), oxygen, BondOrder::Single)
-        .map_err(|err| ForestError::Smirks(err.to_string()))?;
-    Ok(product)
+/// Hydroxylation as a [`RuleSet`]: two `PatternInfo` rows, `h` then `h2`.
+pub fn hydroxylation() -> RuleSet {
+    RuleSet::new(
+        Some("Hydroxylation".into()),
+        [
+            PatternInfo::hydroxyl("h", H),
+            PatternInfo::hydroxyl("h2", H2),
+        ],
+    )
 }
 
 /// Unique hydroxylation products as canonical SMILES.
 pub fn hydroxylate(mol: &Molecule) -> Result<Vec<String>, ForestError> {
-    let mut products = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
-    for reactant in [H, H2] {
-        for mapped in unique_atom_sites(mol, reactant)? {
-            let Some(&carbon) = mapped.get(&1) else {
-                continue;
-            };
-            let product = add_hydroxyl(mol, carbon)?;
-            if !accept_product(&product) {
-                continue;
-            }
-            let smiles = canon_smiles(&product);
-            if seen.insert(smiles.clone()) {
-                products.push(smiles);
-            }
-        }
-    }
-    Ok(products)
+    Ok(hydroxylation()
+        .metabolize(mol, accept_all_rules, accept_all_sites, true)?
+        .into_iter()
+        .flat_map(|emission| emission.products)
+        .collect())
 }
 
 #[cfg(test)]

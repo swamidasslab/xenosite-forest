@@ -14,6 +14,7 @@ The Python engine is RDKit + pynauty. This crate checks the seams that would blo
 - hydroquinone pair-path edit
 - `_forest` cache / `xf` facade (same-object answers; `copy_mol` shares cache; `rw_copy` does not)
 - PyO3 `#[pyclass]` wrap of `ForestMol` (native) and wasm-bindgen JS class (WASM)
+- `RuleSet` of `PatternInfo` records, with `FilterRules` / `FilterSites` as `impl Fn` or `Box<dyn Fn>`
 - `wasm32-unknown-unknown` (no C FFI: no `inchi` native, no canonaut `c-nauty-bench`)
 
 Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`). Canonical SMILES is chematic’s, not RDKit’s (`C(C)O` vs `CCO`). Tests compare `canon_of` identities, not a spelling. Kekulé parents are integer-order graphs with aromatic atom flags cleared so aliphatic SMIRKS can match.
@@ -54,7 +55,21 @@ cargo test -p xenosite-forest --features python
 
 `python3-dev` (libpython) is required to link the test binary. `#[pyclass]` is CPython; it is not WASM.
 
-**wasm-bindgen** (`--features wasm`): the same payload, a JS class named `ForestMol`. `python` and `wasm` are mutually exclusive (both want the `cdylib`).
+**RuleSet / closures:** Python `FilterRules` / `FilterSites` are `Callable`. Rust uses `impl Fn` on `RuleSet::metabolize`, or `BoxedFilters` (`Box<dyn Fn>`) when a search stores them. Capture-by-move; the boxed form is `'static`. Built-in filters should be Rust functions that read `PatternInfo` / `Effect` (methide is an effect field). A Python lambda still crosses the GIL and marshals a `PatternInfo` per call.
+
+Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.compose([hydroxylation, dealkylation])`). That copies pattern data into the Rust payload. Later `metabolize(mol)` passes handles only.
+
+```python
+rs = RuleSet([
+    PatternInfo("h", "[#6h1:1]", "hydroxyl", "O", "H"),
+    PatternInfo("h2", "[#6h2,#6h3:1]", "hydroxyl", "O", "H"),
+], "Hydroxylation")
+rs.metabolize(ForestMol("c1ccccc1"))  # no per-search marshal of patterns
+```
+
+`python` and `wasm` are mutually exclusive (both want the `cdylib`).
+
+**wasm-bindgen** (`--features wasm`): the same payload, JS classes named `ForestMol` and `RuleSet`. JS does not get `filter_rules` callbacks on this door; compose patterns in Rust/JS data, then `metabolize`.
 
 
 ## Build
@@ -146,4 +161,4 @@ Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --
 
 ## Not in this crate
 
-Full `find_path`, every Phase I rule, atom-trace, RuleSet. Those wait on these tests staying green.
+Full `find_path`, every Phase I rule, atom-trace. Those wait on these tests staying green. A `RuleSet` of `PatternInfo` plus closures is in the crate as a door; it is not the live Python `RuleSet` / `find_path` filters.
