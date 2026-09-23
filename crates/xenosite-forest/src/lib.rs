@@ -32,7 +32,7 @@ mod python_api;
 #[cfg(feature = "wasm")]
 mod wasm_api;
 
-pub use atom_tracker::AtomTracker;
+pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};
