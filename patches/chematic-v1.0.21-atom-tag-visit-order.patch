@@ -1,61 +1,50 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index 8689a423..4f6e8a27 100644
+index 8689a423..3398cdda 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -3,25 +3,9 @@ members = [
-     "crates/chematic-core",
-     "crates/chematic-smiles",
-     "crates/chematic-perception",
+@@ -1,40 +1,2 @@
+-[workspace]
+-members = [
+-    "crates/chematic-core",
+-    "crates/chematic-smiles",
+-    "crates/chematic-perception",
 -    "crates/chematic-mol",
 -    "crates/chematic-depict",
 -    "crates/chematic-chem",
 -    "crates/chematic-cip",
 -    "crates/chematic-fp",
-     "crates/chematic-smarts",
+-    "crates/chematic-smarts",
 -    "crates/chematic-3d",
-     "crates/chematic-rxn",
+-    "crates/chematic-rxn",
 -    "crates/chematic-ff",
 -    "crates/chematic-ewald",
 -    "crates/chematic-crystal",
 -    "crates/chematic-inchi",
 -    "crates/chematic-wasm",
-     "crates/chematic",
+-    "crates/chematic",
 -    "crates/chematic-iupac",
 -    "crates/chematic-mcp",
 -    "crates/chematic-cli",
 -    "crates/chematic-py",
 -    "tools/gen_sa_table",
- ]
- resolver = "2"
- 
-diff --git a/crates/chematic-core/Cargo.toml b/crates/chematic-core/Cargo.toml
-index fe12b4fa..a351b450 100644
---- a/crates/chematic-core/Cargo.toml
-+++ b/crates/chematic-core/Cargo.toml
-@@ -1,16 +1,16 @@
- [package]
- name = "chematic-core"
--version.workspace = true
--edition.workspace = true
--rust-version.workspace = true
--authors.workspace = true
--license.workspace = true
--repository.workspace = true
-+version = "1.0.21"
-+edition = "2024"
-+rust-version = "1.88"
-+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
-+license = "MIT OR Apache-2.0"
-+repository = "https://github.com/kent-tokyo/chematic"
- description = "Core types (Atom, Bond, Molecule) for chematic — pure-Rust RDKit alternative, WASM-compatible"
- keywords = ["cheminformatics", "chemistry", "molecule", "smiles", "wasm"]
- categories = ["science", "science::computational-chemistry::cheminformatics", "data-structures"]
- readme = "README.md"
--homepage.workspace = true
-+homepage = "https://kent-tokyo.github.io/chematic/"
- documentation = "https://docs.rs/chematic-core"
- 
- [package.metadata.docs.rs]
+-]
+-resolver = "2"
+-
+-[profile.release]
+-opt-level = 3        # optimize for speed (was "z" for size)
+-lto = true           # whole-program link-time optimization
+-codegen-units = 1    # required for LTO; also enables more cross-crate inlining
+-
+-[workspace.package]
+-version = "1.0.21"
+-edition = "2024"
+-rust-version = "1.88"
+-authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
+-license = "MIT OR Apache-2.0"
+-repository = "https://github.com/kent-tokyo/chematic"
+-homepage = "https://kent-tokyo.github.io/chematic/"
++# Vendored into xenosite-forest: not a Cargo workspace.
++# Sparse crates under crates/ are members of the parent repo workspace.
 diff --git a/crates/chematic-core/src/atom.rs b/crates/chematic-core/src/atom.rs
 index 5fc75740..e67595bf 100644
 --- a/crates/chematic-core/src/atom.rs
@@ -111,62 +100,10 @@ index d5dd9727..d19be2b6 100644
      /// Mark an atom as an R-group wildcard while preserving its atom index.
      pub fn set_r_group(&mut self, idx: AtomIdx, label: crate::atom::RGroupLabel) {
          let atom = &mut self.atoms[idx.0 as usize];
-diff --git a/crates/chematic-perception/Cargo.toml b/crates/chematic-perception/Cargo.toml
-index fb3ca020..9bb87fd4 100644
---- a/crates/chematic-perception/Cargo.toml
-+++ b/crates/chematic-perception/Cargo.toml
-@@ -1,16 +1,16 @@
- [package]
- name = "chematic-perception"
--version.workspace = true
--edition.workspace = true
--rust-version.workspace = true
--authors.workspace = true
--license.workspace = true
--repository.workspace = true
-+version = "1.0.21"
-+edition = "2024"
-+rust-version = "1.88"
-+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
-+license = "MIT OR Apache-2.0"
-+repository = "https://github.com/kent-tokyo/chematic"
- description = "SSSR ring perception and Hückel aromaticity for chematic — pure-Rust RDKit alternative"
- keywords = ["aromaticity", "rings", "sssr", "cheminformatics", "chemistry"]
- categories = ["science", "science::computational-chemistry::cheminformatics", "algorithms"]
- readme = "../../README.md"
--homepage.workspace = true
-+homepage = "https://kent-tokyo.github.io/chematic/"
- documentation = "https://docs.rs/chematic-perception"
- 
- [package.metadata.docs.rs]
 diff --git a/crates/chematic-rxn/Cargo.toml b/crates/chematic-rxn/Cargo.toml
-index e1f478df..e57328f8 100644
+index e1f478df..e69a9949 100644
 --- a/crates/chematic-rxn/Cargo.toml
 +++ b/crates/chematic-rxn/Cargo.toml
-@@ -1,16 +1,16 @@
- [package]
- name = "chematic-rxn"
--version.workspace = true
--edition.workspace = true
--rust-version.workspace = true
--authors.workspace = true
--license.workspace = true
--repository.workspace = true
-+version = "1.0.21"
-+edition = "2024"
-+rust-version = "1.88"
-+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
-+license = "MIT OR Apache-2.0"
-+repository = "https://github.com/kent-tokyo/chematic"
- description = "Reaction SMILES/SMIRKS parser and writer for chematic — pure-Rust RDKit alternative"
- keywords = ["reaction", "smiles", "smirks", "cheminformatics", "chemistry"]
- categories = ["science", "science::computational-chemistry::cheminformatics", "parser-implementations", "algorithms"]
- readme = "README.md"
--homepage.workspace = true
-+homepage = "https://kent-tokyo.github.io/chematic/"
- documentation = "https://docs.rs/chematic-rxn"
- 
- [package.metadata.docs.rs]
 @@ -34,7 +34,6 @@ serde_json = "1.0"
  [dev-dependencies]
  # Path-only (no `version`): mutual dev-dependency, matching the pattern in
@@ -175,62 +112,10 @@ index e1f478df..e57328f8 100644
  criterion = { version = "0.8", features = ["html_reports"] }
  
  [[bench]]
-diff --git a/crates/chematic-smarts/Cargo.toml b/crates/chematic-smarts/Cargo.toml
-index adb33357..bc91b722 100644
---- a/crates/chematic-smarts/Cargo.toml
-+++ b/crates/chematic-smarts/Cargo.toml
-@@ -1,16 +1,16 @@
- [package]
- name = "chematic-smarts"
--version.workspace = true
--edition.workspace = true
--rust-version.workspace = true
--authors.workspace = true
--license.workspace = true
--repository.workspace = true
-+version = "1.0.21"
-+edition = "2024"
-+rust-version = "1.88"
-+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
-+license = "MIT OR Apache-2.0"
-+repository = "https://github.com/kent-tokyo/chematic"
- description = "SMARTS parser, VF2 subgraph isomorphism and MCS for chematic — pure-Rust RDKit alternative"
- keywords = ["smarts", "substructure", "vf2", "mcs", "cheminformatics"]
- categories = ["science", "science::computational-chemistry::cheminformatics", "parser-implementations", "algorithms"]
- readme = "README.md"
--homepage.workspace = true
-+homepage = "https://kent-tokyo.github.io/chematic/"
- documentation = "https://docs.rs/chematic-smarts"
- 
- [package.metadata.docs.rs]
 diff --git a/crates/chematic-smiles/Cargo.toml b/crates/chematic-smiles/Cargo.toml
-index 9e5af0f5..e21df940 100644
+index 9e5af0f5..1aea2d9f 100644
 --- a/crates/chematic-smiles/Cargo.toml
 +++ b/crates/chematic-smiles/Cargo.toml
-@@ -1,16 +1,16 @@
- [package]
- name = "chematic-smiles"
--version.workspace = true
--edition.workspace = true
--rust-version.workspace = true
--authors.workspace = true
--license.workspace = true
--repository.workspace = true
-+version = "1.0.21"
-+edition = "2024"
-+rust-version = "1.88"
-+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
-+license = "MIT OR Apache-2.0"
-+repository = "https://github.com/kent-tokyo/chematic"
- description = "OpenSMILES parser, writer and canonical SMILES for chematic — pure Rust, WASM-compatible"
- keywords = ["smiles", "parser", "cheminformatics", "rdkit", "wasm"]
- categories = ["science", "science::computational-chemistry::cheminformatics", "parser-implementations", "algorithms"]
- readme = "README.md"
--homepage.workspace = true
-+homepage = "https://kent-tokyo.github.io/chematic/"
- documentation = "https://docs.rs/chematic-smiles"
- 
- [package.metadata.docs.rs]
 @@ -40,7 +40,6 @@ canonical-search-instrumentation = []
  [dev-dependencies]
  criterion = { version = "0.8", features = ["html_reports"] }
@@ -418,33 +303,10 @@ index 12880792..c4fc8121 100644
          // Write the incoming bond (if explicit / non-default).
          if let Some(token) = incoming_bond {
 diff --git a/crates/chematic/Cargo.toml b/crates/chematic/Cargo.toml
-index f53907f0..bdeac61e 100644
+index f53907f0..3955f892 100644
 --- a/crates/chematic/Cargo.toml
 +++ b/crates/chematic/Cargo.toml
-@@ -1,52 +1,24 @@
- [package]
- name = "chematic"
--version.workspace = true
--edition.workspace = true
--rust-version.workspace = true
--authors.workspace = true
--license.workspace = true
--repository.workspace = true
-+version = "1.0.21"
-+edition = "2024"
-+rust-version = "1.88"
-+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
-+license = "MIT OR Apache-2.0"
-+repository = "https://github.com/kent-tokyo/chematic"
- description = "A pure-Rust cheminformatics toolkit: SMILES/SMARTS, SDF/MOL V3000, ECFP/MACCS fingerprints, LogP/TPSA/QED, CIP stereo, MCS, 2D SVG depiction — no C/C++ dependencies, runs in the browser via WebAssembly."
- keywords = ["cheminformatics", "chemistry", "smiles", "drug-discovery", "wasm"]
- categories = ["science::computational-chemistry::cheminformatics", "science::computational-chemistry::molecular-simulation", "wasm", "parser-implementations", "visualization"]
- readme = "../../README.md"
--homepage.workspace = true
-+homepage = "https://kent-tokyo.github.io/chematic/"
- documentation = "https://docs.rs/chematic"
- 
- [features]
+@@ -17,36 +17,8 @@ documentation = "https://docs.rs/chematic"
  default = []
  smiles      = ["dep:chematic-core", "dep:chematic-smiles"]
  perception  = ["smiles", "dep:chematic-perception"]
