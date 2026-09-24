@@ -1204,6 +1204,22 @@ mod tests {
             many.len()
         );
         assert!(many.iter().all(|h| h.smiles == one[0].smiles));
+        // HEURISTICS: a reordering of the same Deps is not a new path.
+        // Stronger observational check: multipath hits share no total orders.
+        for (i, a) in many.iter().enumerate() {
+            for b in many.iter().skip(i + 1) {
+                assert!(
+                    !a.plan.same_linearizations(&b.plan),
+                    "hit{i} same_linearizations as later hit"
+                );
+                assert_eq!(
+                    a.plan.linearization_overlap(&b.plan),
+                    0,
+                    "hit{i} linearization_overlap={} with later hit",
+                    a.plan.linearization_overlap(&b.plan)
+                );
+            }
+        }
     }
 
     #[test]
