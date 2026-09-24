@@ -64,6 +64,7 @@ fn forest_mol_owns_caches() {
 #[test]
 fn ruleset_compose_and_closures_are_the_public_door() {
     let set = RuleSet::compose(Some("probe".into()), [hydroxylation(), o_dealkylation()]);
+    assert_eq!(set.members().len(), 2);
     assert_eq!(set.patterns().len(), 3);
     let mol = parse_mol("COc1ccccc1").unwrap();
     let only_cleave = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| p.effect.cleaves;
@@ -72,6 +73,10 @@ fn ruleset_compose_and_closures_are_the_public_door() {
         .unwrap();
     assert_eq!(emissions.len(), 1);
     assert_eq!(emissions[0].pattern_name, "O-Me");
+    assert_eq!(
+        emissions[0].namespace(),
+        vec!["Dealkylation", "probe"]
+    );
     let phenol = canon_of("Oc1ccccc1").unwrap();
     assert!(
         emissions[0]

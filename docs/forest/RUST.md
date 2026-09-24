@@ -63,6 +63,8 @@ cargo test -p xenosite-forest --features python
 
 Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.compose([hydroxylation, dealkylation])`). That copies pattern data into the Rust payload. Later `metabolize(mol)` passes handles only.
 
+**RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. Children run with `unique_csmi=false` so alternate rules bubble; the caller's `unique_csmi` is the cross-child CSMI layer. Filters see the leaf set, not the outer compose container.
+
 ```python
 rs = RuleSet([
     PatternInfo("h", "[#6h1:1]", "hydroxyl", "O", "H"),
@@ -196,6 +198,6 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 
 Full `find_path`, every Phase I rule. Production atom-trace can use
 [`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs) on
-`Atom.tag`; `ForestMol` has not switched off its sidecar yet. A `RuleSet` of
-`PatternInfo` plus closures is in the crate as a door; it is not the live
-Python `RuleSet` / `find_path` filters.
+`Atom.tag`; `ForestMol` has not switched off its sidecar yet. Nested
+`RuleSet` namespaces + closures are in the crate as a door; they are not
+yet the live Python `RuleSet` / `find_path` filters.

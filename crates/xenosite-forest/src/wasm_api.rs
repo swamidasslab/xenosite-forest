@@ -92,7 +92,7 @@ impl JsRuleSet {
 
     #[wasm_bindgen(getter)]
     pub fn len(&self) -> usize {
-        self.inner.patterns().len()
+        self.inner.members().len()
     }
 
     pub fn metabolize(&self, smiles: &str) -> Result<String, String> {

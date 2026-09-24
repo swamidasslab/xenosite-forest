@@ -76,10 +76,30 @@ pub struct SiteInfo {
     pub pattern: PatternInfo,
 }
 
-/// One metabolize emission: the discovery site, the pattern, product CSMIs.
+/// One metabolize emission: discovery site, pattern, rule namespace, product CSMIs.
+///
+/// `rule_path` is leaf-first (emitting rule, then each containing [`crate::ruleset::RuleSet`]),
+/// matching Python `info["rule"]` / addition chain order. Unnamed sets stay on the
+/// chain as `None`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Emission {
     pub site: usize,
     pub pattern_name: String,
+    pub rule_path: Vec<Option<String>>,
     pub products: Vec<String>,
+}
+
+impl Emission {
+    /// Named segments of [`Self::rule_path`] (unnamed sets omitted).
+    pub fn namespace(&self) -> Vec<&str> {
+        self.rule_path
+            .iter()
+            .filter_map(|name| name.as_deref())
+            .collect()
+    }
+
+    /// Emitting (leaf) rule name, if the leaf was named.
+    pub fn leaf_rule(&self) -> Option<&str> {
+        self.rule_path.first().and_then(|n| n.as_deref())
+    }
 }

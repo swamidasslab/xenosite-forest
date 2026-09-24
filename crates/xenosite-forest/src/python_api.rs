@@ -263,55 +263,64 @@ impl PyRuleSet {
         self.inner.name.clone()
     }
 
+    /// Direct member count (nested sets count as one member each).
     fn __len__(&self) -> usize {
-        self.inner.patterns().len()
+        self.inner.members().len()
     }
 
+    /// Flat leaf patterns under this set (including nested members).
     fn patterns(&self) -> Vec<PyPatternInfo> {
         self.inner
             .patterns()
-            .iter()
+            .into_iter()
             .cloned()
             .map(|inner| PyPatternInfo { inner })
             .collect()
     }
 
-    /// Run the owned patterns. `filter_rules` / `filter_sites` are optional Python
+    /// Run the owned members. `filter_rules` / `filter_sites` are optional Python
     /// callables; omit them and Rust `accept_all_*` runs with no GIL per site.
+    ///
+    /// Each row is `(pattern_name, site, products, rule_path)` where `rule_path`
+    /// is leaf-first namespace names (`None` for an unnamed set).
     #[pyo3(signature = (mol, filter_rules=None, filter_sites=None))]
     fn metabolize(
         slf: &Bound<'_, Self>,
         mol: &Bound<'_, PyForestMol>,
         filter_rules: Option<Bound<'_, PyAny>>,
         filter_sites: Option<Bound<'_, PyAny>>,
-    ) -> PyResult<Vec<(String, usize, Vec<String>)>> {
+    ) -> PyResult<Vec<(String, usize, Vec<String>, Vec<Option<String>>)>> {
         let chemistry = mol.borrow().inner.mol().clone();
         let set = slf.borrow().inner.clone();
         let emissions = if filter_rules.is_none() && filter_sites.is_none() {
             set.metabolize(&chemistry, accept_all_rules, accept_all_sites, true)
                 .map_err(py_err)?
         } else {
-            metabolize_with_python(slf, mol, &set, &chemistry, filter_rules, filter_sites)?
+            metabolize_with_python(mol, &set, &chemistry, filter_rules, filter_sites)?
         };
         Ok(emissions
             .into_iter()
-            .map(|e| (e.pattern_name, e.site, e.products))
+            .map(|e| (e.pattern_name, e.site, e.products, e.rule_path))
             .collect())
     }
 
     fn __repr__(&self) -> String {
         match &self.inner.name {
             Some(name) => format!(
-                "RuleSet({name:?}, {} patterns)",
+                "RuleSet({name:?}, {} members, {} patterns)",
+                self.inner.members().len(),
                 self.inner.patterns().len()
             ),
-            None => format!("RuleSet({} patterns)", self.inner.patterns().len()),
+            None => format!(
+                "RuleSet({} members, {} patterns)",
+                self.inner.members().len(),
+                self.inner.patterns().len()
+            ),
         }
     }
 }
 
 fn metabolize_with_python(
-    slf: &Bound<'_, PyRuleSet>,
     mol: &Bound<'_, PyForestMol>,
     set: &RuleSet,
     chemistry: &Molecule,
@@ -321,7 +330,6 @@ fn metabolize_with_python(
     let py_rules = filter_rules.map(|cb| cb.unbind());
     let py_sites = filter_sites.map(|cb| cb.unbind());
     let py_mol = mol.clone().unbind();
-    let py_set = slf.clone().unbind();
     let err: RefCell<Option<PyErr>> = RefCell::new(None);
     let take_bool = |result: PyResult<bool>, slot: &RefCell<Option<PyErr>>| match result {
         Ok(keep) => keep,
@@ -330,7 +338,8 @@ fn metabolize_with_python(
             false
         }
     };
-    let rules = |_: &Molecule, _: &RuleSet, pattern: &PatternInfo| {
+    // Filters see the leaf RuleSet (namespace), not the outer compose container.
+    let rules = |_: &Molecule, leaf: &RuleSet, pattern: &PatternInfo| {
         if err.borrow().is_some() {
             return false;
         }
@@ -345,8 +354,14 @@ fn metabolize_with_python(
                         inner: pattern.clone(),
                     },
                 )?;
+                let leaf_py = Py::new(
+                    py,
+                    PyRuleSet {
+                        inner: leaf.clone(),
+                    },
+                )?;
                 cb.bind(py)
-                    .call1((py_mol.bind(py), py_set.bind(py), info))?
+                    .call1((py_mol.bind(py), leaf_py, info))?
                     .extract::<bool>()
             }),
             &err,
@@ -460,13 +475,15 @@ mod tests {
                 2
             );
             let products = rs.call_method1("metabolize", (&mol,)).unwrap();
-            let products: Vec<(String, usize, Vec<String>)> = products.extract().unwrap();
+            let products: Vec<(String, usize, Vec<String>, Vec<Option<String>>)> =
+                products.extract().unwrap();
             assert_eq!(products.len(), 1);
             assert_eq!(products[0].0, "h");
+            assert_eq!(products[0].3, vec![Some("Hydroxylation".into())]);
             let filt = py
                 .eval(c"lambda m, rule, p: p.name == 'h2'", None, None)
                 .unwrap();
-            let kept: Vec<(String, usize, Vec<String>)> = rs
+            let kept: Vec<(String, usize, Vec<String>, Vec<Option<String>>)> = rs
                 .call_method1("metabolize", (&mol, filt))
                 .unwrap()
                 .extract()
@@ -485,11 +502,20 @@ mod tests {
             let composed = ruleset
                 .call_method1("compose", (vec![built_in, dealkyl], "probe"))
                 .unwrap();
+            // Nested namespaces: two members, three flat patterns.
             assert_eq!(
                 composed
                     .call_method0("__len__")
                     .unwrap()
                     .extract::<usize>()
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                composed
+                    .call_method0("patterns")
+                    .unwrap()
+                    .len()
                     .unwrap(),
                 3
             );

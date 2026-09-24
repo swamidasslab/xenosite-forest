@@ -42,8 +42,8 @@ pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
 pub use pair_edit::dehydrogenate_hydroquinone;
 pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
 pub use ruleset::{
-    BoxedFilters, FilterRules, FilterSites, RuleSet, accept_all_rules, accept_all_sites,
-    o_dealkylation,
+    BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
+    accept_all_sites, o_dealkylation,
 };
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;

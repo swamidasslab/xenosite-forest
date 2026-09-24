@@ -3,3 +3,5 @@ A WASM-clean Rust derisk crate (`crates/xenosite-forest`) on chematic and canona
 Chematic is vendored as a sparse submodule at `v1.0.21` with a tiny local patch (`Atom.tag`, `write_with_order` / `canonical_smiles_with_order`). See `patches/README.md` and `./scripts/vendor-chematic.sh`.
 
 `AtomTracker` POC follows atoms via chematic `Atom.tag` through SMIRKS apply and SMILES write/parse (no isotope probe, no sidecar).
+
+`RuleSet` namespaces: nested sets stay nested (`compose` does not flatten); emissions carry a leaf-first `rule_path`; cross-child `unique_csmi` matches Python RuleSet yield.
