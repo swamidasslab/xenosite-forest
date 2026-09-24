@@ -394,8 +394,14 @@ fn merge_effect_fields(
         adds,
         removes,
         cleaves: left.effect.cleaves || right.effect.cleaves,
+        leave_count: left.effect.leave_count.or(right.effect.leave_count),
         methide: left.effect.methide || right.effect.methide,
         dearomatizes: merge_dearomatizes(left, right, system_aromatic),
+        partner: left
+            .effect
+            .partner
+            .clone()
+            .or_else(|| right.effect.partner.clone()),
     }
 }
 

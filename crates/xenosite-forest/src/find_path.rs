@@ -165,9 +165,21 @@ fn keep_fragment(
 fn closer(parent_ha: usize, child_ha: usize, target_ha: usize, target_hit: bool) -> bool {
     // Refuse only walks that grow more distant in heavy-atom count. Equal
     // distance (same-size DH / oxidation hops) must stay open — a strict `<`
-    // drops propane→propene→epoxide. Python uses atom_diff cost; HA is the
-    // provisional stand-in (HEURISTICS: sideways-on-cost not decided).
+    // drops propane→propene→epoxide. When atom_diff is on, prefer cost().
     target_hit || ha_distance(child_ha, target_ha) <= ha_distance(parent_ha, target_ha)
+}
+
+fn closer_diff(
+    parent_cost: usize,
+    child: &crate::Molecule,
+    target: &crate::Molecule,
+    target_hit: bool,
+) -> bool {
+    if target_hit {
+        return true;
+    }
+    let child_cost = crate::atom_diff::atom_diff(child, target).cost();
+    child_cost < parent_cost
 }
 
 /// Search bounds. Defaults match Python `find_path` knobs.
@@ -185,7 +197,8 @@ impl Default for FindPathConfig {
         Self {
             max_paths: 1,
             max_nodes: 800,
-            use_atom_diff: false,
+            // Match Python live `use_filters=True`.
+            use_atom_diff: true,
         }
     }
 }
@@ -308,7 +321,8 @@ where
         } else {
             None
         };
-        let emissions = expand(ruleset, &mol, counters, &keep, diff.as_ref())?;
+        let parent_cost = diff.as_ref().map(|d| d.cost());
+        let emissions = expand(ruleset, &mol, &target_mol, counters, &keep, diff.as_ref())?;
         let mut hits_from_here = 0usize;
 
         for emission in emissions {
@@ -318,7 +332,13 @@ where
             };
             let child_ha = heavy_atoms(&kept)?;
             let target_hit = kept == target_csmi;
-            if !closer(walk.heavy, child_ha, target_ha, target_hit) {
+            let allow = if let Some(pc) = parent_cost {
+                let child_mol = parse_mol(&kept)?;
+                closer_diff(pc, &child_mol, &target_mol, target_hit)
+            } else {
+                closer(walk.heavy, child_ha, target_ha, target_hit)
+            };
+            if !allow {
                 continue;
             }
             if seen.contains(&kept) && !target_hit {
@@ -353,6 +373,7 @@ where
 fn expand<K>(
     ruleset: &RuleSet,
     mol: &crate::Molecule,
+    target: &crate::Molecule,
     counters: &mut PathCounters,
     keep: &K,
     diff: Option<&crate::atom_diff::AtomDiff>,
@@ -360,28 +381,30 @@ fn expand<K>(
 where
     K: Fn(&Candidate) -> bool,
 {
+    let mut candidates = ruleset.candidates(mol)?;
+    if let Some(d) = diff {
+        candidates.retain(|c| {
+            keep(c) && crate::atom_diff::candidate_could_help_on(c, d, Some(mol), Some(target))
+        });
+        candidates.sort_by_key(|c| crate::atom_diff::candidate_order_key(c, d));
+    } else {
+        candidates.retain(|c| keep(c));
+    }
     let mut emissions = Vec::new();
-    for candidate in ruleset.candidates(mol)? {
-        if !keep(&candidate) {
-            continue;
-        }
-        if let Some(d) = diff {
-            if !crate::atom_diff::candidate_could_help(&candidate, d) {
-                continue;
-            }
-        }
+    for candidate in candidates {
         counters.mol_edits += 1;
         if let Some(emission) = candidate.emit(mol)? {
             emissions.push(emission);
         }
     }
-    emissions.extend(expand_pairs(ruleset, mol, counters, keep, diff)?);
+    emissions.extend(expand_pairs(ruleset, mol, target, counters, keep, diff)?);
     Ok(emissions)
 }
 
 fn expand_pairs<K>(
     ruleset: &RuleSet,
     mol: &crate::Molecule,
+    target: &crate::Molecule,
     counters: &mut PathCounters,
     keep: &K,
     diff: Option<&crate::atom_diff::AtomDiff>,
@@ -392,24 +415,44 @@ where
     let mut out = Vec::new();
     for member in ruleset.members() {
         if let crate::ruleset::RuleMember::Set(child) = member {
-            for mut emission in expand_pairs(child, mol, counters, keep, diff)? {
+            for mut emission in expand_pairs(child, mol, target, counters, keep, diff)? {
                 emission.rule_path.push(ruleset.name.clone());
                 out.push(emission);
             }
         }
     }
-    for pair in ruleset.pair_candidates_leaf(mol)? {
-        if !keep_pair(&pair, keep) {
-            continue;
-        }
-        if let Some(d) = diff {
-            if !crate::atom_diff::pattern_could_help(&pair.effect, d) {
-                continue;
+    let mut pairs = ruleset.pair_candidates_leaf(mol)?;
+    if let Some(d) = diff {
+        pairs.retain(|pair| {
+            if !keep_pair(pair, keep) {
+                return false;
             }
-            if pair.effect.dearomatizes && d.loses_aromaticity.is_empty() && !d.h_loss() {
-                continue;
-            }
-        }
+            crate::atom_diff::pattern_could_help_mol(&pair.effect, d, mol, target)
+                && !(pair.effect.dearomatizes && d.loses_aromaticity.is_empty() && !d.h_loss())
+        });
+        pairs.sort_by_key(|p| {
+            // Reuse candidate order via a stand-in effect.
+            let cleave = if p.effect.cleaves { 0u8 } else { 1 };
+            let dear = if p.effect.dearomatizes { 0u8 } else { 1 };
+            let oxy = if p.effect.adds.as_deref().is_some_and(|a| a.contains('O')) {
+                0u8
+            } else {
+                1
+            };
+            let want_cleave = d.target_smaller() || d.has_cleavage();
+            let want_dear = !d.loses_aromaticity.is_empty();
+            let want_oxy = !d.needs_oxygen.is_empty();
+            (
+                if want_cleave { cleave } else { 0 },
+                if want_dear { dear } else { 0 },
+                if want_oxy { oxy } else { 0 },
+                p.pattern_name.clone(),
+            )
+        });
+    } else {
+        pairs.retain(|p| keep_pair(p, keep));
+    }
+    for pair in pairs {
         counters.mol_edits += 1;
         if let Some(emission) = pair.emit(mol)? {
             out.push(Emission {

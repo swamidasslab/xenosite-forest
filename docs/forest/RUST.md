@@ -227,7 +227,6 @@ are in the crate as a door; they are not yet the live Python search.
 
 Same PhaseOne cases / `max_nodes=800` / `max_paths=1` / best-of-5 as
 [`bench_find_path_h2h.py`](../../tests/forest/bench_find_path_h2h.py).
-Measured on this VM @ `376505c`+bench:
 
 ```bash
 cargo run -p xenosite-forest --example find_path_bench --release
@@ -237,32 +236,33 @@ uv run python tests/forest/bench_find_path_rust_h2h.py
 
 Raw: `artifacts/bench_find_path_{rust,python}_{mid,larger}.out`.
 
+Filter parity (`BondCompare::Any` + `match_bonds=false` MCS, multi-placement
+merge, `leave_count` on `Effect`, site/pattern could-help, cleavage-first
+order, atom_diff `closer`) closes the mid-size miss gap.
+
 ### Mid-size / multi-edit
 
-| Case | Python live | Rust (no atom_diff) | Rust (provisional atom_diff) |
+| Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| eugenol→allyl-Q | **ok** 0.033s · 4 steps · bill=20 | MISS · 800 nd · bill≈41k | **ok** 1.80s · 4 steps · bill≈24k |
-| dimethoxy-PEA→catechol | **ok** 0.013s · bill=10 | **ok** 0.038s · bill=391 | MISS · 1 nd (over-filter) |
-| MeOPhOH→hydroxyQ | **ok** 0.35s · bill=226 | MISS · 800 nd · bill≈35k | MISS · 800 nd · bill≈30k |
-| TBA→aldehyde | **ok** 0.022s · bill=5 | **ok** 0.19s · bill=168 | **ok** 0.083s · bill=83 |
-| 2-MeO-naph→1,2-NQ | **ok** 0.011s · bill=7 | MISS · 800 nd · bill≈48k | MISS · 1 nd (over-filter) |
-| **TOTAL wall** | **0.43s** (5/5) | **10.0s** (2/5) | **3.9s** (2/5) |
+| eugenol→allyl-Q | **ok** 0.030s · bill=20 | **ok** 0.058s · bill=89 | MISS · bill≈41k |
+| dimethoxy-PEA→catechol | **ok** 0.011s · bill=10 | **ok** 0.004s · bill=12 | **ok** 0.039s · bill=391 |
+| MeOPhOH→hydroxyQ | **ok** 0.31s · bill=226 | **ok** 0.45s · bill=899 | MISS · bill≈35k |
+| TBA→aldehyde | **ok** 0.017s · bill=5 | **ok** 0.014s · bill=5 | **ok** 0.19s · bill=168 |
+| 2-MeO-naph→1,2-NQ | **ok** 0.010s · bill=7 | **ok** 0.14s · bill=62 | MISS · bill≈48k |
+| **TOTAL wall** | **0.38s (5/5)** | **0.67s (5/5)** | **10s (2/5)** |
 
 ### Larger (HA≈17–26)
 
-| Case | Python live | Rust (no atom_diff) | Rust (atom_diff) |
+| Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| tBu-bis-ND→dialdehyde | **ok** 0.087s · bill=36 | **ok** 0.20s · bill=356 | **ok** 0.18s · bill=261 |
-| macrocycle-ND→aminoK | **ok** 0.16s · bill=26 | **ok** 1.11s · bill=2213 | **ok** 0.86s · bill=1976 |
-| tribenzyl→PhCHO | **ok** 0.006s · bill=4 | **ok** 0.17s · bill=123 | **ok** 0.10s · bill=68 |
-| triPh-butyl→OH | **ok** 0.025s · bill=5 | **ok** 0.25s · bill=158 | **ok** 0.030s · bill=5 |
-| MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.15s · bill=223 | MISS · over-filter |
-| **TOTAL wall** | **0.32s** (5/5) | **1.88s** (5/5) | **1.18s** (4/5) |
+| tBu-bis-ND→dialdehyde | **ok** 0.088s · bill=36 | **ok** 0.041s · bill=33 | **ok** 0.20s · bill=356 |
+| macrocycle-ND→aminoK | **ok** 0.16s · bill=26 | **ok** 0.075s · bill=61 | **ok** 1.11s · bill=2213 |
+| tribenzyl→PhCHO | **ok** 0.006s · bill=4 | **ok** 0.027s · bill=5 | **ok** 0.17s · bill=123 |
+| triPh-butyl→OH | **ok** 0.025s · bill=5 | **ok** 0.078s · bill=5 | **ok** 0.25s · bill=158 |
+| MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.022s · bill=9 | **ok** 0.15s · bill=223 |
+| **TOTAL wall** | **0.32s (5/5)** | **0.24s (5/5)** | **1.88s (5/5)** |
 
-**Read:** chematic door alone is not the win. Python stays ahead because live
-`filter_sites` / multi-placement `atom_diff` / cleavage ordering keep
-`mol_edits` in the tens; Rust still materializes most PhaseOne sites (bills in
-the hundreds–tens of thousands) and the provisional MCS gate both under-helps
-(MeOPhOH) and over-filters (dimethoxy / 2-MeO). Larger one-hop cleaves are
-closer (≈2–10× wall when both hit). Next derisk lever is filter parity, not
-more SMARTS microbench.
+**Read:** with filters on, Rust hits every H2H row. Larger set is **faster than
+Python** (0.24s vs 0.32s). Mid-size is ~1.8× Python wall; MeOPhOH still carries
+most of the Rust bill (899 vs 226) — residual concurrent O/dearom/dealk
+tightening, not door chemistry.

@@ -29,10 +29,14 @@ pub struct Effect {
     pub adds: Option<String>,
     pub removes: Option<String>,
     pub cleaves: bool,
+    /// Named leaving heavy-atom count (methyl dealkylation = 1). `None` = open.
+    pub leave_count: Option<u16>,
     /// Effect bit, not a `pathways=("methide",)` switch.
     pub methide: bool,
     /// Capability: pair/path may dearomatize. Resolved against system aromaticity.
     pub dearomatizes: bool,
+    /// Methide / alkyl partner element hint (`"C"`). Filters read this.
+    pub partner: Option<String>,
 }
 
 /// What a SMARTS pattern can do, before a match.
@@ -76,8 +80,10 @@ impl PatternInfo {
                 adds: Some("O".into()),
                 removes: Some("H".into()),
                 cleaves: false,
+                leave_count: None,
                 methide: false,
                 dearomatizes: false,
+                partner: None,
             },
         )
     }

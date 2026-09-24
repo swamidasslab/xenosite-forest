@@ -171,6 +171,8 @@ impl PyPatternInfo {
                     cleaves,
                     methide,
                     dearomatizes: false,
+                    leave_count: None,
+                    partner: None,
                 },
             ),
         }

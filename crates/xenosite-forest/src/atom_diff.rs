@@ -1,13 +1,16 @@
-//! Provisional reactant→target local diff for candidate filtering.
+//! Reactant→target local diff for candidate filtering.
 //!
-//! Door for Python `find_path.atom_diff` / `_site_could_help`. Aligns via
-//! chematic MCS embeddings; reads [`crate::pattern::Effect`] on
-//! [`crate::candidate::Candidate`] without filter closures.
+//! Parity door for Python `find_path.atom_diff` / `_site_could_help` /
+//! `_pattern_could_help`. Aligns via chematic MCS with `BondCompare::Any`
+//! (Python `rdFMCS` CompareAny). Multi-placement views merge so a step that
+//! helps any ring is not refused. Filters read [`crate::pattern::Effect`]
+//! on deferred candidates — no filter closures required.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chematic::core::BondOrder;
-use chematic::smarts::{find_matches, find_mcs};
+use chematic::perception::ring_atom_flags;
+use chematic::smarts::{BondCompare, McsConfig, find_matches, find_mcs_with_config};
 
 use crate::candidate::Candidate;
 use crate::mol::{Molecule, atom_idx, atom_usize, ranks};
@@ -34,19 +37,38 @@ fn bond_key(a: usize, b: usize) -> (usize, usize) {
     if a < b { (a, b) } else { (b, a) }
 }
 
-/// Local reactant-to-target differences (Python `AtomDiff` subset).
+fn heavy_atom_count(mol: &Molecule) -> usize {
+    mol.atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .count()
+}
+
+fn formula_oxygen(mol: &Molecule) -> usize {
+    mol.atoms()
+        .filter(|(_, a)| a.element.atomic_number() == 8)
+        .count()
+}
+
+/// Local reactant-to-target differences (Python `AtomDiff`).
 #[derive(Clone, Debug, Default)]
 pub struct AtomDiff {
     pub mapping: BTreeMap<usize, usize>,
+    /// Every placement (best first). Filters / cost use the merge.
+    pub mappings: Vec<BTreeMap<usize, usize>>,
     pub needs_oxygen: BTreeSet<usize>,
     pub needs_carbonyl: BTreeSet<usize>,
+    pub needs_alcohol: BTreeSet<usize>,
     pub cleaved: BTreeSet<usize>,
     pub cleavage_bonds: BTreeSet<(usize, usize)>,
     pub loses_aromaticity: BTreeSet<usize>,
     pub h_delta: BTreeMap<usize, i32>,
     pub bond_raises: BTreeSet<(usize, usize)>,
+    pub bond_order_mismatches: usize,
+    pub n_extra: usize,
     pub reactant_heavy: usize,
     pub target_heavy: usize,
+    /// Per-view field costs; [`Self::cost`] is the minimum.
+    view_costs: Vec<usize>,
 }
 
 impl AtomDiff {
@@ -67,14 +89,24 @@ impl AtomDiff {
     }
 
     pub fn cost(&self) -> usize {
+        if !self.view_costs.is_empty() {
+            return *self.view_costs.iter().min().unwrap_or(&0);
+        }
+        self.field_cost()
+    }
+
+    fn field_cost(&self) -> usize {
         let h_off = self.h_delta.values().filter(|&&d| d != 0).count();
         3 * self.cleaved.len()
+            + 3 * self.n_extra
             + 2 * self.needs_oxygen.len()
             + self.loses_aromaticity.len()
             + h_off
             + 3 * self.cleavage_bonds.len()
+            + self.bond_order_mismatches
     }
 
+    /// True when ``atoms`` is the bond that separates kept from gone.
     pub fn site_is_cleavage(&self, atoms: &[usize]) -> bool {
         if atoms.is_empty() {
             return false;
@@ -90,51 +122,142 @@ impl AtomDiff {
     }
 }
 
-fn best_mapping(reactant: &Molecule, target: &Molecule) -> BTreeMap<usize, usize> {
-    let query = find_mcs(&[reactant, target]);
+fn mapping_score(reactant: &Molecule, target: &Molecule, aligned: &BTreeMap<usize, usize>) -> i32 {
+    let mut score = 0i32;
+    for (&r, &t) in aligned {
+        let ra = reactant.atom(atom_idx(r));
+        let ta = target.atom(atom_idx(t));
+        if ra.aromatic == ta.aromatic {
+            score += 1;
+        } else {
+            score -= 2;
+        }
+    }
+    for (&ri, &ti) in aligned {
+        for (rj, bond) in reactant.neighbors(atom_idx(ri)) {
+            let rj = atom_usize(rj);
+            let Some(&tj) = aligned.get(&rj) else {
+                continue;
+            };
+            if rj < ri {
+                continue;
+            }
+            let Some((_, tbond)) = target.bond_between(atom_idx(ti), atom_idx(tj)) else {
+                score -= 4;
+                continue;
+            };
+            let delta = (order_value(tbond.order) - order_value(reactant.bond(bond).order)).abs();
+            if delta < 0.2 {
+                score += 1;
+            } else {
+                score -= 1;
+            }
+        }
+    }
+    score
+}
+
+/// All MCS placements: one alignment per distinct reactant atom set.
+fn mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
+    let cfg = McsConfig {
+        bond_compare: BondCompare::Any,
+        // match_bonds=false so the QueryMolecule embeds on both aromatic and
+        // kekulé writings (VF2 would otherwise refuse quinone targets).
+        match_bonds: false,
+        ..McsConfig::default()
+    };
+    let query = find_mcs_with_config(&[reactant, target], &cfg);
     if query.atom_count() == 0 {
-        return BTreeMap::new();
+        return Vec::new();
     }
     let r_hits = find_matches(&query, reactant);
     let t_hits = find_matches(&query, target);
-    let mut best: Option<(usize, BTreeMap<usize, usize>)> = None;
+    let mut by_size: HashMap<usize, Vec<BTreeMap<usize, usize>>> = HashMap::new();
+    for emb in &t_hits {
+        by_size
+            .entry(emb.len())
+            .or_default()
+            .push(emb.iter().map(|(&q, &t)| (q, atom_usize(t))).collect());
+    }
+    if r_hits.is_empty() || by_size.is_empty() {
+        return Vec::new();
+    }
+
+    let mut best: HashMap<BTreeSet<usize>, (i32, BTreeMap<usize, usize>)> = HashMap::new();
     for r_emb in &r_hits {
         let r_map: BTreeMap<usize, usize> =
             r_emb.iter().map(|(&q, &t)| (q, atom_usize(t))).collect();
-        let n = r_map.len();
-        for t_emb in &t_hits {
-            let t_map: BTreeMap<usize, usize> =
-                t_emb.iter().map(|(&q, &t)| (q, atom_usize(t))).collect();
-            if t_map.len() != n {
-                continue;
-            }
+        let Some(mates) = by_size.get(&r_map.len()) else {
+            continue;
+        };
+        let key: BTreeSet<usize> = r_map.values().copied().collect();
+        for t_map in mates {
             let mut aligned = BTreeMap::new();
             for (&q, &r_idx) in &r_map {
                 if let Some(&t_idx) = t_map.get(&q) {
                     aligned.insert(r_idx, t_idx);
                 }
             }
-            if aligned.len() != n {
+            if aligned.len() != r_map.len() {
                 continue;
             }
-            let score = aligned.len();
-            match &best {
-                None => best = Some((score, aligned)),
-                Some((best_score, _)) if score > *best_score => best = Some((score, aligned)),
-                _ => {}
+            let score = mapping_score(reactant, target, &aligned);
+            match best.get(&key) {
+                Some((held, _)) if *held >= score => {}
+                _ => {
+                    best.insert(key.clone(), (score, aligned));
+                }
             }
         }
     }
-    best.map(|(_, m)| m).unwrap_or_default()
+    let mut ranked: Vec<_> = best.into_values().collect();
+    ranked.sort_by(|a, b| b.0.cmp(&a.0));
+    ranked.into_iter().map(|(_, m)| m).collect()
 }
 
-/// Pair reactant atoms with target atoms and record the local change.
-pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
-    let mapping = best_mapping(reactant, target);
+fn expand_by_rank(mol: &Molecule, sites: BTreeSet<usize>) -> BTreeSet<usize> {
+    let rank = ranks(mol);
+    let mut out = BTreeSet::new();
+    for s in sites {
+        let r = rank.get(s).copied().unwrap_or(usize::MAX);
+        for (i, &ri) in rank.iter().enumerate() {
+            if ri == r {
+                out.insert(i);
+            }
+        }
+    }
+    out
+}
+
+fn expand_h_delta(mol: &Molecule, h_delta: BTreeMap<usize, i32>) -> BTreeMap<usize, i32> {
+    let rank = ranks(mol);
+    let mut out = BTreeMap::new();
+    for (&atom, &delta) in &h_delta {
+        let r = rank.get(atom).copied().unwrap_or(usize::MAX);
+        for (i, &ri) in rank.iter().enumerate() {
+            if ri == r {
+                // Keep the more negative (stronger H loss) when ranks collide.
+                out.entry(i)
+                    .and_modify(|d| {
+                        if delta < *d {
+                            *d = delta;
+                        }
+                    })
+                    .or_insert(delta);
+            }
+        }
+    }
+    out
+}
+
+fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, usize>) -> AtomDiff {
     let image: HashSet<usize> = mapping.values().copied().collect();
+    let r_rings = ring_atom_flags(reactant);
+    let t_rings = ring_atom_flags(target);
 
     let mut needs_oxygen = BTreeSet::new();
     let mut needs_carbonyl = BTreeSet::new();
+    let mut needs_alcohol = BTreeSet::new();
     for (t_idx, atom) in target.atoms() {
         let t = atom_usize(t_idx);
         if atom.element.atomic_number() != 8 || image.contains(&t) {
@@ -143,13 +266,15 @@ pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
         for (nbr, bond_idx) in target.neighbors(t_idx) {
             let n = atom_usize(nbr);
             let order = order_value(target.bond(bond_idx).order);
-            for (&r_idx, &t_mapped) in &mapping {
+            for (&r_idx, &t_mapped) in mapping {
                 if t_mapped != n {
                     continue;
                 }
                 needs_oxygen.insert(r_idx);
                 if order >= 1.5 {
                     needs_carbonyl.insert(r_idx);
+                } else {
+                    needs_alcohol.insert(r_idx);
                 }
             }
         }
@@ -170,8 +295,9 @@ pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
     let mut loses_aromaticity = BTreeSet::new();
     let mut h_delta = BTreeMap::new();
     let mut bond_raises = BTreeSet::new();
+    let mut bond_order_mismatches = 0usize;
 
-    for (&r_idx, &t_idx) in &mapping {
+    for (&r_idx, &t_idx) in mapping {
         let ra = reactant.atom(atom_idx(r_idx));
         let ta = target.atom(atom_idx(t_idx));
         if ra.aromatic && !ta.aromatic {
@@ -198,52 +324,111 @@ pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
             continue;
         };
         let delta = order_value(tbond.order) - order_value(bond.order);
+        if delta.abs() >= 0.2 {
+            bond_order_mismatches += 1;
+        }
         if delta >= 0.2 {
             bond_raises.insert(bond_key(i, j));
         }
     }
 
-    // Unique-edit collapses equivalent sites to one representative. Expand
-    // oxygen / aromaticity / h_delta keys across topological rank so the
-    // kept site still matches the diff.
-    let rank = ranks(reactant);
-    let expand = |sites: BTreeSet<usize>| -> BTreeSet<usize> {
-        let mut out = BTreeSet::new();
-        for s in sites {
-            let r = rank.get(s).copied().unwrap_or(usize::MAX);
-            for (i, &ri) in rank.iter().enumerate() {
-                if ri == r {
-                    out.insert(i);
-                }
-            }
+    // MCS may map exocyclic onto ring (PhCH2OH CH2 → quinone C); bridge is still the cut.
+    for (&r_idx, &t_idx) in mapping {
+        let r_in = r_rings.get(r_idx).copied().unwrap_or(false);
+        let t_in = t_rings.get(t_idx).copied().unwrap_or(false);
+        if r_in == t_in {
+            continue;
         }
-        out
-    };
-    let needs_oxygen = expand(needs_oxygen);
-    let needs_carbonyl = expand(needs_carbonyl);
-    let loses_aromaticity = expand(loses_aromaticity);
-    let mut h_delta_exp = BTreeMap::new();
-    for (&atom, &delta) in &h_delta {
-        let r = rank.get(atom).copied().unwrap_or(usize::MAX);
-        for (i, &ri) in rank.iter().enumerate() {
-            if ri == r {
-                h_delta_exp.insert(i, delta);
+        for (nbr, _) in reactant.neighbors(atom_idx(r_idx)) {
+            let n = atom_usize(nbr);
+            let n_in = r_rings.get(n).copied().unwrap_or(false);
+            if r_in == n_in {
+                continue;
             }
+            cleavage_bonds.insert(bond_key(r_idx, n));
         }
     }
 
-    AtomDiff {
-        mapping,
+    let n_extra = target
+        .atoms()
+        .filter(|(idx, a)| a.element.atomic_number() > 1 && !image.contains(&atom_usize(*idx)))
+        .count();
+
+    let needs_oxygen = expand_by_rank(reactant, needs_oxygen);
+    let needs_carbonyl = expand_by_rank(reactant, needs_carbonyl);
+    let needs_alcohol = expand_by_rank(reactant, needs_alcohol);
+    let loses_aromaticity = expand_by_rank(reactant, loses_aromaticity);
+    let h_delta = expand_h_delta(reactant, h_delta);
+
+    let mut diff = AtomDiff {
+        mapping: mapping.clone(),
+        mappings: vec![mapping.clone()],
         needs_oxygen,
         needs_carbonyl,
+        needs_alcohol,
         cleaved,
         cleavage_bonds,
         loses_aromaticity,
-        h_delta: h_delta_exp,
+        h_delta,
         bond_raises,
-        reactant_heavy: reactant.atom_count(),
-        target_heavy: target.atom_count(),
+        bond_order_mismatches,
+        n_extra,
+        reactant_heavy: heavy_atom_count(reactant),
+        target_heavy: heavy_atom_count(target),
+        view_costs: Vec::new(),
+    };
+    diff.view_costs = vec![diff.field_cost()];
+    diff
+}
+
+fn merge_views(mut views: Vec<AtomDiff>) -> AtomDiff {
+    let costs: Vec<usize> = views.iter().map(|v| v.field_cost()).collect();
+    let mappings: Vec<_> = views.iter().map(|v| v.mapping.clone()).collect();
+    let mut primary = views.remove(0);
+    primary.view_costs = costs;
+    primary.mappings = mappings;
+    if views.is_empty() {
+        return primary;
     }
+    for view in &views {
+        primary.needs_oxygen.extend(&view.needs_oxygen);
+        primary.needs_carbonyl.extend(&view.needs_carbonyl);
+        primary.needs_alcohol.extend(&view.needs_alcohol);
+        primary.cleaved.extend(&view.cleaved);
+        primary.cleavage_bonds.extend(&view.cleavage_bonds);
+        primary.bond_raises.extend(&view.bond_raises);
+        primary.loses_aromaticity.extend(&view.loses_aromaticity);
+        for (&atom, &delta) in &view.h_delta {
+            primary
+                .h_delta
+                .entry(atom)
+                .and_modify(|d| {
+                    if delta < *d {
+                        *d = delta;
+                    }
+                })
+                .or_insert(delta);
+        }
+        primary.bond_order_mismatches = primary
+            .bond_order_mismatches
+            .max(view.bond_order_mismatches);
+        primary.n_extra = primary.n_extra.max(view.n_extra);
+    }
+    primary
+}
+
+/// Pair reactant atoms with target atoms and record the local change.
+pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
+    let maps = mappings(reactant, target);
+    if maps.is_empty() {
+        return AtomDiff {
+            reactant_heavy: heavy_atom_count(reactant),
+            target_heavy: heavy_atom_count(target),
+            ..AtomDiff::default()
+        };
+    }
+    let views: Vec<_> = maps.iter().map(|m| diff_for(reactant, target, m)).collect();
+    merge_views(views)
 }
 
 fn effect_adds_oxygen(effect: &Effect) -> bool {
@@ -258,79 +443,220 @@ fn effect_removes_h(effect: &Effect) -> bool {
     effect.removes.as_deref().is_some_and(|r| r.contains('H'))
 }
 
-/// Pattern-level gate (Python `_rule_could_help` subset) reading span-like fields.
+/// Pattern-level gate (Python `_pattern_could_help`).
 pub fn pattern_could_help(effect: &Effect, diff: &AtomDiff) -> bool {
-    if effect.cleaves && !diff.has_cleavage() {
+    pattern_could_help_on(effect, diff, None)
+}
+
+/// Same as [`pattern_could_help`], with optional live mol for formula-O gate.
+pub fn pattern_could_help_on(effect: &Effect, diff: &AtomDiff, mol: Option<&Molecule>) -> bool {
+    let can_cleave = effect.cleaves;
+    if diff.target_smaller() && !can_cleave {
         return false;
     }
-    if effect.dearomatizes
-        && !effect_adds_h(effect)
-        && diff.loses_aromaticity.is_empty()
-        && !diff.h_loss()
-    {
+    if effect_adds_oxygen(effect) && !can_cleave && diff.needs_oxygen.is_empty() {
         return false;
     }
-    let drops_h_only = !effect.cleaves && effect.adds.is_none() && effect_removes_h(effect);
+    if effect_adds_oxygen(effect) && !can_cleave && !effect.dearomatizes {
+        if let Some(m) = mol {
+            // Target O count is not on AtomDiff; approximate via needs + extras.
+            // Prefer live formula vs target heavy oxygen when available.
+            let _ = m;
+        }
+    }
+    if can_cleave && !diff.has_cleavage() {
+        return false;
+    }
+    if effect.dearomatizes && !effect_adds_h(effect) && diff.loses_aromaticity.is_empty() {
+        return false;
+    }
+    let drops_h_only = !can_cleave && effect.adds.is_none() && effect_removes_h(effect);
     if drops_h_only && !diff.h_loss() && diff.loses_aromaticity.is_empty() {
         return false;
     }
-    let adds_h_only = !effect.cleaves && effect_adds_h(effect) && effect.removes.is_none();
+    let adds_h_only = !can_cleave && effect_adds_h(effect) && effect.removes.is_none();
     if adds_h_only && !diff.h_gain() {
-        return false;
-    }
-    if effect_adds_oxygen(effect)
-        && !effect.dearomatizes
-        && diff.needs_oxygen.is_empty()
-        && diff.target_heavy <= diff.reactant_heavy
-    {
-        // No oxygen to add and target is not larger — skip.
         return false;
     }
     true
 }
 
-/// Site-level gate (Python `_site_could_help` subset) for a deferred candidate.
-pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
-    let effect = &candidate.pattern.effect;
-    if !pattern_could_help(effect, diff) {
+/// Live-mol oxygen gate (Python formula check).
+pub fn pattern_could_help_mol(
+    effect: &Effect,
+    diff: &AtomDiff,
+    mol: &Molecule,
+    target: &Molecule,
+) -> bool {
+    if !pattern_could_help_on(effect, diff, Some(mol)) {
         return false;
     }
-    let atoms = [candidate.site];
-    if effect.cleaves {
-        return diff.site_is_cleavage(&atoms)
-            || diff.cleaved.contains(&candidate.site)
-            || diff.has_cleavage();
-    }
-    if effect_adds_oxygen(effect) && !effect.dearomatizes {
-        if !diff.needs_oxygen.contains(&candidate.site) && diff.needs_oxygen.is_empty() {
-            // Soft: allow when molecule-level needs_oxygen is empty only if
-            // pattern_could_help already passed (e.g. target smaller).
-        } else if !diff.needs_oxygen.contains(&candidate.site) && !diff.needs_oxygen.is_empty() {
-            return false;
-        }
-    }
-    if effect.dearomatizes
-        && !diff.loses_aromaticity.contains(&candidate.site)
-        && !diff.loses_aromaticity.is_empty()
+    if effect_adds_oxygen(effect)
+        && !effect.cleaves
+        && !effect.dearomatizes
+        && formula_oxygen(mol) >= formula_oxygen(target)
     {
         return false;
     }
-    if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let loses_h = diff.h_delta.get(&candidate.site).copied().unwrap_or(0) < 0;
-        if !loses_h && !diff.loses_aromaticity.contains(&candidate.site) {
-            // Soft molecule-level escape when any h_loss / aromatic loss exists.
-            if !diff.h_loss() && diff.loses_aromaticity.is_empty() {
+    true
+}
+
+fn site_atoms(candidate: &Candidate) -> Vec<usize> {
+    let mut atoms: Vec<usize> = candidate
+        .pattern
+        .site_map
+        .iter()
+        .filter_map(|m| candidate.mapped.get(m).copied())
+        .collect();
+    if atoms.is_empty() {
+        atoms.push(candidate.site);
+    }
+    atoms
+}
+
+fn leaving_heavy_counts(mol: &Molecule, atoms: &[usize]) -> Option<(usize, usize)> {
+    if atoms.len() != 2 {
+        return None;
+    }
+    let left = atoms[0];
+    let right = atoms[1];
+    mol.bond_between(atom_idx(left), atom_idx(right))?;
+    let side = |start: usize, blocked: usize| -> usize {
+        let mut seen = HashSet::from([start]);
+        let mut stack = vec![start];
+        while let Some(idx) = stack.pop() {
+            for (nbr, _) in mol.neighbors(atom_idx(idx)) {
+                let n = atom_usize(nbr);
+                if n == blocked || !seen.insert(n) {
+                    continue;
+                }
+                stack.push(n);
+            }
+        }
+        seen.into_iter()
+            .filter(|&i| mol.atom(atom_idx(i)).element.atomic_number() > 1)
+            .count()
+    };
+    Some((side(left, right), side(right, left)))
+}
+
+fn alkyl_bond_raises(mol: &Molecule, atom_idx_u: usize, diff: &AtomDiff) -> bool {
+    for (nbr, _) in mol.neighbors(atom_idx(atom_idx_u)) {
+        let n = atom_usize(nbr);
+        let atom = mol.atom(atom_idx(n));
+        if atom.element.atomic_number() != 6 || atom.aromatic {
+            continue;
+        }
+        if diff.bond_raises.contains(&bond_key(atom_idx_u, n)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Site-level gate (Python `_site_could_help`) for a deferred candidate.
+pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
+    candidate_could_help_on(candidate, diff, None, None)
+}
+
+/// Full site gate with live mol (leave_count / methide partner).
+pub fn candidate_could_help_on(
+    candidate: &Candidate,
+    diff: &AtomDiff,
+    mol: Option<&Molecule>,
+    target: Option<&Molecule>,
+) -> bool {
+    let effect = &candidate.pattern.effect;
+    let ok = match (mol, target) {
+        (Some(m), Some(t)) => pattern_could_help_mol(effect, diff, m, t),
+        _ => pattern_could_help(effect, diff),
+    };
+    if !ok {
+        return false;
+    }
+    let atoms = site_atoms(candidate);
+    if effect.cleaves {
+        if !diff.site_is_cleavage(&atoms) {
+            return false;
+        }
+        if let (Some(n), Some(m)) = (effect.leave_count, mol) {
+            if let Some((a, b)) = leaving_heavy_counts(m, &atoms) {
+                if a.min(b) != n as usize {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    if effect_adds_oxygen(effect) && !effect.dearomatizes {
+        let oxygen_sites: Vec<_> = atoms
+            .iter()
+            .copied()
+            .filter(|a| diff.needs_oxygen.contains(a))
+            .collect();
+        if oxygen_sites.is_empty() {
+            return false;
+        }
+        if oxygen_sites
+            .iter()
+            .all(|a| diff.needs_carbonyl.contains(a) && diff.loses_aromaticity.contains(a))
+        {
+            return false;
+        }
+    }
+
+    if effect.methide {
+        if let Some(m) = mol {
+            // Alkyl partner: skip unless an exocyclic C–C bond raises.
+            if effect.partner.as_deref() == Some("C")
+                && !atoms.iter().any(|&a| alkyl_bond_raises(m, a, diff))
+            {
                 return false;
             }
         }
     }
+
+    if effect.dearomatizes {
+        let hits = atoms.iter().any(|a| diff.loses_aromaticity.contains(a));
+        if !hits {
+            return false;
+        }
+    }
+
+    if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
+        let loses_h = atoms
+            .iter()
+            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) < 0);
+        let loses_ar = atoms.iter().any(|a| diff.loses_aromaticity.contains(a));
+        if !loses_h && !loses_ar {
+            return false;
+        }
+    }
     if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let gains = diff.h_delta.get(&candidate.site).copied().unwrap_or(0) > 0;
-        if !gains && !diff.h_gain() {
+        let gains = atoms
+            .iter()
+            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) > 0);
+        if !gains {
             return false;
         }
     }
     true
+}
+
+/// Sort key for expand: cleavage / dearom / oxygen first (Python `order_key`).
+pub fn candidate_order_key(candidate: &Candidate, diff: &AtomDiff) -> (u8, u8, u8, String) {
+    let effect = &candidate.pattern.effect;
+    let want_cleave = diff.target_smaller() || diff.has_cleavage();
+    let want_dear = !diff.loses_aromaticity.is_empty();
+    let want_oxy = !diff.needs_oxygen.is_empty();
+    let cleave = if effect.cleaves { 0 } else { 1 };
+    let dear = if effect.dearomatizes { 0 } else { 1 };
+    let oxy = if effect_adds_oxygen(effect) { 0 } else { 1 };
+    let primary = if want_cleave { cleave } else { 0 };
+    let secondary = if want_dear { dear } else { 0 };
+    let tertiary = if want_oxy { oxy } else { 0 };
+    (primary, secondary, tertiary, candidate.pattern.name.clone())
 }
 
 /// Keep predicate for [`crate::find_path::find_path_with`] from an [`AtomDiff`].
@@ -342,7 +668,7 @@ pub fn keep_against_diff(diff: &AtomDiff) -> impl Fn(&Candidate) -> bool + '_ {
 mod tests {
     use super::*;
     use crate::mol::parse_mol;
-    use crate::rules::hydroxylation;
+    use crate::rules::{dealkylation, hydroxylation};
 
     #[test]
     fn ethane_to_ethanol_needs_oxygen_on_carbon() {
@@ -353,11 +679,7 @@ mod tests {
         assert!(!diff.has_cleavage());
         let set = hydroxylation();
         let cands = set.candidates(&reactant).unwrap();
-        assert!(!cands.is_empty());
-        assert!(
-            cands.iter().any(|c| candidate_could_help(c, &diff)),
-            "{diff:?}"
-        );
+        assert!(cands.iter().any(|c| candidate_could_help(c, &diff)));
     }
 
     #[test]
@@ -366,6 +688,49 @@ mod tests {
         let target = parse_mol("Oc1ccccc1").unwrap();
         let diff = atom_diff(&reactant, &target);
         assert!(diff.has_cleavage() || diff.target_smaller(), "{diff:?}");
+        let set = dealkylation();
+        let cands = set.candidates(&reactant).unwrap();
+        assert!(
+            cands.iter().any(|c| c.pattern.effect.cleaves
+                && candidate_could_help_on(c, &diff, Some(&reactant), Some(&target))),
+            "dealkylation should survive filter; diff={diff:?}"
+        );
+    }
+
+    #[test]
+    fn meoph_oh_mcs_covers_ring() {
+        let reactant = parse_mol("COc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        assert!(
+            diff.mapping.len() >= 6,
+            "BondCompare::Any MCS should cover the ring; got {}",
+            diff.mapping.len()
+        );
+        assert!(
+            !diff.loses_aromaticity.is_empty() || !diff.needs_oxygen.is_empty(),
+            "{diff:?}"
+        );
+    }
+
+    #[test]
+    fn dimethoxy_keeps_dealkylation() {
+        let reactant = parse_mol("COc1ccc(CCN)cc1OC").unwrap();
+        let target = parse_mol("NCCc1ccc(O)c(O)c1").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        assert!(diff.target_smaller());
+        assert!(diff.has_cleavage(), "{diff:?}");
+        let set = dealkylation();
+        let cands = set.candidates(&reactant).unwrap();
+        let kept: Vec<_> = cands
+            .iter()
+            .filter(|c| candidate_could_help_on(c, &diff, Some(&reactant), Some(&target)))
+            .collect();
+        assert!(
+            !kept.is_empty(),
+            "expected dealkylation survivors; cands={} diff={diff:?}",
+            cands.len()
+        );
     }
 
     #[test]
@@ -387,19 +752,34 @@ mod tests {
         let diff = atom_diff(&reactant, &target);
         let set = hydrogenation();
         let cands = set.candidates(&reactant).unwrap();
-        // Alkene/alkyne SMIRKS may still match; path_end is PairEndpoint.
         for c in &cands {
-            if c.pattern.effect.adds.as_deref() == Some("HH") {
-                // Adding H toward an oxidative quinone target should fail pattern gate
-                // when no h_gain.
-                if !diff.h_gain() {
-                    assert!(
-                        !pattern_could_help(&c.pattern.effect, &diff) || c.pattern.effect.cleaves,
-                        "pattern {} should not help toward quinone",
-                        c.pattern.name
-                    );
-                }
+            if c.pattern.effect.adds.as_deref() == Some("HH") && !diff.h_gain() {
+                assert!(
+                    !pattern_could_help(&c.pattern.effect, &diff) || c.pattern.effect.cleaves,
+                    "pattern {} should not help toward quinone",
+                    c.pattern.name
+                );
             }
         }
+    }
+
+    #[test]
+    fn target_smaller_refuses_non_cleaving() {
+        let reactant = parse_mol("COc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        assert!(diff.target_smaller());
+        let hydroxyl = Effect {
+            adds: Some("O".into()),
+            removes: Some("H".into()),
+            ..Effect::default()
+        };
+        assert!(!pattern_could_help(&hydroxyl, &diff));
+        let cleave = Effect {
+            adds: Some("O".into()),
+            cleaves: true,
+            ..Effect::default()
+        };
+        assert!(pattern_could_help(&cleave, &diff));
     }
 }

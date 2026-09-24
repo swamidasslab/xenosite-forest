@@ -497,6 +497,8 @@ pub fn o_dealkylation() -> RuleSet {
                 cleaves: true,
                 methide: false,
                 dearomatizes: false,
+                leave_count: None,
+                partner: None,
             },
         )],
     )
@@ -593,6 +595,8 @@ mod tests {
             cleaves: false,
             methide: true,
             dearomatizes: false,
+            leave_count: None,
+            partner: None,
         };
         let set = RuleSet::new(Some("probe".into()), [pattern]);
         let refuse_methide = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| !p.effect.methide;
