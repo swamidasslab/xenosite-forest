@@ -79,7 +79,7 @@ impl PathStep {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PathOutcome {
     pub steps: Vec<PathStep>,
-    /// Elementary plan with precedes (Python `as_deps` → `Deps`).
+    /// Elementary plan with precedes ([`Deps::bind`] / Python `as_deps`).
     pub plan: Deps,
     pub smiles: String,
 }
@@ -904,6 +904,27 @@ mod tests {
         let dh = names.iter().position(|&n| n == "Dehydrogenation").unwrap();
         let edges: HashSet<_> = hits[0].plan.precedes().iter().copied().collect();
         assert!(edges.contains(&(oh, dh)));
+    }
+
+    #[test]
+    fn path_hit_plan_replays_to_hit() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_default("c1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        assert!(
+            hits[0].plan.reaches("c1ccccc1", &hits[0].smiles).unwrap(),
+            "plan={:?} smiles={}",
+            hits[0].plan,
+            hits[0].smiles
+        );
+    }
+
+    #[test]
+    fn ethane_plan_replays_to_ethanol() {
+        let mut counters = PathCounters::default();
+        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters).unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits[0].plan.reaches("CC", "CCO").unwrap());
     }
 
     #[test]

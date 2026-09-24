@@ -214,16 +214,17 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 ## Not in this crate
 
 Full Python `atom_diff` parity (leave_count / bond_raises site filters on every
-edge case), archive `Deps` apply / linearizations. Outcomes already carry
-[`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs) via [`as_deps`]
-(precedes from `PlanAtom::Ref` notes; transitive reduction). A provisional
+edge case). Archive `Deps` And/Or/JSON. Outcomes carry
+[`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs) via [`Deps::bind`]
+(will-add → added-by, precedes, transitive reduction). Replay:
+`linearizations` + elementary `Step::apply`. A provisional
 [`atom_diff`](../../crates/xenosite-forest/src/atom_diff.rs) door gates
 candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
 [`find_path`](../../crates/xenosite-forest/src/find_path.rs) walks carry tagged
 [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) (structure/`csmi`
 cache; `Atom.tag` synced from the sidecar through `adopt_product`). Outcomes
-emit elementary [`CanonicalStep`](../../crates/xenosite-forest/src/canonical_plan.rs)
-plans wrapped as `Deps`; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
+emit elementary [`Step`](../../crates/xenosite-forest/src/canonical_plan.rs)
+plans as `Deps`; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
 on the `RuleSet` (data, not a name branch). Eager closer can
 [`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) via
 tag-lift (+ local add extend); else full MCS. Lazy closer: try tag-lift when
@@ -335,7 +336,8 @@ oxidation can raise HA distance while lowering cost.
 
 `find_path` walks carry [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs)
 (not bare SMILES). Edits use `materialize_mols` → `adopt_product` so tags and
-the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a
-`Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Lazy and
+the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a bound
+[`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs) (elementary
+`Step`s + precedes); quinone leaves expand via `RuleSet::plan_kind`. Lazy and
 eager use `try_atom_diff_for_child` when parent/child share heavy tags; else
 full MCS (`atom_diff_for_child` on eager). Add/remove is always MCS.

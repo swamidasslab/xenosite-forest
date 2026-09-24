@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use crate::ForestError;
-use crate::canonical_plan::{CanonicalStep, identity_canonical_plan};
+use crate::canonical_plan::{Step, identity_plan};
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Emission, PatternInfo};
 use crate::ruleset::apply_edit_mols;
@@ -96,12 +96,12 @@ impl Candidate {
     }
 
     /// Elementary plan for this candidate (identity at discovery site).
-    pub fn identity_plan(&self) -> Vec<CanonicalStep> {
+    pub fn identity_plan(&self) -> Vec<Step> {
         let rule = self
             .leaf_rule()
             .unwrap_or(self.pattern.name.as_str())
             .to_string();
-        identity_canonical_plan(rule, [self.site])
+        identity_plan(rule, [self.site])
     }
 
     pub fn is_pair_endpoint(&self) -> bool {

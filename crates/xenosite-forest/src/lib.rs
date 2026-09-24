@@ -46,8 +46,8 @@ pub use atom_diff::{
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
-    CanonicalStep, Deps, PlanAtom, PlanKind, as_deps, canonical_dependency_edges,
-    identity_canonical_plan,
+    CanonicalStep, Deps, Linearization, PlanAtom, PlanKind, Step, as_deps, bind_deps,
+    canonical_dependency_edges, identity_canonical_plan, identity_plan, plan_for_kind,
 };
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
@@ -61,7 +61,7 @@ pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
-pub use rules::{all_rules, catalog_names, default_ruleset, phase_one};
+pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
     accept_all_sites, o_dealkylation,

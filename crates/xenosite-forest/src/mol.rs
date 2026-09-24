@@ -22,14 +22,17 @@ pub enum ForestError {
     Smarts(String),
     Smirks(String),
     Kekule(String),
+    Plan(String),
 }
 
 impl std::fmt::Display for ForestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Parse(msg) | Self::Smarts(msg) | Self::Smirks(msg) | Self::Kekule(msg) => {
-                f.write_str(msg)
-            }
+            Self::Parse(msg)
+            | Self::Smarts(msg)
+            | Self::Smirks(msg)
+            | Self::Kekule(msg)
+            | Self::Plan(msg) => f.write_str(msg),
         }
     }
 }

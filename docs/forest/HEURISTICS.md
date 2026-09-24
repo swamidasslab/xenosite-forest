@@ -24,6 +24,30 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 - Do not drop a child only because `atom_diff` cost is not strictly lower. The `closer` check in `find_path` refuses a sideways step. Some real routes do not move the score down on every hop. Tried equal-cost sideways when the site touched cleavage / dearomatization / oxygen; PhCH2OH and multi-oxidation quinones blew up (`mol_edits` 21→68). Status: not decided — needs a tighter predicate than “touches the diff”.
 - Do not walk a step plan that is the same steps in another order. Once a `Deps` has been yielded, a later walk that is only a reordering of those steps is not a new path.
 
+## Plans are Deps (elementary Steps + precedes)
+
+Status: approved (Rust derisk; shape may replace Python `CanonicalStep`).
+
+The plan language is flat [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs):
+elementary `Step`s (rule name + site notes) plus precedes. There is no parallel
+`CanonicalStep` dialect for search.
+
+Site notes are one enum: known index | `WillAdd(element @ anchor)` | `AddedBy(rule, anchors)`.
+`Deps::bind` rewrites will-add → added-by and builds precedes from those notes.
+Composite hops expand via `PlanKind` data on the leaf `RuleSet` (e.g.
+hydroxylation-then-dehydrogenation from end effects), not a rule-name branch
+in `find_path`. Metabolize may still apply a composite leaf in one hop; the
+plan is the elementary split for search and replay.
+
+Replay: `Deps::linearizations` → each `Linearization::apply` runs named
+elementary rules at resolved sites. Correctness: an accepted product’s plan
+must reach that product under some linearization; a `find_path` hit’s plan
+must reach the hit. No mid-plan re-metabolize of the composite leaf.
+
+`Addition.phase1` stays reserved until expansion schema is named on the
+record. Cleaving quinone ends that need a Dealkylation prep are still a gap
+(data not yet on the expansion).
+
 ## Speed, not yet done
 
 - Put the isotope-bearing atom first in the reaction SMARTS. `SubstructMatch` starts at query atom 0 and does not reorder, so a common atom first is walked before the isotope is tested.

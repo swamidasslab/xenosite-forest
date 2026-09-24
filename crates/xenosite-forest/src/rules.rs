@@ -1848,6 +1848,39 @@ pub fn catalog_names() -> &'static [&'static str] {
     ]
 }
 
+/// Named leaf [`RuleSet`] for plan replay (elementary apply).
+pub fn leaf_rule(name: &str) -> Option<RuleSet> {
+    Some(match name {
+        "Hydroxylation" => hydroxylation(),
+        "Dehydrogenation" => dehydrogenation(),
+        "QuinoneFormation" => quinone_formation(),
+        "Dealkylation" => dealkylation(),
+        "NDealkylation" => n_dealkylation(),
+        "AzoSplitting" => azo_splitting(),
+        "BenzodioxoleReduction" => benzodioxole_reduction(),
+        "NitroaromaticReduction" => nitroaromatic_reduction(),
+        "ThiopheneSulfurOxidation" => thiophene_sulfur_oxidation(),
+        "Dephosphorylation" => dephosphorylation(),
+        "EpoxideOpening" => epoxide_opening(),
+        "Hydrolysis" => hydrolysis(),
+        "Dehydration" => dehydration(),
+        "Hydrogenation" => hydrogenation(),
+        "NitrogenReduction" => nitrogen_reduction(),
+        "OxygenReduction" => oxygen_reduction(),
+        "ReductiveDehalogenation" => reductive_dehalogenation(),
+        "SulfurReduction" => sulfur_reduction(),
+        "Epoxidation" => epoxidation(),
+        "SulfurOxidation" => sulfur_oxidation(),
+        "NitrogenOxidation" => nitrogen_oxidation(),
+        "OxidativeDehalogenation" => oxidative_dehalogenation(),
+        "Acetylation" => acetylation(),
+        "Sulfation" => sulfation(),
+        "Glucuronidation" => glucuronidation(),
+        "Glutathionation" => glutathionation(),
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -182,7 +182,7 @@ impl RuleSet {
     }
 
     /// Pair-endpoint patterns on this leaf set (not nested).
-    fn leaf_pair_endpoints(&self) -> Vec<PatternInfo> {
+    pub(crate) fn leaf_pair_endpoints(&self) -> Vec<PatternInfo> {
         self.members
             .iter()
             .filter_map(|m| match m {
