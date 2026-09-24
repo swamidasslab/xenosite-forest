@@ -1,23 +1,26 @@
 //! First-run plan-guided search over a [`crate::ruleset::RuleSet`].
 //!
-//! Expands via [`RuleSet::candidates`]: site–pattern–parent triples. A search
-//! reads [`PatternInfo`] / effect fields to decide, then
-//! [`crate::candidate::Candidate::materialize`] only for survivors — no filter
-//! closures required. Nested sets stay namespaces on each step's leaf-first
-//! `rule_path`.
+//! Walks carry tagged [`crate::forest_mol::ForestMol`] (structure/`csmi` cache,
+//! atom tags through edits). Expands via [`RuleSet::candidates`]: site–pattern–
+//! parent triples. A search reads [`PatternInfo`] / effect fields to decide,
+//! then materializes only for survivors. Nested sets stay namespaces on each
+//! step's leaf-first `rule_path`.
 //!
-//! This is not full Python `find_path`: no atom-diff filters, no `CanonicalStep` /
-//! `Deps` plan, no stale-priority heap rescore. Closer is a provisional heavy-atom
-//! distance (refuse a child that moves away from the target size). Cleavage keeps
-//! the fragment that hits the target CSMI, else the one nearest in heavy-atom count.
+//! Outcomes carry elementary [`crate::canonical_plan::CanonicalStep`] plans
+//! (identity, or quinone-shaped prep-then-DH from [`PlanKind`] on the leaf).
+//! Closer uses atom-diff cost; child diffs prefer tag-lifted parent MCS when
+//! tags allow ([`crate::atom_diff::atom_diff_for_child`]).
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
+use std::rc::Rc;
 
 use crate::ForestError;
 use crate::candidate::Candidate;
-use crate::mol::{canon_of, canon_smiles, parse_mol};
-use crate::pattern::{Emission, PatternInfo, SiteInfo};
+use crate::canonical_plan::{CanonicalStep, steps_for_kind};
+use crate::forest_mol::ForestMol;
+use crate::mol::{canon_of, parse_mol};
+use crate::pattern::{PatternInfo, SiteInfo};
 use crate::rules::default_ruleset;
 use crate::ruleset::RuleSet;
 
@@ -60,7 +63,7 @@ impl PathStep {
         self.rule_path.first().and_then(|n| n.as_deref())
     }
 
-    fn from_emission(emission: &Emission, product: String, sides: Vec<String>) -> Self {
+    fn from_emission(emission: &ForestEmission, product: String, sides: Vec<String>) -> Self {
         Self {
             rule_path: emission.rule_path.clone(),
             pattern_name: emission.pattern_name.clone(),
@@ -75,14 +78,16 @@ impl PathStep {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PathOutcome {
     pub steps: Vec<PathStep>,
+    /// Elementary plan (Python `CanonicalStep` / `Deps` shape).
+    pub plan: Vec<CanonicalStep>,
     pub smiles: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Walk {
-    smiles: String,
-    heavy: usize,
+    mol: ForestMol,
     steps: Vec<PathStep>,
+    plan: Vec<CanonicalStep>,
     /// Parent's [`crate::atom_diff::AtomDiff::cost`] when this walk was
     /// enqueued. `None` = root (always expand). With `use_atom_diff`, full
     /// closer runs on pop: expand only if `cost() < parent_cost`. Enqueue
@@ -91,7 +96,7 @@ struct Walk {
 }
 
 /// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
     seq: usize,
@@ -120,51 +125,63 @@ impl Ord for HeapItem {
     }
 }
 
-fn heavy_atoms(smiles: &str) -> Result<usize, ForestError> {
-    Ok(parse_mol(smiles)?.atom_count())
-}
-
 fn ha_distance(ha: usize, target_ha: usize) -> usize {
     ha.abs_diff(target_ha)
 }
 
+/// Tagged emission: ForestMol products + elementary plan.
+#[derive(Clone)]
+struct ForestEmission {
+    site: usize,
+    pattern_name: String,
+    rule_path: Vec<Option<String>>,
+    products: Vec<ForestMol>,
+    plan: Vec<CanonicalStep>,
+}
+
 /// Keep the fragment closest to ``target``. Prefer exact CSMI hit.
 fn keep_fragment(
-    products: &[String],
+    products: &[ForestMol],
     target_csmi: &str,
     target_ha: usize,
-) -> Result<Option<(String, Vec<String>)>, ForestError> {
+) -> Option<(ForestMol, Vec<String>)> {
     if products.is_empty() {
-        return Ok(None);
+        return None;
     }
-    let mut best: Option<(String, usize)> = None;
-    for raw in products {
-        let csmi = canon_of(raw)?;
-        let cost = if csmi == target_csmi {
+    let mut best: Option<(usize, Rc<str>, usize)> = None;
+    for (i, mol) in products.iter().enumerate() {
+        let csmi = mol.csmi();
+        let cost = if csmi.as_ref() == target_csmi {
             0
         } else {
-            1 + ha_distance(heavy_atoms(&csmi)?, target_ha)
+            1 + ha_distance(mol.heavy_atom_count(), target_ha)
         };
         match &best {
-            None => best = Some((csmi, cost)),
-            Some((_, best_cost)) if cost < *best_cost => best = Some((csmi, cost)),
-            Some((kept, best_cost)) if cost == *best_cost && csmi < *kept => {
-                best = Some((csmi, cost));
+            None => best = Some((i, Rc::clone(&csmi), cost)),
+            Some((_, _, best_cost)) if cost < *best_cost => {
+                best = Some((i, Rc::clone(&csmi), cost));
+            }
+            Some((_, kept, best_cost)) if cost == *best_cost && csmi.as_ref() < kept.as_ref() => {
+                best = Some((i, Rc::clone(&csmi), cost));
             }
             _ => {}
         }
     }
-    let Some((kept, _)) = best else {
-        return Ok(None);
+    let Some((best_i, kept_csmi, _)) = best else {
+        return None;
     };
+    let kept = products[best_i].clone();
     let mut sides = Vec::new();
-    for raw in products {
-        let csmi = canon_of(raw)?;
-        if csmi != kept {
-            sides.push(csmi);
+    for (i, mol) in products.iter().enumerate() {
+        if i == best_i {
+            continue;
+        }
+        let csmi = mol.csmi();
+        if csmi.as_ref() != kept_csmi.as_ref() {
+            sides.push(csmi.as_ref().to_string());
         }
     }
-    Ok(Some((kept, sides)))
+    Some((kept, sides))
 }
 
 fn closer(parent_ha: usize, child_ha: usize, target_ha: usize, target_hit: bool) -> bool {
@@ -280,29 +297,28 @@ where
         use_atom_diff,
         lazy_closer,
     } = config;
-    let start = parse_mol(reactant)?;
-    let start_csmi = canon_smiles(&start);
+    let start = ForestMol::parse(reactant)?;
+    let start_csmi = start.csmi();
     let target_csmi = canon_of(target)?;
     let target_mol = parse_mol(&target_csmi)?;
-    let target_ha = heavy_atoms(&target_csmi)?;
-    let start_ha = start.atom_count();
+    let target_ha = ForestMol::parse(&target_csmi)?.heavy_atom_count();
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
     heap.push(HeapItem {
-        target_hit: start_csmi == target_csmi,
+        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         seq,
         walk: Walk {
-            smiles: start_csmi.clone(),
-            heavy: start_ha,
+            mol: start,
             steps: Vec::new(),
+            plan: Vec::new(),
             parent_cost: None,
         },
     });
     seq += 1;
 
     let mut seen = HashSet::new();
-    seen.insert(start_csmi);
+    seen.insert(start_csmi.as_ref().to_string());
     let mut found = Vec::new();
 
     while let Some(item) = heap.pop() {
@@ -310,18 +326,19 @@ where
             break;
         }
         let walk = item.walk;
-        if walk.smiles == target_csmi {
+        let here = walk.mol.csmi();
+        if here.as_ref() == target_csmi.as_str() {
             counters.nodes += 1;
             found.push(PathOutcome {
                 steps: walk.steps,
-                smiles: walk.smiles,
+                plan: walk.plan,
+                smiles: here.as_ref().to_string(),
             });
             continue;
         }
 
-        let mol = parse_mol(&walk.smiles)?;
         let diff = if use_atom_diff {
-            let d = crate::atom_diff::atom_diff(&mol, &target_mol);
+            let d = crate::atom_diff::atom_diff(walk.mol.mol(), &target_mol);
             // Lazy closer: verify cost against parent before expanding.
             if lazy_closer {
                 if let Some(pc) = walk.parent_cost {
@@ -337,48 +354,70 @@ where
         counters.nodes += 1;
         counters.expansions += 1;
         let parent_cost = diff.as_ref().map(|d| d.cost());
-        let emissions = expand(ruleset, &mol, &target_mol, counters, &keep, diff.as_ref())?;
+        let emissions = expand(
+            ruleset,
+            &walk.mol,
+            &target_mol,
+            counters,
+            &keep,
+            diff.as_ref(),
+        )?;
         let mut hits_from_here = 0usize;
+        let parent_ha = walk.mol.heavy_atom_count();
 
         for emission in emissions {
-            let Some((kept, sides)) = keep_fragment(&emission.products, &target_csmi, target_ha)?
+            let Some((kept, sides)) = keep_fragment(&emission.products, &target_csmi, target_ha)
             else {
                 continue;
             };
-            let child_ha = heavy_atoms(&kept)?;
-            let target_hit = kept == target_csmi;
+            let kept_csmi = kept.csmi().as_ref().to_string();
+            let child_ha = kept.heavy_atom_count();
+            let target_hit = kept_csmi == target_csmi;
+            // Eager closer: tag-lift child MCS when possible. Lazy defers to pop.
             let allow = if use_atom_diff {
                 if lazy_closer {
-                    // Defer full cost to pop. Do not HA-gate: oxidation can
-                    // raise heavy-atom distance while lowering atom_diff cost.
                     true
                 } else if let Some(pc) = parent_cost {
-                    let child_mol = parse_mol(&kept)?;
-                    let child_cost = crate::atom_diff::atom_diff(&child_mol, &target_mol).cost();
+                    let child_cost = match diff.as_ref() {
+                        Some(parent_d) => crate::atom_diff::atom_diff_for_child(
+                            &walk.mol,
+                            parent_d,
+                            &kept,
+                            &target_mol,
+                        )
+                        .cost(),
+                        None => crate::atom_diff::atom_diff(kept.mol(), &target_mol).cost(),
+                    };
                     cost_closer(pc, child_cost, target_hit)
                 } else {
                     true
                 }
             } else {
-                closer(walk.heavy, child_ha, target_ha, target_hit)
+                closer(parent_ha, child_ha, target_ha, target_hit)
             };
             if !allow {
                 continue;
             }
-            if seen.contains(&kept) && !target_hit {
+            if seen.contains(&kept_csmi) && !target_hit {
                 continue;
             }
-            seen.insert(kept.clone());
+            seen.insert(kept_csmi.clone());
 
             let mut steps = walk.steps.clone();
-            steps.push(PathStep::from_emission(&emission, kept.clone(), sides));
+            steps.push(PathStep::from_emission(
+                &emission,
+                kept_csmi.clone(),
+                sides,
+            ));
+            let mut plan = walk.plan.clone();
+            plan.extend(emission.plan.iter().cloned());
             heap.push(HeapItem {
                 target_hit,
                 seq,
                 walk: Walk {
-                    smiles: kept,
-                    heavy: child_ha,
+                    mol: kept,
                     steps,
+                    plan,
                     parent_cost,
                 },
             });
@@ -397,15 +436,16 @@ where
 
 fn expand<K>(
     ruleset: &RuleSet,
-    mol: &crate::Molecule,
+    parent: &ForestMol,
     target: &crate::Molecule,
     counters: &mut PathCounters,
     keep: &K,
     diff: Option<&crate::atom_diff::AtomDiff>,
-) -> Result<Vec<Emission>, ForestError>
+) -> Result<Vec<ForestEmission>, ForestError>
 where
     K: Fn(&Candidate) -> bool,
 {
+    let mol = parent.mol();
     let mut candidates = ruleset.candidates(mol)?;
     if let Some(d) = diff {
         candidates.retain(|c| {
@@ -418,29 +458,51 @@ where
     let mut emissions = Vec::new();
     for candidate in candidates {
         counters.mol_edits += 1;
-        if let Some(emission) = candidate.emit(mol)? {
+        if let Some(emission) = emit_candidate(&candidate, parent)? {
             emissions.push(emission);
         }
     }
-    emissions.extend(expand_pairs(ruleset, mol, target, counters, keep, diff)?);
+    emissions.extend(expand_pairs(ruleset, parent, target, counters, keep, diff)?);
     Ok(emissions)
+}
+
+fn emit_candidate(
+    candidate: &Candidate,
+    parent: &ForestMol,
+) -> Result<Option<ForestEmission>, ForestError> {
+    let pieces = candidate.materialize_mols(parent.mol())?;
+    if pieces.is_empty() {
+        return Ok(None);
+    }
+    let products: Vec<ForestMol> = pieces
+        .into_iter()
+        .map(|piece| parent.adopt_product(piece))
+        .collect();
+    Ok(Some(ForestEmission {
+        site: candidate.site,
+        pattern_name: candidate.pattern.name.clone(),
+        rule_path: candidate.rule_path.clone(),
+        products,
+        plan: candidate.identity_plan(),
+    }))
 }
 
 fn expand_pairs<K>(
     ruleset: &RuleSet,
-    mol: &crate::Molecule,
+    parent: &ForestMol,
     target: &crate::Molecule,
     counters: &mut PathCounters,
     keep: &K,
     diff: Option<&crate::atom_diff::AtomDiff>,
-) -> Result<Vec<Emission>, ForestError>
+) -> Result<Vec<ForestEmission>, ForestError>
 where
     K: Fn(&Candidate) -> bool,
 {
+    let mol = parent.mol();
     let mut out = Vec::new();
     for member in ruleset.members() {
         if let crate::ruleset::RuleMember::Set(child) = member {
-            for mut emission in expand_pairs(child, mol, target, counters, keep, diff)? {
+            for mut emission in expand_pairs(child, parent, target, counters, keep, diff)? {
                 emission.rule_path.push(ruleset.name.clone());
                 out.push(emission);
             }
@@ -478,15 +540,35 @@ where
     for pair in pairs {
         // Python ResonancePair bumps mol_edits only after alternating paths exist
         // (emit yields products). Empty materializations are not billed.
-        if let Some(emission) = pair.emit(mol)? {
-            counters.mol_edits += 1;
-            out.push(Emission {
-                site: emission.site,
-                pattern_name: emission.pattern_name,
-                rule_path: vec![ruleset.name.clone()],
-                products: emission.products,
-            });
+        let pieces = pair.materialize_mols(mol)?;
+        if pieces.is_empty() {
+            continue;
         }
+        counters.mol_edits += 1;
+        let products: Vec<ForestMol> = pieces
+            .into_iter()
+            .map(|piece| parent.adopt_product(piece))
+            .collect();
+        let site_atoms = pair.plan_site_atoms();
+        let ends = [&pair.left.effect, &pair.right.effect];
+        let leaf = ruleset
+            .name
+            .as_deref()
+            .unwrap_or(pair.pattern_name.as_str());
+        let plan = steps_for_kind(
+            ruleset.plan_kind,
+            leaf,
+            mol,
+            &site_atoms,
+            Some(&ends),
+        );
+        out.push(ForestEmission {
+            site: pair.site,
+            pattern_name: pair.pattern_name.clone(),
+            rule_path: vec![ruleset.name.clone()],
+            products,
+            plan,
+        });
     }
     Ok(out)
 }
@@ -528,28 +610,27 @@ where
         use_atom_diff: _,
         lazy_closer: _,
     } = config;
-    let start = parse_mol(reactant)?;
-    let start_csmi = canon_smiles(&start);
+    let start = ForestMol::parse(reactant)?;
+    let start_csmi = start.csmi();
     let target_csmi = canon_of(target)?;
-    let target_ha = heavy_atoms(&target_csmi)?;
-    let start_ha = start.atom_count();
+    let target_ha = ForestMol::parse(&target_csmi)?.heavy_atom_count();
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
     heap.push(HeapItem {
-        target_hit: start_csmi == target_csmi,
+        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         seq,
         walk: Walk {
-            smiles: start_csmi.clone(),
-            heavy: start_ha,
+            mol: start,
             steps: Vec::new(),
+            plan: Vec::new(),
             parent_cost: None,
         },
     });
     seq += 1;
 
     let mut seen = HashSet::new();
-    seen.insert(start_csmi);
+    seen.insert(start_csmi.as_ref().to_string());
     let mut found = Vec::new();
 
     while let Some(item) = heap.pop() {
@@ -558,44 +639,66 @@ where
         }
         counters.nodes += 1;
         let walk = item.walk;
-        if walk.smiles == target_csmi {
+        let here = walk.mol.csmi();
+        if here.as_ref() == target_csmi.as_str() {
             found.push(PathOutcome {
                 steps: walk.steps,
-                smiles: walk.smiles,
+                plan: walk.plan,
+                smiles: here.as_ref().to_string(),
             });
             continue;
         }
 
-        let mol = parse_mol(&walk.smiles)?;
+        let mol = walk.mol.mol();
         counters.expansions += 1;
-        let emissions = ruleset.metabolize(&mol, &filter_rules, &filter_sites, true)?;
+        let string_emissions = ruleset.metabolize(mol, &filter_rules, &filter_sites, true)?;
         let mut hits_from_here = 0usize;
 
-        for emission in emissions {
+        for emission in string_emissions {
             counters.mol_edits += 1;
-            let Some((kept, sides)) = keep_fragment(&emission.products, &target_csmi, target_ha)?
-            else {
+            // Re-parse products into ForestMol (filter path; no tag continuity).
+            let products: Result<Vec<_>, _> = emission
+                .products
+                .iter()
+                .map(|s| ForestMol::parse(s))
+                .collect();
+            let products = products?;
+            let Some((kept, sides)) = keep_fragment(&products, &target_csmi, target_ha) else {
                 continue;
             };
-            let child_ha = heavy_atoms(&kept)?;
-            let target_hit = kept == target_csmi;
-            if !closer(walk.heavy, child_ha, target_ha, target_hit) {
+            let kept_csmi = kept.csmi().as_ref().to_string();
+            let child_ha = kept.heavy_atom_count();
+            let target_hit = kept_csmi == target_csmi;
+            if !closer(
+                walk.mol.heavy_atom_count(),
+                child_ha,
+                target_ha,
+                target_hit,
+            ) {
                 continue;
             }
-            if seen.contains(&kept) && !target_hit {
+            if seen.contains(&kept_csmi) && !target_hit {
                 continue;
             }
-            seen.insert(kept.clone());
+            seen.insert(kept_csmi.clone());
 
             let mut steps = walk.steps.clone();
-            steps.push(PathStep::from_emission(&emission, kept.clone(), sides));
+            steps.push(PathStep {
+                rule_path: emission.rule_path.clone(),
+                pattern_name: emission.pattern_name.clone(),
+                site: emission.site,
+                product: kept_csmi.clone(),
+                sides,
+            });
+            let mut plan = walk.plan.clone();
+            plan.extend(emission.plan.iter().cloned());
             heap.push(HeapItem {
                 target_hit,
                 seq,
                 walk: Walk {
-                    smiles: kept,
-                    heavy: child_ha,
+                    mol: kept,
                     steps,
+                    plan,
                     parent_cost: None,
                 },
             });
@@ -616,6 +719,7 @@ where
 mod tests {
     use super::*;
     use crate::hydroxylation::hydroxylation;
+    use crate::mol::canon_of;
     use crate::ruleset::o_dealkylation;
 
     #[test]
@@ -629,6 +733,8 @@ mod tests {
         assert_eq!(outcome.steps[0].leaf_rule(), Some("Hydroxylation"));
         assert_eq!(outcome.steps[0].namespace(), vec!["Hydroxylation"]);
         assert!(outcome.steps[0].sides.is_empty());
+        assert_eq!(outcome.plan.len(), 1);
+        assert_eq!(outcome.plan[0].rule, "Hydroxylation");
         assert_eq!(counters.mol_edits, 1);
     }
 
@@ -646,6 +752,7 @@ mod tests {
             !outcome.steps[0].sides.is_empty(),
             "cleavage should leave a side fragment"
         );
+        assert_eq!(outcome.plan[0].rule, "Dealkylation");
     }
 
     #[test]
@@ -678,6 +785,7 @@ mod tests {
         let hits = find_path("CCO", "CCO", &hydroxylation(), &mut counters).unwrap();
         assert_eq!(hits.len(), 1);
         assert!(hits[0].steps.is_empty());
+        assert!(hits[0].plan.is_empty());
         assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
         assert_eq!(counters.nodes, 1);
         assert_eq!(counters.mol_edits, 0);
@@ -708,6 +816,7 @@ mod tests {
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("Hydroxylation"));
+        assert!(!hits[0].plan.is_empty());
     }
 
     #[test]
@@ -741,6 +850,11 @@ mod tests {
             "leaf={leaf:?} steps={:?}",
             hits[0].steps
         );
+        assert!(
+            !hits[0].plan.is_empty(),
+            "expected elementary plan, got {:?}",
+            hits[0].plan
+        );
     }
 
     #[test]
@@ -770,5 +884,24 @@ mod tests {
         .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("O=C1C=CC(=O)C=C1").unwrap());
+    }
+
+    #[test]
+    fn walk_preserves_tags_through_hydroxylation() {
+        let parent = ForestMol::parse("CC").unwrap();
+        let t0 = parent.tag_of(0).expect("stamped");
+        let t1 = parent.tag_of(1).expect("stamped");
+        let mut counters = PathCounters::default();
+        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters).unwrap();
+        assert!(!hits.is_empty());
+        // Product mol is not on the outcome; check adopt via a fresh emit.
+        let set = hydroxylation();
+        let cands = set.candidates(parent.mol()).unwrap();
+        let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        assert!(child.shares_tag_gen(&parent));
+        assert_eq!(child.tag_of(child.index_of(t0).unwrap()), Some(t0));
+        assert_eq!(child.tag_of(child.index_of(t1).unwrap()), Some(t1));
+        assert_eq!(child.mol().atom_count(), 3);
     }
 }

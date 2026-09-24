@@ -12,6 +12,7 @@ compile_error!(
 pub mod atom_diff;
 pub mod atom_tracker;
 pub mod candidate;
+pub mod canonical_plan;
 pub mod chematic_vendor;
 pub mod find_path;
 pub mod forest;
@@ -37,11 +38,13 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_diff::{
-    AtomDiff, atom_diff, candidate_could_help, candidate_could_help_on, candidate_order_key,
-    keep_against_diff, pair_could_help, pattern_could_help, pattern_could_help_mol,
+    AtomDiff, atom_diff, atom_diff_for_child, atom_diff_from_mappings, candidate_could_help,
+    candidate_could_help_on, candidate_order_key, extend_mapping_for_born, keep_against_diff,
+    lift_mappings, pair_could_help, pattern_could_help, pattern_could_help_mol,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
+pub use canonical_plan::{CanonicalStep, PlanAtom, PlanKind, identity_canonical_plan};
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
     find_path_diff, find_path_with, find_path_with_filters,

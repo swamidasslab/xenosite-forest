@@ -8,11 +8,39 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
+use crate::atom_tracker::AtomTracker;
 use crate::forest::{Formula, Structure, molecule_formula};
 use crate::kekule::{KekuleCache, ensure_kekule_parents};
 use crate::labels::{self, Tag};
-use crate::mol::{ForestError, Molecule, canon_smiles, parse_mol, ranks};
+use crate::mol::{ForestError, Molecule, atom_idx, canon_smiles, parse_mol, ranks};
 use crate::smarts::smarts_matches;
+use chematic::smiles::canonical_smiles_with_order;
+
+/// Write sidecar labels onto chematic `Atom.tag` so apply/fragments copy them.
+fn sync_tags_to_mol(mol: &mut Molecule, labels: &[Option<Tag>]) {
+    let n = mol.atom_count().min(labels.len());
+    for i in 0..n {
+        mol.set_tag(atom_idx(i), labels[i].map(|t| t.0));
+    }
+}
+
+/// Canonical SMILES → `parse_mol` (aromatize), tags remapped by visit order.
+fn normalize_tagged_product(product: &Molecule) -> Result<Molecule, ForestError> {
+    if product.atom_count() == 0 {
+        return Ok(product.clone());
+    }
+    let (smi, order) = canonical_smiles_with_order(product);
+    let mut fresh = parse_mol(&smi)?;
+    if fresh.atom_count() != order.len() {
+        // Fall back to plain canon_smiles round-trip without tags.
+        return parse_mol(&canon_smiles(product));
+    }
+    for (new_i, &old_idx) in order.iter().enumerate() {
+        let tag = product.atom(old_idx).tag;
+        fresh.set_tag(atom_idx(new_i), tag);
+    }
+    Ok(fresh)
+}
 
 /// Owned molecule. Parse installs empty caches, filled on demand.
 #[derive(Clone)]
@@ -32,7 +60,9 @@ impl ForestMol {
 
     /// Wrap chemistry with **new** caches (disconnected from any parent tree).
     pub fn new(mol: Molecule) -> Self {
+        let mut mol = mol;
         let (labels, next) = labels::stamp(mol.atom_count());
+        sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
@@ -51,9 +81,11 @@ impl ForestMol {
     /// Unmodified systems still hit. An edit that changes a system's shape
     /// is a new [`crate::kekule::SystemKey`] and starts an empty bag.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
+        let mut mol = mol;
         let next = parent.tag_gen.get();
         let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), next);
         parent.tag_gen.set(next);
+        sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
@@ -66,9 +98,11 @@ impl ForestMol {
 
     /// Product of a reindexing apply. `src_to_new[src] = Some(dst)` or `None`.
     pub fn from_apply(&self, mol: Molecule, src_to_new: &[Option<usize>]) -> Self {
+        let mut mol = mol;
         let next = self.tag_gen.get();
         let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), next);
         self.tag_gen.set(next);
+        sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
@@ -79,16 +113,35 @@ impl ForestMol {
         }
     }
 
+    /// Adopt a chematic product: re-parse via [`canon_smiles`] + [`parse_mol`]
+    /// (aromaticity parity with the old string walk) while remapping `Atom.tag`
+    /// by canonical visit order.
+    pub fn adopt_product(&self, product: Molecule) -> Self {
+        let normalized = normalize_tagged_product(&product).unwrap_or(product);
+        let src_to_new = AtomTracker::src_to_new(self.mol(), &normalized);
+        self.from_apply(normalized, &src_to_new)
+    }
+
     /// Same tags after a permutation: `old_at_new[new] = old`.
     pub fn after_permute(&self, mol: &Molecule, old_at_new: &[usize]) -> Self {
+        let mut mol = mol.clone();
+        let labels = labels::remap_permute(&self.labels, old_at_new);
+        sync_tags_to_mol(&mut mol, &labels);
         Self {
-            mol: mol.clone(),
-            labels: labels::remap_permute(&self.labels, old_at_new),
+            mol,
+            labels,
             tag_gen: Rc::clone(&self.tag_gen),
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&self.kekule),
             is_terminal_product: Cell::new(false),
         }
+    }
+
+    pub fn heavy_atom_count(&self) -> usize {
+        self.mol
+            .atoms()
+            .filter(|(_, a)| a.element.atomic_number() > 1)
+            .count()
     }
 
     pub fn tag_of(&self, idx: usize) -> Option<Tag> {

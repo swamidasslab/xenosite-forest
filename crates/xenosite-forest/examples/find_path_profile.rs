@@ -130,6 +130,7 @@ fn expand_timed(
                 pattern_name: em.pattern_name,
                 rule_path: vec![None],
                 products: em.products,
+                plan: Vec::new(),
             });
         }
     }

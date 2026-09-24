@@ -329,7 +329,7 @@ impl PairCandidate {
         (self.start, self.end)
     }
 
-    pub fn materialize(&self, mol: &Molecule) -> Result<Vec<String>, ForestError> {
+    pub fn materialize_mols(&self, mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         let forms = kekule_forms(mol)?;
         let rings = ring_sets(mol);
         let neighbors = system_neighbors(mol, &self.system);
@@ -364,12 +364,28 @@ impl PairCandidate {
                     continue;
                 }
                 let smiles = canon_smiles(&checked);
-                if local_csmi.insert(smiles.clone()) {
-                    products.push(smiles);
+                if local_csmi.insert(smiles) {
+                    products.push(checked);
                 }
             }
         }
         Ok(products)
+    }
+
+    pub fn materialize(&self, mol: &Molecule) -> Result<Vec<String>, ForestError> {
+        Ok(self
+            .materialize_mols(mol)?
+            .iter()
+            .map(canon_smiles)
+            .collect())
+    }
+
+    /// Elementary plan site atoms (pair ends), falling back to discovery site.
+    pub fn plan_site_atoms(&self) -> Vec<usize> {
+        match self.end_atoms() {
+            Some((a, b)) => vec![a, b],
+            None => vec![self.site],
+        }
     }
 
     pub fn emit(&self, mol: &Molecule) -> Result<Option<PairEmission>, ForestError> {

@@ -432,6 +432,144 @@ pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
     merge_views(views)
 }
 
+/// Build [`AtomDiff`] from known reactant→target mappings (no MCS).
+pub fn atom_diff_from_mappings(
+    reactant: &Molecule,
+    target: &Molecule,
+    maps: Vec<BTreeMap<usize, usize>>,
+) -> AtomDiff {
+    if maps.is_empty() {
+        return AtomDiff {
+            reactant_heavy: heavy_atom_count(reactant),
+            target_heavy: heavy_atom_count(target),
+            ..AtomDiff::default()
+        };
+    }
+    let views: Vec<_> = maps.iter().map(|m| diff_for(reactant, target, m)).collect();
+    merge_views(views)
+}
+
+/// Lift parent MCS mappings onto a tagged child via surviving atom tags.
+///
+/// Returns `None` when parent and child do not share a tag generation or no
+/// mapped parent atom survives. Born atoms (new OH) are left unmapped here —
+/// callers may [`extend_mapping_for_born`] or fall back to full MCS.
+pub fn lift_mappings(
+    parent: &crate::forest_mol::ForestMol,
+    child: &crate::forest_mol::ForestMol,
+    parent_maps: &[BTreeMap<usize, usize>],
+) -> Option<Vec<BTreeMap<usize, usize>>> {
+    if !parent.shares_tag_gen(child) || parent_maps.is_empty() {
+        return None;
+    }
+    let mut lifted = Vec::new();
+    for parent_map in parent_maps {
+        let mut child_map = BTreeMap::new();
+        for (&parent_idx, &target_idx) in parent_map {
+            let Some(tag) = parent.tag_of(parent_idx) else {
+                continue;
+            };
+            let Some(child_idx) = child.index_of(tag) else {
+                continue;
+            };
+            child_map.insert(child_idx, target_idx);
+        }
+        if !child_map.is_empty() {
+            lifted.push(child_map);
+        }
+    }
+    if lifted.is_empty() {
+        None
+    } else {
+        Some(lifted)
+    }
+}
+
+/// Greedy: map an unmapped child atom onto an unmapped target atom of the same
+/// element that is bonded to a mapped neighbor's image (hydroxylation OH).
+pub fn extend_mapping_for_born(
+    child: &Molecule,
+    target: &Molecule,
+    mapping: &mut BTreeMap<usize, usize>,
+) {
+    let mut image: HashSet<usize> = mapping.values().copied().collect();
+    let mapped_child: HashSet<usize> = mapping.keys().copied().collect();
+    let mut born: Vec<usize> = (0..child.atom_count())
+        .filter(|i| {
+            child.atom(atom_idx(*i)).element.atomic_number() > 1 && !mapped_child.contains(i)
+        })
+        .collect();
+    born.sort_unstable();
+    for child_idx in born {
+        let z = child.atom(atom_idx(child_idx)).element.atomic_number();
+        let mut placed = None;
+        for (nbr, _) in child.neighbors(atom_idx(child_idx)) {
+            let nbr = atom_usize(nbr);
+            let Some(&t_nbr) = mapping.get(&nbr) else {
+                continue;
+            };
+            for (t_cand, _) in target.neighbors(atom_idx(t_nbr)) {
+                let t_cand = atom_usize(t_cand);
+                if image.contains(&t_cand) {
+                    continue;
+                }
+                if target.atom(atom_idx(t_cand)).element.atomic_number() != z {
+                    continue;
+                }
+                placed = Some(t_cand);
+                break;
+            }
+            if placed.is_some() {
+                break;
+            }
+        }
+        if let Some(t_cand) = placed {
+            mapping.insert(child_idx, t_cand);
+            image.insert(t_cand);
+        }
+    }
+}
+
+/// Child [`AtomDiff`] via tag-lifted parent MCS when possible; else full MCS.
+///
+/// Same atom count → lift only. Growth (OH) → lift + greedy born extend; if
+/// that still leaves heavy born atoms unmapped, fall back to full MCS so
+/// closer cost stays honest.
+pub fn atom_diff_for_child(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+) -> AtomDiff {
+    let parent_maps = if parent_diff.mappings.is_empty() {
+        vec![parent_diff.mapping.clone()]
+    } else {
+        parent_diff.mappings.clone()
+    };
+    let Some(mut lifted) = lift_mappings(parent, child, &parent_maps) else {
+        return atom_diff(child.mol(), target);
+    };
+    let child_n = child.mol().atom_count();
+    let parent_n = parent.mol().atom_count();
+    if child_n > parent_n {
+        for m in &mut lifted {
+            extend_mapping_for_born(child.mol(), target, m);
+        }
+        // Any heavy child atom still unmapped → full MCS.
+        let mapped: HashSet<usize> = lifted
+            .iter()
+            .flat_map(|m| m.keys().copied())
+            .collect();
+        let orphan = (0..child_n).any(|i| {
+            child.mol().atom(atom_idx(i)).element.atomic_number() > 1 && !mapped.contains(&i)
+        });
+        if orphan {
+            return atom_diff(child.mol(), target);
+        }
+    }
+    atom_diff_from_mappings(child.mol(), target, lifted)
+}
+
 fn effect_adds_oxygen(effect: &Effect) -> bool {
     effect.adds.as_deref().is_some_and(|a| a.contains('O'))
 }
@@ -863,5 +1001,43 @@ mod tests {
             ..Effect::default()
         };
         assert!(pattern_could_help(&cleave, &diff));
+    }
+
+    #[test]
+    fn tag_lift_dh_matches_full_mcs_cost() {
+        use crate::forest_mol::ForestMol;
+        use crate::rules::dehydrogenation;
+
+        let parent = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let parent_diff = atom_diff(parent.mol(), &target);
+        let pairs = dehydrogenation()
+            .pair_candidates_leaf(parent.mol())
+            .unwrap();
+        assert!(!pairs.is_empty());
+        let pieces = pairs[0].materialize_mols(parent.mol()).unwrap();
+        assert!(!pieces.is_empty());
+        let child = parent.adopt_product(pieces[0].clone());
+        let lifted = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        let full = atom_diff(child.mol(), &target);
+        assert_eq!(lifted.cost(), full.cost(), "lifted={lifted:?} full={full:?}");
+    }
+
+    #[test]
+    fn tag_lift_hydroxylation_extends_born_oxygen() {
+        use crate::forest_mol::ForestMol;
+        use crate::hydroxylation::hydroxylation;
+
+        let parent = ForestMol::parse("CC").unwrap();
+        let target = parse_mol("CCO").unwrap();
+        let parent_diff = atom_diff(parent.mol(), &target);
+        let cands = hydroxylation().candidates(parent.mol()).unwrap();
+        let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        assert_eq!(child.mol().atom_count(), 3);
+        let lifted = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        // Child is the target → cost 0 whether lift or full MCS.
+        assert_eq!(lifted.cost(), 0, "{lifted:?}");
+        assert!(child.shares_tag_gen(&parent));
     }
 }

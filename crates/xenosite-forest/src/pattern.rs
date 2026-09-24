@@ -112,6 +112,8 @@ pub struct Emission {
     pub pattern_name: String,
     pub rule_path: Vec<Option<String>>,
     pub products: Vec<String>,
+    /// Elementary steps for this hop (identity or quinone-shaped expansion).
+    pub plan: Vec<crate::canonical_plan::CanonicalStep>,
 }
 
 impl Emission {

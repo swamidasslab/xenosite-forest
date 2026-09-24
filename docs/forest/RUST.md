@@ -213,15 +213,19 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 
 ## Not in this crate
 
-Full Python `atom_diff` parity (multi-placement merge, leave_count, bond_raises
-site filters), `CanonicalStep` / `Deps`. A provisional
+Full Python `atom_diff` parity (leave_count / bond_raises site filters on every
+edge case), archive `Deps` apply. A provisional
 [`atom_diff`](../../crates/xenosite-forest/src/atom_diff.rs) door gates
 candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
-Production atom-trace can use
-[`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs) on
-`Atom.tag`; `ForestMol` has not switched off its sidecar yet. Nested
-`RuleSet` namespaces + a first-run [`find_path`](../../crates/xenosite-forest/src/find_path.rs)
-are in the crate as a door; they are not yet the live Python search.
+[`find_path`](../../crates/xenosite-forest/src/find_path.rs) walks carry tagged
+[`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) (structure/`csmi`
+cache; `Atom.tag` synced from the sidecar through `adopt_product`). Outcomes
+emit elementary [`CanonicalStep`](../../crates/xenosite-forest/src/canonical_plan.rs)
+plans; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
+on the `RuleSet` (data, not a name branch). Eager closer can
+[`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) via
+tag-lift (+ greedy OH extend). Nested `RuleSet` namespaces are in the crate as
+a door; they are not yet the live Python search.
 
 ## find_path H2H (Rust vs Python live)
 
@@ -248,23 +252,23 @@ closes the mid-size miss gap.
 
 | Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| eugenol→allyl-Q | **ok** 0.030s · bill=20 | **ok** 0.014s · bill=20 | MISS · bill≈7k |
-| dimethoxy-PEA→catechol | **ok** 0.011s · bill=10 | **ok** 0.004s · bill=12 | **ok** 0.039s · bill=391 |
-| MeOPhOH→hydroxyQ | **ok** 0.31s · bill=226 | **ok** 0.19s · bill=328 | MISS · bill≈29k |
-| TBA→aldehyde | **ok** 0.018s · bill=5 | **ok** 0.015s · bill=5 | **ok** 0.19s · bill=168 |
-| 2-MeO-naph→1,2-NQ | **ok** 0.010s · bill=7 | **ok** 0.009s · bill=7 | MISS · bill≈48k |
-| **TOTAL wall** | **0.38s (5/5)** | **0.23s (5/5)** | **8s (2/5)** |
+| eugenol→allyl-Q | **ok** 0.030s · bill=20 | **ok** 0.008s · bill=16 | MISS · bill≈7k |
+| dimethoxy-PEA→catechol | **ok** 0.011s · bill=10 | **ok** 0.003s · bill=12 | **ok** 0.039s · bill=391 |
+| MeOPhOH→hydroxyQ | **ok** 0.31s · bill=226 | **ok** 0.080s · bill=315 | MISS · bill≈29k |
+| TBA→aldehyde | **ok** 0.018s · bill=5 | **ok** 0.014s · bill=5 | **ok** 0.19s · bill=168 |
+| 2-MeO-naph→1,2-NQ | **ok** 0.010s · bill=7 | **ok** 0.008s · bill=7 | MISS · bill≈48k |
+| **TOTAL wall** | **0.38s (5/5)** | **0.11s (5/5)** | **8s (2/5)** |
 
 ### Larger (HA≈17–26)
 
 | Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| tBu-bis-ND→dialdehyde | **ok** 0.086s · bill=36 | **ok** 0.041s · bill=33 | **ok** 0.20s · bill=294 |
-| macrocycle-ND→aminoK | **ok** 0.16s · bill=26 | **ok** 0.072s · bill=24 | **ok** 1.16s · bill=1109 |
-| tribenzyl→PhCHO | **ok** 0.006s · bill=4 | **ok** 0.027s · bill=5 | **ok** 0.17s · bill=84 |
-| triPh-butyl→OH | **ok** 0.025s · bill=5 | **ok** 0.078s · bill=5 | **ok** 0.24s · bill=122 |
-| MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.022s · bill=9 | **ok** 0.15s · bill=150 |
-| **TOTAL wall** | **0.32s (5/5)** | **0.24s (5/5)** | **1.92s (5/5)** |
+| tBu-bis-ND→dialdehyde | **ok** 0.086s · bill=36 | **ok** 0.027s · bill=33 | **ok** 0.20s · bill=294 |
+| macrocycle-ND→aminoK | **ok** 0.16s · bill=26 | **ok** 0.079s · bill=37 | **ok** 1.16s · bill=1109 |
+| tribenzyl→PhCHO | **ok** 0.006s · bill=4 | **ok** 0.026s · bill=5 | **ok** 0.17s · bill=84 |
+| triPh-butyl→OH | **ok** 0.025s · bill=5 | **ok** 0.031s · bill=5 | **ok** 0.24s · bill=122 |
+| MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.018s · bill=9 | **ok** 0.15s · bill=150 |
+| **TOTAL wall** | **0.32s (5/5)** | **0.18s (5/5)** | **1.92s (5/5)** |
 
 ### Hard (HA≈14–20, ≥3–8 hops)
 
@@ -273,20 +277,17 @@ Rust misses most rows under `max_nodes=800`.
 
 | Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| trimethoxy-PEA→catechol | **ok** 0.12s · 5 steps · bill=60 | **ok** 0.095s · 5 steps · bill=57 | MISS · bill≈43k |
-| eugenol-MeO→allylQ | **ok** 0.067s · 5 steps · bill=39 | **ok** 0.040s · 4 steps · bill=40 | **ok** 1.6s · bill≈17k |
-| bisMeO-naph→1,2NQ | **ok** 0.062s · 5 steps · bill=27 | **ok** 0.080s · 4 steps · bill=27 | MISS · bill≈47k |
-| tetraMeO-biphenyl→tetraOH | **ok** 0.13s · 4 steps · bill=52 | **ok** 0.14s · 4 steps · bill=54 | **ok** 16s · bill≈37k |
-| veratrole-allyl→allylQ | **ok** 1.16s · 7 steps · bill=873 | **ok** 0.17s · 5 steps · bill=132 | MISS · bill≈41k |
-| tetraMeO-naph→polyOH-NQ | **ok** 5.33s · 8 steps · bill=1311 | **ok** 3.34s · 7 steps · bill=802 | MISS · bill≈54k |
-| **TOTAL wall** | **6.86s (6/6)** | **3.86s (6/6)** | **55s (2/6)** |
+| trimethoxy-PEA→catechol | **ok** 0.12s · 5 steps · bill=60 | **ok** 0.035s · 5 steps · bill=57 | MISS · bill≈43k |
+| eugenol-MeO→allylQ | **ok** 0.067s · 5 steps · bill=39 | **ok** 0.020s · 4 steps · bill=40 | **ok** 1.6s · bill≈17k |
+| bisMeO-naph→1,2NQ | **ok** 0.062s · 5 steps · bill=27 | **ok** 0.054s · 4 steps · bill=34 | MISS · bill≈47k |
+| tetraMeO-biphenyl→tetraOH | **ok** 0.13s · 4 steps · bill=52 | **ok** 0.075s · 4 steps · bill=54 | **ok** 16s · bill≈37k |
+| veratrole-allyl→allylQ | **ok** 1.16s · 7 steps · bill=873 | **ok** 0.045s · 6 steps · bill=105 | MISS · bill≈41k |
+| tetraMeO-naph→polyOH-NQ | **ok** 5.33s · 8 steps · bill=1311 | **ok** 1.37s · 7 steps · bill=767 | MISS · bill≈54k |
+| **TOTAL wall** | **6.86s (6/6)** | **1.60s (6/6)** | **55s (2/6)** |
 
 **Read:** with filters on, Rust hits every H2H row and is **faster than Python** on
-mid (0.23s vs 0.38s), larger (0.24s vs 0.32s), and hard (3.86s vs 6.86s). The
-hard suite is where atom_diff pays off most: veratrole-allyl bill 132 vs 873,
-tetraMeO-naph 802 vs 1311. Pair-end could-help cut MeOPhOH from ≈899 to ≈328
-(Python 226). Residual mid-size edits are search order / intermediate
-expansion, not a missing root filter.
+mid (0.11s vs 0.38s), larger, and hard (1.60s vs 6.86s). Walks carry tagged
+`ForestMol` + `CanonicalStep` plans; eager closer can tag-lift MCS.
 
 ### Profile: where hard wall goes (not copies)
 
@@ -308,9 +309,18 @@ Hard H2H (release, best-of-5), atom_diff on:
 
 | | eager closer | lazy closer |
 | --- | ---: | ---: |
-| TOTAL wall | 3.88s | **1.79s** |
-| tetraMeO-naph | 3.36s · bill=802 | **1.53s · bill=768** |
-| veratrole-allyl | 0.17s · bill=132 | **0.064s · bill=132** |
+| TOTAL wall | 1.97s | **1.60s** |
+| tetraMeO-naph | 1.72s · bill=806 | **1.37s · bill=767** |
+| veratrole-allyl | 0.051s · bill=115 | **0.045s · bill=105** |
 
-Mid atom_diff TOTAL **0.15s** (was ~0.23s). Do not HA-gate at enqueue —
+Mid atom_diff TOTAL **0.11s** (was ~0.23s). Do not HA-gate at enqueue —
 oxidation can raise HA distance while lowering cost.
+
+### Tagged walks + step plans (landed)
+
+`find_path` walks carry [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs)
+(not bare SMILES). Edits use `materialize_mols` → `adopt_product` so tags and
+the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a
+`Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Eager
+closer uses `atom_diff_for_child` (tag-lift + OH extend) instead of a fresh MCS
+when tags allow.

@@ -17,9 +17,10 @@ use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
 use crate::ForestError;
 use crate::candidate::{Candidate, ParentRef};
+use crate::canonical_plan::{PlanKind, steps_for_kind};
 use crate::kekule::kekule_forms;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
-use crate::pair_edit::{pair_candidates, pair_metabolize};
+use crate::pair_edit::pair_candidates;
 use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
 use crate::unique_edit::{unique_sites, unique_sites_on_forms};
@@ -92,6 +93,8 @@ pub enum RuleMember {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuleSet {
     pub name: Option<String>,
+    /// How accepted hops from this leaf expand into elementary plan steps.
+    pub plan_kind: PlanKind,
     members: Vec<RuleMember>,
 }
 
@@ -99,6 +102,7 @@ impl RuleSet {
     pub fn new(name: Option<String>, patterns: impl IntoIterator<Item = PatternInfo>) -> Self {
         Self {
             name,
+            plan_kind: PlanKind::Identity,
             members: patterns.into_iter().map(RuleMember::Pattern).collect(),
         }
     }
@@ -107,8 +111,15 @@ impl RuleSet {
     pub fn compose(name: Option<String>, sets: impl IntoIterator<Item = RuleSet>) -> Self {
         Self {
             name,
+            plan_kind: PlanKind::Identity,
             members: sets.into_iter().map(RuleMember::Set).collect(),
         }
+    }
+
+    /// Set [`Self::plan_kind`] (quinone-shaped leaves use prep-then-DH).
+    pub fn with_plan_kind(mut self, kind: PlanKind) -> Self {
+        self.plan_kind = kind;
+        self
     }
 
     pub fn members(&self) -> &[RuleMember] {
@@ -241,11 +252,22 @@ impl RuleSet {
         }
         for pair in self.pair_candidates_leaf(mol)? {
             if let Some(emission) = pair.emit(mol)? {
+                let site_atoms = pair.plan_site_atoms();
+                let ends = [&pair.left.effect, &pair.right.effect];
+                let leaf = self.name.as_deref().unwrap_or(emission.pattern_name.as_str());
+                let plan = steps_for_kind(
+                    self.plan_kind,
+                    leaf,
+                    mol,
+                    &site_atoms,
+                    Some(&ends),
+                );
                 out.push(Emission {
                     site: emission.site,
                     pattern_name: emission.pattern_name,
                     rule_path: vec![self.name.clone()],
                     products: emission.products,
+                    plan,
                 });
             }
         }
@@ -352,7 +374,7 @@ impl RuleSet {
             .filter(|p| filter_rules(mol, self, p))
             .collect();
         if !pair_endpoints.is_empty() {
-            for pair in pair_metabolize(mol, &pair_endpoints)? {
+            for pair in crate::pair_edit::pair_candidates(mol, &pair_endpoints)? {
                 let info = SiteInfo {
                     site: pair.site,
                     pattern: pair_endpoints[0].clone(),
@@ -360,11 +382,25 @@ impl RuleSet {
                 if !filter_sites(mol, pair.site, &info) {
                     continue;
                 }
+                let Some(emission) = pair.emit(mol)? else {
+                    continue;
+                };
+                let site_atoms = pair.plan_site_atoms();
+                let ends = [&pair.left.effect, &pair.right.effect];
+                let leaf = self.name.as_deref().unwrap_or(emission.pattern_name.as_str());
+                let plan = steps_for_kind(
+                    self.plan_kind,
+                    leaf,
+                    mol,
+                    &site_atoms,
+                    Some(&ends),
+                );
                 let emission = Emission {
-                    site: pair.site,
-                    pattern_name: pair.pattern_name,
+                    site: emission.site,
+                    pattern_name: emission.pattern_name,
                     rule_path: vec![self.name.clone()],
-                    products: pair.products,
+                    products: emission.products,
+                    plan,
                 };
                 push_emission(Some(emission), unique_csmi, &mut seen_leaf, &mut emissions);
             }
@@ -447,20 +483,24 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
     Ok(product)
 }
 
-/// Apply a pattern edit at a mapped site (used by [`Candidate::materialize`]).
+/// Same as [`apply_edit_mols`], returning product CSMIs.
 pub(crate) fn apply_edit_for_candidate(
     mol: &Molecule,
     pattern: &PatternInfo,
     mapped: &BTreeMap<u16, usize>,
 ) -> Result<Vec<String>, ForestError> {
-    apply_edit(mol, pattern, mapped)
+    Ok(apply_edit_mols(mol, pattern, mapped)?
+        .iter()
+        .map(canon_smiles)
+        .collect())
 }
 
-fn apply_edit(
+/// Apply a pattern edit at a mapped site, keeping chematic products (tags intact).
+pub(crate) fn apply_edit_mols(
     mol: &Molecule,
     pattern: &PatternInfo,
     mapped: &BTreeMap<u16, usize>,
-) -> Result<Vec<String>, ForestError> {
+) -> Result<Vec<Molecule>, ForestError> {
     match &pattern.edit {
         Edit::Hydroxyl => {
             let Some(&carbon) = mapped.get(&1) else {
@@ -468,7 +508,7 @@ fn apply_edit(
             };
             let product = add_hydroxyl(mol, carbon)?;
             if accept_product(&product) {
-                Ok(vec![canon_smiles(&product)])
+                Ok(vec![product])
             } else {
                 Ok(Vec::new())
             }
@@ -476,8 +516,7 @@ fn apply_edit(
         Edit::Smirks(smirks) => {
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
-            let pieces = apply_smirks_at(smirks, &work, mapped)?;
-            Ok(pieces.iter().map(canon_smiles).collect())
+            apply_smirks_at(smirks, &work, mapped)
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
     }

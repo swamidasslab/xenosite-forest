@@ -8,9 +8,10 @@
 use std::collections::BTreeMap;
 
 use crate::ForestError;
+use crate::canonical_plan::{CanonicalStep, identity_canonical_plan};
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Emission, PatternInfo};
-use crate::ruleset::apply_edit_for_candidate;
+use crate::ruleset::apply_edit_mols;
 
 /// Which mol to apply the edit on.
 ///
@@ -60,8 +61,18 @@ impl Candidate {
             .collect()
     }
 
+    /// Run the edit and return product molecules (tags preserved when present).
+    pub fn materialize_mols(&self, context: &Molecule) -> Result<Vec<Molecule>, ForestError> {
+        let work = match &self.parent {
+            ParentRef::Context => context,
+            ParentRef::Form(form) => form,
+        };
+        apply_edit_mols(work, &self.pattern, &self.mapped)
+    }
+
     /// Run the edit and return product CSMIs. Call only after filtering.
     pub fn materialize(&self, context: &Molecule) -> Result<Vec<String>, ForestError> {
+        use crate::ruleset::apply_edit_for_candidate;
         let work = match &self.parent {
             ParentRef::Context => context,
             ParentRef::Form(form) => form,
@@ -80,7 +91,17 @@ impl Candidate {
             pattern_name: self.pattern.name.clone(),
             rule_path: self.rule_path.clone(),
             products,
+            plan: self.identity_plan(),
         }))
+    }
+
+    /// Elementary plan for this candidate (identity at discovery site).
+    pub fn identity_plan(&self) -> Vec<CanonicalStep> {
+        let rule = self
+            .leaf_rule()
+            .unwrap_or(self.pattern.name.as_str())
+            .to_string();
+        identity_canonical_plan(rule, [self.site])
     }
 
     pub fn is_pair_endpoint(&self) -> bool {
