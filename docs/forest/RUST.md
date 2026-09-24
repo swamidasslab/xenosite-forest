@@ -244,25 +244,26 @@ order, atom_diff `closer`) closes the mid-size miss gap.
 
 | Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| eugenol→allyl-Q | **ok** 0.030s · bill=20 | **ok** 0.058s · bill=89 | MISS · bill≈41k |
+| eugenol→allyl-Q | **ok** 0.030s · bill=20 | **ok** 0.014s · bill=20 | MISS · bill≈7k |
 | dimethoxy-PEA→catechol | **ok** 0.011s · bill=10 | **ok** 0.004s · bill=12 | **ok** 0.039s · bill=391 |
-| MeOPhOH→hydroxyQ | **ok** 0.31s · bill=226 | **ok** 0.45s · bill=899 | MISS · bill≈35k |
-| TBA→aldehyde | **ok** 0.017s · bill=5 | **ok** 0.014s · bill=5 | **ok** 0.19s · bill=168 |
-| 2-MeO-naph→1,2-NQ | **ok** 0.010s · bill=7 | **ok** 0.14s · bill=62 | MISS · bill≈48k |
-| **TOTAL wall** | **0.38s (5/5)** | **0.67s (5/5)** | **10s (2/5)** |
+| MeOPhOH→hydroxyQ | **ok** 0.31s · bill=226 | **ok** 0.19s · bill=328 | MISS · bill≈29k |
+| TBA→aldehyde | **ok** 0.018s · bill=5 | **ok** 0.015s · bill=5 | **ok** 0.19s · bill=168 |
+| 2-MeO-naph→1,2-NQ | **ok** 0.010s · bill=7 | **ok** 0.009s · bill=7 | MISS · bill≈48k |
+| **TOTAL wall** | **0.38s (5/5)** | **0.23s (5/5)** | **8s (2/5)** |
 
 ### Larger (HA≈17–26)
 
 | Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| tBu-bis-ND→dialdehyde | **ok** 0.088s · bill=36 | **ok** 0.041s · bill=33 | **ok** 0.20s · bill=356 |
-| macrocycle-ND→aminoK | **ok** 0.16s · bill=26 | **ok** 0.075s · bill=61 | **ok** 1.11s · bill=2213 |
-| tribenzyl→PhCHO | **ok** 0.006s · bill=4 | **ok** 0.027s · bill=5 | **ok** 0.17s · bill=123 |
-| triPh-butyl→OH | **ok** 0.025s · bill=5 | **ok** 0.078s · bill=5 | **ok** 0.25s · bill=158 |
-| MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.022s · bill=9 | **ok** 0.15s · bill=223 |
-| **TOTAL wall** | **0.32s (5/5)** | **0.24s (5/5)** | **1.88s (5/5)** |
+| tBu-bis-ND→dialdehyde | **ok** 0.086s · bill=36 | **ok** 0.041s · bill=33 | **ok** 0.20s · bill=294 |
+| macrocycle-ND→aminoK | **ok** 0.16s · bill=26 | **ok** 0.072s · bill=24 | **ok** 1.16s · bill=1109 |
+| tribenzyl→PhCHO | **ok** 0.006s · bill=4 | **ok** 0.027s · bill=5 | **ok** 0.17s · bill=84 |
+| triPh-butyl→OH | **ok** 0.025s · bill=5 | **ok** 0.078s · bill=5 | **ok** 0.24s · bill=122 |
+| MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.022s · bill=9 | **ok** 0.15s · bill=150 |
+| **TOTAL wall** | **0.32s (5/5)** | **0.24s (5/5)** | **1.92s (5/5)** |
 
-**Read:** with filters on, Rust hits every H2H row. Larger set is **faster than
-Python** (0.24s vs 0.32s). Mid-size is ~1.8× Python wall; MeOPhOH still carries
-most of the Rust bill (899 vs 226) — residual concurrent O/dearom/dealk
-tightening, not door chemistry.
+**Read:** with filters on, Rust hits every H2H row and is **faster than Python** on
+both mid (0.23s vs 0.38s) and larger (0.24s vs 0.32s). Pair-end could-help
+(per-end oxygen / `partner=="C"` methide, QF alkyl split to `methide_end`)
+cut MeOPhOH from bill≈899 to ≈328 (Python 226). Residual edits are search
+order / intermediate expansion, not a missing root filter.

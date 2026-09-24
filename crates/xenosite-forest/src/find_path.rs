@@ -451,8 +451,10 @@ where
         pairs.retain(|p| keep_pair(p, keep));
     }
     for pair in pairs {
-        counters.mol_edits += 1;
+        // Python ResonancePair bumps mol_edits only after alternating paths exist
+        // (emit yields products). Empty materializations are not billed.
         if let Some(emission) = pair.emit(mol)? {
+            counters.mol_edits += 1;
             out.push(Emission {
                 site: emission.site,
                 pattern_name: emission.pattern_name,
