@@ -575,8 +575,8 @@ mod tests {
         let endpoints: Vec<_> = dehydrogenation()
             .patterns()
             .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
             .cloned()
-            .filter(|p| matches!(p.edit, Edit::PairEndpoint(_)))
             .collect();
         assert!(!endpoints.is_empty());
         let emissions = pair_metabolize(&mol, &endpoints).unwrap();
@@ -595,8 +595,8 @@ mod tests {
         let endpoints: Vec<_> = quinone_formation()
             .patterns()
             .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
             .cloned()
-            .filter(|p| matches!(p.edit, Edit::PairEndpoint(_)))
             .collect();
         let emissions = pair_metabolize(&mol, &endpoints).unwrap();
         let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
@@ -615,8 +615,8 @@ mod tests {
         let endpoints: Vec<_> = dehydrogenation()
             .patterns()
             .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
             .cloned()
-            .filter(|p| matches!(p.edit, Edit::PairEndpoint(_)))
             .collect();
         let cands = pair_candidates(&mol, &endpoints).unwrap();
         assert!(!cands.is_empty());

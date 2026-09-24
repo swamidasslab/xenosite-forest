@@ -163,7 +163,11 @@ fn keep_fragment(
 }
 
 fn closer(parent_ha: usize, child_ha: usize, target_ha: usize, target_hit: bool) -> bool {
-    target_hit || ha_distance(child_ha, target_ha) < ha_distance(parent_ha, target_ha)
+    // Refuse only walks that grow more distant in heavy-atom count. Equal
+    // distance (same-size DH / oxidation hops) must stay open — a strict `<`
+    // drops propane→propene→epoxide. Python uses atom_diff cost; HA is the
+    // provisional stand-in (HEURISTICS: sideways-on-cost not decided).
+    target_hit || ha_distance(child_ha, target_ha) <= ha_distance(parent_ha, target_ha)
 }
 
 /// Search bounds. Defaults match Python `find_path` knobs.

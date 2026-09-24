@@ -18,7 +18,7 @@ The Python engine is RDKit + pynauty. This crate checks the seams that would blo
 - `RuleSet` of `PatternInfo` records, with `FilterRules` / `FilterSites` as `impl Fn` or `Box<dyn Fn>`
 - `wasm32-unknown-unknown` (no C FFI: no `inchi` native, no canonaut `c-nauty-bench`)
 
-Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`). Canonical SMILES is chematic’s, not RDKit’s (`C(C)O` vs `CCO`). Tests compare `canon_of` identities, not a spelling. Kekulé parents stamp integer orders onto **one** conjugated system; other systems stay aromatic.
+Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity_experimental`). Canonical SMILES is chematic’s, not RDKit’s (`C(C)O` vs `CCO`). Tests compare `canon_of` identities, not a spelling. Kekulé parents stamp integer orders onto **one** conjugated system; other systems stay aromatic. Chematic SMARTS treats bare `h` / `;h` as inert — digitize like Hydroxylation (`[#6h1,#6h2,#6h3]` not `[#6h]`).
 
 ## `ForestMol`
 

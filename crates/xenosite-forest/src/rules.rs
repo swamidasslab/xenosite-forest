@@ -77,7 +77,8 @@ pub fn dehydrogenation() -> RuleSet {
             ),
             smirks_row(
                 "alcohol",
-                "[#6h:1]-[#8H1:2]>>[*:1]=[*:2]",
+                // chematic: bare `h` is inert; digitize like Hydroxylation partition.
+                "[#6h1,#6h2,#6h3:1]-[#8H1:2]>>[*:1]=[*:2]",
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
@@ -90,7 +91,7 @@ pub fn dehydrogenation() -> RuleSet {
             ),
             smirks_row(
                 "amine",
-                "[#6h:1]-[#7D1H2,#7D2H1:2]>>[*:1]=[*:2]",
+                "[#6h1,#6h2,#6h3:1]-[#7D1H2,#7D2H1:2]>>[*:1]=[*:2]",
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
@@ -103,7 +104,7 @@ pub fn dehydrogenation() -> RuleSet {
             ),
             smirks_row(
                 "alkyl",
-                "[#6h:1]-[#6D1H3,#6D2H2,#6D3H1:2]>>[*:1]=[*:2]",
+                "[#6h1,#6h2,#6h3:1]-[#6D1H3,#6D2H2,#6D3H1:2]>>[*:1]=[*:2]",
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
@@ -368,7 +369,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "cc_alcohol",
-                "[#6h:1][#6:2]>>(O-[*:1].[*:2])",
+                "[#6h1,#6h2,#6h3:1][#6:2]>>(O-[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -381,7 +382,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "cc_carbonyl",
-                "[#6h:1][#6:2]>>(O=[*:1].[*:2])",
+                "[#6h1,#6h2,#6h3:1][#6:2]>>(O=[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -1135,7 +1136,7 @@ pub fn nitrogen_oxidation() -> RuleSet {
         [
             smirks_row(
                 "hydroxylamine",
-                "[#7v3h:1]>>[*:1]O",
+                "[#7v3h1,#7v3h2:1]>>[*:1]O",
                 SiteKind::Atom,
                 vec![1],
                 Effect {
@@ -1269,7 +1270,7 @@ pub fn acetylation() -> RuleSet {
         Some("Acetylation".into()),
         [smirks_row(
             "acetyl",
-            "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
+            "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1][#6](=[#8])[#6]",
             SiteKind::Atom,
             vec![1],
             Effect {
