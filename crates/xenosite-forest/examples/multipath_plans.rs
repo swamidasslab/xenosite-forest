@@ -1,8 +1,86 @@
-//! Dump multipath find_path plans (SMILES + step plans).
+//! Dump multipath find_path plans on larger / hard PhaseOne cases.
+//! Tiny door mols (anisole, TBA-benzyl) are not useful here.
 //!
+//! ```text
 //! cargo run -p xenosite-forest --example multipath_plans --release
+//! cargo run -p xenosite-forest --example multipath_plans --release -- --hard
+//! ```
+
+use std::env;
+use std::time::Instant;
 
 use xenosite_forest::{FindPathConfig, PathCounters, PathOutcome, find_path_with, phase_one};
+
+const MAX_NODES: usize = 800;
+const MAX_PATHS: usize = 4;
+
+/// Mid→large scaffolds (same set as find_path_bench `--larger`).
+const LARGER: &[(&str, &str, &str)] = &[
+    (
+        "tBu-bis-ND→dialdehyde",
+        "CN(C)Cc1ccc(CN(C)Cc2ccc(C(C)(C)C)cc2)cc1",
+        "O=Cc1ccc(C=O)cc1",
+    ),
+    (
+        "macrocycle-ND→aminoK",
+        "C1CCCCCCNC2CCCC(CC2)NCCCC1",
+        "NC1CCCC(=O)CC1",
+    ),
+    (
+        "tribenzyl→PhCHO",
+        "N(Cc1ccccc1)(Cc1ccccc1)Cc1ccccc1",
+        "O=Cc1ccccc1",
+    ),
+    (
+        "MeO-diphenyl→catechol",
+        "COc1ccc(Cc2ccc(OC)cc2)cc1",
+        "Oc1ccc(Cc2ccc(O)cc2)cc1",
+    ),
+    (
+        "dimethoxy-PEA→catechol",
+        "COc1ccc(CCN)cc1OC",
+        "NCCc1ccc(O)c(O)c1",
+    ),
+    (
+        "eugenol→allyl-quinone",
+        "COc1ccc(CC=C)cc1O",
+        "O=C1C=CC(=O)C(CC=C)=C1",
+    ),
+];
+
+/// ≥3–8 PhaseOne hops (same set as find_path_bench `--hard`).
+const HARD: &[(&str, &str, &str)] = &[
+    (
+        "trimethoxy-PEA→catechol",
+        "COc1cc(OC)c(OC)c(CCN)c1",
+        "NCCc1cc(O)c(O)c(O)c1",
+    ),
+    (
+        "eugenol-MeO→allylQ",
+        "COc1cc(CC=C)cc(OC)c1O",
+        "O=C1C=C(CC=C)C(=O)C(O)=C1",
+    ),
+    (
+        "bisMeO-naph→1,2NQ",
+        "COc1ccc2c(OC)cccc2c1",
+        "O=C1C(=O)c2ccccc2C=C1",
+    ),
+    (
+        "tetraMeO-biphenyl→tetraOH",
+        "COc1ccc(-c2ccc(OC)c(OC)c2)cc1OC",
+        "Oc1ccc(-c2ccc(O)c(O)c2)cc1O",
+    ),
+    (
+        "veratrole-allyl→allylQ",
+        "COc1ccc(CC=C)c(OC)c1OC",
+        "O=C1C=C(CC=C)C(=O)C(O)=C1",
+    ),
+    (
+        "tetraMeO-naph→polyOH-NQ",
+        "COc1cc(OC)c2c(OC)cc(OC)cc2c1",
+        "O=C1C=C(O)C(=O)c2c(O)cc(O)cc12",
+    ),
+];
 
 fn fmt_plan(hit: &PathOutcome) -> String {
     let steps: Vec<String> = hit
@@ -17,10 +95,10 @@ fn fmt_plan(hit: &PathOutcome) -> String {
                     other => format!("{other:?}"),
                 })
                 .collect();
-            let orbit = if s.orbit.is_empty() {
+            let orbit = if s.orbit.len() <= 1 {
                 String::new()
             } else {
-                format!(" orbit={:?}", s.orbit)
+                format!(" |Ω|={}", s.orbit.len())
             };
             format!("{}@[{}]{}", s.rule, site.join(","), orbit)
         })
@@ -33,87 +111,71 @@ fn fmt_plan(hit: &PathOutcome) -> String {
         .collect();
     let maybe: Vec<_> = hit.maybe().sides();
     format!(
-        "  steps: {}\n  precedes: {}\n  maybe: {:?}\n  n_lin: {}",
+        "  {} step(s): {}\n  precedes: {}\n  maybe ({}): {:?}\n  n_lin={}",
+        hit.plan.len(),
         steps.join(" → "),
         if precedes.is_empty() {
             "(none)".into()
         } else {
             precedes.join(", ")
         },
+        maybe.len(),
         maybe,
         hit.plan.n_linearizations()
     )
 }
 
-fn dump(name: &str, start: &str, target: &str, max_paths: usize, max_nodes: usize) {
+fn dump(name: &str, start: &str, target: &str) {
     println!("=== {name} ===");
     println!("reactant: {start}");
     println!("target:   {target}");
     let mut counters = PathCounters::default();
+    let t0 = Instant::now();
     let hits = find_path_with(
         start,
         target,
         &phase_one(),
         &mut counters,
         FindPathConfig {
-            max_paths,
-            max_nodes,
+            max_paths: MAX_PATHS,
+            max_nodes: MAX_NODES,
             ..FindPathConfig::default()
         },
         |_| true,
     )
     .unwrap();
+    let ms = t0.elapsed().as_secs_f64() * 1e3;
     println!(
-        "hits: {}  (billed={}, nodes={})",
+        "hits={}  wall={ms:.0} ms  billed={}  nodes={}  mol_edits={}",
         hits.len(),
         counters.billed(),
-        counters.nodes
+        counters.nodes,
+        counters.mol_edits
     );
+    if hits.is_empty() {
+        println!("  (no hit under budget)\n");
+        return;
+    }
     for (i, hit) in hits.iter().enumerate() {
         println!("\n-- plan {i} → {}", hit.smiles);
         println!("{}", fmt_plan(hit));
         if i > 0 {
             let ov = hits[0].plan.linearization_overlap(&hit.plan);
-            println!("  overlap with plan0: {ov}");
+            let same = hits[0].plan.same_linearizations(&hit.plan);
+            println!("  vs plan0: overlap={ov} same_linearizations={same}");
         }
     }
     println!();
 }
 
 fn main() {
-    dump(
-        "N,N-dimethylbenzylamine → benzaldehyde",
-        "CN(C)Cc1ccccc1",
-        "O=Cc1ccccc1",
-        4,
-        200,
+    let hard = env::args().any(|a| a == "--hard");
+    let cases = if hard { HARD } else { LARGER };
+    println!(
+        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}\n",
+        if hard { "HARD" } else { "LARGER" }
     );
-    dump(
-        "t-butyl benzoate → benzoic acid (hydrolysis)",
-        "c1ccccc1C(=O)OC(C)(C)C",
-        "O=C(O)c1ccccc1",
-        3,
-        80,
-    );
-    dump(
-        "anisole → phenol",
-        "COc1ccccc1",
-        "Oc1ccccc1",
-        4,
-        100,
-    );
-    dump(
-        "hydroquinone diacetate → hydroquinone",
-        "CC(=O)Oc1ccc(OC(C)=O)cc1",
-        "Oc1ccc(O)cc1",
-        4,
-        150,
-    );
-    dump(
-        "dimethoxy-PEA → catechol",
-        "COc1ccc(CCN)cc1OC",
-        "NCCc1ccc(O)c(O)c1",
-        4,
-        300,
-    );
+    for (name, start, target) in cases {
+        dump(name, start, target);
+    }
 }
