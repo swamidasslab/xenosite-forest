@@ -22,8 +22,8 @@ use crate::kekule::kekule_forms;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
 use crate::pair_edit::pair_candidates;
 use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
-use crate::smarts::smarts_matches;
 use crate::smirks::apply_smirks_at;
+use crate::unique_edit::{unique_sites, unique_sites_on_forms};
 use crate::valence::accept_product;
 
 /// True when the SMARTS bond between the first two `site_map` atoms is an
@@ -351,19 +351,12 @@ impl RuleSet {
                             let emission_key: BTreeSet<String> =
                                 emission.products.iter().cloned().collect();
                             let leaf_name = emission.leaf_rule().unwrap_or("").to_string();
-                            // Cross-rule: first leaf to produce this csmi wins.
                             if let Some(kept) = seen_csmi.get(&emission_key) {
                                 if kept != &leaf_name {
                                     continue;
                                 }
                             } else {
-                                seen_csmi.insert(emission_key.clone(), leaf_name);
-                            }
-                            // Within-rule yield: one emission per (pattern, csmi).
-                            // Site topo unique-edit is off; this is the yield layer.
-                            let yield_key = (emission.pattern_name.clone(), emission_key);
-                            if !seen_leaf.insert(yield_key) {
-                                continue;
+                                seen_csmi.insert(emission_key, leaf_name);
                             }
                         }
                         emissions.push(emission);
@@ -420,27 +413,28 @@ fn pattern_candidates(
     let use_forms = site_bond_is_exclusive_double(&pattern.smarts, &pattern.site_map)
         && mol.atoms().any(|(_, atom)| atom.aromatic);
     if use_forms {
-        // Every concrete Kekulé hit. No topological unique-edit: rank collapse
-        // would edit one orbit rep and leave tagged MCS lift looking at the
-        // wrong atom. Atom-diff filters + product/csmi yield narrow later.
         let forms = kekule_forms(mol)?;
-        for (form_i, form) in forms.iter().enumerate() {
-            for mapped in smarts_matches(form, &pattern.smarts)? {
-                let Some(&site) = mapped.get(&pattern.primary_map()) else {
-                    continue;
-                };
-                out.push(Candidate {
-                    site,
-                    pattern: pattern.clone(),
-                    rule_path: vec![set.name.clone()],
-                    mapped,
-                    parent: ParentRef::Form(Box::new(forms[form_i].clone())),
-                });
-            }
+        let hits = unique_sites_on_forms(
+            mol,
+            &forms,
+            &pattern.smarts,
+            pattern.site_kind,
+            &pattern.site_map,
+        )?;
+        for (mapped, form_i) in hits {
+            let Some(&site) = mapped.get(&pattern.primary_map()) else {
+                continue;
+            };
+            out.push(Candidate {
+                site,
+                pattern: pattern.clone(),
+                rule_path: vec![set.name.clone()],
+                mapped,
+                parent: ParentRef::Form(Box::new(forms[form_i].clone())),
+            });
         }
     } else {
-        // Same: all SMARTS hits, not unique_sites by topological rank.
-        for mapped in smarts_matches(mol, &pattern.smarts)? {
+        for mapped in unique_sites(mol, &pattern.smarts, pattern.site_kind, &pattern.site_map)? {
             let Some(&site) = mapped.get(&pattern.primary_map()) else {
                 continue;
             };
@@ -734,10 +728,9 @@ mod tests {
         let without = set
             .metabolize(&mol, accept_all_rules, accept_all_sites, false)
             .unwrap();
-        // No yield: every concrete site from each leaf (2 methyls × 2 leaves).
-        assert_eq!(without.len(), 4);
-        assert!(without.iter().any(|e| e.leaf_rule() == Some("OverlapOhA")));
-        assert!(without.iter().any(|e| e.leaf_rule() == Some("OverlapOhB")));
+        assert_eq!(without.len(), 2);
+        assert_eq!(without[0].leaf_rule(), Some("OverlapOhA"));
+        assert_eq!(without[1].leaf_rule(), Some("OverlapOhB"));
     }
 
     #[test]
@@ -809,14 +802,11 @@ mod tests {
         use crate::rules::epoxidation;
         let mol = parse_mol("c1ccccc1").unwrap();
         let candidates = epoxidation().candidates(&mol).unwrap();
-        // Every concrete Kekulé hit (no topo unique-edit); yield still one product.
-        assert!(!candidates.is_empty(), "{candidates:?}");
-        assert!(
-            candidates
-                .iter()
-                .all(|c| matches!(c.parent, crate::candidate::ParentRef::Form(_))),
-            "{candidates:?}"
-        );
+        assert_eq!(candidates.len(), 1, "{candidates:?}");
+        assert!(matches!(
+            candidates[0].parent,
+            crate::candidate::ParentRef::Form(_)
+        ));
         let emissions = epoxidation().metabolites(&mol, true).unwrap();
         assert_eq!(emissions.len(), 1, "{emissions:?}");
         assert_eq!(emissions[0].pattern_name, "epoxide");
@@ -844,9 +834,8 @@ mod tests {
         let mol = parse_mol("CC").unwrap();
         let set = hydroxylation();
         let cands = set.candidates(&mol).unwrap();
-        // Both methyl carbons are SMARTS hits (no topo unique-edit).
-        assert_eq!(cands.len(), 2);
-        assert!(cands.iter().all(|c| c.pattern.name == "h2"));
+        assert_eq!(cands.len(), 1);
+        assert_eq!(cands[0].pattern.name, "h2");
         // Filtering by pattern data needs no closure into the rule.
         let refuse: Vec<_> = cands
             .iter()

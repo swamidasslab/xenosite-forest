@@ -399,7 +399,8 @@ where
                     true
                 } else if let Some(pc) = parent_cost {
                     if child_diff.is_none() {
-                        child_diff = Some(crate::atom_diff::atom_diff(kept.mol(), &target_mol));
+                        child_diff =
+                            Some(crate::atom_diff::atom_diff(kept.mol(), &target_mol));
                     }
                     cost_closer(pc, child_diff.as_ref().unwrap().cost(), target_hit)
                 } else {
