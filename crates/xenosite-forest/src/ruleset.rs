@@ -17,6 +17,7 @@ use chematic::core::{Atom, BondOrder, Element};
 
 use crate::ForestError;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
+use crate::pair_edit::pair_metabolize;
 use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
 use crate::unique_edit::unique_atom_sites;
@@ -160,12 +161,15 @@ impl RuleSet {
         let mut seen_csmi: BTreeMap<BTreeSet<String>, String> = BTreeMap::new();
         // Within this leaf's own patterns (when unique_csmi): (pattern, emission).
         let mut seen_leaf: BTreeSet<(String, BTreeSet<String>)> = BTreeSet::new();
+        let mut pair_endpoints: Vec<PatternInfo> = Vec::new();
 
         for member in &self.members {
             match member {
                 RuleMember::Pattern(pattern) => {
-                    // Pair-endpoint paths are data until the pair door is wired.
                     if matches!(pattern.edit, Edit::PairEndpoint(_)) {
+                        if filter_rules(mol, self, pattern) {
+                            pair_endpoints.push(pattern.clone());
+                        }
                         continue;
                     }
                     if !filter_rules(mol, self, pattern) {
@@ -228,6 +232,32 @@ impl RuleSet {
                 }
             }
         }
+
+        if !pair_endpoints.is_empty() {
+            for pair in pair_metabolize(mol, &pair_endpoints)? {
+                let emission_key: BTreeSet<String> = pair.products.iter().cloned().collect();
+                if unique_csmi {
+                    let leaf_key = (pair.pattern_name.clone(), emission_key.clone());
+                    if !seen_leaf.insert(leaf_key) {
+                        continue;
+                    }
+                }
+                let info = SiteInfo {
+                    site: pair.site,
+                    pattern: pair_endpoints[0].clone(),
+                };
+                if !filter_sites(mol, pair.site, &info) {
+                    continue;
+                }
+                emissions.push(Emission {
+                    site: pair.site,
+                    pattern_name: pair.pattern_name,
+                    rule_path: vec![self.name.clone()],
+                    products: pair.products,
+                });
+            }
+        }
+
         Ok(emissions)
     }
 }
@@ -258,7 +288,11 @@ fn apply_edit(
             }
         }
         Edit::Smirks(smirks) => {
-            let pieces = apply_smirks_at(smirks, mol, mapped)?;
+            // ResonanceRule: match on aromatic parent, apply on Kekulé parent
+            // when maps 1–2 name an aromatic bond.
+            let mut cache = crate::kekule::KekuleCache::default();
+            let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
+            let pieces = apply_smirks_at(smirks, &work, mapped)?;
             Ok(pieces.iter().map(canon_smiles).collect())
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
@@ -532,6 +566,23 @@ mod tests {
         assert_eq!(
             products[0].namespace(),
             vec!["OverlapOhA", "Inner", "Outer"]
+        );
+    }
+
+    #[test]
+    fn dehydrogenation_metabolize_emits_quinone_via_pair_door() {
+        use crate::rules::dehydrogenation;
+        let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
+        let emissions = dehydrogenation()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .unwrap();
+        let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        assert!(
+            emissions.iter().any(|e| {
+                e.products.iter().any(|p| canon_of(p).unwrap() == want)
+                    && e.leaf_rule() == Some("Dehydrogenation")
+            }),
+            "{emissions:?}"
         );
     }
 }

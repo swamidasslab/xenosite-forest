@@ -67,8 +67,9 @@ Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.c
 
 **Rule catalog:** every concrete Python reaction rule is a leaf `RuleSet` in
 [`rules.rs`](../../crates/xenosite-forest/src/rules.rs) (`phase_one`,
-`default_ruleset`, `all_rules`). Pair-endpoint patterns are data
-(`Edit::PairEndpoint`); atom/bond SMIRKS metabolize today.
+`default_ruleset`, `all_rules`). Pair-endpoint patterns metabolize through
+the ResonancePair door (`Edit::PairEndpoint` + path flip). Atom/bond SMIRKS
+use Kekulé `reactant_parent` when the matched bond is aromatic.
 
 ```python
 rs = RuleSet([

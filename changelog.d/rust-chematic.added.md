@@ -4,7 +4,7 @@ Chematic is vendored as a sparse submodule at `v1.0.21` with a tiny local patch 
 
 `AtomTracker` POC follows atoms via chematic `Atom.tag` through SMIRKS apply and SMILES write/parse (no isotope probe, no sidecar).
 
-`RuleSet` namespaces + first-run `find_path` + a full leaf-rule catalog
-(`rules.rs`: Phase I, conjugation, extras) ported as `PatternInfo` data.
-Pair-endpoint rows are registered; the pair door is not wired yet.
-Atom/bond SMIRKS metabolize through the generic door.
+**Pair door:** ResonancePair endpoints (`Edit::PairEndpoint`) metabolize via
+alternating-path flip on Kekulé forms. Hydroquinone → quinone and benzene
+QF `add_carbonyl_o`×2 are covered. SMIRKS apply uses a Kekulé
+`reactant_parent` when maps 1–2 are aromatic.

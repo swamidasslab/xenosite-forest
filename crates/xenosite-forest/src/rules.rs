@@ -23,6 +23,7 @@ fn smirks_row(
         site_map,
         edit: Edit::Smirks(smirks.into()),
         effect,
+        skip_same_rings: false,
     }
 }
 
@@ -33,6 +34,10 @@ fn endpoint_row(
     effect: Effect,
     pair_edit: &str,
 ) -> PatternInfo {
+    let skip_same_rings = matches!(
+        name,
+        "single_to_double" | "iminium" | "dealkylate"
+    );
     PatternInfo {
         name: name.into(),
         smarts: smarts.into(),
@@ -40,6 +45,7 @@ fn endpoint_row(
         site_map,
         edit: Edit::PairEndpoint(pair_edit.into()),
         effect,
+        skip_same_rings,
     }
 }
 

@@ -43,6 +43,8 @@ pub struct PatternInfo {
     pub site_map: Vec<u16>,
     pub edit: Edit,
     pub effect: Effect,
+    /// Refuse single-to-double when maps 1 and 2 share the same ring set.
+    pub skip_same_rings: bool,
 }
 
 impl PatternInfo {
@@ -59,6 +61,7 @@ impl PatternInfo {
             site_map: vec![1],
             edit,
             effect,
+            skip_same_rings: false,
         }
     }
 
