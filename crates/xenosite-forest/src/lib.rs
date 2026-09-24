@@ -38,7 +38,7 @@ mod wasm_api;
 
 pub use atom_diff::{
     AtomDiff, atom_diff, candidate_could_help, candidate_could_help_on, candidate_order_key,
-    keep_against_diff, pattern_could_help, pattern_could_help_mol,
+    keep_against_diff, pair_could_help, pattern_could_help, pattern_could_help_mol,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};

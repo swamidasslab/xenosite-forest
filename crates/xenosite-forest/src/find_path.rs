@@ -427,11 +427,9 @@ where
             if !keep_pair(pair, keep) {
                 return false;
             }
-            crate::atom_diff::pattern_could_help_mol(&pair.effect, d, mol, target)
-                && !(pair.effect.dearomatizes && d.loses_aromaticity.is_empty() && !d.h_loss())
+            crate::atom_diff::pair_could_help(pair, d, mol, target)
         });
         pairs.sort_by_key(|p| {
-            // Reuse candidate order via a stand-in effect.
             let cleave = if p.effect.cleaves { 0u8 } else { 1 };
             let dear = if p.effect.dearomatizes { 0u8 } else { 1 };
             let oxy = if p.effect.adds.as_deref().is_some_and(|a| a.contains('O')) {

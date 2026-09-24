@@ -164,7 +164,7 @@ pub fn dehydrogenation() -> RuleSet {
                     methide: true,
                     dearomatizes: true,
                     leave_count: None,
-                    partner: None,
+                    partner: Some("C".into()),
                 },
                 "single_to_double",
             ),
@@ -179,7 +179,22 @@ pub fn quinone_formation() -> RuleSet {
         [
             endpoint_row(
                 "single_to_double",
-                "[#6R:1][#8H,#7D1H2,#7D2H1,#6D1H3,#6D2H2,#6D3H1:2]",
+                "[#6R:1][#8H,#7D1H2,#7D2H1:2]",
+                vec![1],
+                Effect {
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                    leave_count: None,
+                    partner: None,
+                },
+                "single_to_double",
+            ),
+            endpoint_row(
+                "methide_end",
+                "[#6R:1][#6D1H3,#6D2H2,#6D3H1:2]",
                 vec![1],
                 Effect {
                     adds: None,
@@ -188,7 +203,7 @@ pub fn quinone_formation() -> RuleSet {
                     methide: true,
                     dearomatizes: true,
                     leave_count: None,
-                    partner: None,
+                    partner: Some("C".into()),
                 },
                 "single_to_double",
             ),

@@ -317,6 +317,18 @@ pub struct PairCandidate {
 }
 
 impl PairCandidate {
+    /// Discovery site atoms for each end (Python `end_atoms`).
+    pub fn end_atoms(&self) -> Option<(usize, usize)> {
+        let a = site_atom(&self.map1, &self.left)?;
+        let b = site_atom(&self.map2, &self.right)?;
+        Some((a, b))
+    }
+
+    /// Conjugated-system anchors for the alternating path (Python `path_ends`).
+    pub fn path_ends(&self) -> (usize, usize) {
+        (self.start, self.end)
+    }
+
     pub fn materialize(&self, mol: &Molecule) -> Result<Vec<String>, ForestError> {
         let forms = kekule_forms(mol)?;
         let rings = ring_sets(mol);

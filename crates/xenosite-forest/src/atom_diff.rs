@@ -14,6 +14,7 @@ use chematic::smarts::{BondCompare, McsConfig, find_matches, find_mcs_with_confi
 
 use crate::candidate::Candidate;
 use crate::mol::{Molecule, atom_idx, atom_usize, ranks};
+use crate::pair_edit::PairCandidate;
 use crate::pattern::Effect;
 
 fn hydrogens(mol: &Molecule, idx: usize) -> i32 {
@@ -559,6 +560,37 @@ pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
     candidate_could_help_on(candidate, diff, None, None)
 }
 
+fn scope_could_help(
+    effect: &Effect,
+    atoms: &[usize],
+    path_ends: &[usize],
+    diff: &AtomDiff,
+) -> bool {
+    let mut scope: HashSet<usize> = atoms.iter().copied().collect();
+    scope.extend(path_ends.iter().copied());
+    if effect.dearomatizes && !scope.iter().any(|a| diff.loses_aromaticity.contains(a)) {
+        return false;
+    }
+    if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
+        let loses_h = scope
+            .iter()
+            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) < 0);
+        let loses_ar = scope.iter().any(|a| diff.loses_aromaticity.contains(a));
+        if !loses_h && !loses_ar {
+            return false;
+        }
+    }
+    if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
+        let gains = scope
+            .iter()
+            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) > 0);
+        if !gains {
+            return false;
+        }
+    }
+    true
+}
+
 /// Full site gate with live mol (leave_count / methide partner).
 pub fn candidate_could_help_on(
     candidate: &Candidate,
@@ -606,42 +638,63 @@ pub fn candidate_could_help_on(
         }
     }
 
-    if effect.methide {
+    // Single-site methide: alkyl partner needs an exocyclic C–C bond raise.
+    // Pair ends use [`pair_could_help`] (per-end partner), not this merge.
+    if effect.partner.as_deref() == Some("C") {
         if let Some(m) = mol {
-            // Alkyl partner: skip unless an exocyclic C–C bond raises.
-            if effect.partner.as_deref() == Some("C")
-                && !atoms.iter().any(|&a| alkyl_bond_raises(m, a, diff))
-            {
+            if !atoms.iter().any(|&a| alkyl_bond_raises(m, a, diff)) {
                 return false;
             }
         }
     }
 
-    if effect.dearomatizes {
-        let hits = atoms.iter().any(|a| diff.loses_aromaticity.contains(a));
-        if !hits {
+    scope_could_help(effect, &atoms, &[], diff)
+}
+
+/// Pair-site gate (Python `_site_could_help` when ``"ends"`` is on the info).
+///
+/// Per-end oxygen and ``partner == "C"`` (methide) read each end's effect, not
+/// the merged span. Dearomatize / H gates use end atoms ∪ path anchors.
+pub fn pair_could_help(
+    pair: &PairCandidate,
+    diff: &AtomDiff,
+    mol: &Molecule,
+    target: &Molecule,
+) -> bool {
+    let effect = &pair.effect;
+    if !pattern_could_help_mol(effect, diff, mol, target) {
+        return false;
+    }
+    let Some((end_a, end_b)) = pair.end_atoms() else {
+        return false;
+    };
+    let atoms = [end_a, end_b];
+    if effect.cleaves {
+        if !diff.site_is_cleavage(&atoms) {
+            return false;
+        }
+        if let Some(n) = effect.leave_count {
+            if let Some((a, b)) = leaving_heavy_counts(mol, &atoms) {
+                if a.min(b) != n as usize {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    let ends = [(&pair.left.effect, end_a), (&pair.right.effect, end_b)];
+    for (end, atom) in ends {
+        if effect_adds_oxygen(end) && !diff.needs_oxygen.contains(&atom) {
+            return false;
+        }
+        if end.partner.as_deref() == Some("C") && !alkyl_bond_raises(mol, atom, diff) {
             return false;
         }
     }
 
-    if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let loses_h = atoms
-            .iter()
-            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) < 0);
-        let loses_ar = atoms.iter().any(|a| diff.loses_aromaticity.contains(a));
-        if !loses_h && !loses_ar {
-            return false;
-        }
-    }
-    if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let gains = atoms
-            .iter()
-            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) > 0);
-        if !gains {
-            return false;
-        }
-    }
-    true
+    let (p0, p1) = pair.path_ends();
+    scope_could_help(effect, &atoms, &[p0, p1], diff)
 }
 
 /// Sort key for expand: cleavage / dearom / oxygen first (Python `order_key`).
@@ -711,6 +764,35 @@ mod tests {
             !diff.loses_aromaticity.is_empty() || !diff.needs_oxygen.is_empty(),
             "{diff:?}"
         );
+    }
+
+    #[test]
+    fn meoph_oh_pair_end_filter_matches_python() {
+        use crate::rules::{phase_one, quinone_formation};
+        let reactant = parse_mol("COc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        let qf = quinone_formation();
+        let pairs = qf.pair_candidates(&reactant).unwrap();
+        let kept: Vec<_> = pairs
+            .iter()
+            .filter(|p| pair_could_help(p, &diff, &reactant, &target))
+            .collect();
+        // Python QuinoneFormation filter_sites keeps 3 pair sites here.
+        assert_eq!(
+            kept.len(),
+            3,
+            "pair_kept={} of {}; names={:?}",
+            kept.len(),
+            pairs.len(),
+            kept.iter().map(|p| &p.pattern_name).collect::<Vec<_>>()
+        );
+        assert!(
+            kept.iter()
+                .all(|p| !p.left.effect.methide && !p.right.effect.methide),
+            "methide ends must fail alkyl_bond_raises on MeOPhOH"
+        );
+        let _ = phase_one();
     }
 
     #[test]
