@@ -156,3 +156,15 @@ MS1 / MS2 path finding (if pursued) stays on `find_path`-style
 APIs, not a revived `xenosite.net` package.
 
 Old code: `src/xenosite/_archive_forest/net.py`.
+
+## find_path `cleavage_first` expand gate
+
+Status: approved.
+
+Tried an in-path phase: while expand still emitted cleaving edits, take only
+those; otherwise exclude later cleaves (`FindPathConfig.cleavage_first`, briefly
+also a depth cap). Ad hoc relative to data-not-branches — cleaved sites already
+run through the same expand / `order_key` / atom_diff / leave_count path as other
+reactions. Redundancy collapse belongs in plan yield keys / Or-Maybe fold / a
+richer heap key, not a second cleavage predicate in the expansion loop.
+

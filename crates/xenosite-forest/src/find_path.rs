@@ -124,9 +124,6 @@ struct Walk {
     /// [`try_atom_diff_for_child`] / cleavage lift when safe; else `None`
     /// and pop runs full MCS.
     diff: Option<crate::atom_diff::AtomDiff>,
-    /// Cleavage-first: once a walk expands with **no** cleaving emissions,
-    /// further expands exclude cleaves (non-cleavage on that core).
-    cleavage_done: bool,
 }
 
 /// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
@@ -294,14 +291,6 @@ pub struct FindPathConfig {
     /// Skips MCS on siblings never popped. Do not HA-gate at enqueue —
     /// oxidation can raise HA distance while lowering cost. Default on.
     pub lazy_closer: bool,
-    /// When true and the target is smaller, prefer the cleavage net inside
-    /// the site-expansion loop: if this expand still has cleaving emissions,
-    /// take **only** those (both matching sides via tag-lift). When an expand
-    /// has no cleaving emissions, switch to non-cleavage on that core and
-    /// **exclude** later cleaves. No depth cap — presence of cleave emissions
-    /// is the gate. find_path's heap decides which paths to expand; no
-    /// separate seed handoff / SMILES reparse. Default off.
-    pub cleavage_first: bool,
 }
 
 impl Default for FindPathConfig {
@@ -312,8 +301,6 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: true,
-            // Opt in to measure redundancy collapse; default off.
-            cleavage_first: false,
         }
     }
 }
@@ -400,7 +387,6 @@ where
         max_nodes,
         use_atom_diff,
         lazy_closer,
-        cleavage_first,
     } = config;
     let start = ForestMol::parse(reactant)?;
     let start_csmi = start.csmi();
@@ -410,8 +396,6 @@ where
         .atoms()
         .filter(|(_, a)| a.element.atomic_number() > 1)
         .count();
-    let start_ha = start.heavy_atom_count();
-    let cleave_first = cleavage_first && target_ha < start_ha;
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
@@ -426,7 +410,6 @@ where
             opens: Vec::new(),
             parent_cost: None,
             diff: None,
-            cleavage_done: false,
         },
     });
     seq += 1;
@@ -484,23 +467,10 @@ where
             &keep,
             diff.as_ref(),
         )?;
-        // Cleavage net first (no depth cap): if cleaving emissions are present
-        // and this walk has not graduated, take only those. When expand has no
-        // cleaves, non-cleavage on the core and lock out later cleaves.
-        let any_cleave = cleave_first && !walk.cleavage_done && emissions.iter().any(|e| e.cleaves);
-        let cleave_only = any_cleave;
-        let no_cleave = cleave_first && (walk.cleavage_done || !any_cleave);
-        let graduate = cleave_first && !walk.cleavage_done && !any_cleave;
         let mut hits_from_here = 0usize;
         let parent_ha = walk.mol.heavy_atom_count();
 
         for emission in emissions {
-            if cleave_only && !emission.cleaves {
-                continue;
-            }
-            if no_cleave && emission.cleaves {
-                continue;
-            }
             let keeps = keep_fragments(
                 &walk.mol,
                 &emission.products,
@@ -576,7 +546,6 @@ where
                         opens: child_opens,
                         parent_cost,
                         diff: child_diff,
-                        cleavage_done: walk.cleavage_done || graduate,
                     },
                 });
                 seq += 1;
@@ -810,7 +779,6 @@ where
         max_nodes,
         use_atom_diff: _,
         lazy_closer: _,
-        cleavage_first: _,
     } = config;
     let start = ForestMol::parse(reactant)?;
     let start_csmi = start.csmi();
@@ -830,7 +798,6 @@ where
             opens: Vec::new(),
             parent_cost: None,
             diff: None,
-            cleavage_done: false,
         },
     });
     seq += 1;
@@ -918,7 +885,6 @@ where
                         opens: child_opens,
                         parent_cost: None,
                         diff: None,
-                        cleavage_done: false,
                     },
                 });
                 seq += 1;

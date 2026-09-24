@@ -4,7 +4,6 @@
 //! ```text
 //! cargo run -p xenosite-forest --example multipath_plans --release
 //! cargo run -p xenosite-forest --example multipath_plans --release -- --hard
-//! cargo run -p xenosite-forest --example multipath_plans --release -- --hard --cleave-first
 //! ```
 
 use std::env;
@@ -126,7 +125,7 @@ fn fmt_plan(hit: &PathOutcome) -> String {
     )
 }
 
-fn dump(name: &str, start: &str, target: &str, cleave_first: bool) {
+fn dump(name: &str, start: &str, target: &str) {
     println!("=== {name} ===");
     println!("reactant: {start}");
     println!("target:   {target}");
@@ -140,7 +139,6 @@ fn dump(name: &str, start: &str, target: &str, cleave_first: bool) {
         FindPathConfig {
             max_paths: MAX_PATHS,
             max_nodes: MAX_NODES,
-            cleavage_first: cleave_first,
             ..FindPathConfig::default()
         },
         |_| true,
@@ -185,13 +183,12 @@ fn dump(name: &str, start: &str, target: &str, cleave_first: bool) {
 
 fn main() {
     let hard = env::args().any(|a| a == "--hard");
-    let cleave_first = env::args().any(|a| a == "--cleave-first");
     let cases = if hard { HARD } else { LARGER };
     println!(
-        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}  cleave_first={cleave_first}\n",
+        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}\n",
         if hard { "HARD" } else { "LARGER" }
     );
     for (name, start, target) in cases {
-        dump(name, start, target, cleave_first);
+        dump(name, start, target);
     }
 }

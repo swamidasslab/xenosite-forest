@@ -479,7 +479,6 @@ fn main() {
                 max_nodes: 800,
                 use_atom_diff: true,
                 lazy_closer: lazy,
-                ..FindPathConfig::default()
             };
             let mut best = f64::MAX;
             let mut bill = 0usize;

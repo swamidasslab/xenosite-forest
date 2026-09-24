@@ -13,8 +13,7 @@
 //!
 //! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
-//! `--nofilter`), `--paths N` (emit up to N plans; default 1),
-//! `--cleave-first` (in-path cleave-while-present then exclude-cleaves; opt-in).
+//! `--nofilter`), `--paths N` (emit up to N plans; default 1).
 //!
 //! Pair with:
 //! ```text
@@ -180,13 +179,8 @@ fn print_table(
     repeats: u32,
     budget: Duration,
 ) {
-    let cleave = if config.cleavage_first {
-        "cleave_first=on"
-    } else {
-        "cleave_first=off"
-    };
     println!(
-        "\n=== {title} (atom_diff={}, lazy_closer={}, max_paths={}, {cleave}) ===",
+        "\n=== {title} (atom_diff={}, lazy_closer={}, max_paths={}) ===",
         config.use_atom_diff, config.lazy_closer, config.max_paths
     );
     println!(
@@ -233,10 +227,6 @@ fn parse_paths(args: &[String]) -> usize {
         .max(1)
 }
 
-fn parse_cleave_first(args: &[String]) -> bool {
-    args.iter().any(|a| a == "--cleave-first")
-}
-
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let larger = args.iter().any(|a| a == "--larger");
@@ -246,13 +236,12 @@ fn main() {
     let filter_only = !nofilter || args.iter().any(|a| a == "--filter-only");
     let budget = parse_budget(&args, if nofilter { 60 } else { 30 });
     let max_paths = parse_paths(&args);
-    let cleave_first = parse_cleave_first(&args);
 
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
     );
     println!(
-        "(release; tagged ForestMol; filter-only={filter_only}; cleave_first={cleave_first}; budget={}s)",
+        "(release; tagged ForestMol; filter-only={filter_only}; budget={}s)",
         budget.as_secs()
     );
 
@@ -267,7 +256,6 @@ fn main() {
     let base = FindPathConfig {
         max_paths,
         max_nodes: MAX_NODES,
-        cleavage_first: cleave_first,
         ..FindPathConfig::default()
     };
     if nofilter && !args.iter().any(|a| a == "--filter-only") {
