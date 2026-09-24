@@ -72,5 +72,7 @@ pub use ruleset::{
 };
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;
-pub use unique_edit::unique_atom_sites;
+pub use unique_edit::{
+    UniqueSite, same_site_orbit, unique_atom_sites, unique_atom_sites_with_orbits,
+};
 pub use valence::{accept_product, nitrogen_two_doubles};

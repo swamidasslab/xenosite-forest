@@ -38,6 +38,8 @@ impl std::fmt::Debug for ParentRef {
 #[derive(Clone, Debug)]
 pub struct Candidate {
     pub site: usize,
+    /// Primary-map atoms collapsed into this unique-edit class (sorted).
+    pub orbit: Vec<usize>,
     pub pattern: PatternInfo,
     /// Leaf-first rule namespace (emitting set, then containers).
     pub rule_path: Vec<Option<String>>,
@@ -88,6 +90,7 @@ impl Candidate {
         }
         Ok(Some(Emission {
             site: self.site,
+            site_orbit: self.orbit.clone(),
             site_atoms: {
                 let mut atoms: Vec<usize> = self
                     .pattern

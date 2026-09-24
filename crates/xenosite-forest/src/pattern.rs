@@ -98,6 +98,9 @@ impl PatternInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SiteInfo {
     pub site: usize,
+    /// Primary-map atoms that share this site's unique-edit class (sorted).
+    /// Always includes `site`. Length > 1 when topology collapses equivalents.
+    pub orbit: Vec<usize>,
     pub pattern: PatternInfo,
 }
 
@@ -109,6 +112,8 @@ pub struct SiteInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Emission {
     pub site: usize,
+    /// Primary-map orbit passed down from unique-edit (see [`SiteInfo::orbit`]).
+    pub site_orbit: Vec<usize>,
     /// Discovery site atoms for cleavage bookkeeping ([`crate::canonical_plan::CleavageSide`]).
     pub site_atoms: Vec<usize>,
     pub cleaves: bool,

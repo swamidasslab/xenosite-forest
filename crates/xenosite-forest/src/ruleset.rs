@@ -285,6 +285,7 @@ impl RuleSet {
                 let plan = self.canonical_plan(mol, &site_atoms, Some(&ends));
                 out.push(Emission {
                     site: emission.site,
+                    site_orbit: vec![emission.site],
                     site_atoms: site_atoms.clone(),
                     cleaves: pair.effect.cleaves,
                     pattern_name: emission.pattern_name,
@@ -360,6 +361,7 @@ impl RuleSet {
                     for c in pattern_candidates(self, mol, pattern)? {
                         let info = SiteInfo {
                             site: c.site,
+                            orbit: c.orbit.clone(),
                             pattern: c.pattern.clone(),
                         };
                         if !filter_sites(mol, c.site, &info) {
@@ -400,6 +402,7 @@ impl RuleSet {
             for pair in crate::pair_edit::pair_candidates(mol, &pair_endpoints)? {
                 let info = SiteInfo {
                     site: pair.site,
+                    orbit: vec![pair.site],
                     pattern: pair_endpoints[0].clone(),
                 };
                 if !filter_sites(mol, pair.site, &info) {
@@ -413,6 +416,7 @@ impl RuleSet {
                 let plan = self.canonical_plan(mol, &site_atoms, Some(&ends));
                 let emission = Emission {
                     site: emission.site,
+                    site_orbit: vec![emission.site],
                     site_atoms: site_atoms.clone(),
                     cleaves: pair.effect.cleaves,
                     pattern_name: emission.pattern_name,
@@ -445,28 +449,30 @@ fn pattern_candidates(
             pattern.site_kind,
             &pattern.site_map,
         )?;
-        for (mapped, form_i) in hits {
-            let Some(&site) = mapped.get(&pattern.primary_map()) else {
+        for (hit, form_i) in hits {
+            let Some(&site) = hit.mapped.get(&pattern.primary_map()) else {
                 continue;
             };
             out.push(Candidate {
                 site,
+                orbit: hit.orbit,
                 pattern: pattern.clone(),
                 rule_path: vec![set.name.clone()],
-                mapped,
+                mapped: hit.mapped,
                 parent: ParentRef::Form(Box::new(forms[form_i].clone())),
             });
         }
     } else {
-        for mapped in unique_sites(mol, &pattern.smarts, pattern.site_kind, &pattern.site_map)? {
-            let Some(&site) = mapped.get(&pattern.primary_map()) else {
+        for hit in unique_sites(mol, &pattern.smarts, pattern.site_kind, &pattern.site_map)? {
+            let Some(&site) = hit.mapped.get(&pattern.primary_map()) else {
                 continue;
             };
             out.push(Candidate {
                 site,
+                orbit: hit.orbit,
                 pattern: pattern.clone(),
                 rule_path: vec![set.name.clone()],
-                mapped,
+                mapped: hit.mapped,
                 parent: ParentRef::Context,
             });
         }
@@ -595,6 +601,20 @@ mod tests {
     fn hydroxylation_set_matches_door_on_propane() {
         let got = products_of(&hydroxylation(), "CCC", accept_all_rules, accept_all_sites);
         assert_eq!(got, canon_set(["CCCO", "CC(C)O"]));
+    }
+
+    #[test]
+    fn benzene_hydroxylation_passes_orbit_of_six() {
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let emissions = hydroxylation()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .unwrap();
+        assert_eq!(emissions.len(), 1);
+        assert_eq!(emissions[0].site_orbit.len(), 6);
+        assert!(emissions[0].site_orbit.contains(&emissions[0].site));
+        let cands = hydroxylation().candidates(&mol).unwrap();
+        let h = cands.iter().find(|c| c.pattern.name == "h").unwrap();
+        assert_eq!(h.orbit.len(), 6);
     }
 
     #[test]

@@ -46,6 +46,9 @@ pub struct PathStep {
     pub rule_path: Vec<Option<String>>,
     pub pattern_name: String,
     pub site: usize,
+    /// Unique-edit primary-map orbit (includes `site`). Plan equivalence under
+    /// automorphism compares sites via [`crate::same_site_orbit`].
+    pub site_orbit: Vec<usize>,
     /// Kept fragment CSMI (the search node).
     pub product: String,
     /// Cleaved-off fragment CSMIs (not expanded).
@@ -65,11 +68,19 @@ impl PathStep {
         self.rule_path.first().and_then(|n| n.as_deref())
     }
 
+    /// Same rule/pattern and sites in one unique-edit orbit.
+    pub fn same_site_class(&self, other: &Self) -> bool {
+        self.pattern_name == other.pattern_name
+            && self.leaf_rule() == other.leaf_rule()
+            && crate::same_site_orbit(self.site, &self.site_orbit, other.site, &other.site_orbit)
+    }
+
     fn from_emission(emission: &ForestEmission, product: String, sides: Vec<String>) -> Self {
         Self {
             rule_path: emission.rule_path.clone(),
             pattern_name: emission.pattern_name.clone(),
             site: emission.site,
+            site_orbit: emission.site_orbit.clone(),
             product,
             sides,
         }
@@ -153,6 +164,7 @@ fn ha_distance(ha: usize, target_ha: usize) -> usize {
 #[derive(Clone)]
 struct ForestEmission {
     site: usize,
+    site_orbit: Vec<usize>,
     /// Discovery site atoms (Python frozenset site for CleavageSide).
     site_atoms: BTreeSet<usize>,
     cleaves: bool,
@@ -574,6 +586,7 @@ fn emit_candidate(
         .collect();
     Ok(Some(ForestEmission {
         site: candidate.site,
+        site_orbit: candidate.orbit.clone(),
         site_atoms: candidate_site_atoms(candidate),
         cleaves: candidate.pattern.effect.cleaves,
         pattern_name: candidate.pattern.name.clone(),
@@ -650,6 +663,7 @@ where
         let plan = ruleset.canonical_plan(mol, &site_atoms, Some(&ends));
         out.push(ForestEmission {
             site: pair.site,
+            site_orbit: vec![pair.site],
             site_atoms: pair.plan_site_atoms().into_iter().collect(),
             cleaves: pair.effect.cleaves,
             pattern_name: pair.pattern_name.clone(),
@@ -667,6 +681,7 @@ where
 {
     let mut stand_in = Candidate {
         site: pair.site,
+        orbit: vec![pair.site],
         pattern: pair.left.clone(),
         rule_path: Vec::new(),
         mapped: Default::default(),
@@ -786,6 +801,7 @@ where
                 rule_path: emission.rule_path.clone(),
                 pattern_name: emission.pattern_name.clone(),
                 site: emission.site,
+                site_orbit: emission.site_orbit.clone(),
                 product: kept_csmi.clone(),
                 sides,
             });
