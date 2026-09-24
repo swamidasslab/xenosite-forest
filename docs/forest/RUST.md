@@ -287,3 +287,27 @@ hard suite is where atom_diff pays off most: veratrole-allyl bill 132 vs 873,
 tetraMeO-naph 802 vs 1311. Pair-end could-help cut MeOPhOH from ≈899 to ≈328
 (Python 226). Residual mid-size edits are search order / intermediate
 expansion, not a missing root filter.
+
+### Profile: where hard wall goes (not copies)
+
+```bash
+cargo run -p xenosite-forest --example find_path_profile --release
+```
+
+On tetraMeO-naph / veratrole-allyl (release, atom_diff on):
+
+| Phase | Share of wall |
+| --- | ---: |
+| `closer` (per-product child `parse` + full `atom_diff`) | **~62–66%** |
+| parent `atom_diff` | ~13–20% |
+| candidate/pair discover | ~12–15% |
+| materialize | ~3–8% |
+| filter retain | ~0.1–0.3% |
+| parent `parse_mol` | ~0.1% |
+
+Unit costs: `Molecule.clone` ≈0.3 µs, `PatternInfo.clone` ≈0.07 µs,
+`atom_diff` ≈21 ms. Need ~10⁶ mol clones to spend 10% of a 3.3s hard run.
+
+**Decision:** do **not** pursue `Arc` / ref elision for `PatternInfo` or Kekulé
+forms — clone cost is noise. Next speed lever (if wanted) is cheaper `closer`
+(reuse/cache child diffs, or a lighter score than a full MCS).
