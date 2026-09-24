@@ -59,9 +59,19 @@ cargo test -p xenosite-forest --features python
 
 `python3-dev` (libpython) is required to link the test binary. `#[pyclass]` is CPython; it is not WASM.
 
-**RuleSet / closures:** Python `FilterRules` / `FilterSites` are `Callable`. Rust uses `impl Fn` on `RuleSet::metabolize`, or `BoxedFilters` (`Box<dyn Fn>`) when a search stores them. Capture-by-move; the boxed form is `'static`. Built-in filters should be Rust functions that read `PatternInfo` / `Effect` (methide is an effect field). A Python lambda still crosses the GIL and marshals a `PatternInfo` per call.
+**RuleSet / candidates:** Primary walk is [`RuleSet::candidates`](../../crates/xenosite-forest/src/ruleset.rs)
+— site–pattern–[`ParentRef`](../../crates/xenosite-forest/src/candidate.rs) triples
+without applying edits. A search reads `PatternInfo` / `Effect` to filter, then
+[`Candidate::materialize`](../../crates/xenosite-forest/src/candidate.rs) only for
+survivors. Filter closures on `metabolize` remain for Python parity; they are
+not required. `metabolites(mol)` materializes everything. ResonancePair path
+emissions are still joint (`pair_emissions`) — not yet deferred triples.
 
-Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.compose([hydroxylation, dealkylation])`). That copies pattern data into the Rust payload. Later `metabolize(mol)` passes handles only.
+**RuleSet / closures (optional):** Python `FilterRules` / `FilterSites` are
+`Callable`. Rust can still pass `impl Fn` on `RuleSet::metabolize`, or
+`BoxedFilters` (`Box<dyn Fn>`). Prefer filtering candidates by reading data.
+
+Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.compose([hydroxylation, dealkylation])`). That copies pattern data into the Rust payload. Later `metabolize(mol)` / `candidates(mol)` passes handles only.
 
 **RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. Children run with `unique_csmi=false` so alternate rules bubble; the caller's `unique_csmi` is the cross-child CSMI layer. Filters see the leaf set, not the outer compose container.
 

@@ -36,16 +36,21 @@ impl std::fmt::Display for ForestError {
 
 impl std::error::Error for ForestError {}
 
+/// Apply RDKit-parity aromaticity. On refusal, return the input unchanged.
+pub fn aromatize(mol: &CoreMolecule) -> CoreMolecule {
+    match apply_aromaticity_rdkit_parity_experimental(mol) {
+        Ok(aromatized) => aromatized,
+        Err(_) => mol.clone(),
+    }
+}
+
 /// Parse SMILES and apply RDKit-parity aromaticity.
 ///
 /// Kekulé input is aromatized. Already-aromatic SMILES keep atom indexes.
 /// If the parity engine refuses a structure, the parsed mol is kept.
 pub fn parse_mol(smiles: &str) -> Result<CoreMolecule, ForestError> {
     let mol = parse(smiles).map_err(|err| ForestError::Parse(err.to_string()))?;
-    match apply_aromaticity_rdkit_parity_experimental(&mol) {
-        Ok(aromatized) => Ok(aromatized),
-        Err(_) => Ok(mol),
-    }
+    Ok(aromatize(&mol))
 }
 
 pub fn canon_smiles(mol: &CoreMolecule) -> String {

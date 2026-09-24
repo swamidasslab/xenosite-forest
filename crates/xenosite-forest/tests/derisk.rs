@@ -1,10 +1,10 @@
 //! Cross-seam derisk tests: MCS, WASM-shaped public API, SMARTS used by live rules.
 
 use xenosite_forest::{
-    ForestMol, Molecule, PatternInfo, RuleSet, accept_all_rules, accept_all_sites, apply_smirks_at,
-    canon_of, canon_smiles, dehydrogenate_hydroquinone, find_path, hydroxylate, hydroxylation,
-    o_dealkylation, parse_mol, smarts_matches, unique_atom_sites, unordered_atom_pair_orbit_sizes,
-    PathCounters,
+    ForestMol, Molecule, PathCounters, PatternInfo, RuleSet, accept_all_rules, accept_all_sites,
+    apply_smirks_at, canon_of, canon_smiles, dehydrogenate_hydroquinone, find_path, hydroxylate,
+    hydroxylation, o_dealkylation, parse_mol, smarts_matches, unique_atom_sites,
+    unordered_atom_pair_orbit_sizes,
 };
 
 #[test]
@@ -74,10 +74,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
         .unwrap();
     assert_eq!(emissions.len(), 1);
     assert_eq!(emissions[0].pattern_name, "O-Me");
-    assert_eq!(
-        emissions[0].namespace(),
-        vec!["Dealkylation", "probe"]
-    );
+    assert_eq!(emissions[0].namespace(), vec!["Dealkylation", "probe"]);
     let phenol = canon_of("Oc1ccccc1").unwrap();
     assert!(
         emissions[0]
@@ -93,10 +90,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
 
 #[test]
 fn find_path_uses_ruleset_namespaces() {
-    let set = RuleSet::compose(
-        Some("Forest".into()),
-        [hydroxylation(), o_dealkylation()],
-    );
+    let set = RuleSet::compose(Some("Forest".into()), [hydroxylation(), o_dealkylation()]);
     let mut counters = PathCounters::default();
     let hits = find_path("CC", "CCO", &set, &mut counters).unwrap();
     assert_eq!(hits.len(), 1);

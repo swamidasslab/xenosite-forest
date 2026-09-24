@@ -167,6 +167,7 @@ impl PyPatternInfo {
                     removes,
                     cleaves,
                     methide,
+                    dearomatizes: false,
                 },
             ),
         }
@@ -512,14 +513,7 @@ mod tests {
                     .unwrap(),
                 2
             );
-            assert_eq!(
-                composed
-                    .call_method0("patterns")
-                    .unwrap()
-                    .len()
-                    .unwrap(),
-                3
-            );
+            assert_eq!(composed.call_method0("patterns").unwrap().len().unwrap(), 3);
         });
     }
 }

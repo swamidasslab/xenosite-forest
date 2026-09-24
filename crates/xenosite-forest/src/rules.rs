@@ -34,10 +34,7 @@ fn endpoint_row(
     effect: Effect,
     pair_edit: &str,
 ) -> PatternInfo {
-    let skip_same_rings = matches!(
-        name,
-        "single_to_double" | "iminium" | "dealkylate"
-    );
+    let skip_same_rings = matches!(name, "single_to_double" | "iminium" | "dealkylate");
     PatternInfo {
         name: name.into(),
         smarts: smarts.into(),
@@ -71,11 +68,12 @@ pub fn dehydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: Some("HH".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("HH".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "alcohol",
@@ -83,11 +81,12 @@ pub fn dehydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: Some("HH".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("HH".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "amine",
@@ -95,11 +94,12 @@ pub fn dehydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: Some("HH".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("HH".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "alkyl",
@@ -107,22 +107,24 @@ pub fn dehydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: Some("HH".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("HH".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             endpoint_row(
                 "phenol_end",
                 "[#6:1]-[#8H:2]",
                 vec![2],
                 Effect {
-                adds: None,
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "single_to_double",
             ),
             endpoint_row(
@@ -130,11 +132,12 @@ pub fn dehydrogenation() -> RuleSet {
                 "[#6:1]-[#7D1H2,#7D2H1:2]",
                 vec![2],
                 Effect {
-                adds: None,
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "single_to_double",
             ),
             endpoint_row(
@@ -142,11 +145,12 @@ pub fn dehydrogenation() -> RuleSet {
                 "[#6:1]-[#6D1H3,#6D2H2,#6D3H1:2]",
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: true,
-            },
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: true,
+                    dearomatizes: true,
+                },
                 "single_to_double",
             ),
         ],
@@ -163,11 +167,12 @@ pub fn quinone_formation() -> RuleSet {
                 "[#6R:1][#8H,#7D1H2,#7D2H1,#6D1H3,#6D2H2,#6D3H1:2]",
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: true,
-            },
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: true,
+                    dearomatizes: true,
+                },
                 "single_to_double",
             ),
             endpoint_row(
@@ -175,11 +180,12 @@ pub fn quinone_formation() -> RuleSet {
                 "[#6D2H1;R:1]",
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "add_carbonyl_o",
             ),
             endpoint_row(
@@ -187,11 +193,12 @@ pub fn quinone_formation() -> RuleSet {
                 "[#6H0R:1]-[F,Cl,Br,I:2]",
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "replace_halogen",
             ),
             endpoint_row(
@@ -199,11 +206,12 @@ pub fn quinone_formation() -> RuleSet {
                 "[#6H0R:1][#7D3:2]",
                 vec![1],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "iminium",
             ),
             endpoint_row(
@@ -211,11 +219,12 @@ pub fn quinone_formation() -> RuleSet {
                 "[#6R:1][#7,#8:2][#6:3]",
                 vec![1],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "dealkylate",
             ),
         ],
@@ -233,11 +242,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methyl_carbonyl",
@@ -245,11 +255,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methyl_alcohol",
@@ -257,11 +268,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methylene_carboxylic",
@@ -269,11 +281,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methylene_carbonyl",
@@ -281,11 +294,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methylene_alcohol",
@@ -293,11 +307,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methine_carbonyl",
@@ -305,11 +320,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methine_alcohol",
@@ -317,11 +333,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "quaternary_alcohol",
@@ -329,11 +346,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "cc_quaternary_alcohol",
@@ -341,11 +359,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "cc_alcohol",
@@ -353,11 +372,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "cc_carbonyl",
@@ -365,11 +385,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "hemiaminal",
@@ -377,11 +398,12 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: Some("H".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -398,11 +420,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methyl_carbonyl",
@@ -410,11 +433,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methyl_alcohol",
@@ -422,11 +446,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methylene_carboxylic",
@@ -434,11 +459,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methylene_carbonyl",
@@ -446,11 +472,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methylene_alcohol",
@@ -458,11 +485,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methine_carbonyl",
@@ -470,11 +498,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "methine_alcohol",
@@ -482,11 +511,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "quaternary_alcohol",
@@ -494,11 +524,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "hemiaminal",
@@ -506,11 +537,12 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: Some("H".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("H".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -520,20 +552,19 @@ pub fn n_dealkylation() -> RuleSet {
 pub fn azo_splitting() -> RuleSet {
     RuleSet::new(
         Some("AzoSplitting".into()),
-        [
-            smirks_row(
-                "azo",
-                "[#7:1]=,:[#7:2]>>[*:1].[*:2]",
-                SiteKind::Bond,
-                vec![1, 2],
-                Effect {
+        [smirks_row(
+            "azo",
+            "[#7:1]=,:[#7:2]>>[*:1].[*:2]",
+            SiteKind::Bond,
+            vec![1, 2],
+            Effect {
                 adds: None,
                 removes: None,
                 cleaves: true,
                 methide: false,
+                dearomatizes: false,
             },
-            ),
-        ],
+        )],
     )
 }
 
@@ -541,20 +572,19 @@ pub fn azo_splitting() -> RuleSet {
 pub fn benzodioxole_reduction() -> RuleSet {
     RuleSet::new(
         Some("BenzodioxoleReduction".into()),
-        [
-            smirks_row(
-                "dioxole_methylene",
-                "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
-                SiteKind::DirectedBond,
-                vec![2, 3],
-                Effect {
+        [smirks_row(
+            "dioxole_methylene",
+            "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
+            SiteKind::DirectedBond,
+            vec![2, 3],
+            Effect {
                 adds: None,
                 removes: None,
                 cleaves: true,
                 methide: false,
+                dearomatizes: false,
             },
-            ),
-        ],
+        )],
     )
 }
 
@@ -569,11 +599,12 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitro_neutral",
@@ -581,11 +612,12 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -595,20 +627,19 @@ pub fn nitroaromatic_reduction() -> RuleSet {
 pub fn thiophene_sulfur_oxidation() -> RuleSet {
     RuleSet::new(
         Some("ThiopheneSulfurOxidation".into()),
-        [
-            smirks_row(
-                "thiophene_s_oxide",
-                "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
-                SiteKind::Atom,
-                vec![1],
-                Effect {
+        [smirks_row(
+            "thiophene_s_oxide",
+            "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1>>[*:2]1=[*:3][*:4]=[*:5][*&H0&+:1]1[O-]",
+            SiteKind::Atom,
+            vec![1],
+            Effect {
                 adds: Some("O".into()),
                 removes: None,
                 cleaves: false,
                 methide: false,
+                dearomatizes: false,
             },
-            ),
-        ],
+        )],
     )
 }
 
@@ -616,20 +647,19 @@ pub fn thiophene_sulfur_oxidation() -> RuleSet {
 pub fn dephosphorylation() -> RuleSet {
     RuleSet::new(
         Some("Dephosphorylation".into()),
-        [
-            smirks_row(
-                "phosphate_ester",
-                "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]",
-                SiteKind::Atom,
-                vec![1],
-                Effect {
+        [smirks_row(
+            "phosphate_ester",
+            "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]",
+            SiteKind::Atom,
+            vec![1],
+            Effect {
                 adds: None,
                 removes: None,
                 cleaves: true,
                 methide: false,
+                dearomatizes: false,
             },
-            ),
-        ],
+        )],
     )
 }
 
@@ -644,11 +674,12 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "hydrate",
@@ -656,11 +687,12 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -677,11 +709,12 @@ pub fn hydrolysis() -> RuleSet {
                 SiteKind::Bond,
                 vec![2, 3],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "cleave",
@@ -689,11 +722,12 @@ pub fn hydrolysis() -> RuleSet {
                 SiteKind::Bond,
                 vec![2, 3],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -710,11 +744,12 @@ pub fn dehydration() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("OH".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("OH".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "beta_elimination",
@@ -722,11 +757,12 @@ pub fn dehydration() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("OH".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("OH".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "carbonyl",
@@ -734,11 +770,12 @@ pub fn dehydration() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -755,11 +792,12 @@ pub fn hydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
-                adds: Some("HH".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("HH".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "alkene",
@@ -767,22 +805,24 @@ pub fn hydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
-                adds: Some("HH".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("HH".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             endpoint_row(
                 "path_end",
                 "[*:1]",
                 vec![1],
                 Effect {
-                adds: Some("H".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("H".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
+                },
                 "keep",
             ),
         ],
@@ -800,11 +840,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitro_anion",
@@ -812,11 +853,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitro_neutral",
@@ -824,11 +866,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitro_to_amine",
@@ -836,11 +879,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("OO".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("OO".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitro_both",
@@ -848,11 +892,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("OO".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("OO".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "hydroxylamine",
@@ -860,11 +905,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitroso",
@@ -872,11 +918,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitro_both_any",
@@ -884,11 +931,12 @@ pub fn nitrogen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("OO".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("OO".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -905,11 +953,12 @@ pub fn oxygen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("HH".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("HH".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "peroxide",
@@ -917,11 +966,12 @@ pub fn oxygen_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -938,11 +988,12 @@ pub fn reductive_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "alkene",
@@ -950,11 +1001,12 @@ pub fn reductive_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -971,11 +1023,12 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "disulfide",
@@ -983,11 +1036,12 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "thioether",
@@ -995,11 +1049,12 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: None,
-                removes: Some("O".into()),
-                cleaves: true,
-                methide: false,
-            },
+                    adds: None,
+                    removes: Some("O".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1009,20 +1064,19 @@ pub fn sulfur_reduction() -> RuleSet {
 pub fn epoxidation() -> RuleSet {
     RuleSet::new(
         Some("Epoxidation".into()),
-        [
-            smirks_row(
-                "epoxide",
-                "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1",
-                SiteKind::Bond,
-                vec![1, 2],
-                Effect {
+        [smirks_row(
+            "epoxide",
+            "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1",
+            SiteKind::Bond,
+            vec![1, 2],
+            Effect {
                 adds: Some("O".into()),
                 removes: None,
                 cleaves: false,
                 methide: false,
+                dearomatizes: false,
             },
-            ),
-        ],
+        )],
     )
 }
 
@@ -1037,11 +1091,12 @@ pub fn sulfur_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "hydroxy",
@@ -1049,11 +1104,12 @@ pub fn sulfur_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "oxo",
@@ -1061,11 +1117,12 @@ pub fn sulfur_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1082,11 +1139,12 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "nitroso",
@@ -1094,11 +1152,12 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "n_oxide",
@@ -1106,11 +1165,12 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1127,11 +1187,12 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "carbonyl",
@@ -1139,11 +1200,12 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "carboxylic",
@@ -1151,11 +1213,12 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "rearrange",
@@ -1163,11 +1226,12 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("O".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("O".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "gem_carboxylic",
@@ -1175,11 +1239,12 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "gem_hydrate",
@@ -1187,11 +1252,12 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("OO".into()),
-                removes: None,
-                cleaves: true,
-                methide: false,
-            },
+                    adds: Some("OO".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1201,20 +1267,19 @@ pub fn oxidative_dehalogenation() -> RuleSet {
 pub fn acetylation() -> RuleSet {
     RuleSet::new(
         Some("Acetylation".into()),
-        [
-            smirks_row(
-                "acetyl",
-                "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
-                SiteKind::Atom,
-                vec![1],
-                Effect {
+        [smirks_row(
+            "acetyl",
+            "[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]",
+            SiteKind::Atom,
+            vec![1],
+            Effect {
                 adds: Some("CCO".into()),
                 removes: Some("H".into()),
                 cleaves: false,
                 methide: false,
+                dearomatizes: false,
             },
-            ),
-        ],
+        )],
     )
 }
 
@@ -1229,11 +1294,12 @@ pub fn sulfation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
-                adds: Some("SOOO".into()),
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("SOOO".into()),
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "epoxide_methyl_sulfone",
@@ -1241,11 +1307,12 @@ pub fn sulfation() -> RuleSet {
                 SiteKind::Atom,
                 vec![4],
                 Effect {
-                adds: Some("CSO".into()),
-                removes: Some("O".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CSO".into()),
+                    removes: Some("O".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1262,11 +1329,12 @@ pub fn glucuronidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCOOOOOO".into()),
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCOOOOOO".into()),
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "carboxylate",
@@ -1274,11 +1342,12 @@ pub fn glucuronidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCOOOOOO".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCOOOOOO".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1295,11 +1364,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "epoxide_ch2",
@@ -1307,11 +1377,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "epoxide_c",
@@ -1319,11 +1390,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "halide",
@@ -1331,11 +1403,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "thiol",
@@ -1343,11 +1416,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: Some("H".into()),
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: Some("H".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "alkene",
@@ -1355,11 +1429,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "michael",
@@ -1367,11 +1442,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "carbonyl",
@@ -1379,11 +1455,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "aziridine_ch",
@@ -1391,11 +1468,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "aziridine_ch2",
@@ -1403,11 +1481,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "aziridine_c",
@@ -1415,11 +1494,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "mesylate",
@@ -1427,11 +1507,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
             smirks_row(
                 "isocyanate",
@@ -1439,11 +1520,12 @@ pub fn glutathionation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                removes: None,
-                cleaves: false,
-                methide: false,
-            },
+                    adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                },
             ),
         ],
     )
@@ -1451,67 +1533,76 @@ pub fn glutathionation() -> RuleSet {
 
 /// Phase I catalog (Python `PhaseOne`).
 pub fn phase_one() -> RuleSet {
-    RuleSet::compose(Some("PhaseOne".into()), [
-        hydroxylation(),
-        epoxidation(),
-        sulfur_oxidation(),
-        nitrogen_oxidation(),
-        dehydrogenation(),
-        quinone_formation(),
-        dephosphorylation(),
-        epoxide_opening(),
-        hydrolysis(),
-        dehydration(),
-        hydrogenation(),
-        nitrogen_reduction(),
-        oxygen_reduction(),
-        reductive_dehalogenation(),
-        sulfur_reduction(),
-        dealkylation(),
-        oxidative_dehalogenation(),
-    ])
+    RuleSet::compose(
+        Some("PhaseOne".into()),
+        [
+            hydroxylation(),
+            epoxidation(),
+            sulfur_oxidation(),
+            nitrogen_oxidation(),
+            dehydrogenation(),
+            quinone_formation(),
+            dephosphorylation(),
+            epoxide_opening(),
+            hydrolysis(),
+            dehydration(),
+            hydrogenation(),
+            nitrogen_reduction(),
+            oxygen_reduction(),
+            reductive_dehalogenation(),
+            sulfur_reduction(),
+            dealkylation(),
+            oxidative_dehalogenation(),
+        ],
+    )
 }
 
 /// Default search ruleset (Python `find_path.default_ruleset`).
 pub fn default_ruleset() -> RuleSet {
-    RuleSet::compose(Some("Default".into()), [
-        dealkylation(),
-        quinone_formation(),
-        hydroxylation(),
-        dehydrogenation(),
-    ])
+    RuleSet::compose(
+        Some("Default".into()),
+        [
+            dealkylation(),
+            quinone_formation(),
+            hydroxylation(),
+            dehydrogenation(),
+        ],
+    )
 }
 
 /// Every ported leaf rule as one nested catalog.
 pub fn all_rules() -> RuleSet {
-    RuleSet::compose(Some("All".into()), [
-        hydroxylation(),
-        epoxidation(),
-        sulfur_oxidation(),
-        nitrogen_oxidation(),
-        dehydrogenation(),
-        quinone_formation(),
-        dephosphorylation(),
-        epoxide_opening(),
-        hydrolysis(),
-        dehydration(),
-        hydrogenation(),
-        nitrogen_reduction(),
-        oxygen_reduction(),
-        reductive_dehalogenation(),
-        sulfur_reduction(),
-        dealkylation(),
-        oxidative_dehalogenation(),
-        n_dealkylation(),
-        azo_splitting(),
-        benzodioxole_reduction(),
-        nitroaromatic_reduction(),
-        thiophene_sulfur_oxidation(),
-        acetylation(),
-        sulfation(),
-        glucuronidation(),
-        glutathionation(),
-    ])
+    RuleSet::compose(
+        Some("All".into()),
+        [
+            hydroxylation(),
+            epoxidation(),
+            sulfur_oxidation(),
+            nitrogen_oxidation(),
+            dehydrogenation(),
+            quinone_formation(),
+            dephosphorylation(),
+            epoxide_opening(),
+            hydrolysis(),
+            dehydration(),
+            hydrogenation(),
+            nitrogen_reduction(),
+            oxygen_reduction(),
+            reductive_dehalogenation(),
+            sulfur_reduction(),
+            dealkylation(),
+            oxidative_dehalogenation(),
+            n_dealkylation(),
+            azo_splitting(),
+            benzodioxole_reduction(),
+            nitroaromatic_reduction(),
+            thiophene_sulfur_oxidation(),
+            acetylation(),
+            sulfation(),
+            glucuronidation(),
+            glutathionation(),
+        ],
+    )
 }
 
 /// Leaf names in catalog order.
@@ -1607,9 +1698,9 @@ mod tests {
             .unwrap();
         let phenol = canon_of("Oc1ccccc1").unwrap();
         assert!(
-            emissions.iter().any(|e| {
-                e.products.iter().any(|p| canon_of(p).unwrap() == phenol)
-            }),
+            emissions
+                .iter()
+                .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == phenol) }),
             "{emissions:?}"
         );
     }
@@ -1621,12 +1712,20 @@ mod tests {
             .metabolize(&mol, accept_all_rules, accept_all_sites, true)
             .unwrap();
         assert_eq!(emissions.len(), 1);
-        assert_eq!(canon_of(&emissions[0].products[0]).unwrap(), canon_of("CCO").unwrap());
+        assert_eq!(
+            canon_of(&emissions[0].products[0]).unwrap(),
+            canon_of("CCO").unwrap()
+        );
     }
 
     #[test]
     fn glutathionation_has_gsh_product_side() {
-        assert!(glutathionation().patterns().iter().any(|p| p.name == "epoxide_ch"));
+        assert!(
+            glutathionation()
+                .patterns()
+                .iter()
+                .any(|p| p.name == "epoxide_ch")
+        );
         assert!(
             glutathionation()
                 .patterns()
@@ -1635,4 +1734,3 @@ mod tests {
         );
     }
 }
-

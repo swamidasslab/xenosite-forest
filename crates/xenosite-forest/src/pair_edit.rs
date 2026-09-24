@@ -10,7 +10,7 @@ use chematic::core::{Atom, BondOrder, Element};
 use chematic::perception::find_sssr;
 
 use crate::kekule::{conjugated_component, kekule_forms};
-use crate::mol::{ForestError, Molecule, atom_idx, atom_usize, canon_smiles};
+use crate::mol::{ForestError, Molecule, aromatize, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
 use crate::smarts::smarts_matches;
 use crate::valence::accept_product;
@@ -40,10 +40,7 @@ fn current_orders(mol: &Molecule) -> HashMap<(usize, usize), i32> {
         .collect()
 }
 
-fn system_neighbors(
-    mol: &Molecule,
-    system: &HashSet<usize>,
-) -> HashMap<usize, Vec<usize>> {
+fn system_neighbors(mol: &Molecule, system: &HashSet<usize>) -> HashMap<usize, Vec<usize>> {
     let mut neighbors = HashMap::new();
     for &i in system {
         let mut nbrs = Vec::new();
@@ -126,6 +123,51 @@ fn clear_aromatic(mol: &mut Molecule) {
             *mol = mol.with_atom_aromatic(atom, false);
         }
     }
+}
+
+/// Capability OR, resolved against whether the conjugated system is aromatic.
+fn merge_dearomatizes(left: &PatternInfo, right: &PatternInfo, system_aromatic: bool) -> bool {
+    (left.effect.dearomatizes || right.effect.dearomatizes) && system_aromatic
+}
+
+/// True when the kekulized system is aromatic again after sanitize.
+///
+/// Other aromatic systems may stay. The kekulized one did not if any of its
+/// aromatic atoms is no longer aromatic, or a non-aromatic double or triple
+/// bond still touches it (carbonyl, exocyclic methide). HEURISTICS approved.
+fn system_stayed_aromatic(parent: &Molecule, product: &Molecule, system: &HashSet<usize>) -> bool {
+    let aromatic_idxs: Vec<usize> = system
+        .iter()
+        .copied()
+        .filter(|&i| parent.atom(atom_idx(i)).aromatic)
+        .collect();
+    if aromatic_idxs.len() < 2 {
+        return false;
+    }
+    if aromatic_idxs
+        .iter()
+        .any(|&i| !product.atom(atom_idx(i)).aromatic)
+    {
+        return false;
+    }
+    let aromatic_set: HashSet<usize> = aromatic_idxs.into_iter().collect();
+    for (_, bond) in product.bonds() {
+        let aromatic_bond = bond.order == BondOrder::Aromatic
+            || (product.atom(bond.atom1).aromatic && product.atom(bond.atom2).aromatic);
+        if aromatic_bond {
+            continue;
+        }
+        match bond.order {
+            BondOrder::Double | BondOrder::Triple => {}
+            _ => continue,
+        }
+        let left = atom_usize(bond.atom1);
+        let right = atom_usize(bond.atom2);
+        if aromatic_set.contains(&left) || aromatic_set.contains(&right) {
+            return false;
+        }
+    }
+    true
 }
 
 fn ring_sets(mol: &Molecule) -> HashMap<usize, BTreeSet<usize>> {
@@ -312,10 +354,15 @@ pub fn pair_metabolize(
     let mut seen_csmi: BTreeSet<BTreeSet<String>> = BTreeSet::new();
 
     for system in &systems {
-        let anchors: Vec<usize> = hits.keys().copied().filter(|a| system.contains(a)).collect();
+        let anchors: Vec<usize> = hits
+            .keys()
+            .copied()
+            .filter(|a| system.contains(a))
+            .collect();
         if anchors.len() < 2 {
             continue;
         }
+        let system_aromatic = system.iter().any(|&i| mol.atom(atom_idx(i)).aromatic);
         let mut sorted_anchors = anchors;
         sorted_anchors.sort_unstable();
         for i in 0..sorted_anchors.len() {
@@ -348,15 +395,14 @@ pub fn pair_metabolize(
                         if !seen_sig.insert((sa, sb, n1.clone(), n2.clone())) {
                             continue;
                         }
+                        let dearomatizes = merge_dearomatizes(info1, info2, system_aromatic);
                         let neighbors = system_neighbors(mol, system);
                         let mut products = Vec::new();
                         let mut local_csmi = BTreeSet::new();
                         for form in &forms {
                             let bond_map = current_orders(form);
                             let mut paths = alternating_from(&bond_map, start, end, &neighbors, 2);
-                            paths.extend(alternating_from(
-                                &bond_map, end, start, &neighbors, 2,
-                            ));
+                            paths.extend(alternating_from(&bond_map, end, start, &neighbors, 2));
                             for path in paths {
                                 // Odd bond count ⇔ even atom count.
                                 if path.len() % 2 == 1 {
@@ -376,7 +422,11 @@ pub fn pair_metabolize(
                                 if !accept_product(&rw) {
                                     continue;
                                 }
-                                let smiles = canon_smiles(&rw);
+                                let checked = aromatize(&rw);
+                                if dearomatizes && system_stayed_aromatic(mol, &checked, system) {
+                                    continue;
+                                }
+                                let smiles = canon_smiles(&checked);
                                 if local_csmi.insert(smiles.clone()) {
                                     products.push(smiles);
                                 }
@@ -412,6 +462,7 @@ pub fn dehydrogenate_hydroquinone(mol: &Molecule) -> Result<Vec<String>, ForestE
         edit: Edit::PairEndpoint("single_to_double".into()),
         effect: crate::pattern::Effect {
             removes: Some("H".into()),
+            dearomatizes: true,
             ..Default::default()
         },
         skip_same_rings: false,
@@ -452,11 +503,9 @@ mod tests {
         let emissions = pair_metabolize(&mol, &endpoints).unwrap();
         let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
         assert!(
-            emissions.iter().any(|e| {
-                e.products
-                    .iter()
-                    .any(|p| canon_of(p).unwrap() == want)
-            }),
+            emissions
+                .iter()
+                .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == want) }),
             "{emissions:?}"
         );
     }

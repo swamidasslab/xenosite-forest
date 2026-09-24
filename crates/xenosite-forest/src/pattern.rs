@@ -19,7 +19,7 @@ pub enum Edit {
     Hydroxyl,
     /// Apply this SMIRKS at the unique-edit match.
     Smirks(String),
-    /// Resonance-pair endpoint (path flip). Registered as data; pair door TBD.
+    /// Resonance-pair endpoint (path flip via [`crate::pair_edit`]).
     PairEndpoint(String),
 }
 
@@ -31,6 +31,8 @@ pub struct Effect {
     pub cleaves: bool,
     /// Effect bit, not a `pathways=("methide",)` switch.
     pub methide: bool,
+    /// Capability: pair/path may dearomatize. Resolved against system aromaticity.
+    pub dearomatizes: bool,
 }
 
 /// What a SMARTS pattern can do, before a match.
@@ -75,6 +77,7 @@ impl PatternInfo {
                 removes: Some("H".into()),
                 cleaves: false,
                 methide: false,
+                dearomatizes: false,
             },
         )
     }

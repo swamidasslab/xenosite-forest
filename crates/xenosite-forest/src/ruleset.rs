@@ -5,23 +5,51 @@
 //! after the child that emitted (leaf first, outer last), matching Python
 //! `info["rule"]` / addition chain order.
 //!
-//! Python `FilterRules` / `FilterSites` are `Callable`. Here they are
-//! `impl Fn` on [`RuleSet::metabolize`], or [`BoxedFilters`] when a search
-//! needs to store them. Built-in filters should read [`PatternInfo`] fields.
-//! Filters still see each leaf set (not the outer container). A Python lambda
-//! still crosses the GIL.
+//! Primary walk: [`RuleSet::candidates`] yields site–pattern–[`ParentRef`]
+//! triples without applying edits. A search reads [`PatternInfo`] / [`Effect`]
+//! to filter, then [`Candidate::materialize`] only for survivors. Filter
+//! closures are optional convenience on [`RuleSet::metabolize`], not required.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use chematic::core::{Atom, BondOrder, Element};
+use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
 use crate::ForestError;
+use crate::candidate::{Candidate, ParentRef};
+use crate::kekule::kekule_forms;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
 use crate::pair_edit::pair_metabolize;
 use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
-use crate::unique_edit::unique_atom_sites;
+use crate::unique_edit::{unique_sites, unique_sites_on_forms};
 use crate::valence::accept_product;
+
+/// True when the SMARTS bond between the first two `site_map` atoms is an
+/// exclusive double (`=`), not `=,:`. Epoxidation matches that on Kekulé forms.
+fn site_bond_is_exclusive_double(smarts: &str, site_map: &[u16]) -> bool {
+    if site_map.len() < 2 {
+        return false;
+    }
+    let Ok(query) = parse_smarts(smarts) else {
+        return false;
+    };
+    let mut idxs = BTreeMap::new();
+    for (i, atom) in query.atoms.iter().enumerate() {
+        if let Some(mapno) = atom.atom_map {
+            idxs.insert(mapno, i);
+        }
+    }
+    let (Some(&left), Some(&right)) = (idxs.get(&site_map[0]), idxs.get(&site_map[1])) else {
+        return false;
+    };
+    let Some(bond) = query.bonds.iter().find(|bond| {
+        (bond.atom1 == left && bond.atom2 == right) || (bond.atom1 == right && bond.atom2 == left)
+    }) else {
+        return false;
+    };
+    matches!(bond.query, BondQuery::Primitive(BondPrimitive::Double))
+}
 
 /// `filter_rules(mol, rule, pattern) -> bool` before SMARTS runs.
 pub fn accept_all_rules(_mol: &Molecule, _rule: &RuleSet, _pattern: &PatternInfo) -> bool {
@@ -33,9 +61,9 @@ pub fn accept_all_sites(_mol: &Molecule, _site: usize, _info: &SiteInfo) -> bool
     true
 }
 
-/// Python `FilterRules`. Use `impl Fn` on [`RuleSet::metabolize`] when possible.
+/// Python `FilterRules`. Prefer filtering [`Candidate`]s by reading pattern data.
 pub type FilterRules = dyn Fn(&Molecule, &RuleSet, &PatternInfo) -> bool;
-/// Python `FilterSites`.
+/// Python `FilterSites`. Prefer filtering [`Candidate`]s by reading site + effect.
 pub type FilterSites = dyn Fn(&Molecule, usize, &SiteInfo) -> bool;
 
 /// Stored filters (`Box<dyn Fn>`). Capture-by-move; `'static`.
@@ -71,10 +99,7 @@ impl RuleSet {
     pub fn new(name: Option<String>, patterns: impl IntoIterator<Item = PatternInfo>) -> Self {
         Self {
             name,
-            members: patterns
-                .into_iter()
-                .map(RuleMember::Pattern)
-                .collect(),
+            members: patterns.into_iter().map(RuleMember::Pattern).collect(),
         }
     }
 
@@ -114,6 +139,91 @@ impl RuleSet {
         self.members.push(RuleMember::Set(set));
     }
 
+    /// Discover site–pattern–parent triples without applying edits.
+    ///
+    /// Nested sets append themselves onto each candidate's `rule_path`.
+    /// Pair-endpoint patterns are collected and resolved into pair emissions
+    /// only at [`Self::metabolites`] / [`Self::metabolize`] (path flip still
+    /// needs both ends together).
+    pub fn candidates(&self, mol: &Molecule) -> Result<Vec<Candidate>, ForestError> {
+        self.candidates_inner(mol)
+    }
+
+    fn candidates_inner(&self, mol: &Molecule) -> Result<Vec<Candidate>, ForestError> {
+        let mut out = Vec::new();
+        for member in &self.members {
+            match member {
+                RuleMember::Pattern(pattern) => {
+                    if matches!(pattern.edit, Edit::PairEndpoint(_)) {
+                        continue;
+                    }
+                    out.extend(pattern_candidates(self, mol, pattern)?);
+                }
+                RuleMember::Set(child) => {
+                    for mut c in child.candidates_inner(mol)? {
+                        c.rule_path.push(self.name.clone());
+                        out.push(c);
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Pair-endpoint patterns on this leaf set (not nested).
+    fn leaf_pair_endpoints(&self) -> Vec<PatternInfo> {
+        self.members
+            .iter()
+            .filter_map(|m| match m {
+                RuleMember::Pattern(p) if matches!(p.edit, Edit::PairEndpoint(_)) => {
+                    Some(p.clone())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Materialize every candidate (and leaf pair paths). No filter closures.
+    pub fn metabolites(
+        &self,
+        mol: &Molecule,
+        unique_csmi: bool,
+    ) -> Result<Vec<Emission>, ForestError> {
+        self.metabolize(mol, accept_all_rules, accept_all_sites, unique_csmi)
+    }
+
+    /// ResonancePair path emissions for this set and nested children.
+    ///
+    /// Pair ends need a joint walk, so they are not [`Candidate`] triples yet.
+    /// Each emission's `rule_path` is leaf-first with this set appended when
+    /// nested.
+    pub fn pair_emissions(&self, mol: &Molecule) -> Result<Vec<Emission>, ForestError> {
+        let mut out = Vec::new();
+        for member in &self.members {
+            match member {
+                RuleMember::Pattern(_) => {}
+                RuleMember::Set(child) => {
+                    for mut emission in child.pair_emissions(mol)? {
+                        emission.rule_path.push(self.name.clone());
+                        out.push(emission);
+                    }
+                }
+            }
+        }
+        let endpoints = self.leaf_pair_endpoints();
+        if !endpoints.is_empty() {
+            for pair in pair_metabolize(mol, &endpoints)? {
+                out.push(Emission {
+                    site: pair.site,
+                    pattern_name: pair.pattern_name,
+                    rule_path: vec![self.name.clone()],
+                    products: pair.products,
+                });
+            }
+        }
+        Ok(out)
+    }
+
     pub fn metabolize_boxed(
         &self,
         mol: &Molecule,
@@ -128,9 +238,12 @@ impl RuleSet {
         )
     }
 
-    /// Run each member. Nested sets receive `unique_csmi=false` so alternate
-    /// children bubble up; this set's caller `unique_csmi` is the cross-child
-    /// CSMI layer. Each emission's [`Emission::rule_path`] ends with this set.
+    /// Filter candidates by closures (Python parity), then materialize.
+    ///
+    /// Prefer [`Self::candidates`] + reading [`PatternInfo`] when the search
+    /// can filter without callbacks. Nested sets receive `unique_csmi=false`
+    /// so alternate children bubble; this set's caller `unique_csmi` is the
+    /// cross-child CSMI layer.
     pub fn metabolize<R, S>(
         &self,
         mol: &Molecule,
@@ -157,56 +270,32 @@ impl RuleSet {
         S: Fn(&Molecule, usize, &SiteInfo) -> bool,
     {
         let mut emissions = Vec::new();
-        // Cross-child yield: emission CSMI frozenset → kept leaf rule name.
         let mut seen_csmi: BTreeMap<BTreeSet<String>, String> = BTreeMap::new();
-        // Within this leaf's own patterns (when unique_csmi): (pattern, emission).
         let mut seen_leaf: BTreeSet<(String, BTreeSet<String>)> = BTreeSet::new();
-        let mut pair_endpoints: Vec<PatternInfo> = Vec::new();
 
+        // Nested children first (same order as members), then this leaf's
+        // patterns — walk members so namespace order matches compose order.
         for member in &self.members {
             match member {
                 RuleMember::Pattern(pattern) => {
                     if matches!(pattern.edit, Edit::PairEndpoint(_)) {
-                        if filter_rules(mol, self, pattern) {
-                            pair_endpoints.push(pattern.clone());
-                        }
                         continue;
                     }
                     if !filter_rules(mol, self, pattern) {
                         continue;
                     }
-                    for mapped in unique_atom_sites(mol, &pattern.smarts)? {
-                        let Some(&site) = mapped.get(&pattern.primary_map()) else {
-                            continue;
-                        };
+                    for c in pattern_candidates(self, mol, pattern)? {
                         let info = SiteInfo {
-                            site,
-                            pattern: pattern.clone(),
+                            site: c.site,
+                            pattern: c.pattern.clone(),
                         };
-                        if !filter_sites(mol, site, &info) {
+                        if !filter_sites(mol, c.site, &info) {
                             continue;
                         }
-                        let products = apply_edit(mol, pattern, &mapped)?;
-                        if products.is_empty() {
-                            continue;
-                        }
-                        let emission_key: BTreeSet<String> = products.iter().cloned().collect();
-                        if unique_csmi {
-                            let leaf_key = (pattern.name.clone(), emission_key.clone());
-                            if !seen_leaf.insert(leaf_key) {
-                                continue;
-                            }
-                        }
-                        emissions.push(Emission {
-                            site,
-                            pattern_name: pattern.name.clone(),
-                            rule_path: vec![self.name.clone()],
-                            products,
-                        });
+                        push_emission(c.emit(mol)?, unique_csmi, &mut seen_leaf, &mut emissions);
                     }
                 }
                 RuleMember::Set(child) => {
-                    // Children: yield off so alternate rules / nested sets bubble.
                     let child_emissions =
                         child.metabolize_inner(mol, filter_rules, filter_sites, false)?;
                     for mut emission in child_emissions {
@@ -214,13 +303,9 @@ impl RuleSet {
                         if unique_csmi {
                             let emission_key: BTreeSet<String> =
                                 emission.products.iter().cloned().collect();
-                            let leaf_name = emission
-                                .leaf_rule()
-                                .unwrap_or("")
-                                .to_string();
+                            let leaf_name = emission.leaf_rule().unwrap_or("").to_string();
                             if let Some(kept) = seen_csmi.get(&emission_key) {
                                 if kept != &leaf_name {
-                                    // Overlapping coverage: keep first leaf only.
                                     continue;
                                 }
                             } else {
@@ -233,15 +318,13 @@ impl RuleSet {
             }
         }
 
+        let pair_endpoints: Vec<PatternInfo> = self
+            .leaf_pair_endpoints()
+            .into_iter()
+            .filter(|p| filter_rules(mol, self, p))
+            .collect();
         if !pair_endpoints.is_empty() {
             for pair in pair_metabolize(mol, &pair_endpoints)? {
-                let emission_key: BTreeSet<String> = pair.products.iter().cloned().collect();
-                if unique_csmi {
-                    let leaf_key = (pair.pattern_name.clone(), emission_key.clone());
-                    if !seen_leaf.insert(leaf_key) {
-                        continue;
-                    }
-                }
                 let info = SiteInfo {
                     site: pair.site,
                     pattern: pair_endpoints[0].clone(),
@@ -249,17 +332,83 @@ impl RuleSet {
                 if !filter_sites(mol, pair.site, &info) {
                     continue;
                 }
-                emissions.push(Emission {
+                let emission = Emission {
                     site: pair.site,
                     pattern_name: pair.pattern_name,
                     rule_path: vec![self.name.clone()],
                     products: pair.products,
-                });
+                };
+                push_emission(Some(emission), unique_csmi, &mut seen_leaf, &mut emissions);
             }
         }
 
         Ok(emissions)
     }
+}
+
+fn pattern_candidates(
+    set: &RuleSet,
+    mol: &Molecule,
+    pattern: &PatternInfo,
+) -> Result<Vec<Candidate>, ForestError> {
+    let mut out = Vec::new();
+    let use_forms = site_bond_is_exclusive_double(&pattern.smarts, &pattern.site_map)
+        && mol.atoms().any(|(_, atom)| atom.aromatic);
+    if use_forms {
+        let forms = kekule_forms(mol)?;
+        let hits = unique_sites_on_forms(
+            mol,
+            &forms,
+            &pattern.smarts,
+            pattern.site_kind,
+            &pattern.site_map,
+        )?;
+        for (mapped, form_i) in hits {
+            let Some(&site) = mapped.get(&pattern.primary_map()) else {
+                continue;
+            };
+            out.push(Candidate {
+                site,
+                pattern: pattern.clone(),
+                rule_path: vec![set.name.clone()],
+                mapped,
+                parent: ParentRef::Form(Box::new(forms[form_i].clone())),
+            });
+        }
+    } else {
+        for mapped in unique_sites(mol, &pattern.smarts, pattern.site_kind, &pattern.site_map)? {
+            let Some(&site) = mapped.get(&pattern.primary_map()) else {
+                continue;
+            };
+            out.push(Candidate {
+                site,
+                pattern: pattern.clone(),
+                rule_path: vec![set.name.clone()],
+                mapped,
+                parent: ParentRef::Context,
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn push_emission(
+    emission: Option<Emission>,
+    unique_csmi: bool,
+    seen_leaf: &mut BTreeSet<(String, BTreeSet<String>)>,
+    emissions: &mut Vec<Emission>,
+) {
+    let Some(emission) = emission else {
+        return;
+    };
+    if unique_csmi {
+        let emission_key: BTreeSet<String> = emission.products.iter().cloned().collect();
+        let leaf_key = (emission.pattern_name.clone(), emission_key);
+        if !seen_leaf.insert(leaf_key) {
+            return;
+        }
+    }
+    emissions.push(emission);
 }
 
 fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> {
@@ -270,10 +419,19 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
     Ok(product)
 }
 
+/// Apply a pattern edit at a mapped site (used by [`Candidate::materialize`]).
+pub(crate) fn apply_edit_for_candidate(
+    mol: &Molecule,
+    pattern: &PatternInfo,
+    mapped: &BTreeMap<u16, usize>,
+) -> Result<Vec<String>, ForestError> {
+    apply_edit(mol, pattern, mapped)
+}
+
 fn apply_edit(
     mol: &Molecule,
     pattern: &PatternInfo,
-    mapped: &std::collections::BTreeMap<u16, usize>,
+    mapped: &BTreeMap<u16, usize>,
 ) -> Result<Vec<String>, ForestError> {
     match &pattern.edit {
         Edit::Hydroxyl => {
@@ -288,8 +446,6 @@ fn apply_edit(
             }
         }
         Edit::Smirks(smirks) => {
-            // ResonanceRule: match on aromatic parent, apply on Kekulé parent
-            // when maps 1–2 name an aromatic bond.
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
             let pieces = apply_smirks_at(smirks, &work, mapped)?;
@@ -312,6 +468,7 @@ pub fn o_dealkylation() -> RuleSet {
                 removes: None,
                 cleaves: true,
                 methide: false,
+                dearomatizes: false,
             },
         )],
     )
@@ -407,6 +564,7 @@ mod tests {
             removes: Some("H".into()),
             cleaves: false,
             methide: true,
+            dearomatizes: false,
         };
         let set = RuleSet::new(Some("probe".into()), [pattern]);
         let refuse_methide = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| !p.effect.methide;
@@ -443,10 +601,7 @@ mod tests {
             assert!(emission.rule_path.len() >= 2);
         }
         let dealk = emissions.iter().find(|e| e.pattern_name == "O-Me").unwrap();
-        assert_eq!(
-            dealk.namespace(),
-            vec!["Dealkylation", "PhaseI-probe"]
-        );
+        assert_eq!(dealk.namespace(), vec!["Dealkylation", "PhaseI-probe"]);
         let hyd = emissions.iter().find(|e| e.pattern_name == "h").unwrap();
         assert_eq!(hyd.namespace(), vec!["Hydroxylation", "PhaseI-probe"]);
     }
@@ -476,10 +631,7 @@ mod tests {
             .metabolize(&mol, accept_all_rules, accept_all_sites, true)
             .unwrap();
         let emission = &emissions[0];
-        assert_eq!(
-            emission.rule_path,
-            vec![Some("Hydroxylation".into()), None]
-        );
+        assert_eq!(emission.rule_path, vec![Some("Hydroxylation".into()), None]);
         assert_eq!(emission.namespace(), vec!["Hydroxylation"]);
     }
 
@@ -502,10 +654,7 @@ mod tests {
             .unwrap();
         assert_eq!(with_dedup.len(), 1);
         assert_eq!(with_dedup[0].leaf_rule(), Some("OverlapOhA"));
-        assert_eq!(
-            with_dedup[0].namespace(),
-            vec!["OverlapOhA", "OverlapSet"]
-        );
+        assert_eq!(with_dedup[0].namespace(), vec!["OverlapOhA", "OverlapSet"]);
         assert_eq!(
             canon_set(with_dedup[0].products.iter().cloned()),
             canon_set(["CCO"])
@@ -521,10 +670,7 @@ mod tests {
 
     #[test]
     fn filter_rules_sees_leaf_set_not_outer_compose() {
-        let set = RuleSet::compose(
-            Some("Forest".into()),
-            [hydroxylation(), o_dealkylation()],
-        );
+        let set = RuleSet::compose(Some("Forest".into()), [hydroxylation(), o_dealkylation()]);
         let seen = std::cell::RefCell::new(BTreeSet::new());
         let mol = parse_mol("CC").unwrap();
         let _ = set
@@ -584,5 +730,54 @@ mod tests {
             }),
             "{emissions:?}"
         );
+    }
+
+    #[test]
+    fn epoxidation_matches_kekule_forms_on_benzene() {
+        use crate::rules::epoxidation;
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let candidates = epoxidation().candidates(&mol).unwrap();
+        assert_eq!(candidates.len(), 1, "{candidates:?}");
+        assert!(matches!(
+            candidates[0].parent,
+            crate::candidate::ParentRef::Form(_)
+        ));
+        let emissions = epoxidation().metabolites(&mol, true).unwrap();
+        assert_eq!(emissions.len(), 1, "{emissions:?}");
+        assert_eq!(emissions[0].pattern_name, "epoxide");
+        assert_eq!(emissions[0].leaf_rule(), Some("Epoxidation"));
+        let want = canon_of("C1=CC2OC2C=C1").unwrap();
+        assert!(
+            emissions[0]
+                .products
+                .iter()
+                .any(|p| canon_of(p).unwrap() == want),
+            "want {want}, got {:?}",
+            emissions[0].products
+        );
+    }
+
+    #[test]
+    fn epoxidation_on_alkene_does_not_need_forms() {
+        use crate::rules::epoxidation;
+        let got = products_of(&epoxidation(), "C=C", accept_all_rules, accept_all_sites);
+        assert_eq!(got, canon_set(["C1CO1"]));
+    }
+
+    #[test]
+    fn candidates_defer_materialize() {
+        let mol = parse_mol("CC").unwrap();
+        let set = hydroxylation();
+        let cands = set.candidates(&mol).unwrap();
+        assert_eq!(cands.len(), 1);
+        assert_eq!(cands[0].pattern.name, "h2");
+        // Filtering by pattern data needs no closure into the rule.
+        let refuse: Vec<_> = cands
+            .iter()
+            .filter(|c| c.pattern.effect.adds.as_deref() != Some("O"))
+            .collect();
+        assert!(refuse.is_empty());
+        let products = cands[0].materialize(&mol).unwrap();
+        assert_eq!(canon_of(&products[0]).unwrap(), canon_of("CCO").unwrap());
     }
 }
