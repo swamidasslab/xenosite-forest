@@ -1,22 +1,26 @@
-//! Phase + clone cost profile for hard `find_path` cases.
+//! Phase profile for the **tagged `ForestMol`** `find_path` door.
 //!
-//! Matches production lazy closer: HA gate at enqueue, full cost on pop.
+//! Same walk as production: structure/`csmi` cache, `Atom.tag` through
+//! `adopt_product`, lazy cost closer on pop, eager tag-lift child MCS.
+//! Does **not** re-parse walk CSMI strings.
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example find_path_profile --release
 //! ```
 
 use std::collections::{BinaryHeap, HashSet};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use xenosite_forest::atom_diff::{
-    atom_diff, candidate_could_help_on, candidate_order_key, pair_could_help,
+    atom_diff, atom_diff_for_child, candidate_could_help_on, candidate_order_key, pair_could_help,
 };
-use xenosite_forest::mol::{Molecule, canon_of, canon_smiles, parse_mol};
-use xenosite_forest::pattern::Emission;
+use xenosite_forest::canonical_plan::steps_for_kind;
+use xenosite_forest::forest_mol::ForestMol;
+use xenosite_forest::mol::{Molecule, canon_of, parse_mol};
 use xenosite_forest::rules::phase_one;
 use xenosite_forest::ruleset::RuleSet;
-use xenosite_forest::{FindPathConfig, PathCounters, find_path_with};
+use xenosite_forest::{Candidate, FindPathConfig, PathCounters, find_path_with};
 
 const HARD: &[(&str, &str, &str)] = &[
     (
@@ -38,12 +42,12 @@ const HARD: &[(&str, &str, &str)] = &[
 
 #[derive(Default, Clone)]
 struct Timers {
-    parse: Duration,
+    csmi: Duration,
     atom_diff: Duration,
+    lift: Duration,
     discover: Duration,
     filter: Duration,
     materialize: Duration,
-    /// Pop-time cost verify rejects (paid MCS, no expand).
     reject: Duration,
     enqueue: Duration,
     nodes: usize,
@@ -51,12 +55,14 @@ struct Timers {
     mol_edits: usize,
     cand_kept: usize,
     pair_kept: usize,
+    csmi_calls: usize,
 }
 
 impl Timers {
     fn total_accounted(&self) -> Duration {
-        self.parse
+        self.csmi
             + self.atom_diff
+            + self.lift
             + self.discover
             + self.filter
             + self.materialize
@@ -65,16 +71,24 @@ impl Timers {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
-struct HeapItem {
-    target_hit: bool,
-    seq: usize,
-    smiles: String,
-    heavy: usize,
+struct Walk {
+    mol: ForestMol,
     steps_len: usize,
     parent_cost: Option<usize>,
 }
 
+struct HeapItem {
+    target_hit: bool,
+    seq: usize,
+    walk: Walk,
+}
+
+impl PartialEq for HeapItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.target_hit == other.target_hit && self.seq == other.seq
+    }
+}
+impl Eq for HeapItem {}
 impl Ord for HeapItem {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other
@@ -89,159 +103,213 @@ impl PartialOrd for HeapItem {
     }
 }
 
-fn heavy_atoms(s: &str) -> usize {
-    parse_mol(s).map(|m| m.atom_count()).unwrap_or(0)
+struct ForestEmission {
+    products: Vec<ForestMol>,
+}
+
+fn keep_fragment(
+    products: &[ForestMol],
+    target_csmi: &str,
+    target_ha: usize,
+) -> Option<(ForestMol, String)> {
+    let mut best: Option<(usize, Rc<str>, usize)> = None;
+    for (i, mol) in products.iter().enumerate() {
+        let csmi = mol.csmi();
+        let cost = if csmi.as_ref() == target_csmi {
+            0
+        } else {
+            1 + mol.heavy_atom_count().abs_diff(target_ha)
+        };
+        match &best {
+            None => best = Some((i, Rc::clone(&csmi), cost)),
+            Some((_, _, bc)) if cost < *bc => best = Some((i, Rc::clone(&csmi), cost)),
+            Some((_, kept, bc)) if cost == *bc && csmi.as_ref() < kept.as_ref() => {
+                best = Some((i, Rc::clone(&csmi), cost));
+            }
+            _ => {}
+        }
+    }
+    let (i, csmi, _) = best?;
+    Some((products[i].clone(), csmi.as_ref().to_string()))
 }
 
 fn expand_timed(
     ruleset: &RuleSet,
-    mol: &Molecule,
+    parent: &ForestMol,
     target: &Molecule,
     diff: &xenosite_forest::AtomDiff,
     t: &mut Timers,
-) -> Vec<Emission> {
+) -> Vec<ForestEmission> {
+    let mol = parent.mol();
     let t0 = Instant::now();
     let mut candidates = ruleset.candidates(mol).unwrap();
-    let all_pairs = ruleset.pair_candidates(mol).unwrap();
+    // Nested sets: full pair_candidates (same as production walk).
+    let mut pairs = ruleset.pair_candidates(mol).unwrap();
     t.discover += t0.elapsed();
 
     let t0 = Instant::now();
     candidates.retain(|c| candidate_could_help_on(c, diff, Some(mol), Some(target)));
     candidates.sort_by_key(|c| candidate_order_key(c, diff));
-    let mut kept_pairs = all_pairs;
-    kept_pairs.retain(|p| pair_could_help(p, diff, mol, target));
+    pairs.retain(|p| pair_could_help(p, diff, mol, target));
     t.filter += t0.elapsed();
     t.cand_kept += candidates.len();
-    t.pair_kept += kept_pairs.len();
+    t.pair_kept += pairs.len();
 
     let t0 = Instant::now();
     let mut out = Vec::new();
     for c in candidates {
         t.mol_edits += 1;
-        if let Some(em) = c.emit(mol).unwrap() {
-            out.push(em);
+        let pieces = c.materialize_mols(mol).unwrap();
+        if pieces.is_empty() {
+            continue;
         }
+        let products: Vec<_> = pieces
+            .into_iter()
+            .map(|piece| parent.adopt_product(piece))
+            .collect();
+        out.push(ForestEmission { products });
     }
-    for p in kept_pairs {
-        if let Some(em) = p.emit(mol).unwrap() {
-            t.mol_edits += 1;
-            out.push(Emission {
-                site: em.site,
-                pattern_name: em.pattern_name,
-                rule_path: vec![None],
-                products: em.products,
-                plan: Vec::new(),
-            });
+    for pair in pairs {
+        let pieces = pair.materialize_mols(mol).unwrap();
+        if pieces.is_empty() {
+            continue;
         }
+        t.mol_edits += 1;
+        let products: Vec<_> = pieces
+            .into_iter()
+            .map(|piece| parent.adopt_product(piece))
+            .collect();
+        let _ = steps_for_kind(
+            ruleset.plan_kind,
+            ruleset
+                .name
+                .as_deref()
+                .unwrap_or(pair.pattern_name.as_str()),
+            mol,
+            &pair.plan_site_atoms(),
+            Some(&[&pair.left.effect, &pair.right.effect]),
+        );
+        out.push(ForestEmission { products });
     }
     t.materialize += t0.elapsed();
     out
 }
 
-fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usize) {
+/// Instrumented copy of production tagged-walk search (lazy or eager closer).
+fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration, bool, usize) {
     let wall0 = Instant::now();
     let mut t = Timers::default();
     let set = phase_one();
-    let start = parse_mol(reactant).unwrap();
-    let start_csmi = canon_smiles(&start);
+
+    let start = ForestMol::parse(reactant).unwrap();
+    let t0 = Instant::now();
+    let start_csmi = start.csmi();
+    t.csmi += t0.elapsed();
+    t.csmi_calls += 1;
+
     let target_csmi = canon_of(target).unwrap();
     let target_mol = parse_mol(&target_csmi).unwrap();
-    let target_ha = target_mol.atom_count();
+    let target_ha = ForestMol::parse(&target_csmi).unwrap().heavy_atom_count();
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
     heap.push(HeapItem {
-        target_hit: start_csmi == target_csmi,
+        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         seq,
-        smiles: start_csmi.clone(),
-        heavy: start.atom_count(),
-        steps_len: 0,
-        parent_cost: None,
+        walk: Walk {
+            mol: start,
+            steps_len: 0,
+            parent_cost: None,
+        },
     });
     seq += 1;
     let mut seen = HashSet::new();
-    seen.insert(start_csmi);
-    let mut found_steps = 0usize;
+    seen.insert(start_csmi.as_ref().to_string());
     let mut hit = false;
+    let mut found_steps = 0usize;
     const MAX_NODES: usize = 800;
 
     while let Some(item) = heap.pop() {
         if t.nodes >= MAX_NODES || hit {
             break;
         }
-        if item.smiles == target_csmi {
+        let walk = item.walk;
+
+        let t0 = Instant::now();
+        let here = walk.mol.csmi();
+        t.csmi += t0.elapsed();
+        t.csmi_calls += 1;
+
+        if here.as_ref() == target_csmi.as_str() {
             t.nodes += 1;
             hit = true;
-            found_steps = item.steps_len;
+            found_steps = walk.steps_len;
             break;
         }
 
         let t0 = Instant::now();
-        let mol = parse_mol(&item.smiles).unwrap();
-        t.parse += t0.elapsed();
-
-        let t0 = Instant::now();
-        let diff = atom_diff(&mol, &target_mol);
+        let diff = atom_diff(walk.mol.mol(), &target_mol);
         let cost = diff.cost();
         t.atom_diff += t0.elapsed();
 
-        if let Some(pc) = item.parent_cost {
-            if cost >= pc {
-                let t0 = Instant::now();
-                t.rejected += 1;
-                t.reject += t0.elapsed();
-                continue;
+        if lazy {
+            if let Some(pc) = walk.parent_cost {
+                if cost >= pc {
+                    t.rejected += 1;
+                    t.reject += Duration::ZERO; // MCS already in atom_diff
+                    continue;
+                }
             }
         }
         t.nodes += 1;
 
-        let emissions = expand_timed(&set, &mol, &target_mol, &diff, &mut t);
+        let emissions = expand_timed(&set, &walk.mol, &target_mol, &diff, &mut t);
 
         for emission in emissions {
             let t0 = Instant::now();
-            let products = &emission.products;
-            let kept = {
-                let mut best: Option<(String, usize, i32)> = None;
-                for p in products {
-                    let ha = heavy_atoms(p);
-                    let dist = (ha as i32 - target_ha as i32).abs();
-                    let is_hit = p == &target_csmi;
-                    if is_hit {
-                        best = Some((p.clone(), ha, -1));
-                        break;
-                    }
-                    match &best {
-                        None => best = Some((p.clone(), ha, dist)),
-                        Some((_, _, d)) if dist < *d => best = Some((p.clone(), ha, dist)),
-                        _ => {}
-                    }
-                }
-                best
-            };
-            let Some((kept, child_ha, _)) = kept else {
+            let Some((kept, kept_csmi)) =
+                keep_fragment(&emission.products, &target_csmi, target_ha)
+            else {
                 t.enqueue += t0.elapsed();
                 continue;
             };
-            let target_hit = kept == target_csmi;
-            // Lazy: no HA gate — cost verified on pop.
-            if seen.contains(&kept) && !target_hit {
+            // keep_fragment called csmi on products
+            t.csmi_calls += emission.products.len();
+
+            let target_hit = kept_csmi == target_csmi;
+            let allow = if lazy {
+                true
+            } else if let Some(pc) = walk.parent_cost {
+                let t1 = Instant::now();
+                let child_cost = atom_diff_for_child(&walk.mol, &diff, &kept, &target_mol).cost();
+                t.lift += t1.elapsed();
+                target_hit || child_cost < pc
+            } else {
+                true
+            };
+            if !allow {
                 t.enqueue += t0.elapsed();
                 continue;
             }
-            seen.insert(kept.clone());
+            if seen.contains(&kept_csmi) && !target_hit {
+                t.enqueue += t0.elapsed();
+                continue;
+            }
+            seen.insert(kept_csmi);
             heap.push(HeapItem {
                 target_hit,
                 seq,
-                smiles: kept,
-                heavy: child_ha,
-                steps_len: item.steps_len + 1,
-                parent_cost: Some(cost),
+                walk: Walk {
+                    mol: kept,
+                    steps_len: walk.steps_len + 1,
+                    parent_cost: Some(cost),
+                },
             });
             seq += 1;
             t.enqueue += t0.elapsed();
             if target_hit {
                 hit = true;
-                found_steps = item.steps_len + 1;
+                found_steps = walk.steps_len + 1;
                 break;
             }
         }
@@ -257,34 +325,91 @@ fn pct(part: Duration, whole: Duration) -> f64 {
     }
 }
 
-fn microbench_clones() {
-    println!("\n=== microbench: clone / parse / diff unit cost ===");
-    let mol = parse_mol("COc1cc(OC)c2c(OC)cc(OC)cc2c1").unwrap();
+fn microbench() {
+    println!("\n=== microbench (tagged ForestMol door) ===");
+    let parent = ForestMol::parse("COc1cc(OC)c2c(OC)cc(OC)cc2c1").unwrap();
     let target = parse_mol("O=C1C=C(O)C(=O)c2c(O)cc(O)cc12").unwrap();
+    let set = phase_one();
+
     let n = 2_000usize;
     let t0 = Instant::now();
     for _ in 0..n {
-        let _ = mol.clone();
+        let _ = parent.mol().clone();
     }
     let mol_clone = t0.elapsed();
+
+    let t0 = Instant::now();
+    let first = parent.csmi();
+    let first_t = t0.elapsed();
+    let t0 = Instant::now();
+    for _ in 0..n {
+        let _ = parent.csmi();
+    }
+    let cached = t0.elapsed();
+    assert!(Rc::ptr_eq(&first, &parent.csmi()));
+
     let t0 = Instant::now();
     for _ in 0..100 {
-        let _ = atom_diff(&mol, &target);
+        let _ = atom_diff(parent.mol(), &target);
     }
     let diff = t0.elapsed();
+
+    // Adopt cost: one real hydroxylation-style product if any candidate exists.
+    let cands = set.candidates(parent.mol()).unwrap();
+    let adopt = if let Some(c) = cands.first() {
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        if let Some(piece) = pieces.into_iter().next() {
+            let t0 = Instant::now();
+            for _ in 0..50 {
+                let _ = parent.adopt_product(piece.clone());
+            }
+            Some(t0.elapsed())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     println!(
-        "Molecule.clone  {n}×  {:.3} µs/op",
+        "Molecule.clone           {n}×  {:.3} µs/op",
         mol_clone.as_secs_f64() * 1e6 / n as f64
     );
     println!(
-        "atom_diff       100×  {:.3} ms/op",
+        "ForestMol.csmi (cold)          {:.3} µs",
+        first_t.as_secs_f64() * 1e6
+    );
+    println!(
+        "ForestMol.csmi (cached)  {n}×  {:.3} ns/op",
+        cached.as_secs_f64() * 1e9 / n as f64
+    );
+    println!(
+        "atom_diff                100×  {:.3} ms/op",
         diff.as_secs_f64() * 1e3 / 100.0
     );
+    if let Some(a) = adopt {
+        println!(
+            "adopt_product            50×  {:.3} µs/op",
+            a.as_secs_f64() * 1e6 / 50.0
+        );
+    }
 }
 
 fn main() {
-    println!("Rust find_path phase profile (release, atom_diff + lazy closer)\n");
+    let args: Vec<String> = std::env::args().collect();
+    let budget_secs: u64 = args
+        .windows(2)
+        .find(|w| w[0] == "--budget-secs")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(45);
+    let budget = Duration::from_secs(budget_secs);
+    let profile_t0 = Instant::now();
 
+    println!(
+        "Rust find_path phase profile (tagged ForestMol, atom_diff + lazy closer; budget {budget_secs}s)\n"
+    );
+
+    // Warm production API once.
     {
         let mut c = PathCounters::default();
         let _ = find_path_with(
@@ -293,19 +418,23 @@ fn main() {
             &phase_one(),
             &mut c,
             FindPathConfig::default(),
-            |_| true,
+            |_: &Candidate| true,
         );
     }
 
     println!(
-        "{:<28} {:>7} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5} {:>4}",
-        "case", "wall", "parse%", "diff%", "disc%", "filt%", "mat%", "enq%", "hit", "rej"
+        "{:<28} {:>7} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5} {:>4}",
+        "case", "wall", "csmi%", "diff%", "lift%", "disc%", "filt%", "mat%", "enq%", "hit", "rej"
     );
 
     for &(name, r, tgt) in HARD {
+        if profile_t0.elapsed() >= budget {
+            println!("{name:<28} SKIP  (budget)");
+            continue;
+        }
         let mut best: Option<(Timers, Duration, bool, usize)> = None;
         for _ in 0..3 {
-            let row = profile_search(r, tgt);
+            let row = profile_search(r, tgt, true);
             best = Some(match best {
                 None => row,
                 Some(prev) if row.1 < prev.1 => row,
@@ -315,11 +444,12 @@ fn main() {
         let (tm, wall, hit, steps) = best.unwrap();
         let w = wall;
         println!(
-            "{:<28} {:>6.3}s {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>3}/{steps} {:>4}",
+            "{:<28} {:>6.3}s {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>3}/{steps} {:>4}",
             name,
             w.as_secs_f64(),
-            pct(tm.parse, w),
+            pct(tm.csmi, w),
             pct(tm.atom_diff, w),
+            pct(tm.lift, w),
             pct(tm.discover, w),
             pct(tm.filter, w),
             pct(tm.materialize, w),
@@ -328,20 +458,27 @@ fn main() {
             tm.rejected,
         );
         println!(
-            "  nodes={} edits={} cand_kept={} pair_kept={} accounted={:.1}%",
+            "  nodes={} edits={} cand_kept={} pair_kept={} csmi_calls={} accounted={:.1}%",
             tm.nodes,
             tm.mol_edits,
             tm.cand_kept,
             tm.pair_kept,
+            tm.csmi_calls,
             pct(tm.total_accounted(), w),
         );
     }
 
-    microbench_clones();
+    if profile_t0.elapsed() < budget {
+        microbench();
+    }
 
     println!("\n=== production wall lazy vs eager (best of 3) ===");
     let set = phase_one();
     for &(name, r, tgt) in HARD {
+        if profile_t0.elapsed() >= budget {
+            println!("{name:<28} SKIP  (budget)");
+            continue;
+        }
         for (label, lazy) in [("lazy", true), ("eager", false)] {
             let config = FindPathConfig {
                 max_paths: 1,
@@ -354,7 +491,7 @@ fn main() {
             for _ in 0..3 {
                 let mut c = PathCounters::default();
                 let t0 = Instant::now();
-                let _ = find_path_with(r, tgt, &set, &mut c, config, |_| true).unwrap();
+                let _ = find_path_with(r, tgt, &set, &mut c, config, |_: &Candidate| true).unwrap();
                 let sec = t0.elapsed().as_secs_f64();
                 if sec < best {
                     best = sec;

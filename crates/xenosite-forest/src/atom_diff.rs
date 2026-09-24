@@ -556,10 +556,7 @@ pub fn atom_diff_for_child(
             extend_mapping_for_born(child.mol(), target, m);
         }
         // Any heavy child atom still unmapped → full MCS.
-        let mapped: HashSet<usize> = lifted
-            .iter()
-            .flat_map(|m| m.keys().copied())
-            .collect();
+        let mapped: HashSet<usize> = lifted.iter().flat_map(|m| m.keys().copied()).collect();
         let orphan = (0..child_n).any(|i| {
             child.mol().atom(atom_idx(i)).element.atomic_number() > 1 && !mapped.contains(&i)
         });
@@ -1020,7 +1017,11 @@ mod tests {
         let child = parent.adopt_product(pieces[0].clone());
         let lifted = atom_diff_for_child(&parent, &parent_diff, &child, &target);
         let full = atom_diff(child.mol(), &target);
-        assert_eq!(lifted.cost(), full.cost(), "lifted={lifted:?} full={full:?}");
+        assert_eq!(
+            lifted.cost(),
+            full.cost(),
+            "lifted={lifted:?} full={full:?}"
+        );
     }
 
     #[test]

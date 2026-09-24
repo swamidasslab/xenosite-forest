@@ -254,14 +254,11 @@ impl RuleSet {
             if let Some(emission) = pair.emit(mol)? {
                 let site_atoms = pair.plan_site_atoms();
                 let ends = [&pair.left.effect, &pair.right.effect];
-                let leaf = self.name.as_deref().unwrap_or(emission.pattern_name.as_str());
-                let plan = steps_for_kind(
-                    self.plan_kind,
-                    leaf,
-                    mol,
-                    &site_atoms,
-                    Some(&ends),
-                );
+                let leaf = self
+                    .name
+                    .as_deref()
+                    .unwrap_or(emission.pattern_name.as_str());
+                let plan = steps_for_kind(self.plan_kind, leaf, mol, &site_atoms, Some(&ends));
                 out.push(Emission {
                     site: emission.site,
                     pattern_name: emission.pattern_name,
@@ -387,14 +384,11 @@ impl RuleSet {
                 };
                 let site_atoms = pair.plan_site_atoms();
                 let ends = [&pair.left.effect, &pair.right.effect];
-                let leaf = self.name.as_deref().unwrap_or(emission.pattern_name.as_str());
-                let plan = steps_for_kind(
-                    self.plan_kind,
-                    leaf,
-                    mol,
-                    &site_atoms,
-                    Some(&ends),
-                );
+                let leaf = self
+                    .name
+                    .as_deref()
+                    .unwrap_or(emission.pattern_name.as_str());
+                let plan = steps_for_kind(self.plan_kind, leaf, mol, &site_atoms, Some(&ends));
                 let emission = Emission {
                     site: emission.site,
                     pattern_name: emission.pattern_name,

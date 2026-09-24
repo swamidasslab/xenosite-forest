@@ -236,10 +236,18 @@ Same PhaseOne cases / `max_nodes=800` / `max_paths=1` / best-of-5 as
 cargo run -p xenosite-forest --example find_path_bench --release
 cargo run -p xenosite-forest --example find_path_bench --release -- --larger
 cargo run -p xenosite-forest --example find_path_bench --release -- --hard
+# unfiltered (slow) is opt-in:
+cargo run -p xenosite-forest --example find_path_bench --release -- --hard --nofilter
+cargo run -p xenosite-forest --example find_path_profile --release
 uv run python tests/forest/bench_find_path_rust_h2h.py
 uv run python tests/forest/bench_find_path_rust_h2h.py --larger
 uv run python tests/forest/bench_find_path_rust_h2h.py --hard
 ```
+
+Default bench is **filter-only** (atom_diff on). `--budget-secs N` stops remaining
+rows once the suite wall exceeds N (default 30s filter / 60s with `--nofilter`).
+`find_path_profile` instruments the tagged `ForestMol` walk (not a CSMI-string
+re-parse door).
 
 Raw: `artifacts/bench_find_path_{rust,python}_{mid,larger,hard}.out`.
 

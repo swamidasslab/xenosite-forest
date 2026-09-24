@@ -1,12 +1,19 @@
 //! Apples-to-apples `find_path` wall times vs Python live PhaseOne.
 //!
 //! Same mid-size / multi-edit cases as `tests/forest/bench_find_path_h2h.py`.
+//! Default runs **filter-only** (atom_diff on). Unfiltered is opt-in and
+//! budgeted — hard nofilter can take minutes.
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example find_path_bench --release
 //! cargo run -p xenosite-forest --example find_path_bench --release -- --larger
 //! cargo run -p xenosite-forest --example find_path_bench --release -- --hard
+//! cargo run -p xenosite-forest --example find_path_bench --release -- --hard --nofilter
 //! ```
+//!
+//! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
+//! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
+//! `--nofilter`).
 //!
 //! Pair with:
 //! ```text
@@ -15,13 +22,15 @@
 //! uv run python tests/forest/bench_find_path_rust_h2h.py --hard
 //! ```
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use xenosite_forest::{FindPathConfig, PathCounters, canon_of, find_path_with, phase_one};
 
 const MAX_NODES: usize = 800;
 const MAX_PATHS: usize = 1;
 const REPEATS: u32 = 5;
+/// Best-of repeats when running the expensive unfiltered table.
+const NOFILTER_REPEATS: u32 = 1;
 
 /// (name, reactant, target). Targets are chematic-reachable CSMI spellings
 /// (TBA keeps E stereo; non-stereo spelling is a different canonaut string).
@@ -125,7 +134,13 @@ struct Row {
     billed: usize,
 }
 
-fn run_one(reactant: &str, target: &str, use_atom_diff: bool, lazy_closer: bool) -> Row {
+fn run_one(
+    reactant: &str,
+    target: &str,
+    use_atom_diff: bool,
+    lazy_closer: bool,
+    repeats: u32,
+) -> Row {
     let want = canon_of(target).unwrap_or_else(|e| panic!("{target}: {e}"));
     let set = phase_one();
     let config = FindPathConfig {
@@ -142,7 +157,7 @@ fn run_one(reactant: &str, target: &str, use_atom_diff: bool, lazy_closer: bool)
     }
 
     let mut best: Option<Row> = None;
-    for _ in 0..REPEATS {
+    for _ in 0..repeats {
         let mut counters = PathCounters::default();
         let t0 = Instant::now();
         let hits = find_path_with(reactant, target, &set, &mut counters, config, |_| true)
@@ -167,15 +182,27 @@ fn run_one(reactant: &str, target: &str, use_atom_diff: bool, lazy_closer: bool)
     best.expect("repeats")
 }
 
-fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool, lazy_closer: bool) {
+fn print_table(
+    title: &str,
+    cases: &[(&str, &str, &str)],
+    use_atom_diff: bool,
+    lazy_closer: bool,
+    repeats: u32,
+    budget: Duration,
+) {
     println!("\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}) ===");
     println!(
         "{:<32} {:>4} {:>9} {:>5} {:>6} {:>7} {:>6}",
         "case", "hit", "seconds", "steps", "nodes", "edits", "bill"
     );
     let mut total = 0.0;
+    let suite_t0 = Instant::now();
     for &(name, reactant, target) in cases {
-        let row = run_one(reactant, target, use_atom_diff, lazy_closer);
+        if suite_t0.elapsed() >= budget {
+            println!("{name:<32} SKIP  (budget {:.0}s)", budget.as_secs_f64());
+            continue;
+        }
+        let row = run_one(reactant, target, use_atom_diff, lazy_closer, repeats);
         total += row.seconds;
         println!(
             "{:<32} {:>4} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
@@ -191,14 +218,30 @@ fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool, l
     println!("{:<32} {:>4} {:>9.3}", "TOTAL", "", total);
 }
 
+fn parse_budget(args: &[String], default_secs: u64) -> Duration {
+    args.windows(2)
+        .find(|w| w[0] == "--budget-secs")
+        .and_then(|w| w[1].parse().ok())
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(default_secs))
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let larger = args.iter().any(|a| a == "--larger");
     let hard = args.iter().any(|a| a == "--hard");
+    // Default: filter-only. Unfiltered (slow) is --nofilter.
+    let nofilter = args.iter().any(|a| a == "--nofilter");
+    let filter_only = !nofilter || args.iter().any(|a| a == "--filter-only");
+    let budget = parse_budget(&args, if nofilter { 60 } else { 30 });
+
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={MAX_PATHS}  best-of-{REPEATS}"
     );
-    println!("(release; chematic door; provisional atom_diff optional)");
+    println!(
+        "(release; tagged ForestMol; filter-only={filter_only}; budget={}s)",
+        budget.as_secs()
+    );
 
     let (cases, title) = if hard {
         (HARD, "hard HA≈14–20 · multi-step (≥3–8 hops)")
@@ -208,9 +251,11 @@ fn main() {
         (CASES, "mid-size / multi-edit")
     };
 
-    print_table(title, cases, false, false);
-    print_table(title, cases, true, true);
+    if nofilter && !args.iter().any(|a| a == "--filter-only") {
+        print_table(title, cases, false, false, NOFILTER_REPEATS, budget);
+    }
+    print_table(title, cases, true, true, REPEATS, budget);
     if hard || args.iter().any(|a| a == "--eager") {
-        print_table(title, cases, true, false);
+        print_table(title, cases, true, false, REPEATS, budget);
     }
 }

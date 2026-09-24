@@ -404,11 +404,7 @@ where
             seen.insert(kept_csmi.clone());
 
             let mut steps = walk.steps.clone();
-            steps.push(PathStep::from_emission(
-                &emission,
-                kept_csmi.clone(),
-                sides,
-            ));
+            steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
             let mut plan = walk.plan.clone();
             plan.extend(emission.plan.iter().cloned());
             heap.push(HeapItem {
@@ -555,13 +551,7 @@ where
             .name
             .as_deref()
             .unwrap_or(pair.pattern_name.as_str());
-        let plan = steps_for_kind(
-            ruleset.plan_kind,
-            leaf,
-            mol,
-            &site_atoms,
-            Some(&ends),
-        );
+        let plan = steps_for_kind(ruleset.plan_kind, leaf, mol, &site_atoms, Some(&ends));
         out.push(ForestEmission {
             site: pair.site,
             pattern_name: pair.pattern_name.clone(),
@@ -669,12 +659,7 @@ where
             let kept_csmi = kept.csmi().as_ref().to_string();
             let child_ha = kept.heavy_atom_count();
             let target_hit = kept_csmi == target_csmi;
-            if !closer(
-                walk.mol.heavy_atom_count(),
-                child_ha,
-                target_ha,
-                target_hit,
-            ) {
+            if !closer(walk.mol.heavy_atom_count(), child_ha, target_ha, target_hit) {
                 continue;
             }
             if seen.contains(&kept_csmi) && !target_hit {
