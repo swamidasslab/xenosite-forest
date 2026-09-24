@@ -44,7 +44,8 @@ elementary rules at resolved sites. Correctness: an accepted product’s plan
 must reach that product under some linearization; a `find_path` hit’s plan
 must reach the hit. No mid-plan re-metabolize of the composite leaf.
 
-Plan identity: construction stores the transitive reduction (`canonical_dependency_edges`).
+Plan identity: construction stores the transitive reduction via the Python
+port of `transitive_closure_masks` / `canonical_dependency_edges` (bitmasks).
 `Deps::==` is order-sensitive on steps; `same_linearizations` aligns by step
 equality (greedy multiset) then compares reduced precedes — use that to treat
 reorderings as the same path (HEURISTICS: do not re-walk a reordering).

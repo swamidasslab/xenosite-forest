@@ -399,33 +399,21 @@ impl Linearization {
     }
 }
 
-/// Unique minimal dependency edge set (transitive reduction).
-pub fn canonical_dependency_edges(
+/// One bitmask per node: bit `b` set iff `a` must precede `b`.
+///
+/// Port of Python `transitive_closure_masks`. Nodes are opaque index labels
+/// `0..n-1` — this does **not** check that two plans' steps are the same
+/// reactions/sites. Align node identity first (see [`Deps::same_linearizations`]).
+///
+/// `# Errors`
+/// Invalid edge, self-loop, or cycle. `n > 128` (bitmask width).
+pub fn transitive_closure_masks(
     n: usize,
     edges: &[(usize, usize)],
-) -> Result<Vec<(usize, usize)>, &'static str> {
-    let closure = transitive_closure(n, edges)?;
-    let mut canonical = Vec::new();
-    for a in 0..n {
-        let descendants = &closure[a];
-        let mut through: HashSet<usize> = HashSet::new();
-        for &b in descendants {
-            through.extend(&closure[b]);
-        }
-        for &b in descendants {
-            if !through.contains(&b) {
-                canonical.push((a, b));
-            }
-        }
+) -> Result<Vec<u128>, &'static str> {
+    if n > 128 {
+        return Err("n > 128");
     }
-    canonical.sort_unstable();
-    Ok(canonical)
-}
-
-fn transitive_closure(
-    n: usize,
-    edges: &[(usize, usize)],
-) -> Result<Vec<HashSet<usize>>, &'static str> {
     let mut outgoing: Vec<Vec<usize>> = vec![Vec::new(); n];
     let mut indegree = vec![0usize; n];
     let mut seen = HashSet::new();
@@ -455,15 +443,47 @@ fn transitive_closure(
     if topo.len() != n {
         return Err("cycle in precedes");
     }
-    let mut closure: Vec<HashSet<usize>> = vec![HashSet::new(); n];
+    let mut closure = vec![0u128; n];
     for &a in topo.iter().rev() {
         for &b in &outgoing[a] {
-            closure[a].insert(b);
-            let child = closure[b].clone();
-            closure[a].extend(child);
+            // closure[a] |= (1 << b) | closure[b]
+            closure[a] |= (1u128 << b) | closure[b];
         }
     }
     Ok(closure)
+}
+
+/// Unique minimal dependency edge set (transitive reduction) for this DAG.
+///
+/// Port of Python `canonical_dependency_edges`. Two DAGs over the **same
+/// labeled nodes** `0..n-1` have exactly the same valid orderings iff this
+/// returns the same edge list. [`Deps`] stores this form on construction.
+pub fn canonical_dependency_edges(
+    n: usize,
+    edges: &[(usize, usize)],
+) -> Result<Vec<(usize, usize)>, &'static str> {
+    let closure = transitive_closure_masks(n, edges)?;
+    let mut canonical_edges = Vec::new();
+    for a in 0..n {
+        let descendants = closure[a];
+        let mut through = 0u128;
+        let mut remaining = descendants;
+        while remaining != 0 {
+            let bit = remaining & remaining.wrapping_neg();
+            let b = bit.trailing_zeros() as usize;
+            remaining -= bit;
+            through |= closure[b];
+        }
+        let mut direct = descendants & !through;
+        while direct != 0 {
+            let bit = direct & direct.wrapping_neg();
+            let b = bit.trailing_zeros() as usize;
+            direct -= bit;
+            canonical_edges.push((a, b));
+        }
+    }
+    canonical_edges.sort_unstable();
+    Ok(canonical_edges)
 }
 
 /// Bind will-add → added-by and collect precedes from those notes.
@@ -765,12 +785,6 @@ mod tests {
     }
 
     #[test]
-    fn canonical_edges_drop_transitive() {
-        let reduced = canonical_dependency_edges(3, &[(0, 1), (1, 2), (0, 2)]).unwrap();
-        assert_eq!(reduced, vec![(0, 1), (1, 2)]);
-    }
-
-    #[test]
     fn replay_benzene_qf_plan_reaches_quinone() {
         let mol = parse_mol("c1ccccc1").unwrap();
         let end = Effect {
@@ -803,8 +817,45 @@ mod tests {
     }
 
     #[test]
-    fn deps_eq_after_transitive_reduction() {
-        // Construction reduces edges → stable equal output (Python chain == with_transitive).
+    fn canonical_edges_drop_transitive() {
+        let reduced = canonical_dependency_edges(3, &[(0, 1), (1, 2), (0, 2)]).unwrap();
+        assert_eq!(reduced, vec![(0, 1), (1, 2)]);
+    }
+
+    #[test]
+    fn transitive_closure_and_canonical() {
+        // Python test_transitive_closure_and_canonical
+        let closure = transitive_closure_masks(3, &[(0, 1), (1, 2), (0, 2)]).unwrap();
+        assert!(closure[0] & (1 << 1) != 0 && closure[0] & (1 << 2) != 0);
+        assert!(closure[1] & (1 << 2) != 0);
+        assert_eq!(
+            canonical_dependency_edges(3, &[(0, 1), (1, 2), (0, 2)]).unwrap(),
+            vec![(0, 1), (1, 2)]
+        );
+        assert_eq!(
+            canonical_dependency_edges(3, &[(0, 1), (1, 2)]).unwrap(),
+            canonical_dependency_edges(3, &[(0, 1), (1, 2), (0, 2)]).unwrap()
+        );
+    }
+
+    #[test]
+    fn transitive_closure_cycle_raises() {
+        assert!(
+            transitive_closure_masks(2, &[(0, 1), (1, 0)])
+                .unwrap_err()
+                .contains("cycle")
+        );
+        assert!(
+            transitive_closure_masks(2, &[(0, 0)])
+                .unwrap_err()
+                .contains("cycle")
+        );
+    }
+
+    #[test]
+    fn deps_same_linearizations_via_transitive_closure() {
+        // Python test_deps_same_linearizations_via_transitive_closure:
+        // lin-set identity is canonical edges — not == / raw precedes.
         let a = Step::new("A", [PlanAtom::index(0)]);
         let b = Step::new("B", [PlanAtom::index(1)]);
         let c = Step::new("C", [PlanAtom::index(2)]);
@@ -813,20 +864,44 @@ mod tests {
             Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1), (1, 2), (0, 2)]);
         assert_eq!(chain, with_transitive);
         assert_eq!(chain.precedes(), &[(0, 1), (1, 2)]);
+        assert_eq!(with_transitive.precedes(), &[(0, 1), (1, 2)]);
         assert!(chain.same_linearizations(&with_transitive));
+        assert_eq!(
+            canonical_dependency_edges(3, &[(0, 1), (1, 2), (0, 2)]).unwrap(),
+            vec![(0, 1), (1, 2)]
+        );
+
+        let flipped = Deps::new([c.clone(), a.clone(), b.clone()], [(1, 2), (2, 0)]); // a≺b≺c
+        assert!(chain.same_linearizations(&flipped));
+        assert_ne!(chain, flipped); // == is order-sensitive
+
+        let layered = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 2), (1, 2)]);
+        assert!(layered.same_linearizations(&Deps::new(
+            [a.clone(), b.clone(), c.clone()],
+            [(0, 2), (1, 2)]
+        )));
+
+        let free_dealk = Deps::new([a.clone(), b.clone(), c.clone()], [(1, 2)]); // only b≺c
+        assert!(!free_dealk.same_linearizations(&chain));
+
+        let other_nodes = Deps::new(
+            [
+                Step::new("X", [PlanAtom::index(0)]),
+                Step::new("Y", [PlanAtom::index(1)]),
+                Step::new("Z", [PlanAtom::index(2)]),
+            ],
+            [(0, 1), (1, 2)],
+        );
+        assert!(!chain.same_linearizations(&other_nodes));
     }
 
     #[test]
-    fn same_linearizations_ignores_step_declaration_order() {
+    fn deps_stores_canonical_precedes() {
         let a = Step::new("A", [PlanAtom::index(0)]);
         let b = Step::new("B", [PlanAtom::index(1)]);
         let c = Step::new("C", [PlanAtom::index(2)]);
-        // a ≺ b ≺ c
-        let chain = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1), (1, 2)]);
-        // Declaration order c, a, b with edges a≺b≺c → (1,2), (2,0) in that indexing.
-        let flipped = Deps::new([c.clone(), a.clone(), b.clone()], [(1, 2), (2, 0)]);
-        assert!(chain.same_linearizations(&flipped));
-        assert_ne!(chain, flipped); // == is order-sensitive
+        let d = Deps::new([a, b, c], [(0, 1), (1, 2), (0, 2)]);
+        assert_eq!(d.precedes(), &[(0, 1), (1, 2)]);
     }
 
     #[test]
@@ -853,37 +928,8 @@ mod tests {
     }
 
     #[test]
-    fn same_linearizations_requires_step_identity() {
-        let chain = Deps::new(
-            [
-                Step::new("A", [PlanAtom::index(0)]),
-                Step::new("B", [PlanAtom::index(1)]),
-                Step::new("C", [PlanAtom::index(2)]),
-            ],
-            [(0, 1), (1, 2)],
-        );
-        let other = Deps::new(
-            [
-                Step::new("X", [PlanAtom::index(0)]),
-                Step::new("Y", [PlanAtom::index(1)]),
-                Step::new("Z", [PlanAtom::index(2)]),
-            ],
-            [(0, 1), (1, 2)],
-        );
-        assert!(!chain.same_linearizations(&other));
-        let free_dealk = Deps::new(
-            [
-                Step::new("A", [PlanAtom::index(0)]),
-                Step::new("B", [PlanAtom::index(1)]),
-                Step::new("C", [PlanAtom::index(2)]),
-            ],
-            [(1, 2)],
-        );
-        assert!(!free_dealk.same_linearizations(&chain));
-    }
-
-    #[test]
     fn same_linearizations_duplicate_equal_steps() {
+        // Python test_align_duplicate_steps_greedy
         let a1 = Step::new("A", [PlanAtom::index(0)]);
         let a2 = Step::new("A", [PlanAtom::index(0)]);
         let b = Step::new("B", [PlanAtom::index(1)]);
@@ -898,5 +944,28 @@ mod tests {
             .map(|i| Step::new(format!("S{i}"), [PlanAtom::index(i)]))
             .collect();
         assert_eq!(Deps::new(steps, []).n_linearizations(), 24);
+        assert_eq!(Deps::new([], []).n_linearizations(), 1);
+        assert_eq!(
+            Deps::new([Step::new("A", [PlanAtom::index(0)])], []).n_linearizations(),
+            1
+        );
+    }
+
+    #[test]
+    fn deps_invalid_edge_panics() {
+        let a = Step::new("A", [PlanAtom::index(0)]);
+        let b = Step::new("B", [PlanAtom::index(1)]);
+        assert!(
+            std::panic::catch_unwind(|| {
+                let _ = Deps::new([a.clone(), b.clone()], [(0, 5)]);
+            })
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| {
+                let _ = Deps::new([a, b], [(0, 1), (1, 0)]);
+            })
+            .is_err()
+        );
     }
 }
