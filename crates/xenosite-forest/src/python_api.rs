@@ -480,8 +480,7 @@ mod tests {
                 2
             );
             let products = rs.call_method1("metabolize", (&mol,)).unwrap();
-            let products: Vec<MetabolizeRow> =
-                products.extract().unwrap();
+            let products: Vec<MetabolizeRow> = products.extract().unwrap();
             assert_eq!(products.len(), 1);
             assert_eq!(products[0].0, "h");
             assert_eq!(products[0].3, vec![Some("Hydroxylation".into())]);
