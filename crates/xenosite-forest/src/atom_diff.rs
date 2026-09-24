@@ -13,7 +13,7 @@ use chematic::perception::ring_atom_flags;
 use chematic::smarts::{BondCompare, McsConfig, find_matches, find_mcs_with_config};
 
 use crate::candidate::Candidate;
-use crate::mol::{Molecule, atom_idx, atom_usize, ranks};
+use crate::mol::{Molecule, atom_idx, atom_usize};
 use crate::pair_edit::PairCandidate;
 use crate::pattern::Effect;
 
@@ -216,41 +216,6 @@ fn mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize
     ranked.into_iter().map(|(_, m)| m).collect()
 }
 
-fn expand_by_rank(mol: &Molecule, sites: BTreeSet<usize>) -> BTreeSet<usize> {
-    let rank = ranks(mol);
-    let mut out = BTreeSet::new();
-    for s in sites {
-        let r = rank.get(s).copied().unwrap_or(usize::MAX);
-        for (i, &ri) in rank.iter().enumerate() {
-            if ri == r {
-                out.insert(i);
-            }
-        }
-    }
-    out
-}
-
-fn expand_h_delta(mol: &Molecule, h_delta: BTreeMap<usize, i32>) -> BTreeMap<usize, i32> {
-    let rank = ranks(mol);
-    let mut out = BTreeMap::new();
-    for (&atom, &delta) in &h_delta {
-        let r = rank.get(atom).copied().unwrap_or(usize::MAX);
-        for (i, &ri) in rank.iter().enumerate() {
-            if ri == r {
-                // Keep the more negative (stronger H loss) when ranks collide.
-                out.entry(i)
-                    .and_modify(|d| {
-                        if delta < *d {
-                            *d = delta;
-                        }
-                    })
-                    .or_insert(delta);
-            }
-        }
-    }
-    out
-}
-
 fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, usize>) -> AtomDiff {
     let image: HashSet<usize> = mapping.values().copied().collect();
     let r_rings = ring_atom_flags(reactant);
@@ -355,12 +320,9 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
         .filter(|(idx, a)| a.element.atomic_number() > 1 && !image.contains(&atom_usize(*idx)))
         .count();
 
-    let needs_oxygen = expand_by_rank(reactant, needs_oxygen);
-    let needs_carbonyl = expand_by_rank(reactant, needs_carbonyl);
-    let needs_alcohol = expand_by_rank(reactant, needs_alcohol);
-    let loses_aromaticity = expand_by_rank(reactant, loses_aromaticity);
-    let h_delta = expand_h_delta(reactant, h_delta);
-
+    // Concrete MCS atom indexes only — do not expand by topological rank.
+    // Site discovery emits every SMARTS hit; filters match these ids so the
+    // edited atom is the one the mapping named (needed for tagged MCS lift).
     let mut diff = AtomDiff {
         mapping: mapping.clone(),
         mappings: vec![mapping.clone()],

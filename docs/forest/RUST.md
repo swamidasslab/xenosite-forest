@@ -337,3 +337,12 @@ the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a
 lazy closer (and eager) uses `try_atom_diff_for_child` / `atom_diff_for_child`
 (tag-lift: shrink on remove, local extend on add) instead of a fresh MCS when
 tags allow; full MCS only on lift miss.
+
+Site discovery emits **every** SMARTS hit (no topological unique-edit). Atom-diff
+filters match **concrete MCS atom ids** (`needs_oxygen`, …) — Python parity, not
+rank-expanded sets. Together the edited atom is the one the mapping named, so
+tagged lift stays honest. Product/`seen` csmi still collapses duplicate yields.
+
+**Later (not now):** filter sites on topological id, then promote one concrete
+atom from the passing group to edit. That keeps unique-edit narrowing without
+editing the wrong orbit rep before filters run.
