@@ -444,6 +444,36 @@ impl Deps {
         edges_b.sort_unstable();
         self.precedes == edges_b
     }
+
+    /// Count of shared total orders: `|L(self) ∩ L(other)|`.
+    ///
+    /// Same step multiset required (else `0`). After aligning indices, the
+    /// intersection of topological sorts is the sorts of the **edge union**;
+    /// a cycle in that union means empty intersection (`0`). Equal to
+    /// [`Self::n_linearizations`] on both sides iff [`Self::same_linearizations`].
+    pub fn linearization_overlap(&self, other: &Deps) -> usize {
+        let Some(aligned) = align_deps_indices(&self.steps, &other.steps) else {
+            return 0;
+        };
+        let n = self.steps.len();
+        if n == 0 {
+            return 1;
+        }
+        let mut edges = self.precedes.clone();
+        for &(a, b) in &other.precedes {
+            edges.push((aligned[a], aligned[b]));
+        }
+        let Ok(reduced) = canonical_dependency_edges(n, &edges) else {
+            return 0;
+        };
+        // Same nodes + union edges; maybe does not affect required orders.
+        Deps {
+            steps: self.steps.clone(),
+            precedes: reduced,
+            maybe: Maybe::default(),
+        }
+        .n_linearizations()
+    }
 }
 
 /// Map indices in `steps_b` → indices in `steps_a` by [`Step`] equality.
@@ -1049,6 +1079,37 @@ mod tests {
         let swapped = Deps::new([h3, h0, dh], [(0, 2), (1, 2)]);
         assert!(layered.same_linearizations(&swapped));
         assert_eq!(layered.n_linearizations(), 2);
+        assert_eq!(layered.linearization_overlap(&swapped), 2);
+    }
+
+    #[test]
+    fn linearization_overlap_partial_and_conflicting() {
+        let a = Step::new("A", [PlanAtom::index(0)]);
+        let b = Step::new("B", [PlanAtom::index(1)]);
+        let c = Step::new("C", [PlanAtom::index(2)]);
+        // Free A∥B ≺ C → 2 orders
+        let free = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 2), (1, 2)]);
+        // Chain A≺B≺C → 1 order (subset of free)
+        let chain = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1), (1, 2)]);
+        assert_eq!(free.linearization_overlap(&chain), 1);
+        assert_eq!(chain.linearization_overlap(&free), 1);
+        assert!(!free.same_linearizations(&chain));
+
+        // Opposite A/B orders → union cycles → 0
+        let ab = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1)]);
+        let ba = Deps::new([a.clone(), b.clone(), c.clone()], [(1, 0)]);
+        assert_eq!(ab.linearization_overlap(&ba), 0);
+
+        // Different step multiset → 0
+        let other = Deps::new(
+            [a, b, Step::new("D", [PlanAtom::index(2)])],
+            [(0, 2), (1, 2)],
+        );
+        assert_eq!(free.linearization_overlap(&other), 0);
+        assert_eq!(
+            Deps::new([], []).linearization_overlap(&Deps::new([], [])),
+            1
+        );
     }
 
     #[test]
