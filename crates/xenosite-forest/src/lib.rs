@@ -14,6 +14,7 @@ pub mod atom_tracker;
 pub mod candidate;
 pub mod canonical_plan;
 pub mod chematic_vendor;
+pub mod cleavage_graph;
 pub mod find_path;
 pub mod forest;
 pub mod forest_mol;
@@ -50,6 +51,10 @@ pub use canonical_plan::{
     align_deps_indices, as_deps, bind_deps, canonical_dependency_edges, identity_canonical_plan,
     identity_plan, identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
     transitive_closure_masks,
+};
+pub use cleavage_graph::{
+    CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
+    CleavageNode, CleavageOr, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
 };
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
