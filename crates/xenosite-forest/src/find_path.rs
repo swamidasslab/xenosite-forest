@@ -121,9 +121,12 @@ struct Walk {
     /// enqueued. `None` = root (always expand).
     parent_cost: Option<usize>,
     /// Diff of **this** mol vs target. Filled at enqueue by
-    /// [`try_atom_diff_for_child`] when safe (same heavy tags); else `None`
+    /// [`try_atom_diff_for_child`] / cleavage lift when safe; else `None`
     /// and pop runs full MCS.
     diff: Option<crate::atom_diff::AtomDiff>,
+    /// Cleaving hops so far (root = 0). First-pass cleave-only while
+    /// `cleavage_depth < cleavage_first_depth`.
+    cleavage_depth: usize,
 }
 
 /// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
@@ -176,54 +179,50 @@ struct ForestEmission {
 
 /// Keep fragments that are worth continuing toward ``target``.
 ///
-/// On a bifurcation with a target MCS gate, every product that passes the
-/// cleavage expand filter (strict cost drop + ha ≥ target) is kept — **both**
-/// sides if both match. Single-product emissions skip the extra MCS.
+/// On a bifurcation with a parent diff, every product that passes the cleavage
+/// expand gate (strict cost drop via tag-lift when possible, ha ≥ target) is
+/// kept — **both** sides if both match. Uses tagged [`ForestMol`] products;
+/// never re-parses SMILES.
 fn keep_fragments(
+    parent: &ForestMol,
     products: &[ForestMol],
     target_csmi: &str,
     target_ha: usize,
     parent_diff: Option<&crate::atom_diff::AtomDiff>,
     target_mol: Option<&crate::Molecule>,
-) -> Vec<(ForestMol, Vec<String>)> {
+) -> Vec<(ForestMol, Vec<String>, Option<crate::atom_diff::AtomDiff>)> {
     if products.is_empty() {
         return Vec::new();
     }
     if products.len() >= 2 {
-        if let (Some(diff), Some(tmol)) = (parent_diff, target_mol) {
-            let all_csmis: Vec<Rc<str>> = products.iter().map(|m| m.csmi()).collect();
-            let mut kept_idx = Vec::new();
-            for (i, csmi) in all_csmis.iter().enumerate() {
-                if crate::cleavage_graph::fragment_worth_expanding(
-                    Some(diff),
-                    csmi.as_ref(),
-                    tmol,
-                    target_csmi,
-                    target_ha,
-                ) {
-                    kept_idx.push(i);
+        if let (Some(pdiff), Some(tmol)) = (parent_diff, target_mol) {
+            let mut kept = Vec::new();
+            for (i, child) in products.iter().enumerate() {
+                let csmi = child.csmi();
+                let is_hit = csmi.as_ref() == target_csmi;
+                if !is_hit && child.heavy_atom_count() < target_ha {
+                    continue;
+                }
+                let child_diff =
+                    crate::atom_diff::atom_diff_after_cleavage(parent, pdiff, child, tmol);
+                if is_hit || child_diff.cost() < pdiff.cost() {
+                    let mut sides = Vec::new();
+                    for (j, other) in products.iter().enumerate() {
+                        if j != i && other.csmi().as_ref() != csmi.as_ref() {
+                            sides.push(other.csmi().as_ref().to_string());
+                        }
+                    }
+                    kept.push((child.clone(), sides, Some(child_diff)));
                 }
             }
-            if !kept_idx.is_empty() {
-                return kept_idx
-                    .into_iter()
-                    .map(|best_i| {
-                        let kept = products[best_i].clone();
-                        let kept_csmi = all_csmis[best_i].as_ref();
-                        let mut sides = Vec::new();
-                        for (i, csmi) in all_csmis.iter().enumerate() {
-                            if i != best_i && csmi.as_ref() != kept_csmi {
-                                sides.push(csmi.as_ref().to_string());
-                            }
-                        }
-                        (kept, sides)
-                    })
-                    .collect();
+            if !kept.is_empty() {
+                return kept;
             }
         }
     }
     keep_fragment(products, target_csmi, target_ha)
         .into_iter()
+        .map(|(mol, sides)| (mol, sides, None))
         .collect()
 }
 
@@ -295,9 +294,12 @@ pub struct FindPathConfig {
     /// Skips MCS on siblings never popped. Do not HA-gate at enqueue —
     /// oxidation can raise HA distance while lowering cost. Default on.
     pub lazy_closer: bool,
-    /// When `Some(d)` and the target is smaller than the reactant, seed the
-    /// frontier from a shallow cleavage-only BFS of depth `d` (both matching
-    /// sides kept). `None` disables. Default first-pass depth: 4.
+    /// When `Some(d)` and the target is smaller, walks with
+    /// `cleavage_depth < d` expand **cleaving** edits only (both matching
+    /// sides kept via tag-lift). Once `cleavage_depth >= d`, expansion
+    /// **excludes** cleave sites — non-cleavage chemistry on those cores.
+    /// find_path's heap decides which paths to expand; no separate seed
+    /// handoff / SMILES reparse. `None` disables.
     pub cleavage_first_depth: Option<usize>,
 }
 
@@ -309,8 +311,7 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: true,
-            // Tried depth 3–4: seed BFS MCS cost dominated wall on LARGER
-            // (tBu 175→372 ms) even when the seed already hit. Opt in to measure.
+            // Opt in to measure; default off until lift-first pass is cheaper.
             cleavage_first_depth: None,
         }
     }
@@ -404,75 +405,34 @@ where
     let start_csmi = start.csmi();
     let target_csmi = canon_of(target)?;
     let target_mol = parse_mol(&target_csmi)?;
-    let target_ha = ForestMol::parse(&target_csmi)?.heavy_atom_count();
+    let target_ha = target_mol
+        .atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .count();
     let start_ha = start.heavy_atom_count();
+    let cleave_first = cleavage_first_depth.filter(|_| target_ha < start_ha);
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
-    let mut seen = HashSet::new();
-    let mut found = Vec::new();
+    heap.push(HeapItem {
+        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
+        seq,
+        walk: Walk {
+            mol: start,
+            steps: Vec::new(),
+            plan: Vec::new(),
+            maybe: Vec::new(),
+            opens: Vec::new(),
+            parent_cost: None,
+            diff: None,
+            cleavage_depth: 0,
+        },
+    });
+    seq += 1;
 
-    // Shallow cleavage-first net when the target is smaller: seed both matching
-    // sides as cores (depth-capped). Include depth-0 as the reactant seed so we
-    // do not also push a bare root (that double-walks the same cleavage layer).
-    let mut seeded = false;
-    if let Some(depth) = cleavage_first_depth {
-        if target_ha < start_ha {
-            let seeds =
-                crate::cleavage_graph::cleavage_first_seeds(reactant, target, ruleset, depth)?;
-            for seed in seeds {
-                if !seen.insert(seed.csmi.clone()) {
-                    continue;
-                }
-                let mol = ForestMol::parse(&seed.csmi)?;
-                let target_hit = seed.csmi == target_csmi;
-                let steps: Vec<PathStep> = seed
-                    .hops
-                    .iter()
-                    .map(|h| PathStep {
-                        rule_path: vec![Some(h.rule.clone())],
-                        pattern_name: h.pattern_name.clone(),
-                        site: h.site,
-                        site_orbit: h.site_orbit.clone(),
-                        product: h.product.clone(),
-                        sides: h.sides.clone(),
-                    })
-                    .collect();
-                heap.push(HeapItem {
-                    target_hit,
-                    seq,
-                    walk: Walk {
-                        mol,
-                        steps,
-                        plan: seed.plan,
-                        maybe: seed.maybe,
-                        opens: Vec::new(),
-                        parent_cost: None,
-                        diff: None,
-                    },
-                });
-                seq += 1;
-                seeded = true;
-            }
-        }
-    }
-    if !seeded {
-        heap.push(HeapItem {
-            target_hit: start_csmi.as_ref() == target_csmi.as_str(),
-            seq,
-            walk: Walk {
-                mol: start,
-                steps: Vec::new(),
-                plan: Vec::new(),
-                maybe: Vec::new(),
-                opens: Vec::new(),
-                parent_cost: None,
-                diff: None,
-            },
-        });
-        seq += 1;
-        seen.insert(start_csmi.as_ref().to_string());
-    }
+    let mut seen = HashSet::new();
+    seen.insert(start_csmi.as_ref().to_string());
+    let mut found = Vec::new();
 
     while let Some(item) = heap.pop() {
         if found.len() >= max_paths || counters.nodes >= max_nodes {
@@ -515,6 +475,10 @@ where
         counters.nodes += 1;
         counters.expansions += 1;
         let parent_cost = diff.as_ref().map(|d| d.cost());
+        // First-pass cleave net: only cleaving edits while under the depth cap.
+        // After that, exclude cleave sites — non-cleavage chemistry on survivors.
+        let cleave_only = cleave_first.is_some_and(|d| walk.cleavage_depth < d);
+        let no_cleave = cleave_first.is_some_and(|d| walk.cleavage_depth >= d);
         let emissions = expand(
             ruleset,
             &walk.mol,
@@ -527,28 +491,37 @@ where
         let parent_ha = walk.mol.heavy_atom_count();
 
         for emission in emissions {
+            if cleave_only && !emission.cleaves {
+                continue;
+            }
+            if no_cleave && emission.cleaves {
+                continue;
+            }
             let keeps = keep_fragments(
+                &walk.mol,
                 &emission.products,
                 &target_csmi,
                 target_ha,
                 diff.as_ref(),
                 Some(&target_mol),
             );
-            for (kept, sides) in keeps {
+            for (kept, sides, lifted_diff) in keeps {
                 let kept_csmi = kept.csmi().as_ref().to_string();
                 let child_ha = kept.heavy_atom_count();
                 let target_hit = kept_csmi == target_csmi;
 
-                // Try tag-lift (same heavy tags). None → full MCS later (eager: now;
-                // lazy: on pop). Eager closer also forces MCS when try misses.
+                // Prefer cleavage lift from keep_fragments; else same-tag lift;
+                // else None → full MCS on pop (lazy) / now (eager).
                 let mut child_diff = if use_atom_diff {
-                    diff.as_ref().and_then(|parent_d| {
-                        crate::atom_diff::try_atom_diff_for_child(
-                            &walk.mol,
-                            parent_d,
-                            &kept,
-                            &target_mol,
-                        )
+                    lifted_diff.or_else(|| {
+                        diff.as_ref().and_then(|parent_d| {
+                            crate::atom_diff::try_atom_diff_for_child(
+                                &walk.mol,
+                                parent_d,
+                                &kept,
+                                &target_mol,
+                            )
+                        })
                     })
                 } else {
                     None
@@ -588,6 +561,11 @@ where
                 steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
                 let mut plan = walk.plan.clone();
                 plan.extend(emission.plan.iter().cloned());
+                let child_cleavage_depth = if emission.cleaves {
+                    walk.cleavage_depth + 1
+                } else {
+                    walk.cleavage_depth
+                };
                 heap.push(HeapItem {
                     target_hit,
                     seq,
@@ -599,6 +577,7 @@ where
                         opens: child_opens,
                         parent_cost,
                         diff: child_diff,
+                        cleavage_depth: child_cleavage_depth,
                     },
                 });
                 seq += 1;
@@ -852,6 +831,7 @@ where
             opens: Vec::new(),
             parent_cost: None,
             diff: None,
+            cleavage_depth: 0,
         },
     });
     seq += 1;
@@ -887,15 +867,16 @@ where
 
         for emission in string_emissions {
             counters.mol_edits += 1;
-            // Re-parse products into ForestMol (filter path; no tag continuity).
+            // Filter-path emissions are CSMI strings (no tag continuity). Prefer
+            // find_path_with + Candidate materialize for tagged walks.
             let products: Result<Vec<_>, _> = emission
                 .products
                 .iter()
                 .map(|s| ForestMol::parse(s))
                 .collect();
             let products = products?;
-            let keeps = keep_fragments(&products, &target_csmi, target_ha, None, None);
-            for (kept, sides) in keeps {
+            let keeps = keep_fragments(&walk.mol, &products, &target_csmi, target_ha, None, None);
+            for (kept, sides, _) in keeps {
                 let kept_csmi = kept.csmi().as_ref().to_string();
                 let child_ha = kept.heavy_atom_count();
                 let target_hit = kept_csmi == target_csmi;
@@ -927,6 +908,11 @@ where
                 });
                 let mut plan = walk.plan.clone();
                 plan.extend(emission.plan.iter().cloned());
+                let child_cleavage_depth = if emission.cleaves {
+                    walk.cleavage_depth + 1
+                } else {
+                    walk.cleavage_depth
+                };
                 heap.push(HeapItem {
                     target_hit,
                     seq,
@@ -937,8 +923,8 @@ where
                         maybe: child_maybe,
                         opens: child_opens,
                         parent_cost: None,
-                        // Filter path re-parses; no tag continuity → no lift.
                         diff: None,
+                        cleavage_depth: child_cleavage_depth,
                     },
                 });
                 seq += 1;

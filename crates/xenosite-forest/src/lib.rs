@@ -39,10 +39,10 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_diff::{
-    AtomDiff, added_heavy_atoms, atom_diff, atom_diff_for_child, atom_diff_from_mappings,
-    candidate_could_help, candidate_could_help_on, candidate_order_key, extend_mapping_for_added,
-    keep_against_diff, lift_mappings, pair_could_help, pattern_could_help, pattern_could_help_mol,
-    try_atom_diff_for_child,
+    AtomDiff, added_heavy_atoms, atom_diff, atom_diff_after_cleavage, atom_diff_for_child,
+    atom_diff_from_mappings, candidate_could_help, candidate_could_help_on, candidate_order_key,
+    extend_mapping_for_added, keep_against_diff, lift_mappings, pair_could_help,
+    pattern_could_help, pattern_could_help_mol, try_atom_diff_for_child, try_lift_cleaved_child,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
@@ -55,7 +55,7 @@ pub use canonical_plan::{
 pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
     CleavageNode, CleavageOr, CleavageSeed, CleavageSeedHop, cleavage_first_seeds,
-    cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
+    cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
 };
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,

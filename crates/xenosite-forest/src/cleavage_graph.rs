@@ -11,6 +11,7 @@
 //! This is **not** archive And/Or plan trees: Deps stay the plan language.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::rc::Rc;
 
 use crate::ForestError;
 use crate::atom_diff::{AtomDiff, atom_diff, candidate_could_help, pair_could_help};
@@ -481,19 +482,28 @@ pub fn cleavage_product_graph(
     Ok(CleavageGraph { nodes })
 }
 
-/// One core reached by the shallow first-pass cleavage net.
+/// One core reached by a shallow cleavage-only BFS (measurement helper).
 ///
-/// Both matching sides of a split can appear as separate seeds. Plan / Maybe
-/// follow one representative arm per Or (canonical sites already collapse
-/// orbit twins).
-#[derive(Clone, Debug)]
+/// Search itself does **not** consume these: [`crate::find_path`] runs the
+/// depth-capped cleave-first phase on its own heap walks (tagged
+/// [`ForestMol`] stays on [`Walk`]). This builder exists to size the net
+/// standalone via `cleavage_graph_bench` / unit tests.
+#[derive(Clone)]
 pub struct CleavageSeed {
-    pub csmi: String,
+    pub mol: ForestMol,
+    /// Diff of `mol` vs the search target (lifted through cleavage when possible).
+    pub diff: AtomDiff,
     pub plan: Vec<crate::canonical_plan::Step>,
     pub maybe: Vec<crate::canonical_plan::CleavageSide>,
-    /// Path hops for [`crate::find_path::PathStep`] reconstruction.
+    /// Path hops for measurement / PathStep-shaped dumps.
     pub hops: Vec<CleavageSeedHop>,
     pub depth: usize,
+}
+
+impl CleavageSeed {
+    pub fn csmi(&self) -> Rc<str> {
+        self.mol.csmi()
+    }
 }
 
 /// One cleavage hop on a [`CleavageSeed`] walk.
@@ -512,30 +522,33 @@ pub struct CleavageSeedHop {
 /// Returns every expandable core visited (including the root at depth 0). Leaf
 /// scraps that fail the expand gate are recorded on Maybe of the continuing
 /// seed, not as separate seeds.
+///
+/// `start` must already be a tagged [`ForestMol`] (same object the search will
+/// walk). Child products are [`ForestMol::adopt_product`] — no SMILES round-trip.
+/// Child diffs **lift** the parent MCS after cleavage
+/// ([`crate::atom_diff::atom_diff_after_cleavage`]) when that already shows a
+/// cost drop; otherwise one MCS.
 pub fn cleavage_first_seeds(
-    start: &str,
-    target: &str,
+    start: &ForestMol,
+    target_csmi: &str,
+    target_mol: &Molecule,
     ruleset: &RuleSet,
     max_depth: usize,
 ) -> Result<Vec<CleavageSeed>, ForestError> {
-    let config = CleavageGraphConfig {
-        target: Some(target.to_string()),
-        max_nodes: 64,
-        max_depth,
-    };
-    let root_csmi = canon_of(start)?;
-    let target_csmi = canon_of(target)?;
-    let target_mol = crate::mol::parse_mol(target)?;
+    let max_nodes = 64usize;
     let target_ha = target_mol
         .atoms()
         .filter(|(_, a)| a.element.atomic_number() > 1)
         .count();
+    let root_diff = atom_diff(start.mol(), target_mol);
+    let root_csmi = start.csmi().as_ref().to_string();
 
     let mut seeds = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<CleavageSeed> = VecDeque::new();
     queue.push_back(CleavageSeed {
-        csmi: root_csmi.clone(),
+        mol: start.copy_mol(),
+        diff: root_diff,
         plan: Vec::new(),
         maybe: Vec::new(),
         hops: Vec::new(),
@@ -545,87 +558,196 @@ pub fn cleavage_first_seeds(
 
     while let Some(parent) = queue.pop_front() {
         seeds.push(parent.clone());
-        if parent.depth >= max_depth || seeds.len() >= config.max_nodes {
+        if parent.depth >= max_depth || seeds.len() >= max_nodes {
             continue;
         }
-        let parent_mol = crate::mol::parse_mol(&parent.csmi)?;
-        let parent_diff = atom_diff(&parent_mol, &target_mol);
-        let layer = cleavage_layer(&parent_mol, ruleset, &config)?;
 
-        for or in layer.products {
-            let mut ranked: Vec<(&String, bool)> = or
-                .fragments
-                .iter()
-                .map(|frag| {
-                    let expand = fragment_worth_expanding(
-                        Some(&parent_diff),
-                        frag,
-                        &target_mol,
-                        &target_csmi,
-                        target_ha,
-                    );
-                    (frag, expand)
-                })
+        let mut expandable: Vec<(ForestMol, AtomDiff, CleavageArm)> = Vec::new();
+
+        for c in ruleset.candidates(parent.mol.mol())? {
+            if !c.pattern.effect.cleaves {
+                continue;
+            }
+            if !candidate_could_help(&c, &parent.diff) {
+                continue;
+            }
+            let pieces = c.materialize_mols(parent.mol.mol())?;
+            if pieces.len() < 2 {
+                continue;
+            }
+            let mut adopted: Vec<ForestMol> = pieces
+                .into_iter()
+                .map(|p| parent.mol.adopt_product(p))
                 .collect();
-            ranked.sort_by_key(|(_, expand)| !expand);
-
-            for (frag, expand) in ranked {
-                if !expand {
+            adopted.sort_by_key(|m| m.csmi().as_ref().to_string());
+            let products: Vec<String> = adopted
+                .iter()
+                .map(|m| m.csmi().as_ref().to_string())
+                .collect();
+            let mut child_rows = Vec::new();
+            for child in adopted {
+                let csmi = child.csmi().as_ref().to_string();
+                let is_hit = csmi == target_csmi;
+                if !is_hit && child.heavy_atom_count() < target_ha {
                     continue;
                 }
-                if !seen.insert(frag.clone()) {
-                    continue;
-                }
-                // Representative arm: first arm that lists this continue CSMI.
-                let Some(arm) = or
-                    .arms
-                    .iter()
-                    .find(|a| a.products.iter().any(|p| p == frag))
-                else {
-                    continue;
-                };
-                let Some(maybe_bag) = arm.maybe_for(frag) else {
-                    continue;
-                };
-                let mut plan = parent.plan.clone();
-                plan.push(
-                    crate::canonical_plan::Step::new(
-                        arm.rule.clone(),
-                        arm.site_atoms
-                            .iter()
-                            .copied()
-                            .map(crate::canonical_plan::PlanAtom::index),
-                    )
-                    .with_orbit(arm.site_orbit.iter().copied()),
+                let child_diff = crate::atom_diff::atom_diff_after_cleavage(
+                    &parent.mol,
+                    &parent.diff,
+                    &child,
+                    target_mol,
                 );
-                let mut maybe = parent.maybe.clone();
-                maybe.extend(maybe_bag.entries.iter().cloned());
-                let sides: Vec<String> =
-                    maybe_bag.sides().into_iter().map(str::to_string).collect();
-                let mut hops = parent.hops.clone();
-                hops.push(CleavageSeedHop {
-                    rule: arm.rule.clone(),
-                    pattern_name: arm.pattern_name.clone(),
-                    site: arm.site,
-                    site_orbit: arm.site_orbit.clone(),
-                    product: frag.clone(),
-                    sides,
-                });
-                queue.push_back(CleavageSeed {
-                    csmi: frag.clone(),
-                    plan,
-                    maybe,
-                    hops,
-                    depth: parent.depth + 1,
-                });
-                if seeds.len() + queue.len() >= config.max_nodes {
-                    break;
+                if is_hit || child_diff.cost() < parent.diff.cost() {
+                    child_rows.push((child, child_diff));
                 }
+            }
+            if child_rows.is_empty() {
+                continue;
+            }
+            let rule = c.leaf_rule().unwrap_or(c.pattern.name.as_str()).to_string();
+            let arm = CleavageArm {
+                rule,
+                pattern_name: c.pattern.name.clone(),
+                site: c.site,
+                site_orbit: c.orbit.clone(),
+                site_atoms: {
+                    let mut atoms: Vec<usize> = c
+                        .pattern
+                        .site_map
+                        .iter()
+                        .filter_map(|m| c.mapped.get(m).copied())
+                        .collect();
+                    if atoms.is_empty() {
+                        atoms.push(c.site);
+                    }
+                    atoms
+                },
+                products,
+            };
+            for (child, child_diff) in child_rows {
+                expandable.push((child, child_diff, arm.clone()));
+            }
+        }
+
+        for pair in ruleset.pair_candidates(parent.mol.mol())? {
+            if !pair.effect.cleaves {
+                continue;
+            }
+            if !pair_could_help(&pair, &parent.diff, parent.mol.mol(), target_mol) {
+                continue;
+            }
+            let pieces = pair.materialize_mols(parent.mol.mol())?;
+            if pieces.len() < 2 {
+                continue;
+            }
+            let mut adopted: Vec<ForestMol> = pieces
+                .into_iter()
+                .map(|p| parent.mol.adopt_product(p))
+                .collect();
+            adopted.sort_by_key(|m| m.csmi().as_ref().to_string());
+            let products: Vec<String> = adopted
+                .iter()
+                .map(|m| m.csmi().as_ref().to_string())
+                .collect();
+            let mut child_rows = Vec::new();
+            for child in adopted {
+                let csmi = child.csmi().as_ref().to_string();
+                let is_hit = csmi == target_csmi;
+                if !is_hit && child.heavy_atom_count() < target_ha {
+                    continue;
+                }
+                let child_diff = crate::atom_diff::atom_diff_after_cleavage(
+                    &parent.mol,
+                    &parent.diff,
+                    &child,
+                    target_mol,
+                );
+                if is_hit || child_diff.cost() < parent.diff.cost() {
+                    child_rows.push((child, child_diff));
+                }
+            }
+            if child_rows.is_empty() {
+                continue;
+            }
+            let arm = CleavageArm {
+                rule: pair
+                    .pattern_name
+                    .split('+')
+                    .next()
+                    .unwrap_or("Pair")
+                    .to_string(),
+                pattern_name: pair.pattern_name.clone(),
+                site: pair.site,
+                site_orbit: vec![pair.site],
+                site_atoms: pair.plan_site_atoms(),
+                products,
+            };
+            for (child, child_diff) in child_rows {
+                expandable.push((child, child_diff, arm.clone()));
+            }
+        }
+
+        expandable.sort_by_key(|(m, _, _)| m.csmi().as_ref().to_string());
+
+        for (child_mol, child_diff, arm) in expandable {
+            let frag = child_mol.csmi().as_ref().to_string();
+            if !seen.insert(frag.clone()) {
+                continue;
+            }
+            let Some(maybe_bag) = arm.maybe_for(&frag) else {
+                continue;
+            };
+            let mut plan = parent.plan.clone();
+            plan.push(
+                crate::canonical_plan::Step::new(
+                    arm.rule.clone(),
+                    arm.site_atoms
+                        .iter()
+                        .copied()
+                        .map(crate::canonical_plan::PlanAtom::index),
+                )
+                .with_orbit(arm.site_orbit.iter().copied()),
+            );
+            let mut maybe = parent.maybe.clone();
+            maybe.extend(maybe_bag.entries.iter().cloned());
+            let sides: Vec<String> = maybe_bag.sides().into_iter().map(str::to_string).collect();
+            let mut hops = parent.hops.clone();
+            hops.push(CleavageSeedHop {
+                rule: arm.rule.clone(),
+                pattern_name: arm.pattern_name.clone(),
+                site: arm.site,
+                site_orbit: arm.site_orbit.clone(),
+                product: frag,
+                sides,
+            });
+            queue.push_back(CleavageSeed {
+                mol: child_mol,
+                diff: child_diff,
+                plan,
+                maybe,
+                hops,
+                depth: parent.depth + 1,
+            });
+            if seeds.len() + queue.len() >= max_nodes {
+                break;
             }
         }
     }
 
     Ok(seeds)
+}
+
+/// Compat: parse `start` once, then [`cleavage_first_seeds`].
+pub fn cleavage_first_seeds_smiles(
+    start: &str,
+    target: &str,
+    ruleset: &RuleSet,
+    max_depth: usize,
+) -> Result<Vec<CleavageSeed>, ForestError> {
+    let root = ForestMol::parse(start)?;
+    let target_csmi = canon_of(target)?;
+    let target_mol = crate::mol::parse_mol(target)?;
+    cleavage_first_seeds(&root, &target_csmi, &target_mol, ruleset, max_depth)
 }
 
 /// Summary counts for benches / tests.
@@ -749,17 +871,14 @@ mod tests {
     #[test]
     fn cleavage_first_seeds_depth_capped_both_sides() {
         let seeds =
-            cleavage_first_seeds("COc1ccc(OC)cc1", "Oc1ccc(O)cc1", &phase_one(), 4).unwrap();
+            cleavage_first_seeds_smiles("COc1ccc(OC)cc1", "Oc1ccc(O)cc1", &phase_one(), 4).unwrap();
         assert!(seeds.iter().any(|s| s.depth == 0));
         assert!(seeds.iter().any(|s| s.depth >= 1));
         assert!(seeds.iter().all(|s| s.depth <= 4));
-        // Both matching cores can appear; methanol scraps do not.
         let cores: Vec<_> = seeds.iter().filter(|s| s.depth > 0).collect();
         assert!(!cores.is_empty(), "expected cleavage cores");
         assert!(
-            cores
-                .iter()
-                .all(|s| ForestMol::parse(&s.csmi).unwrap().heavy_atom_count() >= 8),
+            cores.iter().all(|s| s.mol.heavy_atom_count() >= 8),
             "scraps should not be seeds"
         );
     }

@@ -651,6 +651,9 @@ fn place_added_atom(
 /// produce a cheaper/dearer cost than true MCS and poison the closer; those
 /// return `None` so the caller runs full [`atom_diff`].
 ///
+/// Cleavage shrinks: use [`try_lift_cleaved_child`] / [`atom_diff_after_cleavage`]
+/// (lift is allowed there; closer still refuses shrink via this function).
+///
 /// Never runs MCS itself.
 pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
@@ -661,7 +664,8 @@ pub fn try_atom_diff_for_child(
     if !added_heavy_atoms(parent, child).is_empty() {
         return None;
     }
-    // Any heavy parent atom missing on the child → shrink; lift cost unreliable.
+    // Any heavy parent atom missing on the child → shrink; lift cost unreliable
+    // for the closer. Cleavage expand uses [`try_lift_cleaved_child`] instead.
     for i in 0..parent.mol().atom_count() {
         if parent.mol().atom(atom_idx(i)).element.atomic_number() <= 1 {
             continue;
@@ -678,6 +682,45 @@ pub fn try_atom_diff_for_child(
     };
     let lifted = lift_mappings(parent, child, &parent_maps)?;
     Some(atom_diff_from_mappings(child.mol(), target, lifted))
+}
+
+/// Tag-lift after a cleavage shrink (no heavy adds). Removed atoms drop out of
+/// the parent MCS map via [`lift_mappings`].
+///
+/// Lifted cost may overshoot true MCS; callers that need a hard closer bound
+/// should fall back with [`atom_diff_after_cleavage`].
+pub fn try_lift_cleaved_child(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+) -> Option<AtomDiff> {
+    if !added_heavy_atoms(parent, child).is_empty() {
+        return None;
+    }
+    let parent_maps = if parent_diff.mappings.is_empty() {
+        vec![parent_diff.mapping.clone()]
+    } else {
+        parent_diff.mappings.clone()
+    };
+    let lifted = lift_mappings(parent, child, &parent_maps)?;
+    Some(atom_diff_from_mappings(child.mol(), target, lifted))
+}
+
+/// Child diff after cleavage: prefer tag-lift when it already shows a strict
+/// cost drop vs the parent; otherwise full MCS.
+pub fn atom_diff_after_cleavage(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+) -> AtomDiff {
+    if let Some(lifted) = try_lift_cleaved_child(parent, parent_diff, child, target) {
+        if lifted.cost() < parent_diff.cost() {
+            return lifted;
+        }
+    }
+    atom_diff(child.mol(), target)
 }
 
 /// Child [`AtomDiff`] via tag-lift when possible; else full MCS.
@@ -1214,14 +1257,19 @@ mod tests {
         );
         assert!(
             try_atom_diff_for_child(&parent, &parent_diff, &child, &target).is_none(),
-            "shrink should fall back to full MCS"
+            "closer still refuses shrink lift"
         );
-        let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        let lifted = try_lift_cleaved_child(&parent, &parent_diff, &child, &target)
+            .expect("cleavage shrink should tag-lift");
+        let via = atom_diff_after_cleavage(&parent, &parent_diff, &child, &target);
         assert!(
             via.cost() <= parent_cost,
             "toward phenol: parent={parent_cost} child={}",
             via.cost()
         );
+        // When lift already drops cost, after_cleavage should not need MCS.
+        if lifted.cost() < parent_cost {
+            assert_eq!(via.cost(), lifted.cost());
+        }
     }
 }
-// temp - will remove
