@@ -7,19 +7,19 @@
 //! step's leaf-first `rule_path`.
 //!
 //! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
-//! precedes from [`as_deps`]). Composite leaves own a `canonical_plan` hook
-//! (Python) that returns steps named after existing rules. Closer uses atom-diff
-//! cost. Lazy: try tag-lift at enqueue (same-heavy-tag edits only); full MCS on
-//! pop when lift is `None`. Eager: [`crate::atom_diff::atom_diff_for_child`]
-//! (lift else MCS) at enqueue.
+//! precedes + [`crate::canonical_plan::Maybe`] cleavage bags). Composite leaves
+//! own a `canonical_plan` hook (Python) that returns steps named after existing
+//! rules. Closer uses atom-diff cost. Lazy: try tag-lift at enqueue (same-heavy-
+//! tag edits only); full MCS on pop when lift is `None`. Eager:
+//! [`crate::atom_diff::atom_diff_for_child`] (lift else MCS) at enqueue.
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BTreeSet, BinaryHeap, HashSet};
 use std::rc::Rc;
 
 use crate::ForestError;
 use crate::candidate::Candidate;
-use crate::canonical_plan::{CanonicalStep, Deps, as_deps};
+use crate::canonical_plan::{CanonicalStep, CleavageSide, Deps, Maybe, as_deps};
 use crate::forest_mol::ForestMol;
 use crate::mol::{canon_of, parse_mol};
 use crate::pattern::{PatternInfo, SiteInfo};
@@ -80,9 +80,21 @@ impl PathStep {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PathOutcome {
     pub steps: Vec<PathStep>,
-    /// Elementary plan with precedes ([`Deps::bind`] / Python `as_deps`).
+    /// Elementary plan with precedes and cleavage [`Maybe`] (on the plan).
     pub plan: Deps,
     pub smiles: String,
+}
+
+impl PathOutcome {
+    /// Cleavage-side bags on the plan (Python `PathOutcome.maybe`).
+    pub fn maybe(&self) -> &Maybe {
+        self.plan.maybe()
+    }
+
+    /// [`Deps::allows`] / [`Maybe::allows`] — discarded side or overlapping site.
+    pub fn allows(&self, site: Option<&BTreeSet<usize>>, side: Option<&str>) -> bool {
+        self.plan.allows(site, side)
+    }
 }
 
 #[derive(Clone)]
@@ -90,6 +102,10 @@ struct Walk {
     mol: ForestMol,
     steps: Vec<PathStep>,
     plan: Vec<CanonicalStep>,
+    /// Accumulated cleavage bags (attached to [`Deps`] at hit yield).
+    maybe: Vec<CleavageSide>,
+    /// Uncleared ring-open sites (Python `_Walk.opens`).
+    opens: Vec<BTreeSet<usize>>,
     /// Parent's [`crate::atom_diff::AtomDiff::cost`] when this walk was
     /// enqueued. `None` = root (always expand).
     parent_cost: Option<usize>,
@@ -133,10 +149,13 @@ fn ha_distance(ha: usize, target_ha: usize) -> usize {
     ha.abs_diff(target_ha)
 }
 
-/// Tagged emission: ForestMol products + elementary plan.
+/// Tagged emission: ForestMol products + elementary plan + cleavage site data.
 #[derive(Clone)]
 struct ForestEmission {
     site: usize,
+    /// Discovery site atoms (Python frozenset site for CleavageSide).
+    site_atoms: BTreeSet<usize>,
+    cleaves: bool,
     pattern_name: String,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
@@ -314,6 +333,8 @@ where
             mol: start,
             steps: Vec::new(),
             plan: Vec::new(),
+            maybe: Vec::new(),
+            opens: Vec::new(),
             parent_cost: None,
             diff: None,
         },
@@ -334,7 +355,7 @@ where
             counters.nodes += 1;
             found.push(PathOutcome {
                 steps: walk.steps,
-                plan: as_deps(walk.plan),
+                plan: as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe)),
                 smiles: here.as_ref().to_string(),
             });
             continue;
@@ -418,6 +439,14 @@ where
             }
             seen.insert(kept_csmi.clone());
 
+            let (child_maybe, child_opens) = accumulate_maybe(
+                &walk.maybe,
+                &walk.opens,
+                &emission.site_atoms,
+                emission.cleaves,
+                emission.products.len(),
+                &sides,
+            );
             let mut steps = walk.steps.clone();
             steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
             let mut plan = walk.plan.clone();
@@ -429,6 +458,8 @@ where
                     mol: kept,
                     steps,
                     plan,
+                    maybe: child_maybe,
+                    opens: child_opens,
                     parent_cost,
                     diff: child_diff,
                 },
@@ -444,6 +475,47 @@ where
     }
 
     Ok(found)
+}
+
+/// Python walk update: ring-open accumulates `opens`; bifurcation appends bags.
+fn accumulate_maybe(
+    parent_maybe: &[CleavageSide],
+    parent_opens: &[BTreeSet<usize>],
+    site_atoms: &BTreeSet<usize>,
+    cleaves: bool,
+    n_products: usize,
+    discarded: &[String],
+) -> (Vec<CleavageSide>, Vec<BTreeSet<usize>>) {
+    if n_products == 1 && cleaves {
+        let mut opens = parent_opens.to_vec();
+        opens.push(site_atoms.clone());
+        (parent_maybe.to_vec(), opens)
+    } else if n_products > 1 {
+        let mut maybe = parent_maybe.to_vec();
+        for side in discarded {
+            maybe.push(CleavageSide::new(
+                site_atoms.iter().copied(),
+                side.clone(),
+                parent_opens.iter().cloned(),
+            ));
+        }
+        (maybe, parent_opens.to_vec())
+    } else {
+        (parent_maybe.to_vec(), parent_opens.to_vec())
+    }
+}
+
+fn candidate_site_atoms(candidate: &Candidate) -> BTreeSet<usize> {
+    let mut atoms: BTreeSet<usize> = candidate
+        .pattern
+        .site_map
+        .iter()
+        .filter_map(|m| candidate.mapped.get(m).copied())
+        .collect();
+    if atoms.is_empty() {
+        atoms.insert(candidate.site);
+    }
+    atoms
 }
 
 fn expand<K>(
@@ -492,6 +564,8 @@ fn emit_candidate(
         .collect();
     Ok(Some(ForestEmission {
         site: candidate.site,
+        site_atoms: candidate_site_atoms(candidate),
+        cleaves: candidate.pattern.effect.cleaves,
         pattern_name: candidate.pattern.name.clone(),
         rule_path: candidate.rule_path.clone(),
         products,
@@ -566,6 +640,8 @@ where
         let plan = ruleset.canonical_plan(mol, &site_atoms, Some(&ends));
         out.push(ForestEmission {
             site: pair.site,
+            site_atoms: pair.plan_site_atoms().into_iter().collect(),
+            cleaves: pair.effect.cleaves,
             pattern_name: pair.pattern_name.clone(),
             rule_path: vec![ruleset.name.clone()],
             products,
@@ -626,6 +702,8 @@ where
             mol: start,
             steps: Vec::new(),
             plan: Vec::new(),
+            maybe: Vec::new(),
+            opens: Vec::new(),
             parent_cost: None,
             diff: None,
         },
@@ -646,7 +724,7 @@ where
         if here.as_ref() == target_csmi.as_str() {
             found.push(PathOutcome {
                 steps: walk.steps,
-                plan: as_deps(walk.plan),
+                plan: as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe)),
                 smiles: here.as_ref().to_string(),
             });
             continue;
@@ -680,6 +758,15 @@ where
             }
             seen.insert(kept_csmi.clone());
 
+            let site_atoms: BTreeSet<usize> = emission.site_atoms.iter().copied().collect();
+            let (child_maybe, child_opens) = accumulate_maybe(
+                &walk.maybe,
+                &walk.opens,
+                &site_atoms,
+                emission.cleaves,
+                products.len(),
+                &sides,
+            );
             let mut steps = walk.steps.clone();
             steps.push(PathStep {
                 rule_path: emission.rule_path.clone(),
@@ -697,6 +784,8 @@ where
                     mol: kept,
                     steps,
                     plan,
+                    maybe: child_maybe,
+                    opens: child_opens,
                     parent_cost: None,
                     // Filter path re-parses; no tag continuity → no lift.
                     diff: None,
@@ -752,6 +841,11 @@ mod tests {
             !outcome.steps[0].sides.is_empty(),
             "cleavage should leave a side fragment"
         );
+        assert!(!outcome.maybe().is_empty(), "maybe bags on the plan");
+        assert!(
+            outcome.allows(None, Some(outcome.maybe().entries[0].side.as_str())),
+            "allows discarded side"
+        );
         assert_eq!(outcome.plan[0].rule, "Dealkylation");
     }
 
@@ -786,6 +880,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert!(hits[0].steps.is_empty());
         assert!(hits[0].plan.is_empty());
+        assert!(hits[0].maybe().is_empty());
         assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
         assert_eq!(counters.nodes, 1);
         assert_eq!(counters.mol_edits, 0);
@@ -970,5 +1065,184 @@ mod tests {
         assert_eq!(child.tag_of(child.index_of(t0).unwrap()), Some(t0));
         assert_eq!(child.tag_of(child.index_of(t1).unwrap()), Some(t1));
         assert_eq!(child.mol().atom_count(), 3);
+    }
+
+    #[test]
+    fn cleavage_side_and_maybe_allows_on_deps() {
+        use crate::canonical_plan::{CleavageSide, Maybe};
+        use std::collections::BTreeSet;
+
+        let side = CleavageSide::new([1, 2], canon_of("CCO").unwrap(), []);
+        let empty = Maybe::default();
+        assert!(empty.is_empty());
+
+        let filled = Maybe::new([side]);
+        assert!(!filled.is_empty());
+        let demethyl: BTreeSet<_> = [0usize, 1].into_iter().collect();
+        let formation: BTreeSet<_> = [1usize, 2].into_iter().collect();
+        assert!(filled.allows(Some(&demethyl), None));
+        assert!(!filled.allows(Some(&formation), None));
+        assert!(filled.allows(None, Some("CCO")));
+        let far: BTreeSet<_> = [9usize, 10].into_iter().collect();
+        assert!(!filled.allows(Some(&far), None));
+
+        let plan = Deps::bind([crate::canonical_plan::Step::new(
+            "Dealkylation",
+            [crate::canonical_plan::PlanAtom::index(1)],
+        )])
+        .with_maybe(filled);
+        assert!(plan.allows(Some(&demethyl), None));
+        assert!(!plan.allows(Some(&formation), None));
+    }
+
+    #[test]
+    fn hydrolysis_emits_maybe_bag_on_plan() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "c1ccccc1C(=O)OC(C)(C)C",
+            "O=C(O)c1ccccc1",
+            &crate::rules::hydrolysis(),
+            &mut counters,
+            FindPathConfig {
+                max_paths: 3,
+                max_nodes: 40,
+                use_atom_diff: false,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        let with_bag: Vec<_> = hits.iter().filter(|h| !h.maybe().is_empty()).collect();
+        assert!(!with_bag.is_empty(), "expected CleavageSide on hydrolysis");
+        let outcome = with_bag[0];
+        assert_eq!(
+            outcome.plan.iter().map(|s| s.rule.as_str()).collect::<Vec<_>>(),
+            vec!["Hydrolysis"]
+        );
+        let want_side = canon_of("CC(C)(C)O").unwrap();
+        assert!(
+            outcome.maybe().entries.iter().any(|e| e.side == want_side),
+            "sides={:?}",
+            outcome.maybe().sides()
+        );
+        assert!(outcome.allows(None, Some(&want_side)));
+    }
+
+    #[test]
+    fn dealkylation_emits_maybe_and_multipath() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "CN(C)Cc1ccccc1",
+            "O=Cc1ccccc1",
+            &crate::rules::dealkylation(),
+            &mut counters,
+            FindPathConfig {
+                max_paths: 4,
+                max_nodes: 80,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        assert!(
+            hits.iter().any(|h| !h.maybe().is_empty()),
+            "expected maybe bag"
+        );
+        let parent_ha = ForestMol::parse("CN(C)Cc1ccccc1")
+            .unwrap()
+            .heavy_atom_count();
+        for h in &hits {
+            for e in &h.maybe().entries {
+                let side_ha = ForestMol::parse(&e.side).unwrap().heavy_atom_count();
+                assert!(side_ha < parent_ha, "side={} ha={side_ha}", e.side);
+            }
+        }
+    }
+
+    #[test]
+    fn multipath_emits_up_to_max_paths() {
+        let mut counters = PathCounters::default();
+        let one = find_path_with(
+            "CN(C)Cc1ccccc1",
+            "O=Cc1ccccc1",
+            &crate::rules::phase_one(),
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 100,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        assert_eq!(one.len(), 1);
+
+        let mut counters = PathCounters::default();
+        let many = find_path_with(
+            "CN(C)Cc1ccccc1",
+            "O=Cc1ccccc1",
+            &crate::rules::phase_one(),
+            &mut counters,
+            FindPathConfig {
+                max_paths: 4,
+                max_nodes: 200,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        assert!(
+            many.len() > 1 && many.len() <= 4,
+            "max_paths=1 → {} hits; max_paths=4 → {} (want >1)",
+            one.len(),
+            many.len()
+        );
+        assert!(many.iter().all(|h| h.smiles == one[0].smiles));
+    }
+
+    #[test]
+    fn tba_cleavage_maybe_allows_overlapping_site() {
+        // Terbinafine → TBA: formation Dealkylation leaves naphthyl-amine bag.
+        const TERB: &str = "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12";
+        const TBA: &str = r"C(#C/C=C/C=O)C(C)(C)C";
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            TERB,
+            TBA,
+            &crate::rules::phase_one(),
+            &mut counters,
+            FindPathConfig {
+                max_paths: 3,
+                max_nodes: 80,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        let direct: Vec<_> = hits
+            .iter()
+            .filter(|h| {
+                h.plan.len() == 1 && h.plan[0].rule == "Dealkylation"
+            })
+            .collect();
+        assert!(!direct.is_empty(), "expected Dealkylation → TBA");
+        let outcome = direct[0];
+        assert!(!outcome.maybe().is_empty());
+        assert!(
+            outcome.maybe().entries.iter().any(|e| e.side.contains("cccc")),
+            "sides={:?}",
+            outcome.maybe().sides()
+        );
+        let formation = outcome.maybe().entries[0].site.clone();
+        assert!(!outcome.allows(Some(&formation), None));
+        // Overlapping different site (share one atom) passes Maybe.
+        let mut demethyl = BTreeSet::new();
+        demethyl.insert(*formation.iter().next().unwrap());
+        demethyl.insert(formation.iter().next().unwrap() + 1000);
+        assert!(outcome.allows(Some(&demethyl), None));
+        assert!(outcome.allows(None, Some(outcome.maybe().entries[0].side.as_str())));
     }
 }

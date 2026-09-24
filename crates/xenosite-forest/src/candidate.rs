@@ -88,6 +88,19 @@ impl Candidate {
         }
         Ok(Some(Emission {
             site: self.site,
+            site_atoms: {
+                let mut atoms: Vec<usize> = self
+                    .pattern
+                    .site_map
+                    .iter()
+                    .filter_map(|m| self.mapped.get(m).copied())
+                    .collect();
+                if atoms.is_empty() {
+                    atoms.push(self.site);
+                }
+                atoms
+            },
+            cleaves: self.pattern.effect.cleaves,
             pattern_name: self.pattern.name.clone(),
             rule_path: self.rule_path.clone(),
             products,

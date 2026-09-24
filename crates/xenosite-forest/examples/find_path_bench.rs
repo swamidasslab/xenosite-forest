@@ -13,7 +13,7 @@
 //!
 //! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
-//! `--nofilter`).
+//! `--nofilter`), `--paths N` (emit up to N plans; default 1).
 //!
 //! Pair with:
 //! ```text
@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use xenosite_forest::{FindPathConfig, PathCounters, canon_of, find_path_with, phase_one};
 
 const MAX_NODES: usize = 800;
-const MAX_PATHS: usize = 1;
+const DEFAULT_MAX_PATHS: usize = 1;
 const REPEATS: u32 = 5;
 /// Best-of repeats when running the expensive unfiltered table.
 const NOFILTER_REPEATS: u32 = 1;
@@ -127,6 +127,7 @@ const HARD: &[(&str, &str, &str)] = &[
 #[derive(Clone, Debug)]
 struct Row {
     hit: bool,
+    hits: usize,
     seconds: f64,
     steps: usize,
     nodes: usize,
@@ -139,12 +140,13 @@ fn run_one(
     target: &str,
     use_atom_diff: bool,
     lazy_closer: bool,
+    max_paths: usize,
     repeats: u32,
 ) -> Row {
     let want = canon_of(target).unwrap_or_else(|e| panic!("{target}: {e}"));
     let set = phase_one();
     let config = FindPathConfig {
-        max_paths: MAX_PATHS,
+        max_paths,
         max_nodes: MAX_NODES,
         use_atom_diff,
         lazy_closer,
@@ -167,6 +169,7 @@ fn run_one(
         let steps = hits.first().map(|h| h.steps.len()).unwrap_or(0);
         let row = Row {
             hit,
+            hits: hits.len(),
             seconds,
             steps,
             nodes: counters.nodes,
@@ -187,13 +190,16 @@ fn print_table(
     cases: &[(&str, &str, &str)],
     use_atom_diff: bool,
     lazy_closer: bool,
+    max_paths: usize,
     repeats: u32,
     budget: Duration,
 ) {
-    println!("\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}) ===");
     println!(
-        "{:<32} {:>4} {:>9} {:>5} {:>6} {:>7} {:>6}",
-        "case", "hit", "seconds", "steps", "nodes", "edits", "bill"
+        "\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}, max_paths={max_paths}) ==="
+    );
+    println!(
+        "{:<32} {:>4} {:>5} {:>9} {:>5} {:>6} {:>7} {:>6}",
+        "case", "hit", "hits", "seconds", "steps", "nodes", "edits", "bill"
     );
     let mut total = 0.0;
     let suite_t0 = Instant::now();
@@ -202,12 +208,20 @@ fn print_table(
             println!("{name:<32} SKIP  (budget {:.0}s)", budget.as_secs_f64());
             continue;
         }
-        let row = run_one(reactant, target, use_atom_diff, lazy_closer, repeats);
+        let row = run_one(
+            reactant,
+            target,
+            use_atom_diff,
+            lazy_closer,
+            max_paths,
+            repeats,
+        );
         total += row.seconds;
         println!(
-            "{:<32} {:>4} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
+            "{:<32} {:>4} {:>5} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
             name,
             if row.hit { "ok" } else { "MISS" },
+            row.hits,
             row.seconds,
             row.steps,
             row.nodes,
@@ -215,7 +229,7 @@ fn print_table(
             row.billed
         );
     }
-    println!("{:<32} {:>4} {:>9.3}", "TOTAL", "", total);
+    println!("{:<32} {:>4} {:>5} {:>9.3}", "TOTAL", "", "", total);
 }
 
 fn parse_budget(args: &[String], default_secs: u64) -> Duration {
@@ -226,6 +240,14 @@ fn parse_budget(args: &[String], default_secs: u64) -> Duration {
         .unwrap_or_else(|| Duration::from_secs(default_secs))
 }
 
+fn parse_paths(args: &[String]) -> usize {
+    args.windows(2)
+        .find(|w| w[0] == "--paths")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(DEFAULT_MAX_PATHS)
+        .max(1)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let larger = args.iter().any(|a| a == "--larger");
@@ -234,9 +256,10 @@ fn main() {
     let nofilter = args.iter().any(|a| a == "--nofilter");
     let filter_only = !nofilter || args.iter().any(|a| a == "--filter-only");
     let budget = parse_budget(&args, if nofilter { 60 } else { 30 });
+    let max_paths = parse_paths(&args);
 
     println!(
-        "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={MAX_PATHS}  best-of-{REPEATS}"
+        "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
     );
     println!(
         "(release; tagged ForestMol; filter-only={filter_only}; budget={}s)",
@@ -252,10 +275,18 @@ fn main() {
     };
 
     if nofilter && !args.iter().any(|a| a == "--filter-only") {
-        print_table(title, cases, false, false, NOFILTER_REPEATS, budget);
+        print_table(
+            title,
+            cases,
+            false,
+            false,
+            max_paths,
+            NOFILTER_REPEATS,
+            budget,
+        );
     }
-    print_table(title, cases, true, true, REPEATS, budget);
+    print_table(title, cases, true, true, max_paths, REPEATS, budget);
     if hard || args.iter().any(|a| a == "--eager") {
-        print_table(title, cases, true, false, REPEATS, budget);
+        print_table(title, cases, true, false, max_paths, REPEATS, budget);
     }
 }

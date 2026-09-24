@@ -29,8 +29,9 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 Status: approved (Rust derisk; shape may replace Python `CanonicalStep`).
 
 The plan language is flat [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs):
-elementary `Step`s (rule name + site notes) plus precedes. There is no parallel
-`CanonicalStep` dialect for search.
+elementary `Step`s (rule name + site notes) plus precedes, plus [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs)
+cleavage bags on the same plan (not a sibling on the path outcome). There is no
+parallel `CanonicalStep` dialect for search.
 
 Site notes are one enum: known index | `WillAdd(element @ anchor)` | `AddedBy(rule, anchors)`.
 `Deps::bind` rewrites will-add → added-by and builds precedes from those notes.

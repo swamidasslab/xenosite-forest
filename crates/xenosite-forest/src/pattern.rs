@@ -109,6 +109,9 @@ pub struct SiteInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Emission {
     pub site: usize,
+    /// Discovery site atoms for cleavage bookkeeping ([`crate::canonical_plan::CleavageSide`]).
+    pub site_atoms: Vec<usize>,
+    pub cleaves: bool,
     pub pattern_name: String,
     pub rule_path: Vec<Option<String>>,
     pub products: Vec<String>,

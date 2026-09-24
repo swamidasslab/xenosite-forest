@@ -46,9 +46,9 @@ pub use atom_diff::{
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
-    CanonicalPlanFn, CanonicalStep, Deps, Linearization, PlanAtom, Step, align_deps_indices,
-    as_deps, bind_deps, canonical_dependency_edges, identity_canonical_plan, identity_plan,
-    plan_for_leaf, quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
+    CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
+    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges, identity_canonical_plan,
+    identity_plan, plan_for_leaf, quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
 };
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,

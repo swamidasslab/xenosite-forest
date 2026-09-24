@@ -338,11 +338,12 @@ oxidation can raise HA distance while lowering cost.
 (not bare SMILES). Edits use `materialize_mols` → `adopt_product` so tags and
 the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a bound
 [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs) (elementary
-`Step`s + precedes); composite leaves expand via `RuleSet::canonical_plan`. Lazy and
+`Step`s + precedes + [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs)
+cleavage bags on the plan); composite leaves expand via `RuleSet::canonical_plan`. Lazy and
 eager use `try_atom_diff_for_child` when parent/child share heavy tags; else
 full MCS (`atom_diff_for_child` on eager). Add/remove is always MCS.
 
 Plan fuzz ports of the Python Hypothesis suites live under
 [`tests/phase1_plan_fuzz.rs`](../../crates/xenosite-forest/tests/phase1_plan_fuzz.rs)
 (`proptest`, or equivalent). Case count follows `XENOSITE_FUZZ_EXAMPLES` or
-proptest's `PROPTEST_CASES`.
+proptest's `PROPTEST_CASES`. Bench `--paths N` emits up to N plans (default 1).

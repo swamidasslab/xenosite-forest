@@ -1,4 +1,4 @@
-//! Elementary plans: the plan **is** [`Deps`] (steps + precedes).
+//! Elementary plans: the plan **is** [`Deps`] (steps + precedes + maybe).
 //!
 //! No parallel `CanonicalStep` dialect. A hop emits elementary [`Step`]s;
 //! [`Deps::bind`] rewrites [`PlanAtom::WillAdd`] → [`PlanAtom::AddedBy`] and
@@ -6,10 +6,13 @@
 //! `canonical_plan`) that returns steps named after existing elementary
 //! rules — not a `PlanKind` enum in search.
 //!
+//! Cleavage fragments discarded by the walk live on the plan as [`Maybe`]
+//! (not a sibling on the path outcome, and not searched).
+//!
 //! Replay: [`Deps::linearizations`] → [`Linearization::apply`] through named
 //! elementary rules at resolved sites.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeSet, HashSet, VecDeque};
 use std::ops::Deref;
 
 use crate::ForestError;
@@ -203,11 +206,98 @@ fn resolve_added_element(mol: &Molecule, at: usize, element: &str) -> Result<usi
     })
 }
 
-/// Flat elementary steps plus precedes (transitive reduction).
+/// Fragment discarded at a cleavage. Not searched.
+///
+/// `site` is the cleavage site on the parent. `opens` are earlier ring-open
+/// sites on the same walk, oldest first. `side` is the discarded fragment CSMI.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CleavageSide {
+    pub site: BTreeSet<usize>,
+    pub side: String,
+    pub opens: Vec<BTreeSet<usize>>,
+}
+
+impl CleavageSide {
+    pub fn new(
+        site: impl IntoIterator<Item = usize>,
+        side: impl Into<String>,
+        opens: impl IntoIterator<Item = BTreeSet<usize>>,
+    ) -> Self {
+        Self {
+            site: site.into_iter().collect(),
+            side: side.into(),
+            opens: opens.into_iter().collect(),
+        }
+    }
+
+    /// Formation site plus prior ring-opens (Python `span_sites`).
+    pub fn span_sites(&self) -> Vec<&BTreeSet<usize>> {
+        let mut out: Vec<&BTreeSet<usize>> = self.opens.iter().collect();
+        out.push(&self.site);
+        out
+    }
+}
+
+/// Uncleared cleavage fragments carried on a [`Deps`] plan. Not a step.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Maybe {
+    pub entries: Vec<CleavageSide>,
+}
+
+impl Maybe {
+    pub fn new(entries: impl IntoIterator<Item = CleavageSide>) -> Self {
+        Self {
+            entries: entries.into_iter().collect(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn sides(&self) -> Vec<&str> {
+        self.entries.iter().map(|e| e.side.as_str()).collect()
+    }
+
+    /// True when `side` is a discarded fragment, or `site` overlaps a bag span.
+    ///
+    /// The bifurcating cleavage site itself does not pass: that step is already
+    /// in the required plan. A different reaction on overlapping atoms does.
+    pub fn allows(&self, site: Option<&BTreeSet<usize>>, side: Option<&str>) -> bool {
+        if self.entries.is_empty() {
+            return false;
+        }
+        if let Some(want) = side {
+            let want = canon_of(want).unwrap_or_else(|_| want.to_string());
+            return self.entries.iter().any(|e| e.side == want);
+        }
+        let Some(keys) = site else {
+            return true;
+        };
+        if keys.is_empty() {
+            return false;
+        }
+        for entry in &self.entries {
+            if keys == &entry.site {
+                continue;
+            }
+            for span in entry.span_sites() {
+                if !keys.is_disjoint(span) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+/// Flat elementary steps plus precedes (transitive reduction) and [`Maybe`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Deps {
     steps: Vec<Step>,
     precedes: Vec<(usize, usize)>,
+    /// Discarded cleavage fragments (Python `PathOutcome.maybe`, on the plan).
+    maybe: Maybe,
 }
 
 impl Deps {
@@ -230,12 +320,22 @@ impl Deps {
         } else {
             canonical_dependency_edges(n, &raw).expect("cycle in precedes")
         };
-        Self { steps, precedes }
+        Self {
+            steps,
+            precedes,
+            maybe: Maybe::default(),
+        }
     }
 
     /// Bind will-add notes → added-by, then build precedes (the plan identity).
     pub fn bind(steps: impl IntoIterator<Item = Step>) -> Self {
         bind_deps(steps.into_iter().collect())
+    }
+
+    /// Attach cleavage-side bags (Python `Maybe` on the outcome, here on Deps).
+    pub fn with_maybe(mut self, maybe: Maybe) -> Self {
+        self.maybe = maybe;
+        self
     }
 
     pub fn steps(&self) -> &[Step] {
@@ -244,6 +344,15 @@ impl Deps {
 
     pub fn precedes(&self) -> &[(usize, usize)] {
         &self.precedes
+    }
+
+    pub fn maybe(&self) -> &Maybe {
+        &self.maybe
+    }
+
+    /// Delegate to [`Maybe::allows`] (site overlap or discarded side SMILES).
+    pub fn allows(&self, site: Option<&BTreeSet<usize>>, side: Option<&str>) -> bool {
+        self.maybe.allows(site, side)
     }
 
     pub fn is_empty(&self) -> bool {

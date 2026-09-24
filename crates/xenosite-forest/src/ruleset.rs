@@ -285,6 +285,8 @@ impl RuleSet {
                 let plan = self.canonical_plan(mol, &site_atoms, Some(&ends));
                 out.push(Emission {
                     site: emission.site,
+                    site_atoms: site_atoms.clone(),
+                    cleaves: pair.effect.cleaves,
                     pattern_name: emission.pattern_name,
                     rule_path: vec![self.name.clone()],
                     products: emission.products,
@@ -411,6 +413,8 @@ impl RuleSet {
                 let plan = self.canonical_plan(mol, &site_atoms, Some(&ends));
                 let emission = Emission {
                     site: emission.site,
+                    site_atoms: site_atoms.clone(),
+                    cleaves: pair.effect.cleaves,
                     pattern_name: emission.pattern_name,
                     rule_path: vec![self.name.clone()],
                     products: emission.products,
