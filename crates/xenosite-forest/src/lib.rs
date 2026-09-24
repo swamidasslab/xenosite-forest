@@ -48,7 +48,8 @@ pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
     CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
     align_deps_indices, as_deps, bind_deps, canonical_dependency_edges, identity_canonical_plan,
-    identity_plan, plan_for_leaf, quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
+    identity_plan, identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
+    transitive_closure_masks,
 };
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
@@ -60,8 +61,9 @@ pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{
-    AtomBondGenerator, atom_bond_generators, atom_pair_orbit_id, atom_pair_orbit_id_with_gens,
-    unordered_atom_pair_groups_with_gens, unordered_atom_pair_orbit_sizes,
+    AtomBondGenerator, atom_bond_generators, atom_orbit, atom_orbit_with_gens, atom_pair_orbit_id,
+    atom_pair_orbit_id_with_gens, atoms_orbit_with_gens, unordered_atom_pair_groups_with_gens,
+    unordered_atom_pair_orbit_sizes,
 };
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};

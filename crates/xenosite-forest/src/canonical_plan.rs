@@ -70,6 +70,10 @@ fn plan_atom_sort_key(a: &PlanAtom) -> (u8, String, Vec<usize>) {
 pub struct Step {
     pub rule: String,
     pub site: Vec<PlanAtom>,
+    /// Automorphism orbit of the site atoms (generator closure), sorted.
+    /// Empty means unknown / not filled; treat as the resolved site indexes.
+    /// Filled from ForestMol-cached gens when the plan is emitted.
+    pub orbit: Vec<usize>,
 }
 
 /// Compat alias while call sites migrate.
@@ -83,12 +87,45 @@ impl Step {
         Self {
             rule: rule.into(),
             site,
+            orbit: Vec::new(),
         }
+    }
+
+    pub fn with_orbit(mut self, orbit: impl IntoIterator<Item = usize>) -> Self {
+        let mut orbit: Vec<_> = orbit.into_iter().collect();
+        orbit.sort_unstable();
+        orbit.dedup();
+        self.orbit = orbit;
+        self
     }
 
     /// Origin / will-add anchors named by this step's site notes.
     pub fn anchors(&self) -> HashSet<usize> {
         self.site.iter().filter_map(PlanAtom::anchor).collect()
+    }
+
+    /// Orbit for equivalence checks: filled orbit, or resolved index anchors.
+    pub fn site_orbit(&self) -> Vec<usize> {
+        if !self.orbit.is_empty() {
+            return self.orbit.clone();
+        }
+        let mut atoms: Vec<_> = self.anchors().into_iter().collect();
+        atoms.sort_unstable();
+        atoms
+    }
+
+    /// Same rule and site classes under passed / filled orbits.
+    pub fn same_site_class(&self, other: &Self) -> bool {
+        if self.rule != other.rule {
+            return false;
+        }
+        let a = self.site_orbit();
+        let b = other.site_orbit();
+        match (a.first(), b.first()) {
+            (Some(&ai), Some(&bi)) => crate::same_site_orbit(ai, &a, bi, &b),
+            (None, None) => true,
+            _ => false,
+        }
     }
 
     /// Resolve site notes to current heavy-atom indices on `mol`.
@@ -666,7 +703,7 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
                 PlanAtom::Index(_) => site.push(item.clone()),
             }
         }
-        bound.push(Step::new(step.rule.clone(), site));
+        bound.push(Step::new(step.rule.clone(), site).with_orbit(step.orbit.iter().copied()));
     }
     Deps::new(bound, edges)
 }
@@ -691,6 +728,16 @@ pub type CanonicalPlanFn = fn(
 /// Identity plan: `rule` at the given site atoms.
 pub fn identity_plan(rule: impl Into<String>, site: impl IntoIterator<Item = usize>) -> Vec<Step> {
     vec![Step::new(rule, site.into_iter().map(PlanAtom::index))]
+}
+
+/// Identity plan with automorphism orbit of the site (from generators).
+pub fn identity_plan_with_orbit(
+    rule: impl Into<String>,
+    site: impl IntoIterator<Item = usize>,
+    orbit: impl IntoIterator<Item = usize>,
+) -> Vec<Step> {
+    let site: Vec<_> = site.into_iter().collect();
+    vec![Step::new(rule, site.into_iter().map(PlanAtom::index)).with_orbit(orbit)]
 }
 
 /// Compat name.

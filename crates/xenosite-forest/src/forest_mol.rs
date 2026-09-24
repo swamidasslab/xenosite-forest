@@ -245,6 +245,15 @@ impl ForestMol {
         )
     }
 
+    /// Automorphism orbit of one atom using cached generators.
+    pub fn atom_orbit(&self, atom: usize) -> Vec<usize> {
+        crate::orbits::atom_orbit_with_gens(
+            &self.atom_bond_generators(),
+            self.mol.atom_count(),
+            atom,
+        )
+    }
+
     pub fn smarts_matches(
         &self,
         smarts: &str,

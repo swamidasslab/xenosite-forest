@@ -189,6 +189,53 @@ pub fn atom_pair_orbit_id_with_gens(
     usize::MAX
 }
 
+/// Automorphism orbit of one atom (closure under atom+bond generators).
+pub fn atom_orbit(mol: &Molecule, atom: usize) -> Vec<usize> {
+    atom_orbit_with_gens(&atom_bond_generators(mol), mol.atom_count(), atom)
+}
+
+/// Like [`atom_orbit`], with generators supplied (e.g. ForestMol cache).
+pub fn atom_orbit_with_gens(
+    generators: &[AtomBondGenerator],
+    n_atoms: usize,
+    atom: usize,
+) -> Vec<usize> {
+    if atom >= n_atoms {
+        return Vec::new();
+    }
+    let mut seen = vec![false; n_atoms];
+    let mut stack = vec![atom];
+    seen[atom] = true;
+    while let Some(i) = stack.pop() {
+        for (atom_map, _) in generators {
+            let j = atom_map[i];
+            if j < n_atoms && !seen[j] {
+                seen[j] = true;
+                stack.push(j);
+            }
+        }
+    }
+    (0..n_atoms).filter(|&i| seen[i]).collect()
+}
+
+/// Union of automorphism orbits of the given atoms (sorted, deduped).
+pub fn atoms_orbit_with_gens(
+    generators: &[AtomBondGenerator],
+    n_atoms: usize,
+    atoms: impl IntoIterator<Item = usize>,
+) -> Vec<usize> {
+    let mut seen = vec![false; n_atoms];
+    for atom in atoms {
+        if atom >= n_atoms || seen[atom] {
+            continue;
+        }
+        for i in atom_orbit_with_gens(generators, n_atoms, atom) {
+            seen[i] = true;
+        }
+    }
+    (0..n_atoms).filter(|&i| seen[i]).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,6 +291,24 @@ mod tests {
         assert_eq!(by_dist[&2].len(), 1);
         assert_eq!(by_dist[&3].len(), 1);
         assert_ne!(by_dist[&2], by_dist[&3]);
+    }
+
+    #[test]
+    fn benzene_atom_orbit_is_all_six_carbons() {
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let gens = atom_bond_generators(&mol);
+        let orbit = atom_orbit_with_gens(&gens, mol.atom_count(), 0);
+        assert_eq!(orbit, vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(atom_orbit(&mol, 3), orbit);
+    }
+
+    #[test]
+    fn propane_methyl_orbit_is_two_ends() {
+        let mol = parse_mol("CCC").unwrap();
+        let ends = atom_orbit(&mol, 0);
+        assert_eq!(ends.len(), 2);
+        assert!(ends.contains(&0));
+        assert!(!ends.contains(&1)); // middle carbon
     }
 
     #[test]

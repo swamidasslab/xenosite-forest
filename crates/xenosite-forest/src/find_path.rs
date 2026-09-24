@@ -592,7 +592,8 @@ fn emit_candidate(
         pattern_name: candidate.pattern.name.clone(),
         rule_path: candidate.rule_path.clone(),
         products,
-        plan: candidate.identity_plan(),
+        plan: candidate
+            .identity_plan_with_gens(&parent.atom_bond_generators(), parent.mol().atom_count()),
     }))
 }
 

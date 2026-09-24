@@ -615,6 +615,10 @@ mod tests {
         let cands = hydroxylation().candidates(&mol).unwrap();
         let h = cands.iter().find(|c| c.pattern.name == "h").unwrap();
         assert_eq!(h.orbit.len(), 6);
+        let plan = &emissions[0].plan;
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].orbit.len(), 6);
+        assert_eq!(plan[0].orbit, emissions[0].site_orbit);
     }
 
     #[test]

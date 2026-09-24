@@ -481,6 +481,8 @@ pub fn pair_candidates(
 
     let mut out = Vec::new();
     let mut seen_sig: BTreeSet<(usize, usize, String, String, usize)> = BTreeSet::new();
+    let gens = crate::orbits::atom_bond_generators(mol);
+    let n_atoms = mol.atom_count();
 
     for system in &systems {
         let anchors: Vec<usize> = hits
@@ -521,7 +523,8 @@ pub fn pair_candidates(
                         };
                         let sa = site_a.min(site_b);
                         let sb = site_a.max(site_b);
-                        let orbit = crate::orbits::atom_pair_orbit_id(mol, sa, sb);
+                        let orbit =
+                            crate::orbits::atom_pair_orbit_id_with_gens(&gens, n_atoms, sa, sb);
                         if !seen_sig.insert((sa, sb, n1.clone(), n2.clone(), orbit)) {
                             continue;
                         }
