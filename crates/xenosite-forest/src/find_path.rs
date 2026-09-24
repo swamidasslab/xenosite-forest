@@ -248,6 +248,12 @@ fn accept_all_candidates(_c: &Candidate) -> bool {
     true
 }
 
+/// HEURISTICS: a later walk that is only a reordering of an already-yielded
+/// [`Deps`] is not a new path.
+fn plan_already_yielded(found: &[PathOutcome], plan: &Deps) -> bool {
+    found.iter().any(|h| h.plan.same_linearizations(plan))
+}
+
 /// Yield walks that turn ``reactant`` into ``target``.
 ///
 /// Discovers [`Candidate`]s, keeps all of them, materializes, plus ResonancePair
@@ -353,9 +359,13 @@ where
         let here = walk.mol.csmi();
         if here.as_ref() == target_csmi.as_str() {
             counters.nodes += 1;
+            let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
+            if plan_already_yielded(&found, &plan) {
+                continue;
+            }
             found.push(PathOutcome {
                 steps: walk.steps,
-                plan: as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe)),
+                plan,
                 smiles: here.as_ref().to_string(),
             });
             continue;
@@ -722,9 +732,13 @@ where
         let walk = item.walk;
         let here = walk.mol.csmi();
         if here.as_ref() == target_csmi.as_str() {
+            let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
+            if plan_already_yielded(&found, &plan) {
+                continue;
+            }
             found.push(PathOutcome {
                 steps: walk.steps,
-                plan: as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe)),
+                plan,
                 smiles: here.as_ref().to_string(),
             });
             continue;

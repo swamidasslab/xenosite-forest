@@ -13,7 +13,8 @@
 use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 use xenosite_forest::rules::{
-    dehydrogenation, epoxidation, hydroxylation, n_dealkylation, phase_one, quinone_formation,
+    dealkylation, dehydrogenation, epoxidation, hydroxylation, n_dealkylation, phase_one,
+    quinone_formation,
 };
 use xenosite_forest::{
     FindPathConfig, PathCounters, PathOutcome, accept_all_rules, accept_all_sites, canon_of,
@@ -45,6 +46,40 @@ fn find_path_corpus() -> impl Strategy<Value = &'static str> {
         Just("Oc1ccccc1"),
         Just("Oc1ccc(O)cc1"),
         Just("Cc1ccccc1"),
+        Just("Nc1ccc(O)cc1"),
+        Just("COc1ccccc1"),
+        Just("CN(C)Cc1ccccc1"),
+        Just("CCO"),
+        Just("CCN"),
+        Just("C=C"),
+        Just("COc1ccc(O)cc1"),
+        Just("COc1ccc(CC=C)cc1O"),
+        Just("COc1ccc2ccccc2c1"),
+        Just("N(Cc1ccccc1)(Cc1ccccc1)Cc1ccccc1"),
+        Just("c1ccccc1C(=O)OC(C)(C)C"),
+        Just("CC(=O)Oc1ccc(OC(C)=O)cc1"),
+    ]
+}
+
+/// Known multipath-friendly reactant→target pairs (bench / Maybe cases).
+fn multipath_pairs() -> impl Strategy<Value = (&'static str, &'static str)> {
+    prop_oneof![
+        Just(("CN(C)Cc1ccccc1", "O=Cc1ccccc1")),
+        Just(("COc1ccccc1", "Oc1ccccc1")),
+        Just(("c1ccccc1C(=O)OC(C)(C)C", "O=C(O)c1ccccc1")),
+        Just(("CC(=O)Oc1ccc(OC(C)=O)cc1", "Oc1ccc(O)cc1")),
+        Just(("COc1ccc(O)cc1", "O=C1C=C(O)C(=O)C(O)=C1")),
+        Just(("Oc1ccc(O)cc1", "O=C1C=CC(=O)C=C1")),
+        Just(("c1ccccc1", "O=C1C=CC(=O)C=C1")),
+        Just(("Oc1ccccc1", "O=C1C=CC(=O)C=C1")),
+        Just(("COc1ccc(CC=C)cc1O", "O=C1C=CC(=O)C(CC=C)=C1")),
+        Just(("COc1ccc(CCN)cc1OC", "NCCc1ccc(O)c(O)c1")),
+        Just(("N(Cc1ccccc1)(Cc1ccccc1)Cc1ccccc1", "O=Cc1ccccc1")),
+        Just(("COc1ccc2ccccc2c1", "O=C1C(=O)c2ccccc2C=C1")),
+        Just((
+            "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12",
+            r"C(#C/C=C/C=O)C(C)(C)C",
+        )),
     ]
 }
 
@@ -63,6 +98,28 @@ fn assert_plan_elementary(outcome: &PathOutcome, target: &str) {
         !names.contains(&"QuinoneFormation"),
         "opaque QF step in plan {names:?}"
     );
+}
+
+/// HEURISTICS: multipath hits must not share total orders (no Deps reordering).
+fn assert_no_linearization_overlap(hits: &[PathOutcome]) {
+    for (i, a) in hits.iter().enumerate() {
+        for (j, b) in hits.iter().enumerate().skip(i + 1) {
+            assert!(
+                !a.plan.same_linearizations(&b.plan),
+                "hit{i} same_linearizations hit{j}: {:?} vs {:?}",
+                a.plan.iter().map(|s| &s.rule).collect::<Vec<_>>(),
+                b.plan.iter().map(|s| &s.rule).collect::<Vec<_>>()
+            );
+            let ov = a.plan.linearization_overlap(&b.plan);
+            assert_eq!(
+                ov,
+                0,
+                "hit{i} linearization_overlap={ov} with hit{j}: {:?} vs {:?}",
+                a.plan.iter().map(|s| &s.rule).collect::<Vec<_>>(),
+                b.plan.iter().map(|s| &s.rule).collect::<Vec<_>>()
+            );
+        }
+    }
 }
 
 proptest! {
@@ -253,5 +310,99 @@ proptest! {
         if let Some(hit) = hits.first() {
             assert_plan_elementary(hit, target);
         }
+    }
+}
+
+proptest! {
+    #![proptest_config(fuzz_config(12))]
+
+    /// Multipath hits for fixed reactant→target pairs share no linearizations.
+    #[test]
+    fn fuzz_multipath_pairs_no_linearization_overlap(
+        (start, target) in multipath_pairs(),
+    ) {
+        let want = canon_of(target).unwrap();
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            start,
+            &want,
+            &phase_one(),
+            &mut counters,
+            FindPathConfig {
+                max_nodes: 250,
+                max_paths: 4,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        prop_assume!(!hits.is_empty());
+        prop_assert!(hits.iter().all(|h| h.smiles == want));
+        if hits.len() >= 2 {
+            assert_no_linearization_overlap(&hits);
+        }
+    }
+
+    /// Create a Phase-I product, find_path with max_paths>1, assert no overlap.
+    #[test]
+    fn fuzz_created_target_multipath_no_linearization_overlap(
+        start in find_path_corpus(),
+        index in any::<prop::sample::Index>(),
+    ) {
+        let mol = parse_mol(start).unwrap();
+        let start_csmi = canon_of(start).unwrap();
+        let mut seen = std::collections::HashSet::new();
+        seen.insert(start_csmi);
+        let create_rules = [
+            quinone_formation(),
+            hydroxylation(),
+            dehydrogenation(),
+            dealkylation(),
+        ];
+        let mut pool = Vec::new();
+        let start_ha = heavy_atom_count(&mol);
+        'outer: for rule in &create_rules {
+            for emission in rule
+                .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+                .unwrap()
+            {
+                for product in &emission.products {
+                    if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
+                    {
+                        continue;
+                    }
+                    let product_mol = parse_mol(product).unwrap();
+                    let min_ha = 4.max(start_ha / 3);
+                    if heavy_atom_count(&product_mol) < min_ha {
+                        continue;
+                    }
+                    pool.push(product.clone());
+                    if pool.len() >= 10 {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+        prop_assume!(!pool.is_empty());
+        let target = &pool[index.index(pool.len())];
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            start,
+            target,
+            &phase_one(),
+            &mut counters,
+            FindPathConfig {
+                max_nodes: 200,
+                max_paths: 4,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap();
+        if hits.len() < 2 {
+            return Ok(());
+        }
+        prop_assert!(hits.iter().all(|h| h.smiles == *target));
+        assert_no_linearization_overlap(&hits);
     }
 }

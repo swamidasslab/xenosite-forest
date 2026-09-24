@@ -22,7 +22,7 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 ## Correctness, not yet done
 
 - Do not drop a child only because `atom_diff` cost is not strictly lower. The `closer` check in `find_path` refuses a sideways step. Some real routes do not move the score down on every hop. Tried equal-cost sideways when the site touched cleavage / dearomatization / oxygen; PhCH2OH and multi-oxidation quinones blew up (`mol_edits` 21→68). Status: not decided — needs a tighter predicate than “touches the diff”.
-- Do not walk a step plan that is the same steps in another order. Once a `Deps` has been yielded, a later walk that is only a reordering of those steps is not a new path.
+- Do not walk a step plan that is the same steps in another order. Once a `Deps` has been yielded, a later walk that is only a reordering of those steps is not a new path. Rust `find_path` skips a hit when `plan.same_linearizations` matches an already-yielded outcome (`linearization_overlap` counts shared orders).
 
 ## Plans are Deps (elementary Steps + precedes)
 
