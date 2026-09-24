@@ -171,6 +171,9 @@ fn closer(parent_ha: usize, child_ha: usize, target_ha: usize, target_hit: bool)
 pub struct FindPathConfig {
     pub max_paths: usize,
     pub max_nodes: usize,
+    /// When true, build an [`crate::atom_diff::AtomDiff`] once per expansion
+    /// and refuse candidates that cannot help (no filter closures).
+    pub use_atom_diff: bool,
 }
 
 impl Default for FindPathConfig {
@@ -178,6 +181,7 @@ impl Default for FindPathConfig {
         Self {
             max_paths: 1,
             max_nodes: 800,
+            use_atom_diff: false,
         }
     }
 }
@@ -215,6 +219,26 @@ pub fn find_path_default(
     find_path(reactant, target, &default_ruleset(), counters)
 }
 
+/// [`find_path`] with atom-diff candidate gating (no filter closures).
+pub fn find_path_diff(
+    reactant: &str,
+    target: &str,
+    ruleset: &RuleSet,
+    counters: &mut PathCounters,
+) -> Result<Vec<PathOutcome>, ForestError> {
+    find_path_with(
+        reactant,
+        target,
+        ruleset,
+        counters,
+        FindPathConfig {
+            use_atom_diff: true,
+            ..FindPathConfig::default()
+        },
+        accept_all_candidates,
+    )
+}
+
 /// Same as [`find_path`], with caller bounds and a candidate predicate.
 ///
 /// `keep` reads the triple (site, pattern, parent) **before** materialize.
@@ -233,10 +257,12 @@ where
     let FindPathConfig {
         max_paths,
         max_nodes,
+        use_atom_diff,
     } = config;
     let start = parse_mol(reactant)?;
     let start_csmi = canon_smiles(&start);
     let target_csmi = canon_of(target)?;
+    let target_mol = parse_mol(&target_csmi)?;
     let target_ha = heavy_atoms(&target_csmi)?;
     let start_ha = start.atom_count();
 
@@ -273,7 +299,12 @@ where
 
         let mol = parse_mol(&walk.smiles)?;
         counters.expansions += 1;
-        let emissions = expand(ruleset, &mol, counters, &keep)?;
+        let diff = if use_atom_diff {
+            Some(crate::atom_diff::atom_diff(&mol, &target_mol))
+        } else {
+            None
+        };
+        let emissions = expand(ruleset, &mol, counters, &keep, diff.as_ref())?;
         let mut hits_from_here = 0usize;
 
         for emission in emissions {
@@ -320,6 +351,7 @@ fn expand<K>(
     mol: &crate::Molecule,
     counters: &mut PathCounters,
     keep: &K,
+    diff: Option<&crate::atom_diff::AtomDiff>,
 ) -> Result<Vec<Emission>, ForestError>
 where
     K: Fn(&Candidate) -> bool,
@@ -329,12 +361,17 @@ where
         if !keep(&candidate) {
             continue;
         }
+        if let Some(d) = diff {
+            if !crate::atom_diff::candidate_could_help(&candidate, d) {
+                continue;
+            }
+        }
         counters.mol_edits += 1;
         if let Some(emission) = candidate.emit(mol)? {
             emissions.push(emission);
         }
     }
-    emissions.extend(expand_pairs(ruleset, mol, counters, keep)?);
+    emissions.extend(expand_pairs(ruleset, mol, counters, keep, diff)?);
     Ok(emissions)
 }
 
@@ -343,6 +380,7 @@ fn expand_pairs<K>(
     mol: &crate::Molecule,
     counters: &mut PathCounters,
     keep: &K,
+    diff: Option<&crate::atom_diff::AtomDiff>,
 ) -> Result<Vec<Emission>, ForestError>
 where
     K: Fn(&Candidate) -> bool,
@@ -350,7 +388,7 @@ where
     let mut out = Vec::new();
     for member in ruleset.members() {
         if let crate::ruleset::RuleMember::Set(child) = member {
-            for mut emission in expand_pairs(child, mol, counters, keep)? {
+            for mut emission in expand_pairs(child, mol, counters, keep, diff)? {
                 emission.rule_path.push(ruleset.name.clone());
                 out.push(emission);
             }
@@ -359,6 +397,14 @@ where
     for pair in ruleset.pair_candidates_leaf(mol)? {
         if !keep_pair(&pair, keep) {
             continue;
+        }
+        if let Some(d) = diff {
+            if !crate::atom_diff::pattern_could_help(&pair.effect, d) {
+                continue;
+            }
+            if pair.effect.dearomatizes && d.loses_aromaticity.is_empty() && !d.h_loss() {
+                continue;
+            }
         }
         counters.mol_edits += 1;
         if let Some(emission) = pair.emit(mol)? {
@@ -407,6 +453,7 @@ where
     let FindPathConfig {
         max_paths,
         max_nodes,
+        use_atom_diff: _,
     } = config;
     let start = parse_mol(reactant)?;
     let start_csmi = canon_smiles(&start);
@@ -622,24 +669,31 @@ mod tests {
     }
 
     #[test]
-    fn candidates_filter_without_closures() {
-        let mol = parse_mol("CCC").unwrap();
-        let set = hydroxylation();
-        let kept: Vec<_> = set
-            .candidates(&mol)
-            .unwrap()
-            .into_iter()
-            .filter(|c| c.pattern.name == "h")
-            .collect();
-        assert!(kept.is_empty(), "propane has no #6h1");
-        let h2: Vec<_> = set
-            .candidates(&mol)
-            .unwrap()
-            .into_iter()
-            .filter(|c| c.pattern.name == "h2")
-            .collect();
-        assert_eq!(h2.len(), 2);
-        let products = h2[0].materialize(&mol).unwrap();
-        assert!(!products.is_empty());
+    fn atom_diff_gates_ethane_to_ethanol() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_diff("CC", "CCO", &hydroxylation(), &mut counters).unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
+        // Diff gating should not inflate edits beyond the one helpful site.
+        assert_eq!(counters.mol_edits, 1);
+    }
+
+    #[test]
+    fn atom_diff_default_ruleset_hydroquinone() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "Oc1ccc(O)cc1",
+            "O=C1C=CC(=O)C=C1",
+            &default_ruleset(),
+            &mut counters,
+            FindPathConfig {
+                use_atom_diff: true,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        assert_eq!(hits[0].smiles, canon_of("O=C1C=CC(=O)C=C1").unwrap());
     }
 }

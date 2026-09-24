@@ -9,6 +9,7 @@ compile_error!(
     "features `python` and `wasm` are mutually exclusive (CPython vs wasm-bindgen cdylib)"
 );
 
+pub mod atom_diff;
 pub mod atom_tracker;
 pub mod candidate;
 pub mod chematic_vendor;
@@ -35,11 +36,14 @@ mod python_api;
 #[cfg(feature = "wasm")]
 mod wasm_api;
 
+pub use atom_diff::{
+    AtomDiff, atom_diff, candidate_could_help, keep_against_diff, pattern_could_help,
+};
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
-    find_path_with, find_path_with_filters,
+    find_path_diff, find_path_with, find_path_with_filters,
 };
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;

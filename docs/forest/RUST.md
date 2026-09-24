@@ -213,7 +213,10 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 
 ## Not in this crate
 
-Full `atom_diff` filters, every Phase I rule, `CanonicalStep` / `Deps`.
+Full Python `atom_diff` parity (multi-placement merge, leave_count, bond_raises
+site filters), `CanonicalStep` / `Deps`. A provisional
+[`atom_diff`](../../crates/xenosite-forest/src/atom_diff.rs) door gates
+candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
 Production atom-trace can use
 [`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs) on
 `Atom.tag`; `ForestMol` has not switched off its sidecar yet. Nested
