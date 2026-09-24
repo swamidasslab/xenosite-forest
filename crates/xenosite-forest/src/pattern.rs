@@ -7,6 +7,9 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteKind {
     Atom,
+    Bond,
+    DirectedBond,
+    AtomPair,
 }
 
 /// How the pattern edits the matched atoms.
@@ -16,6 +19,8 @@ pub enum Edit {
     Hydroxyl,
     /// Apply this SMIRKS at the unique-edit match.
     Smirks(String),
+    /// Resonance-pair endpoint (path flip). Registered as data; pair door TBD.
+    PairEndpoint(String),
 }
 
 /// One concrete outcome. Filters read these fields.
@@ -34,6 +39,8 @@ pub struct PatternInfo {
     pub name: String,
     pub smarts: String,
     pub site_kind: SiteKind,
+    /// Atom-map numbers that form the discovery site (Python `site_map`).
+    pub site_map: Vec<u16>,
     pub edit: Edit,
     pub effect: Effect,
 }
@@ -49,6 +56,7 @@ impl PatternInfo {
             name: name.into(),
             smarts: smarts.into(),
             site_kind: SiteKind::Atom,
+            site_map: vec![1],
             edit,
             effect,
         }
@@ -66,6 +74,11 @@ impl PatternInfo {
                 methide: false,
             },
         )
+    }
+
+    /// First map in [`Self::site_map`], or 1.
+    pub fn primary_map(&self) -> u16 {
+        self.site_map.first().copied().unwrap_or(1)
     }
 }
 

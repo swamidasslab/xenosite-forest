@@ -1,25 +1,11 @@
 //! Hydroxylation: unique-edit then add OH (graph edit, SMIRKS dialect aside).
 //!
-//! The patterns are [`PatternInfo`] data. [`hydroxylate`] runs them through
-//! [`crate::ruleset::RuleSet::metabolize`].
+//! Patterns live on [`crate::rules::hydroxylation`].
 
 use crate::mol::{ForestError, Molecule};
-use crate::pattern::PatternInfo;
-use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
+use crate::ruleset::{accept_all_rules, accept_all_sites};
 
-const H: &str = "[#6h1:1]";
-const H2: &str = "[#6h2,#6h3:1]";
-
-/// Hydroxylation as a [`RuleSet`]: two `PatternInfo` rows, `h` then `h2`.
-pub fn hydroxylation() -> RuleSet {
-    RuleSet::new(
-        Some("Hydroxylation".into()),
-        [
-            PatternInfo::hydroxyl("h", H),
-            PatternInfo::hydroxyl("h2", H2),
-        ],
-    )
-}
+pub use crate::rules::hydroxylation;
 
 /// Unique hydroxylation products as canonical SMILES.
 pub fn hydroxylate(mol: &Molecule) -> Result<Vec<String>, ForestError> {

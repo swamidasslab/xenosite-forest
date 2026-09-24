@@ -21,6 +21,7 @@ pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
 pub mod pattern;
+pub mod rules;
 pub mod ruleset;
 pub mod smarts;
 pub mod smirks;
@@ -35,7 +36,8 @@ mod wasm_api;
 
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use find_path::{
-    FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_with,
+    FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
+    find_path_with,
 };
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
@@ -45,6 +47,9 @@ pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
 pub use pair_edit::dehydrogenate_hydroquinone;
 pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
+pub use rules::{
+    all_rules, catalog_names, default_ruleset, phase_one,
+};
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
     accept_all_sites, o_dealkylation,

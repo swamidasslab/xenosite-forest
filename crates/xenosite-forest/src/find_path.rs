@@ -15,6 +15,7 @@ use std::cmp::Ordering;
 use crate::ForestError;
 use crate::mol::{canon_of, canon_smiles, parse_mol};
 use crate::pattern::{Emission, PatternInfo, SiteInfo};
+use crate::rules::default_ruleset;
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
 /// Billed work for one search (Python `PathCounters` subset).
@@ -181,8 +182,8 @@ impl Default for FindPathConfig {
 
 /// Yield phase-I walks that turn ``reactant`` into ``target``.
 ///
-/// ``ruleset`` may be nested; step namespaces come from each emission's
-/// `rule_path`. Filters default to accept-all (no atom-diff yet).
+/// When ``ruleset`` is omitted, uses [`crate::rules::default_ruleset`].
+/// Nested sets keep step namespaces on each emission's `rule_path`.
 pub fn find_path(
     reactant: &str,
     target: &str,
@@ -198,6 +199,15 @@ pub fn find_path(
         accept_all_rules,
         accept_all_sites,
     )
+}
+
+/// [`find_path`] with the Phase-I default catalog.
+pub fn find_path_default(
+    reactant: &str,
+    target: &str,
+    counters: &mut PathCounters,
+) -> Result<Vec<PathOutcome>, ForestError> {
+    find_path(reactant, target, &default_ruleset(), counters)
 }
 
 /// Same as [`find_path`], with caller bounds and filters.

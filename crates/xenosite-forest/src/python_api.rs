@@ -133,6 +133,7 @@ fn edit_label(edit: &Edit) -> String {
     match edit {
         Edit::Hydroxyl => "hydroxyl".into(),
         Edit::Smirks(smirks) => smirks.clone(),
+        Edit::PairEndpoint(name) => format!("pair:{name}"),
     }
 }
 

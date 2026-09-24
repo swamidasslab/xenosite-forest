@@ -65,7 +65,10 @@ Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.c
 
 **RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. Children run with `unique_csmi=false` so alternate rules bubble; the caller's `unique_csmi` is the cross-child CSMI layer. Filters see the leaf set, not the outer compose container.
 
-**`find_path` (first run):** expands via `RuleSet::metabolize`, keeps each step's `rule_path` as the namespace, heap is hits-first then FIFO. No atom-diff filters yet; closer is provisional heavy-atom distance. Cleavage keeps the target-hit fragment (else nearest HA count) and records sides.
+**Rule catalog:** every concrete Python reaction rule is a leaf `RuleSet` in
+[`rules.rs`](../../crates/xenosite-forest/src/rules.rs) (`phase_one`,
+`default_ruleset`, `all_rules`). Pair-endpoint patterns are data
+(`Edit::PairEndpoint`); atom/bond SMIRKS metabolize today.
 
 ```python
 rs = RuleSet([

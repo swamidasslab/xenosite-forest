@@ -17,7 +17,7 @@ use chematic::core::{Atom, BondOrder, Element};
 
 use crate::ForestError;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
-use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo, SiteKind};
+use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
 use crate::unique_edit::unique_atom_sites;
 use crate::valence::accept_product;
@@ -164,12 +164,15 @@ impl RuleSet {
         for member in &self.members {
             match member {
                 RuleMember::Pattern(pattern) => {
+                    // Pair-endpoint paths are data until the pair door is wired.
+                    if matches!(pattern.edit, Edit::PairEndpoint(_)) {
+                        continue;
+                    }
                     if !filter_rules(mol, self, pattern) {
                         continue;
                     }
-                    let SiteKind::Atom = pattern.site_kind;
                     for mapped in unique_atom_sites(mol, &pattern.smarts)? {
-                        let Some(&site) = mapped.get(&1) else {
+                        let Some(&site) = mapped.get(&pattern.primary_map()) else {
                             continue;
                         };
                         let info = SiteInfo {
@@ -258,6 +261,7 @@ fn apply_edit(
             let pieces = apply_smirks_at(smirks, mol, mapped)?;
             Ok(pieces.iter().map(canon_smiles).collect())
         }
+        Edit::PairEndpoint(_) => Ok(Vec::new()),
     }
 }
 
