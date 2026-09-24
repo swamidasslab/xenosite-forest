@@ -1117,7 +1117,11 @@ mod tests {
         assert!(!with_bag.is_empty(), "expected CleavageSide on hydrolysis");
         let outcome = with_bag[0];
         assert_eq!(
-            outcome.plan.iter().map(|s| s.rule.as_str()).collect::<Vec<_>>(),
+            outcome
+                .plan
+                .iter()
+                .map(|s| s.rule.as_str())
+                .collect::<Vec<_>>(),
             vec!["Hydrolysis"]
         );
         let want_side = canon_of("CC(C)(C)O").unwrap();
@@ -1224,15 +1228,17 @@ mod tests {
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let direct: Vec<_> = hits
             .iter()
-            .filter(|h| {
-                h.plan.len() == 1 && h.plan[0].rule == "Dealkylation"
-            })
+            .filter(|h| h.plan.len() == 1 && h.plan[0].rule == "Dealkylation")
             .collect();
         assert!(!direct.is_empty(), "expected Dealkylation → TBA");
         let outcome = direct[0];
         assert!(!outcome.maybe().is_empty());
         assert!(
-            outcome.maybe().entries.iter().any(|e| e.side.contains("cccc")),
+            outcome
+                .maybe()
+                .entries
+                .iter()
+                .any(|e| e.side.contains("cccc")),
             "sides={:?}",
             outcome.maybe().sides()
         );
