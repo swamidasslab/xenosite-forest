@@ -13,9 +13,7 @@
 
 use std::time::Instant;
 
-use xenosite_forest::{
-    FindPathConfig, PathCounters, canon_of, find_path_with, phase_one,
-};
+use xenosite_forest::{FindPathConfig, PathCounters, canon_of, find_path_with, phase_one};
 
 const MAX_NODES: usize = 800;
 const MAX_PATHS: usize = 1;

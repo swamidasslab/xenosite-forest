@@ -136,7 +136,10 @@ def main() -> None:
         f"max_paths={MAX_PATHS}  best-of-{REPEATS}  sha={_git_sha()}"
     )
     print(f"\n=== {title} (use_filters=True / atom_diff) ===")
-    print(f"{'case':<28} {'hit':>4} {'seconds':>9} {'steps':>5} {'nodes':>6} {'edits':>7} {'bill':>6}")
+    print(
+        f"{'case':<28} {'hit':>4} {'seconds':>9} {'steps':>5} "
+        f"{'nodes':>6} {'edits':>7} {'bill':>6}"
+    )
     total = 0.0
     for name, reactant, target in cases:
         hit, seconds, steps, nodes, edits, billed = run_one(reactant, target)
