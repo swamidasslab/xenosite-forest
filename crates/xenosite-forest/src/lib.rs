@@ -54,7 +54,8 @@ pub use canonical_plan::{
 };
 pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
-    CleavageNode, CleavageOr, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
+    CleavageNode, CleavageOr, CleavageSeed, CleavageSeedHop, cleavage_first_seeds,
+    cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
 };
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,

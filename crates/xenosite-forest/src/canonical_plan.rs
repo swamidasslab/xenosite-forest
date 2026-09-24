@@ -458,17 +458,29 @@ impl Deps {
     }
 
     /// Number of topological sorts under precedes.
+    ///
+    /// Counts via bitmask DP (no materializing [`Linearization`]s). `n > 20`
+    /// falls back to enumerating [`Self::linearizations`] (plans that large are
+    /// not expected in PhaseOne multipath).
     pub fn n_linearizations(&self) -> usize {
-        self.linearizations().len()
+        let n = self.steps.len();
+        if n == 0 {
+            return 1;
+        }
+        if n > 20 {
+            return self.linearizations().len();
+        }
+        count_topological_sorts(n, &self.precedes)
     }
 
     /// True iff `other` admits exactly the same total orders.
     ///
-    /// Requires the same multiset of leaf [`Step`]s (node identity), then
-    /// compares canonical precedes after aligning indices. Prefer this over
-    /// `==` when declaration order of steps may differ; construction already
-    /// stores the transitive reduction, so `==` also sees reduced edges when
-    /// step order matches.
+    /// Requires the same multiset of leaf [`Step`]s (exact rule + site notes —
+    /// unique-edit already emits one canonical site per class, so orbit-aware
+    /// align is not needed), then compares canonical precedes after aligning
+    /// indices. Prefer this over `==` when declaration order of steps may
+    /// differ; construction already stores the transitive reduction, so `==`
+    /// also sees reduced edges when step order matches.
     pub fn same_linearizations(&self, other: &Deps) -> bool {
         let Some(aligned) = align_deps_indices(&self.steps, &other.steps) else {
             return false;
@@ -480,6 +492,62 @@ impl Deps {
             .collect();
         edges_b.sort_unstable();
         self.precedes == edges_b
+    }
+
+    /// Yield-key when site indices remapped across free-step reorderings: same
+    /// rule multiset, same Maybe side CSMI multiset, and precedes isomorphic
+    /// under rule-name alignment. Complements exact [`Self::same_linearizations`]
+    /// when Index notes differ only because intermediates renumbered.
+    pub fn same_rule_maybe_skeleton(&self, other: &Deps) -> bool {
+        if self.steps.len() != other.steps.len() {
+            return false;
+        }
+        let mut sides_a: Vec<_> = self.maybe.sides();
+        let mut sides_b: Vec<_> = other.maybe.sides();
+        sides_a.sort_unstable();
+        sides_b.sort_unstable();
+        if sides_a != sides_b {
+            return false;
+        }
+        let Some(aligned) = align_deps_indices_by_rule(&self.steps, &other.steps) else {
+            return false;
+        };
+        let mut edges_b: Vec<_> = other
+            .precedes
+            .iter()
+            .map(|&(a, b)| (aligned[a], aligned[b]))
+            .collect();
+        edges_b.sort_unstable();
+        self.precedes == edges_b
+    }
+
+    /// True when `other` is a longer walk that only adds steps beyond `self`
+    /// (Maybe sides of `self` ⊆ `other`; each of `self`'s steps matches a
+    /// distinct step of `other` by rule name). Drops dominated multipath hits.
+    pub fn dominates_extension_of(&self, other: &Deps) -> bool {
+        if self.steps.len() >= other.steps.len() {
+            return false;
+        }
+        let mut sides_a: Vec<_> = self.maybe.sides();
+        let mut sides_b: Vec<_> = other.maybe.sides();
+        sides_a.sort_unstable();
+        sides_b.sort_unstable();
+        if !sides_a.iter().all(|s| sides_b.contains(s)) {
+            return false;
+        }
+        let mut used = vec![false; other.steps.len()];
+        for step in &self.steps {
+            let found = other
+                .steps
+                .iter()
+                .enumerate()
+                .find_map(|(j, o)| (!used[j] && step.rule == o.rule).then_some(j));
+            let Some(j) = found else {
+                return false;
+            };
+            used[j] = true;
+        }
+        true
     }
 
     /// Count of shared total orders: `|L(self) ∩ L(other)|`.
@@ -513,9 +581,42 @@ impl Deps {
     }
 }
 
+/// Count topological sorts of a DAG on `0..n` (bitmask DP).
+fn count_topological_sorts(n: usize, precedes: &[(usize, usize)]) -> usize {
+    debug_assert!(n <= 20);
+    let mut preds = vec![0u32; n];
+    for &(a, b) in precedes {
+        if a < n && b < n {
+            preds[b] |= 1u32 << a;
+        }
+    }
+    let full = 1usize << n;
+    let mut dp = vec![0u128; full];
+    dp[0] = 1;
+    for mask in 0..full {
+        let ways = dp[mask];
+        if ways == 0 {
+            continue;
+        }
+        for (v, pred) in preds.iter().enumerate() {
+            let bit = 1usize << v;
+            if mask & bit != 0 {
+                continue;
+            }
+            if (mask & *pred as usize) != *pred as usize {
+                continue;
+            }
+            dp[mask | bit] = dp[mask | bit].saturating_add(ways);
+        }
+    }
+    usize::try_from(dp[full - 1]).unwrap_or(usize::MAX)
+}
+
 /// Map indices in `steps_b` → indices in `steps_a` by [`Step`] equality.
 ///
 /// `None` if the leaf multisets differ. Duplicate equal steps match greedily.
+/// Unique-edit canonical sites make exact equality the right identity — do not
+/// widen to [`Step::same_site_class`] here.
 pub fn align_deps_indices(steps_a: &[Step], steps_b: &[Step]) -> Option<Vec<usize>> {
     if steps_a.len() != steps_b.len() {
         return None;
@@ -528,6 +629,25 @@ pub fn align_deps_indices(steps_a: &[Step], steps_b: &[Step]) -> Option<Vec<usiz
             .iter()
             .enumerate()
             .find_map(|(j, other)| (!used[j] && other == step).then_some(j));
+        let j = found?;
+        used[j] = true;
+        remap[j] = i;
+    }
+    Some(remap)
+}
+
+/// Align by rule name only (greedy). Used for remapped-index yield keys.
+fn align_deps_indices_by_rule(steps_a: &[Step], steps_b: &[Step]) -> Option<Vec<usize>> {
+    if steps_a.len() != steps_b.len() {
+        return None;
+    }
+    let mut used = vec![false; steps_b.len()];
+    let mut remap = vec![0usize; steps_b.len()];
+    for (i, step) in steps_a.iter().enumerate() {
+        let found = steps_b
+            .iter()
+            .enumerate()
+            .find_map(|(j, other)| (!used[j] && other.rule == step.rule).then_some(j));
         let j = found?;
         used[j] = true;
         remap[j] = i;
@@ -1181,6 +1301,70 @@ mod tests {
             Deps::new([Step::new("A", [PlanAtom::index(0)])], []).n_linearizations(),
             1
         );
+    }
+
+    #[test]
+    fn same_rule_maybe_skeleton_collapses_remapped_free_dealks() {
+        let a = Step::new("Dealkylation", [PlanAtom::index(0)]);
+        let b = Step::new("Dealkylation", [PlanAtom::index(9)]);
+        let c = Step::new("Dealkylation", [PlanAtom::index(12)]);
+        let d = Step::new("Dealkylation", [PlanAtom::index(0)]);
+        let maybe = Maybe::new([
+            CleavageSide::new([0], "OC", std::iter::empty::<BTreeSet<usize>>()),
+            CleavageSide::new([9], "OC", std::iter::empty::<BTreeSet<usize>>()),
+        ]);
+        let p0 = Deps::new([a, b], []).with_maybe(maybe.clone());
+        let p1 = Deps::new([c, d], []).with_maybe(maybe);
+        assert!(!p0.same_linearizations(&p1)); // exact sites differ
+        assert!(p0.same_rule_maybe_skeleton(&p1));
+    }
+
+    #[test]
+    fn dominates_extension_drops_longer_same_maybe_walk() {
+        let short = Deps::new(
+            [
+                Step::new("Dealkylation", [PlanAtom::index(8)]),
+                Step::new("Dealkylation", [PlanAtom::index(1)]),
+            ],
+            [],
+        )
+        .with_maybe(Maybe::new([
+            CleavageSide::new([8], "CNC", std::iter::empty::<BTreeSet<usize>>()),
+            CleavageSide::new(
+                [1],
+                "c1ccc(C(C)(C)C)cc1",
+                std::iter::empty::<BTreeSet<usize>>(),
+            ),
+        ]));
+        let longer = Deps::new(
+            [
+                Step::new("Dealkylation", [PlanAtom::index(8)]),
+                Step::new("Dealkylation", [PlanAtom::index(1)]),
+                Step::new("Dehydrogenation", [PlanAtom::index(6)]),
+            ],
+            [],
+        )
+        .with_maybe(Maybe::new([
+            CleavageSide::new([8], "CNC", std::iter::empty::<BTreeSet<usize>>()),
+            CleavageSide::new(
+                [1],
+                "c1ccc(C(C)(C)C)cc1",
+                std::iter::empty::<BTreeSet<usize>>(),
+            ),
+        ]));
+        assert!(short.dominates_extension_of(&longer));
+        assert!(!longer.dominates_extension_of(&short));
+        assert!(!short.same_linearizations(&longer));
+    }
+
+    #[test]
+    fn n_linearizations_matches_enumeration_on_layered() {
+        let h0 = Step::new("Hydroxylation", [PlanAtom::index(0)]);
+        let h3 = Step::new("Hydroxylation", [PlanAtom::index(3)]);
+        let dh = Step::new("Dehydrogenation", [PlanAtom::index(0)]);
+        let layered = Deps::new([h0, h3, dh], [(0, 2), (1, 2)]);
+        assert_eq!(layered.n_linearizations(), layered.linearizations().len());
+        assert_eq!(layered.n_linearizations(), 2);
     }
 
     #[test]

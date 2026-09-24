@@ -174,6 +174,59 @@ struct ForestEmission {
     plan: Vec<CanonicalStep>,
 }
 
+/// Keep fragments that are worth continuing toward ``target``.
+///
+/// On a bifurcation with a target MCS gate, every product that passes the
+/// cleavage expand filter (strict cost drop + ha ≥ target) is kept — **both**
+/// sides if both match. Single-product emissions skip the extra MCS.
+fn keep_fragments(
+    products: &[ForestMol],
+    target_csmi: &str,
+    target_ha: usize,
+    parent_diff: Option<&crate::atom_diff::AtomDiff>,
+    target_mol: Option<&crate::Molecule>,
+) -> Vec<(ForestMol, Vec<String>)> {
+    if products.is_empty() {
+        return Vec::new();
+    }
+    if products.len() >= 2 {
+        if let (Some(diff), Some(tmol)) = (parent_diff, target_mol) {
+            let all_csmis: Vec<Rc<str>> = products.iter().map(|m| m.csmi()).collect();
+            let mut kept_idx = Vec::new();
+            for (i, csmi) in all_csmis.iter().enumerate() {
+                if crate::cleavage_graph::fragment_worth_expanding(
+                    Some(diff),
+                    csmi.as_ref(),
+                    tmol,
+                    target_csmi,
+                    target_ha,
+                ) {
+                    kept_idx.push(i);
+                }
+            }
+            if !kept_idx.is_empty() {
+                return kept_idx
+                    .into_iter()
+                    .map(|best_i| {
+                        let kept = products[best_i].clone();
+                        let kept_csmi = all_csmis[best_i].as_ref();
+                        let mut sides = Vec::new();
+                        for (i, csmi) in all_csmis.iter().enumerate() {
+                            if i != best_i && csmi.as_ref() != kept_csmi {
+                                sides.push(csmi.as_ref().to_string());
+                            }
+                        }
+                        (kept, sides)
+                    })
+                    .collect();
+            }
+        }
+    }
+    keep_fragment(products, target_csmi, target_ha)
+        .into_iter()
+        .collect()
+}
+
 /// Keep the fragment closest to ``target``. Prefer exact CSMI hit.
 fn keep_fragment(
     products: &[ForestMol],
@@ -242,6 +295,10 @@ pub struct FindPathConfig {
     /// Skips MCS on siblings never popped. Do not HA-gate at enqueue —
     /// oxidation can raise HA distance while lowering cost. Default on.
     pub lazy_closer: bool,
+    /// When `Some(d)` and the target is smaller than the reactant, seed the
+    /// frontier from a shallow cleavage-only BFS of depth `d` (both matching
+    /// sides kept). `None` disables. Default first-pass depth: 4.
+    pub cleavage_first_depth: Option<usize>,
 }
 
 impl Default for FindPathConfig {
@@ -252,6 +309,9 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: true,
+            // Tried depth 3–4: seed BFS MCS cost dominated wall on LARGER
+            // (tBu 175→372 ms) even when the seed already hit. Opt in to measure.
+            cleavage_first_depth: None,
         }
     }
 }
@@ -261,9 +321,12 @@ fn accept_all_candidates(_c: &Candidate) -> bool {
 }
 
 /// HEURISTICS: a later walk that is only a reordering of an already-yielded
-/// [`Deps`] is not a new path.
+/// [`Deps`] is not a new path. Also drop remapped-index free-step twins
+/// ([`Deps::same_rule_maybe_skeleton`]).
 fn plan_already_yielded(found: &[PathOutcome], plan: &Deps) -> bool {
-    found.iter().any(|h| h.plan.same_linearizations(plan))
+    found
+        .iter()
+        .any(|h| h.plan.same_linearizations(plan) || h.plan.same_rule_maybe_skeleton(plan))
 }
 
 /// Yield walks that turn ``reactant`` into ``target``.
@@ -335,33 +398,81 @@ where
         max_nodes,
         use_atom_diff,
         lazy_closer,
+        cleavage_first_depth,
     } = config;
     let start = ForestMol::parse(reactant)?;
     let start_csmi = start.csmi();
     let target_csmi = canon_of(target)?;
     let target_mol = parse_mol(&target_csmi)?;
     let target_ha = ForestMol::parse(&target_csmi)?.heavy_atom_count();
+    let start_ha = start.heavy_atom_count();
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
-    heap.push(HeapItem {
-        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
-        seq,
-        walk: Walk {
-            mol: start,
-            steps: Vec::new(),
-            plan: Vec::new(),
-            maybe: Vec::new(),
-            opens: Vec::new(),
-            parent_cost: None,
-            diff: None,
-        },
-    });
-    seq += 1;
-
     let mut seen = HashSet::new();
-    seen.insert(start_csmi.as_ref().to_string());
     let mut found = Vec::new();
+
+    // Shallow cleavage-first net when the target is smaller: seed both matching
+    // sides as cores (depth-capped). Include depth-0 as the reactant seed so we
+    // do not also push a bare root (that double-walks the same cleavage layer).
+    let mut seeded = false;
+    if let Some(depth) = cleavage_first_depth {
+        if target_ha < start_ha {
+            let seeds =
+                crate::cleavage_graph::cleavage_first_seeds(reactant, target, ruleset, depth)?;
+            for seed in seeds {
+                if !seen.insert(seed.csmi.clone()) {
+                    continue;
+                }
+                let mol = ForestMol::parse(&seed.csmi)?;
+                let target_hit = seed.csmi == target_csmi;
+                let steps: Vec<PathStep> = seed
+                    .hops
+                    .iter()
+                    .map(|h| PathStep {
+                        rule_path: vec![Some(h.rule.clone())],
+                        pattern_name: h.pattern_name.clone(),
+                        site: h.site,
+                        site_orbit: h.site_orbit.clone(),
+                        product: h.product.clone(),
+                        sides: h.sides.clone(),
+                    })
+                    .collect();
+                heap.push(HeapItem {
+                    target_hit,
+                    seq,
+                    walk: Walk {
+                        mol,
+                        steps,
+                        plan: seed.plan,
+                        maybe: seed.maybe,
+                        opens: Vec::new(),
+                        parent_cost: None,
+                        diff: None,
+                    },
+                });
+                seq += 1;
+                seeded = true;
+            }
+        }
+    }
+    if !seeded {
+        heap.push(HeapItem {
+            target_hit: start_csmi.as_ref() == target_csmi.as_str(),
+            seq,
+            walk: Walk {
+                mol: start,
+                steps: Vec::new(),
+                plan: Vec::new(),
+                maybe: Vec::new(),
+                opens: Vec::new(),
+                parent_cost: None,
+                diff: None,
+            },
+        });
+        seq += 1;
+        seen.insert(start_csmi.as_ref().to_string());
+    }
 
     while let Some(item) = heap.pop() {
         if found.len() >= max_paths || counters.nodes >= max_nodes {
@@ -416,82 +527,90 @@ where
         let parent_ha = walk.mol.heavy_atom_count();
 
         for emission in emissions {
-            let Some((kept, sides)) = keep_fragment(&emission.products, &target_csmi, target_ha)
-            else {
-                continue;
-            };
-            let kept_csmi = kept.csmi().as_ref().to_string();
-            let child_ha = kept.heavy_atom_count();
-            let target_hit = kept_csmi == target_csmi;
-
-            // Try tag-lift (same heavy tags). None → full MCS later (eager: now;
-            // lazy: on pop). Eager closer also forces MCS when try misses.
-            let mut child_diff = if use_atom_diff {
-                diff.as_ref().and_then(|parent_d| {
-                    crate::atom_diff::try_atom_diff_for_child(
-                        &walk.mol,
-                        parent_d,
-                        &kept,
-                        &target_mol,
-                    )
-                })
-            } else {
-                None
-            };
-
-            let allow = if use_atom_diff {
-                if lazy_closer {
-                    true
-                } else if let Some(pc) = parent_cost {
-                    if child_diff.is_none() {
-                        child_diff = Some(crate::atom_diff::atom_diff(kept.mol(), &target_mol));
-                    }
-                    cost_closer(pc, child_diff.as_ref().unwrap().cost(), target_hit)
-                } else {
-                    true
-                }
-            } else {
-                closer(parent_ha, child_ha, target_ha, target_hit)
-            };
-            if !allow {
-                continue;
-            }
-            if seen.contains(&kept_csmi) && !target_hit {
-                continue;
-            }
-            seen.insert(kept_csmi.clone());
-
-            let (child_maybe, child_opens) = accumulate_maybe(
-                &walk.maybe,
-                &walk.opens,
-                &emission.site_atoms,
-                emission.cleaves,
-                emission.products.len(),
-                &sides,
+            let keeps = keep_fragments(
+                &emission.products,
+                &target_csmi,
+                target_ha,
+                diff.as_ref(),
+                Some(&target_mol),
             );
-            let mut steps = walk.steps.clone();
-            steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
-            let mut plan = walk.plan.clone();
-            plan.extend(emission.plan.iter().cloned());
-            heap.push(HeapItem {
-                target_hit,
-                seq,
-                walk: Walk {
-                    mol: kept,
-                    steps,
-                    plan,
-                    maybe: child_maybe,
-                    opens: child_opens,
-                    parent_cost,
-                    diff: child_diff,
-                },
-            });
-            seq += 1;
-            if target_hit {
-                hits_from_here += 1;
-                if found.len() + hits_from_here >= max_paths {
-                    break;
+            for (kept, sides) in keeps {
+                let kept_csmi = kept.csmi().as_ref().to_string();
+                let child_ha = kept.heavy_atom_count();
+                let target_hit = kept_csmi == target_csmi;
+
+                // Try tag-lift (same heavy tags). None → full MCS later (eager: now;
+                // lazy: on pop). Eager closer also forces MCS when try misses.
+                let mut child_diff = if use_atom_diff {
+                    diff.as_ref().and_then(|parent_d| {
+                        crate::atom_diff::try_atom_diff_for_child(
+                            &walk.mol,
+                            parent_d,
+                            &kept,
+                            &target_mol,
+                        )
+                    })
+                } else {
+                    None
+                };
+
+                let allow = if use_atom_diff {
+                    if lazy_closer {
+                        true
+                    } else if let Some(pc) = parent_cost {
+                        if child_diff.is_none() {
+                            child_diff = Some(crate::atom_diff::atom_diff(kept.mol(), &target_mol));
+                        }
+                        cost_closer(pc, child_diff.as_ref().unwrap().cost(), target_hit)
+                    } else {
+                        true
+                    }
+                } else {
+                    closer(parent_ha, child_ha, target_ha, target_hit)
+                };
+                if !allow {
+                    continue;
                 }
+                if seen.contains(&kept_csmi) && !target_hit {
+                    continue;
+                }
+                seen.insert(kept_csmi.clone());
+
+                let (child_maybe, child_opens) = accumulate_maybe(
+                    &walk.maybe,
+                    &walk.opens,
+                    &emission.site_atoms,
+                    emission.cleaves,
+                    emission.products.len(),
+                    &sides,
+                );
+                let mut steps = walk.steps.clone();
+                steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
+                let mut plan = walk.plan.clone();
+                plan.extend(emission.plan.iter().cloned());
+                heap.push(HeapItem {
+                    target_hit,
+                    seq,
+                    walk: Walk {
+                        mol: kept,
+                        steps,
+                        plan,
+                        maybe: child_maybe,
+                        opens: child_opens,
+                        parent_cost,
+                        diff: child_diff,
+                    },
+                });
+                seq += 1;
+                if target_hit {
+                    hits_from_here += 1;
+                    if found.len() + hits_from_here >= max_paths {
+                        break;
+                    }
+                }
+            }
+            if found.len() + hits_from_here >= max_paths {
+                break;
             }
         }
     }
@@ -713,6 +832,7 @@ where
         max_nodes,
         use_atom_diff: _,
         lazy_closer: _,
+        cleavage_first_depth: _,
     } = config;
     let start = ForestMol::parse(reactant)?;
     let start_csmi = start.csmi();
@@ -774,60 +894,63 @@ where
                 .map(|s| ForestMol::parse(s))
                 .collect();
             let products = products?;
-            let Some((kept, sides)) = keep_fragment(&products, &target_csmi, target_ha) else {
-                continue;
-            };
-            let kept_csmi = kept.csmi().as_ref().to_string();
-            let child_ha = kept.heavy_atom_count();
-            let target_hit = kept_csmi == target_csmi;
-            if !closer(walk.mol.heavy_atom_count(), child_ha, target_ha, target_hit) {
-                continue;
-            }
-            if seen.contains(&kept_csmi) && !target_hit {
-                continue;
-            }
-            seen.insert(kept_csmi.clone());
-
-            let site_atoms: BTreeSet<usize> = emission.site_atoms.iter().copied().collect();
-            let (child_maybe, child_opens) = accumulate_maybe(
-                &walk.maybe,
-                &walk.opens,
-                &site_atoms,
-                emission.cleaves,
-                products.len(),
-                &sides,
-            );
-            let mut steps = walk.steps.clone();
-            steps.push(PathStep {
-                rule_path: emission.rule_path.clone(),
-                pattern_name: emission.pattern_name.clone(),
-                site: emission.site,
-                site_orbit: emission.site_orbit.clone(),
-                product: kept_csmi.clone(),
-                sides,
-            });
-            let mut plan = walk.plan.clone();
-            plan.extend(emission.plan.iter().cloned());
-            heap.push(HeapItem {
-                target_hit,
-                seq,
-                walk: Walk {
-                    mol: kept,
-                    steps,
-                    plan,
-                    maybe: child_maybe,
-                    opens: child_opens,
-                    parent_cost: None,
-                    // Filter path re-parses; no tag continuity → no lift.
-                    diff: None,
-                },
-            });
-            seq += 1;
-            if target_hit {
-                hits_from_here += 1;
-                if found.len() + hits_from_here >= max_paths {
-                    break;
+            let keeps = keep_fragments(&products, &target_csmi, target_ha, None, None);
+            for (kept, sides) in keeps {
+                let kept_csmi = kept.csmi().as_ref().to_string();
+                let child_ha = kept.heavy_atom_count();
+                let target_hit = kept_csmi == target_csmi;
+                if !closer(walk.mol.heavy_atom_count(), child_ha, target_ha, target_hit) {
+                    continue;
                 }
+                if seen.contains(&kept_csmi) && !target_hit {
+                    continue;
+                }
+                seen.insert(kept_csmi.clone());
+
+                let site_atoms: BTreeSet<usize> = emission.site_atoms.iter().copied().collect();
+                let (child_maybe, child_opens) = accumulate_maybe(
+                    &walk.maybe,
+                    &walk.opens,
+                    &site_atoms,
+                    emission.cleaves,
+                    products.len(),
+                    &sides,
+                );
+                let mut steps = walk.steps.clone();
+                steps.push(PathStep {
+                    rule_path: emission.rule_path.clone(),
+                    pattern_name: emission.pattern_name.clone(),
+                    site: emission.site,
+                    site_orbit: emission.site_orbit.clone(),
+                    product: kept_csmi.clone(),
+                    sides,
+                });
+                let mut plan = walk.plan.clone();
+                plan.extend(emission.plan.iter().cloned());
+                heap.push(HeapItem {
+                    target_hit,
+                    seq,
+                    walk: Walk {
+                        mol: kept,
+                        steps,
+                        plan,
+                        maybe: child_maybe,
+                        opens: child_opens,
+                        parent_cost: None,
+                        // Filter path re-parses; no tag continuity → no lift.
+                        diff: None,
+                    },
+                });
+                seq += 1;
+                if target_hit {
+                    hits_from_here += 1;
+                    if found.len() + hits_from_here >= max_paths {
+                        break;
+                    }
+                }
+            }
+            if found.len() + hits_from_here >= max_paths {
+                break;
             }
         }
     }

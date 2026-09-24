@@ -150,6 +150,7 @@ fn run_one(
         max_nodes: MAX_NODES,
         use_atom_diff,
         lazy_closer,
+        ..FindPathConfig::default()
     };
 
     // Warmup

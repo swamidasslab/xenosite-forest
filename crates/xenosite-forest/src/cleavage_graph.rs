@@ -167,7 +167,19 @@ impl Default for CleavageGraphConfig {
         Self {
             target: None,
             max_nodes: 64,
-            max_depth: 6,
+            // First-pass cleave net stays shallow (HEURISTICS).
+            max_depth: 4,
+        }
+    }
+}
+
+impl CleavageGraphConfig {
+    /// Shallow first-pass toward `target` (depth 4).
+    pub fn first_pass(target: impl Into<String>) -> Self {
+        Self {
+            target: Some(target.into()),
+            max_nodes: 64,
+            max_depth: 4,
         }
     }
 }
@@ -196,7 +208,7 @@ fn fold_layer(arms: Vec<CleavageArm>) -> CleavageLayer {
 /// Both sides of a split stay on [`CleavageOr::fragments`]. Expansion is
 /// per-fragment: if **both** match (strict MCS cost drop and large enough to
 /// still reach the target), **both** are enqueued — we do not pick a winner.
-fn fragment_worth_expanding(
+pub(crate) fn fragment_worth_expanding(
     parent_diff: Option<&AtomDiff>,
     fragment_csmi: &str,
     target: &Molecule,
@@ -469,6 +481,153 @@ pub fn cleavage_product_graph(
     Ok(CleavageGraph { nodes })
 }
 
+/// One core reached by the shallow first-pass cleavage net.
+///
+/// Both matching sides of a split can appear as separate seeds. Plan / Maybe
+/// follow one representative arm per Or (canonical sites already collapse
+/// orbit twins).
+#[derive(Clone, Debug)]
+pub struct CleavageSeed {
+    pub csmi: String,
+    pub plan: Vec<crate::canonical_plan::Step>,
+    pub maybe: Vec<crate::canonical_plan::CleavageSide>,
+    /// Path hops for [`crate::find_path::PathStep`] reconstruction.
+    pub hops: Vec<CleavageSeedHop>,
+    pub depth: usize,
+}
+
+/// One cleavage hop on a [`CleavageSeed`] walk.
+#[derive(Clone, Debug)]
+pub struct CleavageSeedHop {
+    pub rule: String,
+    pub pattern_name: String,
+    pub site: usize,
+    pub site_orbit: Vec<usize>,
+    pub product: String,
+    pub sides: Vec<String>,
+}
+
+/// BFS cleavage-only seeds toward `target`, depth-capped (default first-pass: 4).
+///
+/// Returns every expandable core visited (including the root at depth 0). Leaf
+/// scraps that fail the expand gate are recorded on Maybe of the continuing
+/// seed, not as separate seeds.
+pub fn cleavage_first_seeds(
+    start: &str,
+    target: &str,
+    ruleset: &RuleSet,
+    max_depth: usize,
+) -> Result<Vec<CleavageSeed>, ForestError> {
+    let config = CleavageGraphConfig {
+        target: Some(target.to_string()),
+        max_nodes: 64,
+        max_depth,
+    };
+    let root_csmi = canon_of(start)?;
+    let target_csmi = canon_of(target)?;
+    let target_mol = crate::mol::parse_mol(target)?;
+    let target_ha = target_mol
+        .atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .count();
+
+    let mut seeds = Vec::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut queue: VecDeque<CleavageSeed> = VecDeque::new();
+    queue.push_back(CleavageSeed {
+        csmi: root_csmi.clone(),
+        plan: Vec::new(),
+        maybe: Vec::new(),
+        hops: Vec::new(),
+        depth: 0,
+    });
+    seen.insert(root_csmi);
+
+    while let Some(parent) = queue.pop_front() {
+        seeds.push(parent.clone());
+        if parent.depth >= max_depth || seeds.len() >= config.max_nodes {
+            continue;
+        }
+        let parent_mol = crate::mol::parse_mol(&parent.csmi)?;
+        let parent_diff = atom_diff(&parent_mol, &target_mol);
+        let layer = cleavage_layer(&parent_mol, ruleset, &config)?;
+
+        for or in layer.products {
+            let mut ranked: Vec<(&String, bool)> = or
+                .fragments
+                .iter()
+                .map(|frag| {
+                    let expand = fragment_worth_expanding(
+                        Some(&parent_diff),
+                        frag,
+                        &target_mol,
+                        &target_csmi,
+                        target_ha,
+                    );
+                    (frag, expand)
+                })
+                .collect();
+            ranked.sort_by_key(|(_, expand)| !expand);
+
+            for (frag, expand) in ranked {
+                if !expand {
+                    continue;
+                }
+                if !seen.insert(frag.clone()) {
+                    continue;
+                }
+                // Representative arm: first arm that lists this continue CSMI.
+                let Some(arm) = or
+                    .arms
+                    .iter()
+                    .find(|a| a.products.iter().any(|p| p == frag))
+                else {
+                    continue;
+                };
+                let Some(maybe_bag) = arm.maybe_for(frag) else {
+                    continue;
+                };
+                let mut plan = parent.plan.clone();
+                plan.push(
+                    crate::canonical_plan::Step::new(
+                        arm.rule.clone(),
+                        arm.site_atoms
+                            .iter()
+                            .copied()
+                            .map(crate::canonical_plan::PlanAtom::index),
+                    )
+                    .with_orbit(arm.site_orbit.iter().copied()),
+                );
+                let mut maybe = parent.maybe.clone();
+                maybe.extend(maybe_bag.entries.iter().cloned());
+                let sides: Vec<String> =
+                    maybe_bag.sides().into_iter().map(str::to_string).collect();
+                let mut hops = parent.hops.clone();
+                hops.push(CleavageSeedHop {
+                    rule: arm.rule.clone(),
+                    pattern_name: arm.pattern_name.clone(),
+                    site: arm.site,
+                    site_orbit: arm.site_orbit.clone(),
+                    product: frag.clone(),
+                    sides,
+                });
+                queue.push_back(CleavageSeed {
+                    csmi: frag.clone(),
+                    plan,
+                    maybe,
+                    hops,
+                    depth: parent.depth + 1,
+                });
+                if seeds.len() + queue.len() >= config.max_nodes {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(seeds)
+}
+
 /// Summary counts for benches / tests.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CleavageGraphStats {
@@ -585,6 +744,24 @@ mod tests {
             .iter()
             .any(|n| n.via.iter().any(|(_, o)| o.fragments.len() >= 2));
         assert!(both_sides, "no Or retained both cleavage fragments");
+    }
+
+    #[test]
+    fn cleavage_first_seeds_depth_capped_both_sides() {
+        let seeds =
+            cleavage_first_seeds("COc1ccc(OC)cc1", "Oc1ccc(O)cc1", &phase_one(), 4).unwrap();
+        assert!(seeds.iter().any(|s| s.depth == 0));
+        assert!(seeds.iter().any(|s| s.depth >= 1));
+        assert!(seeds.iter().all(|s| s.depth <= 4));
+        // Both matching cores can appear; methanol scraps do not.
+        let cores: Vec<_> = seeds.iter().filter(|s| s.depth > 0).collect();
+        assert!(!cores.is_empty(), "expected cleavage cores");
+        assert!(
+            cores
+                .iter()
+                .all(|s| ForestMol::parse(&s.csmi).unwrap().heavy_atom_count() >= 8),
+            "scraps should not be seeds"
+        );
     }
 
     #[test]
