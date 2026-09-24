@@ -1,0 +1,10 @@
+Python live find_path PhaseOne  max_nodes=800  max_paths=1  best-of-5  sha=376505c
+
+=== larger HA≈17–26 (use_filters=True / atom_diff) ===
+case                          hit   seconds steps  nodes   edits   bill
+tBu-bis-ND→dialdehyde          ok     0.087     2      6      30     36
+macrocycle-ND→aminoK           ok     0.158     2      3      23     26
+tribenzyl→PhCHO                ok     0.006     1      2       2      4
+triPh-butyl→OH                 ok     0.025     1      2       3      5
+MeO-diphenyl→catechol          ok     0.042     2      3       4      7
+TOTAL                                 0.318

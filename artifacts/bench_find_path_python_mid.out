@@ -1,0 +1,10 @@
+Python live find_path PhaseOne  max_nodes=800  max_paths=1  best-of-5  sha=376505c
+
+=== mid-size / multi-edit (use_filters=True / atom_diff) ===
+case                          hit   seconds steps  nodes   edits   bill
+eugenol→allyl-quinone          ok     0.033     4      5      15     20
+dimethoxy-PEA→catechol         ok     0.013     2      3       7     10
+MeOPhOH→hydroxyquinone         ok     0.351     4     33     193    226
+TBA→enyne aldehyde             ok     0.022     1      2       3      5
+2-MeO-naph→1,2-NQ              ok     0.011     3      3       4      7
+TOTAL                                 0.429

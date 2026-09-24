@@ -1,0 +1,20 @@
+Rust find_path PhaseOne  max_nodes=800  max_paths=1  best-of-5
+(release; chematic door; provisional atom_diff optional)
+
+=== mid-size / multi-edit (atom_diff=false) ===
+case                          hit   seconds steps  nodes   edits   bill
+eugenol→allyl-quinone        MISS     2.642     0    800   40275  41075
+dimethoxy-PEA→catechol         ok     0.038     2      5     386    391
+MeOPhOH→hydroxyquinone       MISS     2.174     0    800   34219  35019
+TBA→enyne aldehyde             ok     0.190     1      2     166    168
+2-MeO-naph→1,2-NQ            MISS     4.942     0    800   46905  47705
+TOTAL                                 9.986
+
+=== mid-size / multi-edit (atom_diff=true) ===
+case                          hit   seconds steps  nodes   edits   bill
+eugenol→allyl-quinone          ok     1.795     4    615   23361  23976
+dimethoxy-PEA→catechol       MISS     0.002     0      1       6      7
+MeOPhOH→hydroxyquinone       MISS     2.041     0    800   29050  29850
+TBA→enyne aldehyde             ok     0.083     1      2      81     83
+2-MeO-naph→1,2-NQ            MISS     0.007     0      1       0      1
+TOTAL                                 3.928

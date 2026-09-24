@@ -1,0 +1,20 @@
+Rust find_path PhaseOne  max_nodes=800  max_paths=1  best-of-5
+(release; chematic door; provisional atom_diff optional)
+
+=== larger HA≈17–26 (atom_diff=false) ===
+case                          hit   seconds steps  nodes   edits   bill
+tBu-bis-ND→dialdehyde          ok     0.198     2      9     347    356
+macrocycle-ND→aminoK           ok     1.111     2     14    2199   2213
+tribenzyl→PhCHO                ok     0.170     1      2     121    123
+triPh-butyl→OH                 ok     0.245     1      2     156    158
+MeO-diphenyl→catechol          ok     0.153     2      3     220    223
+TOTAL                                 1.879
+
+=== larger HA≈17–26 (atom_diff=true) ===
+case                          hit   seconds steps  nodes   edits   bill
+tBu-bis-ND→dialdehyde          ok     0.180     2      9     252    261
+macrocycle-ND→aminoK           ok     0.861     2     14    1962   1976
+tribenzyl→PhCHO                ok     0.102     1      2      66     68
+triPh-butyl→OH                 ok     0.030     1      2       3      5
+MeO-diphenyl→catechol        MISS     0.010     0      1       3      4
+TOTAL                                 1.182
