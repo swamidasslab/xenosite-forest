@@ -13,7 +13,8 @@
 //!
 //! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
-//! `--nofilter`), `--paths N` (emit up to N plans; default 1).
+//! `--nofilter`), `--paths N` (emit up to N plans; default 1),
+//! `--cleave-first N` (in-path cleave-only then exclude-cleaves; opt-in).
 //!
 //! Pair with:
 //! ```text
@@ -141,6 +142,7 @@ fn run_one(
     use_atom_diff: bool,
     lazy_closer: bool,
     max_paths: usize,
+    cleavage_first_depth: Option<usize>,
     repeats: u32,
 ) -> Row {
     let want = canon_of(target).unwrap_or_else(|e| panic!("{target}: {e}"));
@@ -150,7 +152,7 @@ fn run_one(
         max_nodes: MAX_NODES,
         use_atom_diff,
         lazy_closer,
-        ..FindPathConfig::default()
+        cleavage_first_depth,
     };
 
     // Warmup
@@ -192,11 +194,15 @@ fn print_table(
     use_atom_diff: bool,
     lazy_closer: bool,
     max_paths: usize,
+    cleavage_first_depth: Option<usize>,
     repeats: u32,
     budget: Duration,
 ) {
+    let cleave = cleavage_first_depth
+        .map(|d| format!("cleave_first={d}"))
+        .unwrap_or_else(|| "cleave_first=off".into());
     println!(
-        "\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}, max_paths={max_paths}) ==="
+        "\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}, max_paths={max_paths}, {cleave}) ==="
     );
     println!(
         "{:<32} {:>4} {:>5} {:>9} {:>5} {:>6} {:>7} {:>6}",
@@ -215,6 +221,7 @@ fn print_table(
             use_atom_diff,
             lazy_closer,
             max_paths,
+            cleavage_first_depth,
             repeats,
         );
         total += row.seconds;
@@ -249,6 +256,12 @@ fn parse_paths(args: &[String]) -> usize {
         .max(1)
 }
 
+fn parse_cleave_first(args: &[String]) -> Option<usize> {
+    args.windows(2)
+        .find(|w| w[0] == "--cleave-first")
+        .and_then(|w| w[1].parse().ok())
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let larger = args.iter().any(|a| a == "--larger");
@@ -258,12 +271,14 @@ fn main() {
     let filter_only = !nofilter || args.iter().any(|a| a == "--filter-only");
     let budget = parse_budget(&args, if nofilter { 60 } else { 30 });
     let max_paths = parse_paths(&args);
+    let cleave_first = parse_cleave_first(&args);
 
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
     );
     println!(
-        "(release; tagged ForestMol; filter-only={filter_only}; budget={}s)",
+        "(release; tagged ForestMol; filter-only={filter_only}; cleave_first={:?}; budget={}s)",
+        cleave_first,
         budget.as_secs()
     );
 
@@ -282,12 +297,31 @@ fn main() {
             false,
             false,
             max_paths,
+            cleave_first,
             NOFILTER_REPEATS,
             budget,
         );
     }
-    print_table(title, cases, true, true, max_paths, REPEATS, budget);
+    print_table(
+        title,
+        cases,
+        true,
+        true,
+        max_paths,
+        cleave_first,
+        REPEATS,
+        budget,
+    );
     if hard || args.iter().any(|a| a == "--eager") {
-        print_table(title, cases, true, false, max_paths, REPEATS, budget);
+        print_table(
+            title,
+            cases,
+            true,
+            false,
+            max_paths,
+            cleave_first,
+            REPEATS,
+            budget,
+        );
     }
 }
