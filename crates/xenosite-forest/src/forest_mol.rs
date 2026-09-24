@@ -217,6 +217,34 @@ impl ForestMol {
         Rc::clone(cache.topol_equiv.as_ref().expect("topol_equiv filled"))
     }
 
+    /// Atom+bond automorphism generators (canonaut), cached on the structure bag.
+    ///
+    /// Shared by [`Self::copy_mol`]; invalidated on edit (new structure bag).
+    /// Site pair orbits and future GraphTree / step-plan orbits should reuse this.
+    pub fn atom_bond_generators(&self) -> Rc<Vec<crate::orbits::AtomBondGenerator>> {
+        let mut cache = self.structure.borrow_mut();
+        if cache.atom_bond_generators.is_none() {
+            cache.atom_bond_generators =
+                Some(Rc::new(crate::orbits::atom_bond_generators(&self.mol)));
+        }
+        Rc::clone(
+            cache
+                .atom_bond_generators
+                .as_ref()
+                .expect("atom_bond_generators filled"),
+        )
+    }
+
+    /// Unordered atom–atom pair orbit id using cached generators.
+    pub fn atom_pair_orbit_id(&self, left: usize, right: usize) -> usize {
+        crate::orbits::atom_pair_orbit_id_with_gens(
+            &self.atom_bond_generators(),
+            self.mol.atom_count(),
+            left,
+            right,
+        )
+    }
+
     pub fn smarts_matches(
         &self,
         smarts: &str,
@@ -276,6 +304,27 @@ mod tests {
             &mol.smarts_matches(smarts).unwrap()
         ));
         assert!(Rc::ptr_eq(&mol.formula(), &mol.formula()));
+        assert!(Rc::ptr_eq(
+            &mol.atom_bond_generators(),
+            &mol.atom_bond_generators()
+        ));
+    }
+
+    #[test]
+    fn generators_share_on_copy_invalidate_on_edit() {
+        let parent = ForestMol::parse("c1ccccc1").unwrap();
+        let gens = parent.atom_bond_generators();
+        let copied = parent.copy_mol();
+        assert!(Rc::ptr_eq(&gens, &copied.atom_bond_generators()));
+        assert_eq!(
+            parent.atom_pair_orbit_id(0, 1),
+            crate::orbits::atom_pair_orbit_id(parent.mol(), 0, 1)
+        );
+        let edited = parent.edit_copy();
+        assert!(!edited.shares_structure(&parent));
+        assert!(edited.structure.borrow().atom_bond_generators.is_none());
+        let edited_gens = edited.atom_bond_generators();
+        assert!(!Rc::ptr_eq(&gens, &edited_gens));
     }
 
     #[test]

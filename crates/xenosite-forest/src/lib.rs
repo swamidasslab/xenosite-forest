@@ -59,7 +59,10 @@ pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
-pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
+pub use orbits::{
+    AtomBondGenerator, atom_bond_generators, atom_pair_orbit_id, atom_pair_orbit_id_with_gens,
+    unordered_atom_pair_groups_with_gens, unordered_atom_pair_orbit_sizes,
+};
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
 pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};

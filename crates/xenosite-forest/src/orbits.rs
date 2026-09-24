@@ -46,10 +46,11 @@ fn bond_label(order: BondOrder, aromatic: bool) -> &'static str {
     }
 }
 
+/// One automorphism: `(atom_perm, bond_perm)` with `perm[i] = image of i`.
+pub type AtomBondGenerator = (Vec<usize>, Vec<usize>);
+
 /// Automorphism generators of the atom+bond-as-vertex colored graph.
-///
-/// Each generator is `(atom_perm, bond_perm)` with `perm[i] = image of i`.
-pub fn atom_bond_generators(mol: &Molecule) -> Vec<(Vec<usize>, Vec<usize>)> {
+pub fn atom_bond_generators(mol: &Molecule) -> Vec<AtomBondGenerator> {
     let n_atoms = mol.atom_count();
     let n_bonds = mol.bond_count();
     let n_vertices = n_atoms + n_bonds;
@@ -108,10 +109,16 @@ fn sorted_pair(a: usize, b: usize) -> (usize, usize) {
 
 /// Unordered atom–atom orbit partition (benzene ortho/meta/para lock).
 pub fn unordered_atom_pair_groups(mol: &Molecule) -> Vec<Vec<(usize, usize)>> {
-    let n = mol.atom_count();
-    let generators = atom_bond_generators(mol);
-    let candidates: Vec<(usize, usize)> = (0..n)
-        .flat_map(|i| ((i + 1)..n).map(move |j| (i, j)))
+    unordered_atom_pair_groups_with_gens(&atom_bond_generators(mol), mol.atom_count())
+}
+
+/// Like [`unordered_atom_pair_groups`], with generators supplied (e.g. ForestMol cache).
+pub fn unordered_atom_pair_groups_with_gens(
+    generators: &[AtomBondGenerator],
+    n_atoms: usize,
+) -> Vec<Vec<(usize, usize)>> {
+    let candidates: Vec<(usize, usize)> = (0..n_atoms)
+        .flat_map(|i| ((i + 1)..n_atoms).map(move |j| (i, j)))
         .collect();
     let mut parent: HashMap<(usize, usize), (usize, usize)> =
         candidates.iter().copied().map(|p| (p, p)).collect();
@@ -129,7 +136,7 @@ pub fn unordered_atom_pair_groups(mol: &Molecule) -> Vec<Vec<(usize, usize)>> {
     }
 
     for pair in &candidates {
-        for (atom_map, _) in &generators {
+        for (atom_map, _) in generators {
             let image = sorted_pair(atom_map[pair.0], atom_map[pair.1]);
             let a = find(&mut parent, *pair);
             let b = find(&mut parent, image);
@@ -160,8 +167,21 @@ pub fn unordered_atom_pair_orbit_sizes(mol: &Molecule) -> Vec<usize> {
 
 /// Stable id for an unordered atom pair's nauty orbit.
 pub fn atom_pair_orbit_id(mol: &Molecule, left: usize, right: usize) -> usize {
+    atom_pair_orbit_id_with_gens(&atom_bond_generators(mol), mol.atom_count(), left, right)
+}
+
+/// Like [`atom_pair_orbit_id`], with generators supplied (e.g. ForestMol cache).
+pub fn atom_pair_orbit_id_with_gens(
+    generators: &[AtomBondGenerator],
+    n_atoms: usize,
+    left: usize,
+    right: usize,
+) -> usize {
     let want = sorted_pair(left, right);
-    for (id, group) in unordered_atom_pair_groups(mol).iter().enumerate() {
+    for (id, group) in unordered_atom_pair_groups_with_gens(generators, n_atoms)
+        .iter()
+        .enumerate()
+    {
         if group.contains(&want) {
             return id;
         }

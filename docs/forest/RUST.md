@@ -29,7 +29,8 @@ Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Ru
 - Kekulé assignments live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
 - Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them when a correspondence is supplied. Chematic's public apply/write do not return that map (see [Atom identity](#atom-identity-chematic-has-no-public-correspondence)).
 - `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
-- `clear_structure` drops `csmi`/formula/SMARTS, not the kekulé `Rc`.
+- Structure bag also caches **atom+bond automorphism generators** (`atom_bond_generators`) for site / higher-order (plan) orbits. Same share/invalidate rules as `csmi` / ranks.
+- `clear_structure` drops `csmi`/formula/SMARTS/generators, not the kekulé `Rc`.
 
 There is no `has_forest`, no `wipe_forest`, and no `xf()` facade.
 

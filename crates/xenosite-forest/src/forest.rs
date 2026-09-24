@@ -21,6 +21,9 @@ pub struct Structure {
     pub csmi: Option<Rc<str>>,
     pub formula: Option<Rc<Formula>>,
     pub topol_equiv: Option<Rc<Vec<usize>>>,
+    /// Atom+bond automorphism generators (canonaut). Needed for site and
+    /// higher-order (plan) orbits; filled once per structure bag.
+    pub atom_bond_generators: Option<Rc<Vec<crate::orbits::AtomBondGenerator>>>,
     pub smarts_matches: BTreeMap<String, Rc<Vec<BTreeMap<u16, usize>>>>,
 }
 
