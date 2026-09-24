@@ -45,7 +45,10 @@ pub use atom_diff::{
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
-pub use canonical_plan::{CanonicalStep, PlanAtom, PlanKind, identity_canonical_plan};
+pub use canonical_plan::{
+    CanonicalStep, Deps, PlanAtom, PlanKind, as_deps, canonical_dependency_edges,
+    identity_canonical_plan,
+};
 pub use find_path::{
     FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
     find_path_diff, find_path_with, find_path_with_filters,

@@ -6,11 +6,11 @@
 //! then materializes only for survivors. Nested sets stay namespaces on each
 //! step's leaf-first `rule_path`.
 //!
-//! Outcomes carry elementary [`crate::canonical_plan::CanonicalStep`] plans
-//! (identity, or quinone-shaped prep-then-DH from [`PlanKind`] on the leaf).
-//! Closer uses atom-diff cost. Lazy: try tag-lift at enqueue (same-heavy-tag
-//! edits only); full MCS on pop when lift is `None`. Eager:
-//! [`crate::atom_diff::atom_diff_for_child`] (lift else MCS) at enqueue.
+//! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
+//! precedes from [`as_deps`]). Quinone-shaped prep-then-DH comes from
+//! [`PlanKind`] on the leaf. Closer uses atom-diff cost. Lazy: try tag-lift at
+//! enqueue (same-heavy-tag edits only); full MCS on pop when lift is `None`.
+//! Eager: [`crate::atom_diff::atom_diff_for_child`] (lift else MCS) at enqueue.
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use crate::ForestError;
 use crate::candidate::Candidate;
-use crate::canonical_plan::{CanonicalStep, steps_for_kind};
+use crate::canonical_plan::{CanonicalStep, Deps, as_deps, steps_for_kind};
 use crate::forest_mol::ForestMol;
 use crate::mol::{canon_of, parse_mol};
 use crate::pattern::{PatternInfo, SiteInfo};
@@ -79,8 +79,8 @@ impl PathStep {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PathOutcome {
     pub steps: Vec<PathStep>,
-    /// Elementary plan (Python `CanonicalStep` / `Deps` shape).
-    pub plan: Vec<CanonicalStep>,
+    /// Elementary plan with precedes (Python `as_deps` → `Deps`).
+    pub plan: Deps,
     pub smiles: String,
 }
 
@@ -333,7 +333,7 @@ where
             counters.nodes += 1;
             found.push(PathOutcome {
                 steps: walk.steps,
-                plan: walk.plan,
+                plan: as_deps(walk.plan),
                 smiles: here.as_ref().to_string(),
             });
             continue;
@@ -649,7 +649,7 @@ where
         if here.as_ref() == target_csmi.as_str() {
             found.push(PathOutcome {
                 steps: walk.steps,
-                plan: walk.plan,
+                plan: as_deps(walk.plan),
                 smiles: here.as_ref().to_string(),
             });
             continue;
@@ -858,6 +858,52 @@ mod tests {
             "expected elementary plan, got {:?}",
             hits[0].plan
         );
+    }
+
+    #[test]
+    fn benzene_to_quinone_plan_precedes_both_oh_before_dh() {
+        // Python test_find_path_uses_atom_diff_filters: precedes (0,2),(1,2).
+        let mut counters = PathCounters::default();
+        let hits = find_path_default("c1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        let names: Vec<_> = hits[0].plan.iter().map(|s| s.rule.as_str()).collect();
+        assert_eq!(
+            names.iter().filter(|&&n| n == "Hydroxylation").count(),
+            2,
+            "plan={names:?}"
+        );
+        assert_eq!(
+            names.iter().filter(|&&n| n == "Dehydrogenation").count(),
+            1,
+            "plan={names:?}"
+        );
+        assert!(!names.contains(&"QuinoneFormation"));
+        let hydroxyl: Vec<_> = names
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &n)| (n == "Hydroxylation").then_some(i))
+            .collect();
+        let dh = names.iter().position(|&n| n == "Dehydrogenation").unwrap();
+        let edges: HashSet<_> = hits[0].plan.precedes().iter().copied().collect();
+        assert!(!edges.contains(&(hydroxyl[0], hydroxyl[1])));
+        assert!(!edges.contains(&(hydroxyl[1], hydroxyl[0])));
+        assert!(edges.contains(&(hydroxyl[0], dh)));
+        assert!(edges.contains(&(hydroxyl[1], dh)));
+    }
+
+    #[test]
+    fn phenol_to_quinone_plan_oh_precedes_dh() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_default("Oc1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        let names: Vec<_> = hits[0].plan.iter().map(|s| s.rule.as_str()).collect();
+        assert!(!names.contains(&"QuinoneFormation"));
+        assert_eq!(names.iter().filter(|&&n| n == "Hydroxylation").count(), 1);
+        assert_eq!(names.iter().filter(|&&n| n == "Dehydrogenation").count(), 1);
+        let oh = names.iter().position(|&n| n == "Hydroxylation").unwrap();
+        let dh = names.iter().position(|&n| n == "Dehydrogenation").unwrap();
+        let edges: HashSet<_> = hits[0].plan.precedes().iter().copied().collect();
+        assert!(edges.contains(&(oh, dh)));
     }
 
     #[test]

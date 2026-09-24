@@ -214,17 +214,20 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 ## Not in this crate
 
 Full Python `atom_diff` parity (leave_count / bond_raises site filters on every
-edge case), archive `Deps` apply. A provisional
+edge case), archive `Deps` apply / linearizations. Outcomes already carry
+[`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs) via [`as_deps`]
+(precedes from `PlanAtom::Ref` notes; transitive reduction). A provisional
 [`atom_diff`](../../crates/xenosite-forest/src/atom_diff.rs) door gates
 candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
 [`find_path`](../../crates/xenosite-forest/src/find_path.rs) walks carry tagged
 [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) (structure/`csmi`
 cache; `Atom.tag` synced from the sidecar through `adopt_product`). Outcomes
 emit elementary [`CanonicalStep`](../../crates/xenosite-forest/src/canonical_plan.rs)
-plans; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
+plans wrapped as `Deps`; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
 on the `RuleSet` (data, not a name branch). Eager closer can
 [`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) via
-tag-lift (+ local add extend); else full MCS. Lazy closer MCS on pop. Nested
+tag-lift (+ local add extend); else full MCS. Lazy closer: try tag-lift when
+safe (same heavy tags), else MCS on pop. Nested
 `RuleSet` namespaces are in the crate as a door; they are not yet the live
 Python search.
 
