@@ -1,8 +1,8 @@
 //! Phase profile for the **tagged `ForestMol`** `find_path` door.
 //!
 //! Same walk as production: structure/`csmi` cache, `Atom.tag` through
-//! `adopt_product`, lazy cost closer on pop, tag-lift (+ OH extend) at
-//! enqueue so full MCS runs only when lift fails (root / orphan born).
+//! `adopt_product`, lazy cost closer on pop, tag-lift with local add/remove
+//! MCS adjust at enqueue so full MCS runs only when lift fails (root / unplaceable add).
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example find_path_profile --release

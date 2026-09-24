@@ -379,7 +379,7 @@ where
             let child_ha = kept.heavy_atom_count();
             let target_hit = kept_csmi == target_csmi;
 
-            // Tag-lift (+ OH extend) from this node's diff. `None` → full MCS
+            // Tag-lift (+ local add extend / remove shrink). `None` → full MCS
             // later (eager: now; lazy: on pop).
             let mut child_diff = if use_atom_diff {
                 diff.as_ref().and_then(|parent_d| {

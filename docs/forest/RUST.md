@@ -225,8 +225,9 @@ plans; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
 on the `RuleSet` (data, not a name branch). Default lazy (and eager) closer
 [`try_atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) /
 [`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) via
-tag-lift (+ greedy OH extend); full MCS only when lift fails. Nested `RuleSet`
-namespaces are in the crate as a door; they are not yet the live Python search.
+tag-lift (removed atoms shrink the map; added atoms extend locally); full MCS
+only when lift fails. Nested `RuleSet` namespaces are in the crate as a door;
+they are not yet the live Python search.
 
 ## find_path H2H (Rust vs Python live)
 
@@ -334,5 +335,5 @@ oxidation can raise HA distance while lowering cost.
 the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a
 `Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Default
 lazy closer (and eager) uses `try_atom_diff_for_child` / `atom_diff_for_child`
-(tag-lift + OH extend) instead of a fresh MCS when tags allow; full MCS only
-on lift miss.
+(tag-lift: shrink on remove, local extend on add) instead of a fresh MCS when
+tags allow; full MCS only on lift miss.

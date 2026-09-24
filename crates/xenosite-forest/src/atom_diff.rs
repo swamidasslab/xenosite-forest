@@ -451,9 +451,8 @@ pub fn atom_diff_from_mappings(
 
 /// Lift parent MCS mappings onto a tagged child via surviving atom tags.
 ///
-/// Returns `None` when parent and child do not share a tag generation or no
-/// mapped parent atom survives. Born atoms (new OH) are left unmapped here —
-/// callers may [`extend_mapping_for_born`] or fall back to full MCS.
+/// Removed atoms drop out of each map (shrink). Added atoms are left
+/// unmapped — callers may [`extend_mapping_for_added`] or fall back to full MCS.
 pub fn lift_mappings(
     parent: &crate::forest_mol::ForestMol,
     child: &crate::forest_mol::ForestMol,
@@ -485,56 +484,172 @@ pub fn lift_mappings(
     }
 }
 
-/// Greedy: map an unmapped child atom onto an unmapped target atom of the same
-/// element that is bonded to a mapped neighbor's image (hydroxylation OH).
-pub fn extend_mapping_for_born(
+/// Heavy child atoms whose tags are not on `parent` (local additions).
+pub fn added_heavy_atoms(
+    parent: &crate::forest_mol::ForestMol,
+    child: &crate::forest_mol::ForestMol,
+) -> Vec<usize> {
+    let mut out = Vec::new();
+    for i in 0..child.mol().atom_count() {
+        if child.mol().atom(atom_idx(i)).element.atomic_number() <= 1 {
+            continue;
+        }
+        let Some(tag) = child.tag_of(i) else {
+            out.push(i);
+            continue;
+        };
+        if parent.index_of(tag).is_none() {
+            out.push(i);
+        }
+    }
+    out
+}
+
+/// Place locally added child atoms onto free target atoms of the same element.
+///
+/// Rules only add/remove atoms at the edit site. Prefer a free target atom
+/// bonded to every mapped neighbor's image. If a single-neighbor add does not
+/// fit the current MCS orientation, rematch that neighbor onto a same-element
+/// target atom adjacent to the candidate (swap when needed).
+pub fn extend_mapping_for_added(
     child: &Molecule,
     target: &Molecule,
     mapping: &mut BTreeMap<usize, usize>,
+    added: &[usize],
 ) {
     let mut image: HashSet<usize> = mapping.values().copied().collect();
-    let mapped_child: HashSet<usize> = mapping.keys().copied().collect();
-    let mut born: Vec<usize> = (0..child.atom_count())
-        .filter(|i| {
-            child.atom(atom_idx(*i)).element.atomic_number() > 1 && !mapped_child.contains(i)
-        })
+    let mut pending: Vec<usize> = added
+        .iter()
+        .copied()
+        .filter(|i| !mapping.contains_key(i))
         .collect();
-    born.sort_unstable();
-    for child_idx in born {
-        let z = child.atom(atom_idx(child_idx)).element.atomic_number();
-        let mut placed = None;
-        for (nbr, _) in child.neighbors(atom_idx(child_idx)) {
-            let nbr = atom_usize(nbr);
-            let Some(&t_nbr) = mapping.get(&nbr) else {
+    pending.sort_unstable();
+    let mut progress = true;
+    while progress {
+        progress = false;
+        let mut still = Vec::new();
+        for child_idx in pending {
+            if mapping.contains_key(&child_idx) {
                 continue;
-            };
-            for (t_cand, _) in target.neighbors(atom_idx(t_nbr)) {
-                let t_cand = atom_usize(t_cand);
-                if image.contains(&t_cand) {
-                    continue;
-                }
-                if target.atom(atom_idx(t_cand)).element.atomic_number() != z {
-                    continue;
-                }
-                placed = Some(t_cand);
-                break;
             }
-            if placed.is_some() {
-                break;
+            match place_added_atom(child, target, mapping, &mut image, child_idx) {
+                Some(t_cand) => {
+                    mapping.insert(child_idx, t_cand);
+                    image.insert(t_cand);
+                    progress = true;
+                }
+                None => still.push(child_idx),
             }
         }
-        if let Some(t_cand) = placed {
-            mapping.insert(child_idx, t_cand);
-            image.insert(t_cand);
+        pending = still;
+    }
+}
+
+fn place_added_atom(
+    child: &Molecule,
+    target: &Molecule,
+    mapping: &mut BTreeMap<usize, usize>,
+    image: &mut HashSet<usize>,
+    child_idx: usize,
+) -> Option<usize> {
+    let z = child.atom(atom_idx(child_idx)).element.atomic_number();
+    let mut mapped_nbrs: Vec<usize> = child
+        .neighbors(atom_idx(child_idx))
+        .map(|(nbr, _)| atom_usize(nbr))
+        .filter(|n| mapping.contains_key(n))
+        .collect();
+    mapped_nbrs.sort_unstable();
+    mapped_nbrs.dedup();
+    if mapped_nbrs.is_empty() {
+        return None;
+    }
+
+    // Free target atom of matching Z adjacent to every mapped neighbor image.
+    let mut direct = Vec::new();
+    for t_cand in 0..target.atom_count() {
+        if image.contains(&t_cand) {
+            continue;
+        }
+        if target.atom(atom_idx(t_cand)).element.atomic_number() != z {
+            continue;
+        }
+        let ok = mapped_nbrs.iter().all(|&n| {
+            let t_n = mapping[&n];
+            target
+                .bond_between(atom_idx(t_cand), atom_idx(t_n))
+                .is_some()
+        });
+        if ok {
+            direct.push(t_cand);
         }
     }
+    if let Some(&best) = direct.iter().min() {
+        return Some(best);
+    }
+
+    // Single-neighbor add: MCS orientation may be flipped on a symmetric
+    // parent. Rematch the neighbor onto a same-element target atom adjacent
+    // to a free candidate for the new atom.
+    if mapped_nbrs.len() != 1 {
+        return None;
+    }
+    let n = mapped_nbrs[0];
+    let z_n = child.atom(atom_idx(n)).element.atomic_number();
+    let old_t_n = mapping[&n];
+    let mut repairs = Vec::new();
+    for t_cand in 0..target.atom_count() {
+        if image.contains(&t_cand) {
+            continue;
+        }
+        if target.atom(atom_idx(t_cand)).element.atomic_number() != z {
+            continue;
+        }
+        for (t_n_idx, _) in target.neighbors(atom_idx(t_cand)) {
+            let t_n = atom_usize(t_n_idx);
+            if target.atom(atom_idx(t_n)).element.atomic_number() != z_n {
+                continue;
+            }
+            if t_n == old_t_n {
+                repairs.push((t_cand, None));
+                continue;
+            }
+            if !image.contains(&t_n) {
+                repairs.push((t_cand, Some((t_n, None))));
+                continue;
+            }
+            let Some((&m, _)) = mapping.iter().find(|&(_, &img)| img == t_n) else {
+                continue;
+            };
+            if child.atom(atom_idx(m)).element.atomic_number() != z_n {
+                continue;
+            }
+            // Swap images of n and m so n sits next to t_cand.
+            repairs.push((t_cand, Some((t_n, Some(m)))));
+        }
+    }
+    repairs.sort_unstable_by_key(|(t, repair)| (*t, repair.is_some()));
+    let (t_cand, repair) = repairs.into_iter().next()?;
+    match repair {
+        None => {}
+        Some((t_n, None)) => {
+            image.remove(&old_t_n);
+            mapping.insert(n, t_n);
+            image.insert(t_n);
+        }
+        Some((t_n, Some(m))) => {
+            mapping.insert(n, t_n);
+            mapping.insert(m, old_t_n);
+        }
+    }
+    Some(t_cand)
 }
 
 /// Child [`AtomDiff`] via tag-lifted parent MCS when possible.
 ///
-/// Same atom count → lift only. Growth (OH) → lift + greedy born extend.
-/// Returns `None` when lift is impossible or a heavy born atom stays unmapped
-/// — caller should run full [`atom_diff`]. Never runs MCS itself.
+/// Lift surviving atoms (removed → shrink). Locally place added atoms
+/// ([`extend_mapping_for_added`]). Returns `None` when lift is impossible or
+/// an added heavy atom stays unmapped — caller should run full [`atom_diff`].
+/// Never runs MCS itself.
 pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
@@ -547,17 +662,14 @@ pub fn try_atom_diff_for_child(
         parent_diff.mappings.clone()
     };
     let mut lifted = lift_mappings(parent, child, &parent_maps)?;
-    let child_n = child.mol().atom_count();
-    let parent_n = parent.mol().atom_count();
-    if child_n > parent_n {
+    let added = added_heavy_atoms(parent, child);
+    if !added.is_empty() {
         for m in &mut lifted {
-            extend_mapping_for_born(child.mol(), target, m);
+            extend_mapping_for_added(child.mol(), target, m, &added);
         }
-        let mapped: HashSet<usize> = lifted.iter().flat_map(|m| m.keys().copied()).collect();
-        let orphan = (0..child_n).any(|i| {
-            child.mol().atom(atom_idx(i)).element.atomic_number() > 1 && !mapped.contains(&i)
-        });
-        if orphan {
+        // Prefer a view that covered every addition; else refuse (full MCS).
+        lifted.retain(|m| added.iter().all(|a| m.contains_key(a)));
+        if lifted.is_empty() {
             return None;
         }
     }
@@ -863,7 +975,7 @@ pub fn keep_against_diff(diff: &AtomDiff) -> impl Fn(&Candidate) -> bool + '_ {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mol::parse_mol;
+    use crate::mol::{canon_of, parse_mol};
     use crate::rules::{dealkylation, hydroxylation};
 
     #[test]
@@ -1023,8 +1135,12 @@ mod tests {
         let pieces = pairs[0].materialize_mols(parent.mol()).unwrap();
         assert!(!pieces.is_empty());
         let child = parent.adopt_product(pieces[0].clone());
+        assert!(
+            added_heavy_atoms(&parent, &child).is_empty(),
+            "DH does not add heavy atoms"
+        );
         let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
-            .expect("DH same-atom-count should lift without MCS");
+            .expect("same-atom-count tag lift should not need MCS");
         let full = atom_diff(child.mol(), &target);
         assert_eq!(
             lifted.cost(),
@@ -1034,7 +1150,7 @@ mod tests {
     }
 
     #[test]
-    fn tag_lift_hydroxylation_extends_born_oxygen() {
+    fn tag_lift_extends_added_oxygen() {
         use crate::forest_mol::ForestMol;
         use crate::hydroxylation::hydroxylation;
 
@@ -1045,10 +1161,57 @@ mod tests {
         let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
         let child = parent.adopt_product(pieces[0].clone());
         assert_eq!(child.mol().atom_count(), 3);
+        let added = added_heavy_atoms(&parent, &child);
+        assert_eq!(added.len(), 1);
+        assert_eq!(
+            child.mol().atom(atom_idx(added[0])).element.atomic_number(),
+            8
+        );
         let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
-            .expect("OH born-O extend should lift without MCS");
+            .expect("local add should extend without MCS");
         // Child is the target → cost 0 whether lift or full MCS.
         assert_eq!(lifted.cost(), 0, "{lifted:?}");
         assert!(child.shares_tag_gen(&parent));
     }
+
+    #[test]
+    fn tag_lift_shrinks_on_dealkylation() {
+        use crate::forest_mol::ForestMol;
+
+        // Anisole → phenol: methyl carbon removed, no heavy add.
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
+        let parent_diff = atom_diff(parent.mol(), &target);
+        let parent_cost = parent_diff.cost();
+        let cands = dealkylation().candidates(parent.mol()).unwrap();
+        assert!(!cands.is_empty());
+        let phenol = canon_of("Oc1ccccc1").unwrap();
+        let mut child = None;
+        for c in &cands {
+            let pieces = c.materialize_mols(parent.mol()).unwrap();
+            for piece in pieces {
+                let adopted = parent.adopt_product(piece);
+                if adopted.csmi().as_ref() == phenol.as_str() {
+                    child = Some(adopted);
+                    break;
+                }
+            }
+            if child.is_some() {
+                break;
+            }
+        }
+        let child = child.expect("phenol from anisole dealkylation");
+        assert!(
+            added_heavy_atoms(&parent, &child).is_empty(),
+            "dealkylation keeps no new heavies on the kept fragment"
+        );
+        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
+            .expect("removal should shrink-lift without MCS");
+        assert!(
+            lifted.cost() <= parent_cost,
+            "shrink toward phenol: parent={parent_cost} child={}",
+            lifted.cost()
+        );
+    }
 }
+// temp - will remove
