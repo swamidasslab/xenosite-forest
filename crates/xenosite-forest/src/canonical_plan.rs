@@ -94,7 +94,10 @@ impl Deps {
         let n = steps.len();
         let raw: Vec<_> = precedes.into_iter().collect();
         for &(a, b) in &raw {
-            assert!(a < n && b < n && a != b, "invalid precedes ({a}, {b}) for n={n}");
+            assert!(
+                a < n && b < n && a != b,
+                "invalid precedes ({a}, {b}) for n={n}"
+            );
         }
         let precedes = if n == 0 {
             Vec::new()
