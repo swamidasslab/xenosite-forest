@@ -5,12 +5,15 @@
 //! ```text
 //! cargo run -p xenosite-forest --example cleavage_graph_bench --release
 //! cargo run -p xenosite-forest --example cleavage_graph_bench --release -- --hard
+//! cargo run -p xenosite-forest --example cleavage_graph_bench --release -- --uncapped
 //! ```
 
 use std::env;
 use std::time::Instant;
 
-use xenosite_forest::{cleavage_graph_stats, phase_one};
+use xenosite_forest::{
+    CleavageGraphConfig, cleavage_layer, cleavage_product_graph, parse_mol, phase_one,
+};
 
 const LARGER: &[(&str, &str, &str)] = &[
     (
@@ -70,10 +73,13 @@ const HARD: &[(&str, &str, &str)] = &[
 
 fn main() {
     let hard = env::args().any(|a| a == "--hard");
+    let uncapped = env::args().any(|a| a == "--uncapped");
     let cases = if hard { HARD } else { LARGER };
     let set = phase_one();
+    let max_nodes = if uncapped { 10_000 } else { 64 };
+    let max_depth = if uncapped { 12 } else { 6 };
     println!(
-        "cleavage product graph (both sides kept, Or by fragment multiset)  set={}\n",
+        "cleavage product graph (both sides kept; expand if strict MCS drop + ha≥target)  set={}  max_nodes={max_nodes}\n",
         if hard { "HARD" } else { "LARGER" }
     );
     println!(
@@ -82,18 +88,25 @@ fn main() {
     );
     for (name, start, target) in cases {
         let t0 = Instant::now();
-        let (stats, _) = cleavage_graph_stats(start, Some(target), &set).unwrap();
+        let config = CleavageGraphConfig {
+            target: Some((*target).into()),
+            max_nodes,
+            max_depth,
+        };
+        let start_mol = parse_mol(start).unwrap();
+        let layer = cleavage_layer(&start_mol, &set, &config).unwrap();
+        let graph = cleavage_product_graph(start, &set, &config).unwrap();
         let ms = t0.elapsed().as_secs_f64() * 1e3;
         println!(
             "{:<28} {:>6} {:>5} {:>5} {:>6} {:>8} {:>8} {:>8} {:>6.0}",
             name,
-            stats.nodes,
-            stats.ors,
-            stats.arms,
-            stats.max_or_fanin,
-            stats.one_hop_products,
-            stats.one_hop_arms,
-            stats.one_hop_fragments,
+            graph.n_nodes(),
+            graph.n_ors(),
+            graph.n_arms(),
+            graph.max_or_fanin(),
+            layer.n_products(),
+            layer.n_arms(),
+            layer.distinct_fragments().len(),
             ms
         );
     }

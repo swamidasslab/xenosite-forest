@@ -191,36 +191,51 @@ fn fold_layer(arms: Vec<CleavageArm>) -> CleavageLayer {
     CleavageLayer { products }
 }
 
-/// True when this fragment is allowed to expand toward the target.
-fn mcs_allows_fragment(
+/// Whether this fragment should be BFS-expanded toward the target.
+///
+/// Both sides of a split stay on [`CleavageOr::fragments`]. Expansion is
+/// per-fragment: if **both** match (strict MCS cost drop and large enough to
+/// still reach the target), **both** are enqueued — we do not pick a winner.
+fn fragment_worth_expanding(
     parent_diff: Option<&AtomDiff>,
     fragment_csmi: &str,
     target: &Molecule,
+    target_csmi: &str,
+    target_ha: usize,
 ) -> bool {
+    if fragment_csmi == target_csmi {
+        return true;
+    }
     let Ok(frag) = ForestMol::parse(fragment_csmi) else {
         return false;
     };
+    // Cleavage only shrinks; a piece smaller than the target cannot be a core.
+    if frag.heavy_atom_count() < target_ha {
+        return false;
+    }
     let child_diff = atom_diff(frag.mol(), target);
     match parent_diff {
-        Some(parent) => child_diff.cost() <= parent.cost(),
+        Some(parent) => child_diff.cost() < parent.cost(),
         None => true,
     }
 }
 
-/// A split is kept if it has ≥2 products and at least one fragment MCS-gates
-/// (when a target is set). Both sides remain in the Or record either way.
+/// A split is recorded if it bifurcates and at least one fragment is worth
+/// expanding (when a target is set). Both fragment CSMIs stay on the Or.
 fn split_usable(
     products: &[String],
     parent_diff: Option<&AtomDiff>,
     target: Option<&Molecule>,
+    target_csmi: Option<&str>,
+    target_ha: Option<usize>,
 ) -> bool {
     if products.len() < 2 {
         return false;
     }
-    match (parent_diff, target) {
-        (Some(diff), Some(t)) => products
+    match (parent_diff, target, target_csmi, target_ha) {
+        (diff, Some(t), Some(tc), Some(tha)) => products
             .iter()
-            .any(|p| mcs_allows_fragment(Some(diff), p, t)),
+            .any(|p| fragment_worth_expanding(diff, p, t, tc, tha)),
         _ => true,
     }
 }
@@ -228,8 +243,8 @@ fn split_usable(
 /// One-hop cleavage layer from `mol`, folding arms by sorted fragment multiset.
 ///
 /// Both sides of every bifurcation are retained on [`CleavageArm::products`] /
-/// [`CleavageOr::fragments`]. When `config.target` is set, a split is kept only
-/// if at least one fragment does not worsen MCS cost vs the parent.
+/// [`CleavageOr::fragments`]. When `config.target` is set, a split is kept if
+/// at least one fragment is worth expanding; both CSMIs stay on the Or either way.
 pub fn cleavage_layer(
     mol: &Molecule,
     ruleset: &RuleSet,
@@ -239,6 +254,15 @@ pub fn cleavage_layer(
         Some(t) => Some(crate::mol::parse_mol(t)?),
         None => None,
     };
+    let target_csmi = match &config.target {
+        Some(t) => Some(canon_of(t)?),
+        None => None,
+    };
+    let target_ha = target_mol.as_ref().map(|t| {
+        t.atoms()
+            .filter(|(_, a)| a.element.atomic_number() > 1)
+            .count()
+    });
     let parent_diff = target_mol.as_ref().map(|t| atom_diff(mol, t));
 
     let mut raw: Vec<CleavageArm> = Vec::new();
@@ -259,7 +283,13 @@ pub fn cleavage_layer(
             continue;
         }
         let products = sorted_fragments(&emission.products);
-        if !split_usable(&products, parent_diff.as_ref(), target_mol.as_ref()) {
+        if !split_usable(
+            &products,
+            parent_diff.as_ref(),
+            target_mol.as_ref(),
+            target_csmi.as_deref(),
+            target_ha,
+        ) {
             continue;
         }
         let rule = emission
@@ -290,6 +320,8 @@ pub fn cleavage_layer(
             &pair,
             parent_diff.as_ref(),
             target_mol.as_ref(),
+            target_csmi.as_deref(),
+            target_ha,
             &mut raw,
         )?;
     }
@@ -302,13 +334,15 @@ fn push_pair_arm(
     pair: &PairCandidate,
     parent_diff: Option<&AtomDiff>,
     target_mol: Option<&Molecule>,
+    target_csmi: Option<&str>,
+    target_ha: Option<usize>,
     raw: &mut Vec<CleavageArm>,
 ) -> Result<(), ForestError> {
     let Some(emission) = pair.emit(mol)? else {
         return Ok(());
     };
     let products = sorted_fragments(&emission.products);
-    if !split_usable(&products, parent_diff, target_mol) {
+    if !split_usable(&products, parent_diff, target_mol, target_csmi, target_ha) {
         return Ok(());
     }
     raw.push(CleavageArm {
@@ -329,8 +363,10 @@ fn push_pair_arm(
 
 /// BFS cleavage product graph from `start`.
 ///
-/// Every fragment CSMI from each Or is a node (both sides). Non-cleaving
-/// chemistry is not applied here — callers run that across nodes.
+/// Both fragment CSMIs stay on each Or and as graph nodes. BFS **expands**
+/// every fragment that matches the target progress gate (strict MCS cost drop,
+/// ha ≥ target). If both sides match, both are enqueued — no single-winner
+/// prune. Non-matching sides stay on the Or for Maybe / [`CleavageOr::choose`].
 pub fn cleavage_product_graph(
     start: &str,
     ruleset: &RuleSet,
@@ -345,12 +381,23 @@ pub fn cleavage_product_graph(
     index.insert(root_csmi.clone(), 0);
 
     let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+    let mut scheduled: BTreeSet<usize> = BTreeSet::new();
     queue.push_back((0, 0));
+    scheduled.insert(0);
 
     let target_mol = match &config.target {
         Some(t) => Some(crate::mol::parse_mol(t)?),
         None => None,
     };
+    let target_csmi = match &config.target {
+        Some(t) => Some(canon_of(t)?),
+        None => None,
+    };
+    let target_ha = target_mol.as_ref().map(|t| {
+        t.atoms()
+            .filter(|(_, a)| a.element.atomic_number() > 1)
+            .count()
+    });
 
     while let Some((ni, depth)) = queue.pop_front() {
         if depth >= config.max_depth || nodes.len() >= config.max_nodes {
@@ -362,17 +409,37 @@ pub fn cleavage_product_graph(
         let layer = cleavage_layer(&parent_mol, ruleset, config)?;
 
         for or in layer.products {
-            for frag in &or.fragments {
-                if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-                    if !mcs_allows_fragment(Some(diff), frag, t) {
-                        continue;
-                    }
-                }
+            // Expandable fragments first so leaf scraps cannot consume the node
+            // budget ahead of matching cores. When both sides match, both stay
+            // expandable and both are enqueued — no single-winner prune.
+            let mut ranked: Vec<(&String, bool)> = or
+                .fragments
+                .iter()
+                .map(|frag| {
+                    let expand = match (
+                        parent_diff.as_ref(),
+                        target_mol.as_ref(),
+                        target_csmi.as_deref(),
+                        target_ha,
+                    ) {
+                        (diff, Some(t), Some(tc), Some(tha)) => {
+                            fragment_worth_expanding(diff, frag, t, tc, tha)
+                        }
+                        _ => true,
+                    };
+                    (frag, expand)
+                })
+                .collect();
+            ranked.sort_by_key(|(_, expand)| !expand);
+
+            for (frag, expand) in ranked {
                 let child_i = match index.entry(frag.clone()) {
                     std::collections::btree_map::Entry::Occupied(o) => *o.get(),
                     std::collections::btree_map::Entry::Vacant(v) => {
                         if nodes.len() >= config.max_nodes {
-                            break;
+                            // Still want both matching sides when possible; stop
+                            // allocating new leaf/new nodes under the cap.
+                            continue;
                         }
                         let i = nodes.len();
                         nodes.push(CleavageNode {
@@ -380,17 +447,20 @@ pub fn cleavage_product_graph(
                             via: Vec::new(),
                         });
                         v.insert(i);
-                        queue.push_back((i, depth + 1));
                         i
                     }
                 };
-                // Avoid duplicate identical Or records on the same via list.
+
                 let already = nodes[child_i]
                     .via
                     .iter()
                     .any(|(p, o)| p == &parent_csmi && o.fragments == or.fragments);
                 if !already {
                     nodes[child_i].via.push((parent_csmi.clone(), or.clone()));
+                }
+
+                if expand && depth + 1 <= config.max_depth && scheduled.insert(child_i) {
+                    queue.push_back((child_i, depth + 1));
                 }
             }
         }
@@ -527,5 +597,44 @@ mod tests {
         )
         .unwrap();
         assert!(layer.products.is_empty());
+    }
+
+    #[test]
+    fn both_matching_sides_stay_as_nodes() {
+        // Symmetric dimethoxy: cleaving either methoxy toward hydroquinone keeps
+        // a core that still matches. Both fragment CSMIs stay as nodes — we do
+        // not prune to a single winner when both sides match.
+        let start = "COc1ccc(OC)cc1";
+        let target = "Oc1ccc(O)cc1";
+        let graph = cleavage_product_graph(
+            start,
+            &phase_one(),
+            &CleavageGraphConfig {
+                target: Some(target.into()),
+                max_nodes: 32,
+                max_depth: 4,
+            },
+        )
+        .unwrap();
+        let or = graph
+            .nodes
+            .iter()
+            .flat_map(|n| n.via.iter())
+            .find(|(_, o)| o.fragments.len() >= 2)
+            .map(|(_, o)| o)
+            .expect("expected a bifurcation Or with both sides");
+        assert_eq!(or.fragments.len(), 2);
+        let as_nodes = or
+            .fragments
+            .iter()
+            .filter(|f| graph.nodes.iter().any(|n| n.csmi == **f))
+            .count();
+        assert_eq!(
+            as_nodes,
+            2,
+            "both matching sides must be first-class nodes, fragments={:?} nodes={:?}",
+            or.fragments,
+            graph.nodes.iter().map(|n| &n.csmi).collect::<Vec<_>>()
+        );
     }
 }
