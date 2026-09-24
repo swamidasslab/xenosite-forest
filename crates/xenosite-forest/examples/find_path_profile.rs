@@ -1,5 +1,7 @@
 //! Phase + clone cost profile for hard `find_path` cases.
 //!
+//! Matches production lazy closer: HA gate at enqueue, full cost on pop.
+//!
 //! ```text
 //! cargo run -p xenosite-forest --example find_path_profile --release
 //! ```
@@ -41,13 +43,14 @@ struct Timers {
     discover: Duration,
     filter: Duration,
     materialize: Duration,
-    closer: Duration,
-    heap_misc: Duration,
+    /// Pop-time cost verify rejects (paid MCS, no expand).
+    reject: Duration,
+    enqueue: Duration,
     nodes: usize,
+    rejected: usize,
     mol_edits: usize,
     cand_kept: usize,
     pair_kept: usize,
-    mol_clones_est: usize,
 }
 
 impl Timers {
@@ -57,8 +60,8 @@ impl Timers {
             + self.discover
             + self.filter
             + self.materialize
-            + self.closer
-            + self.heap_misc
+            + self.reject
+            + self.enqueue
     }
 }
 
@@ -69,6 +72,7 @@ struct HeapItem {
     smiles: String,
     heavy: usize,
     steps_len: usize,
+    parent_cost: Option<usize>,
 }
 
 impl Ord for HeapItem {
@@ -121,8 +125,6 @@ fn expand_timed(
     for p in kept_pairs {
         if let Some(em) = p.emit(mol).unwrap() {
             t.mol_edits += 1;
-            // Pair materialize clones kekule forms internally.
-            t.mol_clones_est += 1;
             out.push(Emission {
                 site: em.site,
                 pattern_name: em.pattern_name,
@@ -153,6 +155,7 @@ fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usiz
         smiles: start_csmi.clone(),
         heavy: start.atom_count(),
         steps_len: 0,
+        parent_cost: None,
     });
     seq += 1;
     let mut seen = HashSet::new();
@@ -165,8 +168,8 @@ fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usiz
         if t.nodes >= MAX_NODES || hit {
             break;
         }
-        t.nodes += 1;
         if item.smiles == target_csmi {
+            t.nodes += 1;
             hit = true;
             found_steps = item.steps_len;
             break;
@@ -178,8 +181,18 @@ fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usiz
 
         let t0 = Instant::now();
         let diff = atom_diff(&mol, &target_mol);
+        let cost = diff.cost();
         t.atom_diff += t0.elapsed();
-        let parent_cost = diff.cost();
+
+        if let Some(pc) = item.parent_cost {
+            if cost >= pc {
+                let t0 = Instant::now();
+                t.rejected += 1;
+                t.reject += t0.elapsed();
+                continue;
+            }
+        }
+        t.nodes += 1;
 
         let emissions = expand_timed(&set, &mol, &target_mol, &diff, &mut t);
 
@@ -187,7 +200,6 @@ fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usiz
             let t0 = Instant::now();
             let products = &emission.products;
             let kept = {
-                // Mirror keep_fragment: prefer target hit, else nearest HA.
                 let mut best: Option<(String, usize, i32)> = None;
                 for p in products {
                     let ha = heavy_atoms(p);
@@ -206,21 +218,15 @@ fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usiz
                 best
             };
             let Some((kept, child_ha, _)) = kept else {
-                t.closer += t0.elapsed();
+                t.enqueue += t0.elapsed();
                 continue;
             };
             let target_hit = kept == target_csmi;
-            let child_mol = parse_mol(&kept).unwrap();
-            let child_cost = atom_diff(&child_mol, &target_mol).cost();
-            let allow = target_hit || child_cost < parent_cost;
-            t.closer += t0.elapsed();
-            if !allow {
-                continue;
-            }
+            // Lazy: no HA gate — cost verified on pop.
             if seen.contains(&kept) && !target_hit {
+                t.enqueue += t0.elapsed();
                 continue;
             }
-            let t0 = Instant::now();
             seen.insert(kept.clone());
             heap.push(HeapItem {
                 target_hit,
@@ -228,9 +234,10 @@ fn profile_search(reactant: &str, target: &str) -> (Timers, Duration, bool, usiz
                 smiles: kept,
                 heavy: child_ha,
                 steps_len: item.steps_len + 1,
+                parent_cost: Some(cost),
             });
             seq += 1;
-            t.heap_misc += t0.elapsed();
+            t.enqueue += t0.elapsed();
             if target_hit {
                 hit = true;
                 found_steps = item.steps_len + 1;
@@ -253,104 +260,30 @@ fn microbench_clones() {
     println!("\n=== microbench: clone / parse / diff unit cost ===");
     let mol = parse_mol("COc1cc(OC)c2c(OC)cc(OC)cc2c1").unwrap();
     let target = parse_mol("O=C1C=C(O)C(=O)c2c(O)cc(O)cc12").unwrap();
-    let set = phase_one();
-    let cands = set.candidates(&mol).unwrap();
-    assert!(!cands.is_empty(), "expected candidates on tetraMeO-naph");
-    let pattern = cands[0].pattern.clone();
-
-    let n = 5_000usize;
+    let n = 2_000usize;
     let t0 = Instant::now();
     for _ in 0..n {
         let _ = mol.clone();
     }
     let mol_clone = t0.elapsed();
-
     let t0 = Instant::now();
-    for _ in 0..n {
-        let _ = pattern.clone();
-    }
-    let pat_clone = t0.elapsed();
-
-    let smi = canon_smiles(&mol);
-    let t0 = Instant::now();
-    for _ in 0..n {
-        let _ = parse_mol(&smi).unwrap();
-    }
-    let parse = t0.elapsed();
-
-    let t0 = Instant::now();
-    for _ in 0..200 {
+    for _ in 0..100 {
         let _ = atom_diff(&mol, &target);
     }
     let diff = t0.elapsed();
-
-    let t0 = Instant::now();
-    for _ in 0..50 {
-        let _ = set.candidates(&mol).unwrap();
-    }
-    let discover = t0.elapsed();
-
-    let kept: Vec<_> = cands
-        .iter()
-        .filter(|c| {
-            let d = atom_diff(&mol, &target);
-            candidate_could_help_on(c, &d, Some(&mol), Some(&target))
-        })
-        .cloned()
-        .collect();
-    let t0 = Instant::now();
-    for _ in 0..20 {
-        for c in &kept {
-            let _ = c.emit(&mol).unwrap();
-        }
-    }
-    let emit = t0.elapsed();
-
     println!(
-        "Molecule.clone     {n:>6}×  {:>8.3} ms  ({:.3} µs/op)",
-        mol_clone.as_secs_f64() * 1e3,
+        "Molecule.clone  {n}×  {:.3} µs/op",
         mol_clone.as_secs_f64() * 1e6 / n as f64
     );
     println!(
-        "PatternInfo.clone  {n:>6}×  {:>8.3} ms  ({:.3} µs/op)",
-        pat_clone.as_secs_f64() * 1e3,
-        pat_clone.as_secs_f64() * 1e6 / n as f64
-    );
-    println!(
-        "parse_mol          {n:>6}×  {:>8.3} ms  ({:.3} µs/op)",
-        parse.as_secs_f64() * 1e3,
-        parse.as_secs_f64() * 1e6 / n as f64
-    );
-    println!(
-        "atom_diff            200×  {:>8.3} ms  ({:.3} µs/op)",
-        diff.as_secs_f64() * 1e3,
-        diff.as_secs_f64() * 1e6 / 200.0
-    );
-    println!(
-        "candidates()          50×  {:>8.3} ms  ({:.3} µs/op)",
-        discover.as_secs_f64() * 1e3,
-        discover.as_secs_f64() * 1e6 / 50.0
-    );
-    println!(
-        "emit kept×20   (n={})  {:>8.3} ms  ({:.3} µs/emit)",
-        kept.len(),
-        emit.as_secs_f64() * 1e3,
-        emit.as_secs_f64() * 1e6 / (20.0 * kept.len().max(1) as f64)
-    );
-
-    // How many mol clones equal one hard-case second?
-    let us_mol = mol_clone.as_secs_f64() * 1e6 / n as f64;
-    println!(
-        "\nAt {:.2} µs/Molecule.clone: need ~{:.0} clones to spend 10% of a 3.3s hard run.",
-        us_mol,
-        0.10 * 3.3e6 / us_mol
+        "atom_diff       100×  {:.3} ms/op",
+        diff.as_secs_f64() * 1e3 / 100.0
     );
 }
 
 fn main() {
-    println!("Rust find_path phase profile (release, atom_diff=true)\n");
+    println!("Rust find_path phase profile (release, atom_diff + lazy closer)\n");
 
-    // Warmup production path once.
     {
         let mut c = PathCounters::default();
         let _ = find_path_with(
@@ -358,25 +291,20 @@ fn main() {
             HARD[0].2,
             &phase_one(),
             &mut c,
-            FindPathConfig {
-                max_paths: 1,
-                max_nodes: 800,
-                use_atom_diff: true,
-            },
+            FindPathConfig::default(),
             |_| true,
         );
     }
 
     println!(
-        "{:<28} {:>7} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5}",
-        "case", "wall", "parse%", "diff%", "disc%", "filt%", "mat%", "close%", "misc%", "hit"
+        "{:<28} {:>7} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>5} {:>4}",
+        "case", "wall", "parse%", "diff%", "disc%", "filt%", "mat%", "enq%", "hit", "rej"
     );
 
-    for &(name, r, t) in HARD {
-        // Best of 3 for stability on the profiled loop.
+    for &(name, r, tgt) in HARD {
         let mut best: Option<(Timers, Duration, bool, usize)> = None;
         for _ in 0..3 {
-            let row = profile_search(r, t);
+            let row = profile_search(r, tgt);
             best = Some(match best {
                 None => row,
                 Some(prev) if row.1 < prev.1 => row,
@@ -386,7 +314,7 @@ fn main() {
         let (tm, wall, hit, steps) = best.unwrap();
         let w = wall;
         println!(
-            "{:<28} {:>6.3}s {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>3}/{steps}",
+            "{:<28} {:>6.3}s {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>5.1} {:>3}/{steps} {:>4}",
             name,
             w.as_secs_f64(),
             pct(tm.parse, w),
@@ -394,40 +322,45 @@ fn main() {
             pct(tm.discover, w),
             pct(tm.filter, w),
             pct(tm.materialize, w),
-            pct(tm.closer, w),
-            pct(tm.heap_misc, w),
+            pct(tm.enqueue, w),
             if hit { "ok" } else { "NO" },
+            tm.rejected,
         );
-        let acc = tm.total_accounted();
         println!(
-            "  nodes={} edits={} cand_kept={} pair_kept={} accounted={:.1}% ({:.3}s)",
+            "  nodes={} edits={} cand_kept={} pair_kept={} accounted={:.1}%",
             tm.nodes,
             tm.mol_edits,
             tm.cand_kept,
             tm.pair_kept,
-            pct(acc, w),
-            acc.as_secs_f64()
+            pct(tm.total_accounted(), w),
         );
     }
 
     microbench_clones();
 
-    // Production wall for comparison (best of 3).
-    println!("\n=== production find_path_with wall (best of 3) ===");
+    println!("\n=== production wall lazy vs eager (best of 3) ===");
     let set = phase_one();
-    let config = FindPathConfig {
-        max_paths: 1,
-        max_nodes: 800,
-        use_atom_diff: true,
-    };
-    for &(name, r, t) in HARD {
-        let mut best = f64::MAX;
-        for _ in 0..3 {
-            let mut c = PathCounters::default();
-            let t0 = Instant::now();
-            let _ = find_path_with(r, t, &set, &mut c, config, |_| true).unwrap();
-            best = best.min(t0.elapsed().as_secs_f64());
+    for &(name, r, tgt) in HARD {
+        for (label, lazy) in [("lazy", true), ("eager", false)] {
+            let config = FindPathConfig {
+                max_paths: 1,
+                max_nodes: 800,
+                use_atom_diff: true,
+                lazy_closer: lazy,
+            };
+            let mut best = f64::MAX;
+            let mut bill = 0usize;
+            for _ in 0..3 {
+                let mut c = PathCounters::default();
+                let t0 = Instant::now();
+                let _ = find_path_with(r, tgt, &set, &mut c, config, |_| true).unwrap();
+                let sec = t0.elapsed().as_secs_f64();
+                if sec < best {
+                    best = sec;
+                    bill = c.billed();
+                }
+            }
+            println!("{name:<28} {label:<5} {best:.3}s  bill={bill}");
         }
-        println!("{name:<28} {best:.3}s");
     }
 }

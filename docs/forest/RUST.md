@@ -294,20 +294,23 @@ expansion, not a missing root filter.
 cargo run -p xenosite-forest --example find_path_profile --release
 ```
 
-On tetraMeO-naph / veratrole-allyl (release, atom_diff on):
+Eager closer (MCS on every emit) spent **~62–66%** of hard wall on per-product
+child `atom_diff`. Unit: `Molecule.clone` ≈0.3 µs; `atom_diff` ≈21 ms —
+clone elision is noise.
 
-| Phase | Share of wall |
-| --- | ---: |
-| `closer` (per-product child `parse` + full `atom_diff`) | **~62–66%** |
-| parent `atom_diff` | ~13–20% |
-| candidate/pair discover | ~12–15% |
-| materialize | ~3–8% |
-| filter retain | ~0.1–0.3% |
-| parent `parse_mol` | ~0.1% |
+### Lazy closer (landed)
 
-Unit costs: `Molecule.clone` ≈0.3 µs, `PatternInfo.clone` ≈0.07 µs,
-`atom_diff` ≈21 ms. Need ~10⁶ mol clones to spend 10% of a 3.3s hard run.
+`FindPathConfig::lazy_closer` (default on with `use_atom_diff`): enqueue kept
+fragments without child MCS; on pop verify `cost() < parent_cost` before
+expand. Same gate as eager, deferred so siblings never popped skip MCS.
 
-**Decision:** do **not** pursue `Arc` / ref elision for `PatternInfo` or Kekulé
-forms — clone cost is noise. Next speed lever (if wanted) is cheaper `closer`
-(reuse/cache child diffs, or a lighter score than a full MCS).
+Hard H2H (release, best-of-5), atom_diff on:
+
+| | eager closer | lazy closer |
+| --- | ---: | ---: |
+| TOTAL wall | 3.88s | **1.79s** |
+| tetraMeO-naph | 3.36s · bill=802 | **1.53s · bill=768** |
+| veratrole-allyl | 0.17s · bill=132 | **0.064s · bill=132** |
+
+Mid atom_diff TOTAL **0.15s** (was ~0.23s). Do not HA-gate at enqueue —
+oxidation can raise HA distance while lowering cost.

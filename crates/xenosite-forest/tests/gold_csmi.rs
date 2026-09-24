@@ -46,6 +46,7 @@ fn gold_apap_to_napqi_phase_one() {
             max_paths: 2,
             max_nodes: 80,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -69,6 +70,7 @@ fn gold_hydroquinone_to_bq_ring_end() {
             max_paths: 1,
             max_nodes: 120,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -87,6 +89,7 @@ fn gold_apap_to_napqi_hydrox_deh() {
             max_paths: 1,
             max_nodes: 40,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -102,6 +105,7 @@ fn gold_benzene_to_bq_quinone_formation() {
             max_paths: 1,
             max_nodes: 40,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -116,6 +120,7 @@ fn gold_benzene_to_bq_phase_one() {
             max_paths: 1,
             max_nodes: 80,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -138,6 +143,7 @@ fn gold_terbinafine_to_tba_phase_one() {
             max_paths: 1,
             max_nodes: 40,
             use_atom_diff: false,
+            ..Default::default()
         },
         |_| true,
     )
@@ -167,6 +173,7 @@ fn gold_epoxide_opening_aromatic() {
             max_paths: 1,
             max_nodes: 200,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -182,6 +189,7 @@ fn gold_epoxide_opening_kekulized() {
             max_paths: 1,
             max_nodes: 200,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -197,6 +205,7 @@ fn gold_propane_dehydrogenation_to_propene() {
             max_paths: 1,
             max_nodes: 50,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -212,6 +221,7 @@ fn gold_propane_dh_then_epoxidation() {
             max_paths: 1,
             max_nodes: 200,
             use_atom_diff: false,
+            ..Default::default()
         },
     );
 }
@@ -229,6 +239,7 @@ fn gold_epoxide_opening_depth_one_misses_diol() {
             max_paths: 3,
             max_nodes: 2,
             use_atom_diff: false,
+            ..Default::default()
         },
         |_| true,
     )

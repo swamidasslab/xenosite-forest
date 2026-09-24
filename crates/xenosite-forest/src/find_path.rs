@@ -83,6 +83,11 @@ struct Walk {
     smiles: String,
     heavy: usize,
     steps: Vec<PathStep>,
+    /// Parent's [`crate::atom_diff::AtomDiff::cost`] when this walk was
+    /// enqueued. `None` = root (always expand). With `use_atom_diff`, full
+    /// closer runs on pop: expand only if `cost() < parent_cost`. Enqueue
+    /// uses the cheap HA gate only so sibling MCS is not paid up front.
+    parent_cost: Option<usize>,
 }
 
 /// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
@@ -165,21 +170,13 @@ fn keep_fragment(
 fn closer(parent_ha: usize, child_ha: usize, target_ha: usize, target_hit: bool) -> bool {
     // Refuse only walks that grow more distant in heavy-atom count. Equal
     // distance (same-size DH / oxidation hops) must stay open — a strict `<`
-    // drops propane→propene→epoxide. When atom_diff is on, prefer cost().
+    // drops propane→propene→epoxide. When atom_diff is on, this is the cheap
+    // enqueue gate; full cost closer runs on pop (lazy).
     target_hit || ha_distance(child_ha, target_ha) <= ha_distance(parent_ha, target_ha)
 }
 
-fn closer_diff(
-    parent_cost: usize,
-    child: &crate::Molecule,
-    target: &crate::Molecule,
-    target_hit: bool,
-) -> bool {
-    if target_hit {
-        return true;
-    }
-    let child_cost = crate::atom_diff::atom_diff(child, target).cost();
-    child_cost < parent_cost
+fn cost_closer(parent_cost: usize, child_cost: usize, target_hit: bool) -> bool {
+    target_hit || child_cost < parent_cost
 }
 
 /// Search bounds. Defaults match Python `find_path` knobs.
@@ -190,6 +187,11 @@ pub struct FindPathConfig {
     /// When true, build an [`crate::atom_diff::AtomDiff`] once per expansion
     /// and refuse candidates that cannot help (no filter closures).
     pub use_atom_diff: bool,
+    /// When true with `use_atom_diff`, defer full cost closer to pop: enqueue
+    /// every kept fragment, verify `cost() < parent_cost` before expanding.
+    /// Skips MCS on siblings never popped. Do not HA-gate at enqueue —
+    /// oxidation can raise HA distance while lowering cost. Default on.
+    pub lazy_closer: bool,
 }
 
 impl Default for FindPathConfig {
@@ -199,6 +201,7 @@ impl Default for FindPathConfig {
             max_nodes: 800,
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
+            lazy_closer: true,
         }
     }
 }
@@ -275,6 +278,7 @@ where
         max_paths,
         max_nodes,
         use_atom_diff,
+        lazy_closer,
     } = config;
     let start = parse_mol(reactant)?;
     let start_csmi = canon_smiles(&start);
@@ -292,6 +296,7 @@ where
             smiles: start_csmi.clone(),
             heavy: start_ha,
             steps: Vec::new(),
+            parent_cost: None,
         },
     });
     seq += 1;
@@ -304,9 +309,9 @@ where
         if found.len() >= max_paths || counters.nodes >= max_nodes {
             break;
         }
-        counters.nodes += 1;
         let walk = item.walk;
         if walk.smiles == target_csmi {
+            counters.nodes += 1;
             found.push(PathOutcome {
                 steps: walk.steps,
                 smiles: walk.smiles,
@@ -315,12 +320,22 @@ where
         }
 
         let mol = parse_mol(&walk.smiles)?;
-        counters.expansions += 1;
         let diff = if use_atom_diff {
-            Some(crate::atom_diff::atom_diff(&mol, &target_mol))
+            let d = crate::atom_diff::atom_diff(&mol, &target_mol);
+            // Lazy closer: verify cost against parent before expanding.
+            if lazy_closer {
+                if let Some(pc) = walk.parent_cost {
+                    if !cost_closer(pc, d.cost(), false) {
+                        continue;
+                    }
+                }
+            }
+            Some(d)
         } else {
             None
         };
+        counters.nodes += 1;
+        counters.expansions += 1;
         let parent_cost = diff.as_ref().map(|d| d.cost());
         let emissions = expand(ruleset, &mol, &target_mol, counters, &keep, diff.as_ref())?;
         let mut hits_from_here = 0usize;
@@ -332,9 +347,18 @@ where
             };
             let child_ha = heavy_atoms(&kept)?;
             let target_hit = kept == target_csmi;
-            let allow = if let Some(pc) = parent_cost {
-                let child_mol = parse_mol(&kept)?;
-                closer_diff(pc, &child_mol, &target_mol, target_hit)
+            let allow = if use_atom_diff {
+                if lazy_closer {
+                    // Defer full cost to pop. Do not HA-gate: oxidation can
+                    // raise heavy-atom distance while lowering atom_diff cost.
+                    true
+                } else if let Some(pc) = parent_cost {
+                    let child_mol = parse_mol(&kept)?;
+                    let child_cost = crate::atom_diff::atom_diff(&child_mol, &target_mol).cost();
+                    cost_closer(pc, child_cost, target_hit)
+                } else {
+                    true
+                }
             } else {
                 closer(walk.heavy, child_ha, target_ha, target_hit)
             };
@@ -355,6 +379,7 @@ where
                     smiles: kept,
                     heavy: child_ha,
                     steps,
+                    parent_cost,
                 },
             });
             seq += 1;
@@ -501,6 +526,7 @@ where
         max_paths,
         max_nodes,
         use_atom_diff: _,
+        lazy_closer: _,
     } = config;
     let start = parse_mol(reactant)?;
     let start_csmi = canon_smiles(&start);
@@ -517,6 +543,7 @@ where
             smiles: start_csmi.clone(),
             heavy: start_ha,
             steps: Vec::new(),
+            parent_cost: None,
         },
     });
     seq += 1;
@@ -569,6 +596,7 @@ where
                     smiles: kept,
                     heavy: child_ha,
                     steps,
+                    parent_cost: None,
                 },
             });
             seq += 1;

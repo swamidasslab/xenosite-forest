@@ -125,13 +125,14 @@ struct Row {
     billed: usize,
 }
 
-fn run_one(reactant: &str, target: &str, use_atom_diff: bool) -> Row {
+fn run_one(reactant: &str, target: &str, use_atom_diff: bool, lazy_closer: bool) -> Row {
     let want = canon_of(target).unwrap_or_else(|e| panic!("{target}: {e}"));
     let set = phase_one();
     let config = FindPathConfig {
         max_paths: MAX_PATHS,
         max_nodes: MAX_NODES,
         use_atom_diff,
+        lazy_closer,
     };
 
     // Warmup
@@ -166,15 +167,15 @@ fn run_one(reactant: &str, target: &str, use_atom_diff: bool) -> Row {
     best.expect("repeats")
 }
 
-fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool) {
-    println!("\n=== {title} (atom_diff={use_atom_diff}) ===");
+fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool, lazy_closer: bool) {
+    println!("\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}) ===");
     println!(
         "{:<32} {:>4} {:>9} {:>5} {:>6} {:>7} {:>6}",
         "case", "hit", "seconds", "steps", "nodes", "edits", "bill"
     );
     let mut total = 0.0;
     for &(name, reactant, target) in cases {
-        let row = run_one(reactant, target, use_atom_diff);
+        let row = run_one(reactant, target, use_atom_diff, lazy_closer);
         total += row.seconds;
         println!(
             "{:<32} {:>4} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
@@ -207,7 +208,9 @@ fn main() {
         (CASES, "mid-size / multi-edit")
     };
 
-    // Default live Python uses filters (atom_diff). Report both modes.
-    print_table(title, cases, false);
-    print_table(title, cases, true);
+    print_table(title, cases, false, false);
+    print_table(title, cases, true, true);
+    if hard || args.iter().any(|a| a == "--eager") {
+        print_table(title, cases, true, false);
+    }
 }
