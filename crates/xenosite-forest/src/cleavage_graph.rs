@@ -459,7 +459,7 @@ pub fn cleavage_product_graph(
                     nodes[child_i].via.push((parent_csmi.clone(), or.clone()));
                 }
 
-                if expand && depth + 1 <= config.max_depth && scheduled.insert(child_i) {
+                if expand && depth < config.max_depth && scheduled.insert(child_i) {
                     queue.push_back((child_i, depth + 1));
                 }
             }
