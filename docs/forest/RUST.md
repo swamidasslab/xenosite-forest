@@ -65,6 +65,8 @@ Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.c
 
 **RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. Children run with `unique_csmi=false` so alternate rules bubble; the caller's `unique_csmi` is the cross-child CSMI layer. Filters see the leaf set, not the outer compose container.
 
+**`find_path` (first run):** expands via `RuleSet::metabolize`, keeps each step's `rule_path` as the namespace, heap is hits-first then FIFO. No atom-diff filters yet; closer is provisional heavy-atom distance. Cleavage keeps the target-hit fragment (else nearest HA count) and records sides.
+
 ```python
 rs = RuleSet([
     PatternInfo("h", "[#6h1:1]", "hydroxyl", "O", "H"),
@@ -196,8 +198,9 @@ commit a patched submodule tree — only the pin SHA and the patch file.
 
 ## Not in this crate
 
-Full `find_path`, every Phase I rule. Production atom-trace can use
+Full `atom_diff` filters, every Phase I rule, `CanonicalStep` / `Deps`.
+Production atom-trace can use
 [`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs) on
 `Atom.tag`; `ForestMol` has not switched off its sidecar yet. Nested
-`RuleSet` namespaces + closures are in the crate as a door; they are not
-yet the live Python `RuleSet` / `find_path` filters.
+`RuleSet` namespaces + a first-run [`find_path`](../../crates/xenosite-forest/src/find_path.rs)
+are in the crate as a door; they are not yet the live Python search.

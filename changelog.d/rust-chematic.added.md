@@ -5,3 +5,5 @@ Chematic is vendored as a sparse submodule at `v1.0.21` with a tiny local patch 
 `AtomTracker` POC follows atoms via chematic `Atom.tag` through SMIRKS apply and SMILES write/parse (no isotope probe, no sidecar).
 
 `RuleSet` namespaces: nested sets stay nested (`compose` does not flatten); emissions carry a leaf-first `rule_path`; cross-child `unique_csmi` matches Python RuleSet yield.
+
+First-run `find_path` expands a nested `RuleSet`, keeps step namespaces on `PathStep.rule_path`, and covers ethane→ethanol / anisole→phenol / nested-compose path parity tests (no atom-diff filters yet).

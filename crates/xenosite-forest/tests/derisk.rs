@@ -2,8 +2,9 @@
 
 use xenosite_forest::{
     ForestMol, Molecule, PatternInfo, RuleSet, accept_all_rules, accept_all_sites, apply_smirks_at,
-    canon_of, canon_smiles, dehydrogenate_hydroquinone, hydroxylate, hydroxylation, o_dealkylation,
-    parse_mol, smarts_matches, unique_atom_sites, unordered_atom_pair_orbit_sizes,
+    canon_of, canon_smiles, dehydrogenate_hydroquinone, find_path, hydroxylate, hydroxylation,
+    o_dealkylation, parse_mol, smarts_matches, unique_atom_sites, unordered_atom_pair_orbit_sizes,
+    PathCounters,
 };
 
 #[test]

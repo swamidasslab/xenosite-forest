@@ -11,6 +11,7 @@ compile_error!(
 
 pub mod atom_tracker;
 pub mod chematic_vendor;
+pub mod find_path;
 pub mod forest;
 pub mod forest_mol;
 pub mod hydroxylation;
@@ -33,6 +34,9 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
+pub use find_path::{
+    FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_with,
+};
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};
