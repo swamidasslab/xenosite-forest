@@ -53,6 +53,14 @@ impl PlanAtom {
     }
 }
 
+fn plan_atom_sort_key(a: &PlanAtom) -> (u8, String, Vec<usize>) {
+    match a {
+        PlanAtom::Index(i) => (0, String::new(), vec![*i]),
+        PlanAtom::WillAdd { element, at } => (1, element.clone(), vec![*at]),
+        PlanAtom::AddedBy { rule, anchors } => (2, rule.clone(), anchors.clone()),
+    }
+}
+
 /// One elementary reaction at a site. The plan language — not a search-only note.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Step {
@@ -65,9 +73,12 @@ pub type CanonicalStep = Step;
 
 impl Step {
     pub fn new(rule: impl Into<String>, site: impl IntoIterator<Item = PlanAtom>) -> Self {
+        let mut site: Vec<_> = site.into_iter().collect();
+        site.sort_by_key(plan_atom_sort_key);
+        site.dedup();
         Self {
             rule: rule.into(),
-            site: site.into_iter().collect(),
+            site,
         }
     }
 
@@ -298,6 +309,53 @@ impl Deps {
         }
         Ok(false)
     }
+
+    /// Number of topological sorts under precedes.
+    pub fn n_linearizations(&self) -> usize {
+        self.linearizations().len()
+    }
+
+    /// True iff `other` admits exactly the same total orders.
+    ///
+    /// Requires the same multiset of leaf [`Step`]s (node identity), then
+    /// compares canonical precedes after aligning indices. Prefer this over
+    /// `==` when declaration order of steps may differ; construction already
+    /// stores the transitive reduction, so `==` also sees reduced edges when
+    /// step order matches.
+    pub fn same_linearizations(&self, other: &Deps) -> bool {
+        let Some(aligned) = align_deps_indices(&self.steps, &other.steps) else {
+            return false;
+        };
+        let mut edges_b: Vec<_> = other
+            .precedes
+            .iter()
+            .map(|&(a, b)| (aligned[a], aligned[b]))
+            .collect();
+        edges_b.sort_unstable();
+        self.precedes == edges_b
+    }
+}
+
+/// Map indices in `steps_b` → indices in `steps_a` by [`Step`] equality.
+///
+/// `None` if the leaf multisets differ. Duplicate equal steps match greedily.
+pub fn align_deps_indices(steps_a: &[Step], steps_b: &[Step]) -> Option<Vec<usize>> {
+    if steps_a.len() != steps_b.len() {
+        return None;
+    }
+    let mut used = vec![false; steps_b.len()];
+    // remap[j_in_b] = i_in_a
+    let mut remap = vec![0usize; steps_b.len()];
+    for (i, step) in steps_a.iter().enumerate() {
+        let found = steps_b
+            .iter()
+            .enumerate()
+            .find_map(|(j, other)| (!used[j] && other == step).then_some(j));
+        let j = found?;
+        used[j] = true;
+        remap[j] = i;
+    }
+    Some(remap)
 }
 
 impl Deref for Deps {
@@ -438,15 +496,17 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
                             edges.push((earlier, later));
                         }
                     }
-                    site.push(item.clone());
+                    let mut anchors = anchors.clone();
+                    anchors.sort_unstable();
+                    site.push(PlanAtom::AddedBy {
+                        rule: rule.clone(),
+                        anchors,
+                    });
                 }
                 PlanAtom::Index(_) => site.push(item.clone()),
             }
         }
-        bound.push(Step {
-            rule: step.rule.clone(),
-            site,
-        });
+        bound.push(Step::new(step.rule.clone(), site));
     }
     Deps::new(bound, edges)
 }
@@ -653,7 +713,12 @@ mod tests {
         assert_eq!(plan[0].rule, "Hydroxylation");
         assert_eq!(plan[1].rule, "Hydroxylation");
         assert_eq!(plan[2].rule, "Dehydrogenation");
-        assert!(matches!(plan[2].site[0], PlanAtom::WillAdd { .. }));
+        assert!(
+            plan[2]
+                .site
+                .iter()
+                .any(|a| matches!(a, PlanAtom::WillAdd { .. }))
+        );
     }
 
     #[test]
@@ -677,7 +742,12 @@ mod tests {
         assert!(!edges.contains(&(1, 0)));
         assert!(edges.contains(&(0, 2)));
         assert!(edges.contains(&(1, 2)));
-        assert!(matches!(deps[2].site[0], PlanAtom::AddedBy { .. }));
+        assert!(
+            deps[2]
+                .site
+                .iter()
+                .any(|a| matches!(a, PlanAtom::AddedBy { .. }))
+        );
         assert_eq!(deps.linearizations().len(), 2); // OH arms commute
     }
 
@@ -730,5 +800,103 @@ mod tests {
         assert!(!em.is_empty());
         let deps = Deps::bind(identity_plan("Hydroxylation", [em[0].site]));
         assert!(deps.reaches("CC", "CCO").unwrap());
+    }
+
+    #[test]
+    fn deps_eq_after_transitive_reduction() {
+        // Construction reduces edges → stable equal output (Python chain == with_transitive).
+        let a = Step::new("A", [PlanAtom::index(0)]);
+        let b = Step::new("B", [PlanAtom::index(1)]);
+        let c = Step::new("C", [PlanAtom::index(2)]);
+        let chain = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1), (1, 2)]);
+        let with_transitive =
+            Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1), (1, 2), (0, 2)]);
+        assert_eq!(chain, with_transitive);
+        assert_eq!(chain.precedes(), &[(0, 1), (1, 2)]);
+        assert!(chain.same_linearizations(&with_transitive));
+    }
+
+    #[test]
+    fn same_linearizations_ignores_step_declaration_order() {
+        let a = Step::new("A", [PlanAtom::index(0)]);
+        let b = Step::new("B", [PlanAtom::index(1)]);
+        let c = Step::new("C", [PlanAtom::index(2)]);
+        // a ≺ b ≺ c
+        let chain = Deps::new([a.clone(), b.clone(), c.clone()], [(0, 1), (1, 2)]);
+        // Declaration order c, a, b with edges a≺b≺c → (1,2), (2,0) in that indexing.
+        let flipped = Deps::new([c.clone(), a.clone(), b.clone()], [(1, 2), (2, 0)]);
+        assert!(chain.same_linearizations(&flipped));
+        assert_ne!(chain, flipped); // == is order-sensitive
+    }
+
+    #[test]
+    fn same_linearizations_two_prep_then_final() {
+        let h0 = Step::new("Hydroxylation", [PlanAtom::index(0)]);
+        let h3 = Step::new("Hydroxylation", [PlanAtom::index(3)]);
+        let dh = Step::new(
+            "Dehydrogenation",
+            [
+                PlanAtom::AddedBy {
+                    rule: "Hydroxylation".into(),
+                    anchors: vec![0],
+                },
+                PlanAtom::AddedBy {
+                    rule: "Hydroxylation".into(),
+                    anchors: vec![3],
+                },
+            ],
+        );
+        let layered = Deps::new([h0.clone(), h3.clone(), dh.clone()], [(0, 2), (1, 2)]);
+        let swapped = Deps::new([h3, h0, dh], [(0, 2), (1, 2)]);
+        assert!(layered.same_linearizations(&swapped));
+        assert_eq!(layered.n_linearizations(), 2);
+    }
+
+    #[test]
+    fn same_linearizations_requires_step_identity() {
+        let chain = Deps::new(
+            [
+                Step::new("A", [PlanAtom::index(0)]),
+                Step::new("B", [PlanAtom::index(1)]),
+                Step::new("C", [PlanAtom::index(2)]),
+            ],
+            [(0, 1), (1, 2)],
+        );
+        let other = Deps::new(
+            [
+                Step::new("X", [PlanAtom::index(0)]),
+                Step::new("Y", [PlanAtom::index(1)]),
+                Step::new("Z", [PlanAtom::index(2)]),
+            ],
+            [(0, 1), (1, 2)],
+        );
+        assert!(!chain.same_linearizations(&other));
+        let free_dealk = Deps::new(
+            [
+                Step::new("A", [PlanAtom::index(0)]),
+                Step::new("B", [PlanAtom::index(1)]),
+                Step::new("C", [PlanAtom::index(2)]),
+            ],
+            [(1, 2)],
+        );
+        assert!(!free_dealk.same_linearizations(&chain));
+    }
+
+    #[test]
+    fn same_linearizations_duplicate_equal_steps() {
+        let a1 = Step::new("A", [PlanAtom::index(0)]);
+        let a2 = Step::new("A", [PlanAtom::index(0)]);
+        let b = Step::new("B", [PlanAtom::index(1)]);
+        let d1 = Deps::new([a1.clone(), a2.clone(), b.clone()], [(0, 2), (1, 2)]);
+        let d2 = Deps::new([a2, b, a1], [(0, 1), (2, 1)]);
+        assert!(d1.same_linearizations(&d2));
+    }
+
+    #[test]
+    fn free_nodes_n_linearizations_is_factorial() {
+        let steps: Vec<_> = (0..4)
+            .map(|i| Step::new(format!("S{i}"), [PlanAtom::index(i)]))
+            .collect();
+        assert_eq!(Deps::new(steps, []).n_linearizations(), 24);
     }
 }
