@@ -15,7 +15,6 @@ use std::time::{Duration, Instant};
 use xenosite_forest::atom_diff::{
     atom_diff, atom_diff_for_child, candidate_could_help_on, candidate_order_key, pair_could_help,
 };
-use xenosite_forest::canonical_plan::steps_for_kind;
 use xenosite_forest::forest_mol::ForestMol;
 use xenosite_forest::mol::{Molecule, canon_of, parse_mol};
 use xenosite_forest::rules::phase_one;
@@ -179,12 +178,7 @@ fn expand_timed(
             .into_iter()
             .map(|piece| parent.adopt_product(piece))
             .collect();
-        let _ = steps_for_kind(
-            ruleset.plan_kind,
-            ruleset
-                .name
-                .as_deref()
-                .unwrap_or(pair.pattern_name.as_str()),
+        let _ = ruleset.canonical_plan(
             mol,
             &pair.plan_site_atoms(),
             Some(&[&pair.left.effect, &pair.right.effect]),

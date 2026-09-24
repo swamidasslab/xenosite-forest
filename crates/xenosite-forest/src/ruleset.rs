@@ -17,7 +17,7 @@ use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
 use crate::ForestError;
 use crate::candidate::{Candidate, ParentRef};
-use crate::canonical_plan::{PlanKind, steps_for_kind};
+use crate::canonical_plan::{CanonicalPlanFn, Step, steps_for_leaf};
 use crate::kekule::kekule_forms;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
 use crate::pair_edit::pair_candidates;
@@ -90,19 +90,33 @@ pub enum RuleMember {
 }
 
 /// Container of patterns and nested sets. Nested sets stay nested.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct RuleSet {
     pub name: Option<String>,
-    /// How accepted hops from this leaf expand into elementary plan steps.
-    pub plan_kind: PlanKind,
+    /// Leaf-owned expander for [`Self::canonical_plan`] (Python method).
+    plan_fn: Option<CanonicalPlanFn>,
     members: Vec<RuleMember>,
 }
+
+impl PartialEq for RuleSet {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.members == other.members
+            && match (self.plan_fn, other.plan_fn) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a == b,
+                _ => false,
+            }
+    }
+}
+
+impl Eq for RuleSet {}
 
 impl RuleSet {
     pub fn new(name: Option<String>, patterns: impl IntoIterator<Item = PatternInfo>) -> Self {
         Self {
             name,
-            plan_kind: PlanKind::Identity,
+            plan_fn: None,
             members: patterns.into_iter().map(RuleMember::Pattern).collect(),
         }
     }
@@ -111,15 +125,29 @@ impl RuleSet {
     pub fn compose(name: Option<String>, sets: impl IntoIterator<Item = RuleSet>) -> Self {
         Self {
             name,
-            plan_kind: PlanKind::Identity,
+            plan_fn: None,
             members: sets.into_iter().map(RuleMember::Set).collect(),
         }
     }
 
-    /// Set [`Self::plan_kind`] (quinone-shaped leaves use prep-then-DH).
-    pub fn with_plan_kind(mut self, kind: PlanKind) -> Self {
-        self.plan_kind = kind;
+    /// Attach a plan expander (composite leaves: return elementary rule steps).
+    pub fn with_canonical_plan(mut self, f: CanonicalPlanFn) -> Self {
+        self.plan_fn = Some(f);
         self
+    }
+
+    /// Elementary steps for one accepted hop (Python `canonical_plan`).
+    ///
+    /// Default: identity — this rule at the discovery site. Composites return
+    /// steps named after existing catalog rules (`Hydroxylation`, …).
+    pub fn canonical_plan(
+        &self,
+        mol: &Molecule,
+        site_atoms: &[usize],
+        end_effects: Option<&[&crate::pattern::Effect]>,
+    ) -> Vec<Step> {
+        let leaf = self.name.as_deref().unwrap_or("");
+        steps_for_leaf(self.plan_fn, leaf, mol, site_atoms, end_effects)
     }
 
     pub fn members(&self) -> &[RuleMember] {
@@ -254,11 +282,7 @@ impl RuleSet {
             if let Some(emission) = pair.emit(mol)? {
                 let site_atoms = pair.plan_site_atoms();
                 let ends = [&pair.left.effect, &pair.right.effect];
-                let leaf = self
-                    .name
-                    .as_deref()
-                    .unwrap_or(emission.pattern_name.as_str());
-                let plan = steps_for_kind(self.plan_kind, leaf, mol, &site_atoms, Some(&ends));
+                let plan = self.canonical_plan(mol, &site_atoms, Some(&ends));
                 out.push(Emission {
                     site: emission.site,
                     pattern_name: emission.pattern_name,
@@ -384,11 +408,7 @@ impl RuleSet {
                 };
                 let site_atoms = pair.plan_site_atoms();
                 let ends = [&pair.left.effect, &pair.right.effect];
-                let leaf = self
-                    .name
-                    .as_deref()
-                    .unwrap_or(emission.pattern_name.as_str());
-                let plan = steps_for_kind(self.plan_kind, leaf, mol, &site_atoms, Some(&ends));
+                let plan = self.canonical_plan(mol, &site_atoms, Some(&ends));
                 let emission = Emission {
                     site: emission.site,
                     pattern_name: emission.pattern_name,

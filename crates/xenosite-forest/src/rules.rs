@@ -269,7 +269,7 @@ pub fn quinone_formation() -> RuleSet {
             ),
         ],
     )
-    .with_plan_kind(crate::canonical_plan::PlanKind::HydroxylationThenDehydrogenation)
+    .with_canonical_plan(crate::canonical_plan::quinone_canonical_plan)
 }
 
 /// `Dealkylation` from Python `xenosite.forest.rules`.

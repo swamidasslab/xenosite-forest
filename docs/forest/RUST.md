@@ -224,8 +224,8 @@ candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
 [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) (structure/`csmi`
 cache; `Atom.tag` synced from the sidecar through `adopt_product`). Outcomes
 emit elementary [`Step`](../../crates/xenosite-forest/src/canonical_plan.rs)
-plans as `Deps`; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
-on the `RuleSet` (data, not a name branch). Eager closer can
+plans as `Deps`; composite leaves attach a `canonical_plan` hook (Python) that
+returns elementary rule steps (e.g. QF → OH/DH). Eager closer can
 [`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) via
 tag-lift (+ local add extend); else full MCS. Lazy closer: try tag-lift when
 safe (same heavy tags), else MCS on pop. Nested
@@ -338,6 +338,6 @@ oxidation can raise HA distance while lowering cost.
 (not bare SMILES). Edits use `materialize_mols` → `adopt_product` so tags and
 the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a bound
 [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs) (elementary
-`Step`s + precedes); quinone leaves expand via `RuleSet::plan_kind`. Lazy and
+`Step`s + precedes); composite leaves expand via `RuleSet::canonical_plan`. Lazy and
 eager use `try_atom_diff_for_child` when parent/child share heavy tags; else
 full MCS (`atom_diff_for_child` on eager). Add/remove is always MCS.

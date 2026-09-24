@@ -7,10 +7,11 @@
 //! step's leaf-first `rule_path`.
 //!
 //! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
-//! precedes from [`as_deps`]). Quinone-shaped prep-then-DH comes from
-//! [`PlanKind`] on the leaf. Closer uses atom-diff cost. Lazy: try tag-lift at
-//! enqueue (same-heavy-tag edits only); full MCS on pop when lift is `None`.
-//! Eager: [`crate::atom_diff::atom_diff_for_child`] (lift else MCS) at enqueue.
+//! precedes from [`as_deps`]). Composite leaves own a `canonical_plan` hook
+//! (Python) that returns steps named after existing rules. Closer uses atom-diff
+//! cost. Lazy: try tag-lift at enqueue (same-heavy-tag edits only); full MCS on
+//! pop when lift is `None`. Eager: [`crate::atom_diff::atom_diff_for_child`]
+//! (lift else MCS) at enqueue.
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
@@ -18,7 +19,7 @@ use std::rc::Rc;
 
 use crate::ForestError;
 use crate::candidate::Candidate;
-use crate::canonical_plan::{CanonicalStep, Deps, as_deps, steps_for_kind};
+use crate::canonical_plan::{CanonicalStep, Deps, as_deps};
 use crate::forest_mol::ForestMol;
 use crate::mol::{canon_of, parse_mol};
 use crate::pattern::{PatternInfo, SiteInfo};
@@ -562,11 +563,7 @@ where
             .collect();
         let site_atoms = pair.plan_site_atoms();
         let ends = [&pair.left.effect, &pair.right.effect];
-        let leaf = ruleset
-            .name
-            .as_deref()
-            .unwrap_or(pair.pattern_name.as_str());
-        let plan = steps_for_kind(ruleset.plan_kind, leaf, mol, &site_atoms, Some(&ends));
+        let plan = ruleset.canonical_plan(mol, &site_atoms, Some(&ends));
         out.push(ForestEmission {
             site: pair.site,
             pattern_name: pair.pattern_name.clone(),

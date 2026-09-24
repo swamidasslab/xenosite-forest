@@ -34,10 +34,11 @@ elementary `Step`s (rule name + site notes) plus precedes. There is no parallel
 
 Site notes are one enum: known index | `WillAdd(element @ anchor)` | `AddedBy(rule, anchors)`.
 `Deps::bind` rewrites will-add → added-by and builds precedes from those notes.
-Composite hops expand via `PlanKind` data on the leaf `RuleSet` (e.g.
-hydroxylation-then-dehydrogenation from end effects), not a rule-name branch
-in `find_path`. Metabolize may still apply a composite leaf in one hop; the
-plan is the elementary split for search and replay.
+Composite hops own a `canonical_plan` hook on the leaf (Python
+`ReactionRule.canonical_plan`): it returns elementary `Step`s named after
+catalog rules (`Hydroxylation`, `Dehydrogenation`, …). Search asks the leaf;
+there is no `PlanKind` enum. Metabolize may still apply a composite leaf in one
+hop; the plan is the elementary split for search and replay.
 
 Replay: `Deps::linearizations` → each `Linearization::apply` runs named
 elementary rules at resolved sites. Correctness: an accepted product’s plan

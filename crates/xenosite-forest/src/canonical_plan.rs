@@ -2,8 +2,9 @@
 //!
 //! No parallel `CanonicalStep` dialect. A hop emits elementary [`Step`]s;
 //! [`Deps::bind`] rewrites [`PlanAtom::WillAdd`] → [`PlanAtom::AddedBy`] and
-//! builds precedes. Composite hops expand via [`PlanKind`] data on the leaf
-//! [`crate::ruleset::RuleSet`] — not a rule-name branch in search.
+//! builds precedes. Composite leaves own a [`CanonicalPlanFn`] (Python
+//! `canonical_plan`) that returns steps named after existing elementary
+//! rules — not a `PlanKind` enum in search.
 //!
 //! Replay: [`Deps::linearizations`] → [`Linearization::apply`] through named
 //! elementary rules at resolved sites.
@@ -536,15 +537,17 @@ pub fn as_deps(steps: impl IntoIterator<Item = Step>) -> Deps {
     Deps::bind(steps)
 }
 
-/// How a leaf expands an accepted hop into elementary [`Step`]s.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum PlanKind {
-    /// Already elementary: one step at the discovery site.
-    #[default]
-    Identity,
-    /// Prep missing oxygens, then one dehydrogenation (quinone-formation shape).
-    HydroxylationThenDehydrogenation,
-}
+/// Leaf-owned plan expander (Python `ReactionRule.canonical_plan`).
+///
+/// Returns elementary [`Step`]s named after catalog rules (`Hydroxylation`,
+/// `Dehydrogenation`, …). `None` on a [`crate::ruleset::RuleSet`] means
+/// identity: one step at the discovery site.
+pub type CanonicalPlanFn = fn(
+    mol: &Molecule,
+    rule_name: &str,
+    site_atoms: &[usize],
+    end_effects: Option<&[&Effect]>,
+) -> Vec<Step>;
 
 /// Identity plan: `rule` at the given site atoms.
 pub fn identity_plan(rule: impl Into<String>, site: impl IntoIterator<Item = usize>) -> Vec<Step> {
@@ -557,6 +560,37 @@ pub fn identity_canonical_plan(
     site: impl IntoIterator<Item = usize>,
 ) -> Vec<Step> {
     identity_plan(rule, site)
+}
+
+/// Resolve a leaf's plan hook (or identity).
+pub fn steps_for_leaf(
+    plan: Option<CanonicalPlanFn>,
+    rule_name: &str,
+    mol: &Molecule,
+    site_atoms: &[usize],
+    end_effects: Option<&[&Effect]>,
+) -> Vec<Step> {
+    match plan {
+        Some(f) => f(mol, rule_name, site_atoms, end_effects),
+        None => identity_plan(rule_name, site_atoms.iter().copied()),
+    }
+}
+
+/// Bound [`Deps`] for one hop.
+pub fn plan_for_leaf(
+    plan: Option<CanonicalPlanFn>,
+    rule_name: &str,
+    mol: &Molecule,
+    site_atoms: &[usize],
+    end_effects: Option<&[&Effect]>,
+) -> Deps {
+    Deps::bind(steps_for_leaf(
+        plan,
+        rule_name,
+        mol,
+        site_atoms,
+        end_effects,
+    ))
 }
 
 fn end_needs_oxygen(effect: &Effect) -> bool {
@@ -634,43 +668,24 @@ pub fn hydroxylation_then_dehydrogenation(
     preps
 }
 
-/// Elementary steps from [`PlanKind`] (unbound; call [`Deps::bind`] for the plan).
-pub fn steps_for_kind(
-    kind: PlanKind,
-    rule_name: &str,
+/// Python `QuinoneFormation.canonical_plan`: prep missing oxygens, then DH.
+///
+/// Steps name existing elementary rules (`Hydroxylation`,
+/// `OxidativeDehalogenation`, `Dehydrogenation`). Wired on the QF leaf via
+/// [`crate::ruleset::RuleSet::with_canonical_plan`].
+pub fn quinone_canonical_plan(
     mol: &Molecule,
+    _rule_name: &str,
     site_atoms: &[usize],
     end_effects: Option<&[&Effect]>,
 ) -> Vec<Step> {
-    match kind {
-        PlanKind::Identity => identity_plan(rule_name, site_atoms.iter().copied()),
-        PlanKind::HydroxylationThenDehydrogenation => {
-            if let (Some(ends), true) = (end_effects, site_atoms.len() >= 2) {
-                let plan = hydroxylation_then_dehydrogenation(mol, ends, site_atoms);
-                if !plan.is_empty() {
-                    return plan;
-                }
-            }
-            identity_plan("Dehydrogenation", site_atoms.iter().copied())
+    if let (Some(ends), true) = (end_effects, site_atoms.len() >= 2) {
+        let plan = hydroxylation_then_dehydrogenation(mol, ends, site_atoms);
+        if !plan.is_empty() {
+            return plan;
         }
     }
-}
-
-/// Bound [`Deps`] for one hop.
-pub fn plan_for_kind(
-    kind: PlanKind,
-    rule_name: &str,
-    mol: &Molecule,
-    site_atoms: &[usize],
-    end_effects: Option<&[&Effect]>,
-) -> Deps {
-    Deps::bind(steps_for_kind(
-        kind,
-        rule_name,
-        mol,
-        site_atoms,
-        end_effects,
-    ))
+    identity_plan("Dehydrogenation", site_atoms.iter().copied())
 }
 
 #[cfg(test)]
