@@ -41,6 +41,7 @@ pub use atom_diff::{
     AtomDiff, atom_diff, atom_diff_for_child, atom_diff_from_mappings, candidate_could_help,
     candidate_could_help_on, candidate_order_key, extend_mapping_for_born, keep_against_diff,
     lift_mappings, pair_could_help, pattern_could_help, pattern_could_help_mol,
+    try_atom_diff_for_child,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};

@@ -222,10 +222,11 @@ candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
 cache; `Atom.tag` synced from the sidecar through `adopt_product`). Outcomes
 emit elementary [`CanonicalStep`](../../crates/xenosite-forest/src/canonical_plan.rs)
 plans; quinone-shaped leaves set [`PlanKind::HydroxylationThenDehydrogenation`]
-on the `RuleSet` (data, not a name branch). Eager closer can
+on the `RuleSet` (data, not a name branch). Default lazy (and eager) closer
+[`try_atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) /
 [`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs) via
-tag-lift (+ greedy OH extend). Nested `RuleSet` namespaces are in the crate as
-a door; they are not yet the live Python search.
+tag-lift (+ greedy OH extend); full MCS only when lift fails. Nested `RuleSet`
+namespaces are in the crate as a door; they are not yet the live Python search.
 
 ## find_path H2H (Rust vs Python live)
 
@@ -295,7 +296,8 @@ Rust misses most rows under `max_nodes=800`.
 
 **Read:** with filters on, Rust hits every H2H row and is **faster than Python** on
 mid (0.11s vs 0.38s), larger, and hard (1.60s vs 6.86s). Walks carry tagged
-`ForestMol` + `CanonicalStep` plans; eager closer can tag-lift MCS.
+`ForestMol` + `CanonicalStep` plans; default lazy closer tag-lifts MCS at
+enqueue (full MCS only on lift miss / root).
 
 ### Profile: where hard wall goes (not copies)
 
@@ -310,8 +312,9 @@ clone elision is noise.
 ### Lazy closer (landed)
 
 `FindPathConfig::lazy_closer` (default on with `use_atom_diff`): enqueue kept
-fragments without child MCS; on pop verify `cost() < parent_cost` before
-expand. Same gate as eager, deferred so siblings never popped skip MCS.
+fragments with tag-lifted child diff when possible; on pop verify
+`cost() < parent_cost` before expand (full MCS only if lift missed). Same gate
+as eager, deferred so siblings never popped skip work.
 
 Hard H2H (release, best-of-5), atom_diff on:
 
@@ -329,6 +332,7 @@ oxidation can raise HA distance while lowering cost.
 `find_path` walks carry [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs)
 (not bare SMILES). Edits use `materialize_mols` → `adopt_product` so tags and
 the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a
-`Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Eager
-closer uses `atom_diff_for_child` (tag-lift + OH extend) instead of a fresh MCS
-when tags allow.
+`Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Default
+lazy closer (and eager) uses `try_atom_diff_for_child` / `atom_diff_for_child`
+(tag-lift + OH extend) instead of a fresh MCS when tags allow; full MCS only
+on lift miss.

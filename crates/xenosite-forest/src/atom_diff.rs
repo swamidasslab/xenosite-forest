@@ -530,41 +530,49 @@ pub fn extend_mapping_for_born(
     }
 }
 
-/// Child [`AtomDiff`] via tag-lifted parent MCS when possible; else full MCS.
+/// Child [`AtomDiff`] via tag-lifted parent MCS when possible.
 ///
-/// Same atom count → lift only. Growth (OH) → lift + greedy born extend; if
-/// that still leaves heavy born atoms unmapped, fall back to full MCS so
-/// closer cost stays honest.
-pub fn atom_diff_for_child(
+/// Same atom count → lift only. Growth (OH) → lift + greedy born extend.
+/// Returns `None` when lift is impossible or a heavy born atom stays unmapped
+/// — caller should run full [`atom_diff`]. Never runs MCS itself.
+pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
-) -> AtomDiff {
+) -> Option<AtomDiff> {
     let parent_maps = if parent_diff.mappings.is_empty() {
         vec![parent_diff.mapping.clone()]
     } else {
         parent_diff.mappings.clone()
     };
-    let Some(mut lifted) = lift_mappings(parent, child, &parent_maps) else {
-        return atom_diff(child.mol(), target);
-    };
+    let mut lifted = lift_mappings(parent, child, &parent_maps)?;
     let child_n = child.mol().atom_count();
     let parent_n = parent.mol().atom_count();
     if child_n > parent_n {
         for m in &mut lifted {
             extend_mapping_for_born(child.mol(), target, m);
         }
-        // Any heavy child atom still unmapped → full MCS.
         let mapped: HashSet<usize> = lifted.iter().flat_map(|m| m.keys().copied()).collect();
         let orphan = (0..child_n).any(|i| {
             child.mol().atom(atom_idx(i)).element.atomic_number() > 1 && !mapped.contains(&i)
         });
         if orphan {
-            return atom_diff(child.mol(), target);
+            return None;
         }
     }
-    atom_diff_from_mappings(child.mol(), target, lifted)
+    Some(atom_diff_from_mappings(child.mol(), target, lifted))
+}
+
+/// Child [`AtomDiff`] via tag-lift when possible; else full MCS.
+pub fn atom_diff_for_child(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+) -> AtomDiff {
+    try_atom_diff_for_child(parent, parent_diff, child, target)
+        .unwrap_or_else(|| atom_diff(child.mol(), target))
 }
 
 fn effect_adds_oxygen(effect: &Effect) -> bool {
@@ -1015,7 +1023,8 @@ mod tests {
         let pieces = pairs[0].materialize_mols(parent.mol()).unwrap();
         assert!(!pieces.is_empty());
         let child = parent.adopt_product(pieces[0].clone());
-        let lifted = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
+            .expect("DH same-atom-count should lift without MCS");
         let full = atom_diff(child.mol(), &target);
         assert_eq!(
             lifted.cost(),
@@ -1036,7 +1045,8 @@ mod tests {
         let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
         let child = parent.adopt_product(pieces[0].clone());
         assert_eq!(child.mol().atom_count(), 3);
-        let lifted = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
+            .expect("OH born-O extend should lift without MCS");
         // Child is the target → cost 0 whether lift or full MCS.
         assert_eq!(lifted.cost(), 0, "{lifted:?}");
         assert!(child.shares_tag_gen(&parent));

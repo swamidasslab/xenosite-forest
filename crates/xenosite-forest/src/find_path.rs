@@ -9,7 +9,8 @@
 //! Outcomes carry elementary [`crate::canonical_plan::CanonicalStep`] plans
 //! (identity, or quinone-shaped prep-then-DH from [`PlanKind`] on the leaf).
 //! Closer uses atom-diff cost; child diffs prefer tag-lifted parent MCS when
-//! tags allow ([`crate::atom_diff::atom_diff_for_child`]).
+//! tags allow ([`crate::atom_diff::try_atom_diff_for_child`]) — default lazy
+//! and eager both lift at enqueue; full MCS only on lift miss.
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
@@ -89,10 +90,11 @@ struct Walk {
     steps: Vec<PathStep>,
     plan: Vec<CanonicalStep>,
     /// Parent's [`crate::atom_diff::AtomDiff::cost`] when this walk was
-    /// enqueued. `None` = root (always expand). With `use_atom_diff`, full
-    /// closer runs on pop: expand only if `cost() < parent_cost`. Enqueue
-    /// uses the cheap HA gate only so sibling MCS is not paid up front.
+    /// enqueued. `None` = root (always expand).
     parent_cost: Option<usize>,
+    /// Diff of **this** mol vs target. Filled at enqueue by tag-lift (+ OH
+    /// extend) when possible; on pop, full MCS only if still `None`.
+    diff: Option<crate::atom_diff::AtomDiff>,
 }
 
 /// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
@@ -311,6 +313,7 @@ where
             steps: Vec::new(),
             plan: Vec::new(),
             parent_cost: None,
+            diff: None,
         },
     });
     seq += 1;
@@ -336,7 +339,11 @@ where
         }
 
         let diff = if use_atom_diff {
-            let d = crate::atom_diff::atom_diff(walk.mol.mol(), &target_mol);
+            // Prefer tag-lifted diff from enqueue; full MCS only when missing.
+            let d = match walk.diff {
+                Some(d) => d,
+                None => crate::atom_diff::atom_diff(walk.mol.mol(), &target_mol),
+            };
             // Lazy closer: verify cost against parent before expanding.
             if lazy_closer {
                 if let Some(pc) = walk.parent_cost {
@@ -371,22 +378,31 @@ where
             let kept_csmi = kept.csmi().as_ref().to_string();
             let child_ha = kept.heavy_atom_count();
             let target_hit = kept_csmi == target_csmi;
-            // Eager closer: tag-lift child MCS when possible. Lazy defers to pop.
+
+            // Tag-lift (+ OH extend) from this node's diff. `None` → full MCS
+            // later (eager: now; lazy: on pop).
+            let mut child_diff = if use_atom_diff {
+                diff.as_ref().and_then(|parent_d| {
+                    crate::atom_diff::try_atom_diff_for_child(
+                        &walk.mol,
+                        parent_d,
+                        &kept,
+                        &target_mol,
+                    )
+                })
+            } else {
+                None
+            };
+
             let allow = if use_atom_diff {
                 if lazy_closer {
                     true
                 } else if let Some(pc) = parent_cost {
-                    let child_cost = match diff.as_ref() {
-                        Some(parent_d) => crate::atom_diff::atom_diff_for_child(
-                            &walk.mol,
-                            parent_d,
-                            &kept,
-                            &target_mol,
-                        )
-                        .cost(),
-                        None => crate::atom_diff::atom_diff(kept.mol(), &target_mol).cost(),
-                    };
-                    cost_closer(pc, child_cost, target_hit)
+                    if child_diff.is_none() {
+                        child_diff =
+                            Some(crate::atom_diff::atom_diff(kept.mol(), &target_mol));
+                    }
+                    cost_closer(pc, child_diff.as_ref().unwrap().cost(), target_hit)
                 } else {
                     true
                 }
@@ -413,6 +429,7 @@ where
                     steps,
                     plan,
                     parent_cost,
+                    diff: child_diff,
                 },
             });
             seq += 1;
@@ -613,6 +630,7 @@ where
             steps: Vec::new(),
             plan: Vec::new(),
             parent_cost: None,
+            diff: None,
         },
     });
     seq += 1;
@@ -683,6 +701,8 @@ where
                     steps,
                     plan,
                     parent_cost: None,
+                    // Filter path re-parses; no tag continuity → no lift.
+                    diff: None,
                 },
             });
             seq += 1;

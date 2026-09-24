@@ -1,8 +1,8 @@
 //! Phase profile for the **tagged `ForestMol`** `find_path` door.
 //!
 //! Same walk as production: structure/`csmi` cache, `Atom.tag` through
-//! `adopt_product`, lazy cost closer on pop, eager tag-lift child MCS.
-//! Does **not** re-parse walk CSMI strings.
+//! `adopt_product`, lazy cost closer on pop, tag-lift (+ OH extend) at
+//! enqueue so full MCS runs only when lift fails (root / orphan born).
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example find_path_profile --release
@@ -13,14 +13,15 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use xenosite_forest::atom_diff::{
-    atom_diff, atom_diff_for_child, candidate_could_help_on, candidate_order_key, pair_could_help,
+    atom_diff, candidate_could_help_on, candidate_order_key, pair_could_help,
+    try_atom_diff_for_child,
 };
 use xenosite_forest::canonical_plan::steps_for_kind;
 use xenosite_forest::forest_mol::ForestMol;
 use xenosite_forest::mol::{Molecule, canon_of, parse_mol};
 use xenosite_forest::rules::phase_one;
 use xenosite_forest::ruleset::RuleSet;
-use xenosite_forest::{Candidate, FindPathConfig, PathCounters, find_path_with};
+use xenosite_forest::{AtomDiff, Candidate, FindPathConfig, PathCounters, find_path_with};
 
 const HARD: &[(&str, &str, &str)] = &[
     (
@@ -56,6 +57,14 @@ struct Timers {
     cand_kept: usize,
     pair_kept: usize,
     csmi_calls: usize,
+    /// Pops that used a tag-lifted diff (no MCS).
+    lift_hits: usize,
+    /// Pops that fell back to full MCS.
+    mcs_falls: usize,
+    /// Enqueue lifts that succeeded.
+    enqueue_lifts: usize,
+    /// Enqueue lifts that returned `None`.
+    enqueue_miss: usize,
 }
 
 impl Timers {
@@ -75,6 +84,8 @@ struct Walk {
     mol: ForestMol,
     steps_len: usize,
     parent_cost: Option<usize>,
+    /// Diff of this mol vs target; filled at enqueue by tag-lift when possible.
+    diff: Option<AtomDiff>,
 }
 
 struct HeapItem {
@@ -137,7 +148,7 @@ fn expand_timed(
     ruleset: &RuleSet,
     parent: &ForestMol,
     target: &Molecule,
-    diff: &xenosite_forest::AtomDiff,
+    diff: &AtomDiff,
     t: &mut Timers,
 ) -> Vec<ForestEmission> {
     let mol = parent.mol();
@@ -220,6 +231,7 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
             mol: start,
             steps_len: 0,
             parent_cost: None,
+            diff: None,
         },
     });
     seq += 1;
@@ -247,16 +259,26 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
             break;
         }
 
-        let t0 = Instant::now();
-        let diff = atom_diff(walk.mol.mol(), &target_mol);
+        // Prefer tag-lifted diff from enqueue; full MCS only when missing.
+        let diff = match walk.diff {
+            Some(d) => {
+                t.lift_hits += 1;
+                d
+            }
+            None => {
+                let t0 = Instant::now();
+                let d = atom_diff(walk.mol.mol(), &target_mol);
+                t.atom_diff += t0.elapsed();
+                t.mcs_falls += 1;
+                d
+            }
+        };
         let cost = diff.cost();
-        t.atom_diff += t0.elapsed();
 
         if lazy {
             if let Some(pc) = walk.parent_cost {
                 if cost >= pc {
                     t.rejected += 1;
-                    t.reject += Duration::ZERO; // MCS already in atom_diff
                     continue;
                 }
             }
@@ -277,13 +299,26 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
             t.csmi_calls += emission.products.len();
 
             let target_hit = kept_csmi == target_csmi;
+
+            let t1 = Instant::now();
+            let mut child_diff = try_atom_diff_for_child(&walk.mol, &diff, &kept, &target_mol);
+            t.lift += t1.elapsed();
+            if child_diff.is_some() {
+                t.enqueue_lifts += 1;
+            } else {
+                t.enqueue_miss += 1;
+            }
+
             let allow = if lazy {
                 true
             } else if let Some(pc) = walk.parent_cost {
-                let t1 = Instant::now();
-                let child_cost = atom_diff_for_child(&walk.mol, &diff, &kept, &target_mol).cost();
-                t.lift += t1.elapsed();
-                target_hit || child_cost < pc
+                if child_diff.is_none() {
+                    let t2 = Instant::now();
+                    child_diff = Some(atom_diff(kept.mol(), &target_mol));
+                    t.atom_diff += t2.elapsed();
+                    t.mcs_falls += 1;
+                }
+                target_hit || child_diff.as_ref().unwrap().cost() < pc
             } else {
                 true
             };
@@ -303,6 +338,7 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
                     mol: kept,
                     steps_len: walk.steps_len + 1,
                     parent_cost: Some(cost),
+                    diff: child_diff,
                 },
             });
             seq += 1;
@@ -371,6 +407,24 @@ fn microbench() {
         None
     };
 
+    // Lift microbench: parent MCS once, then try_lift on a child.
+    let parent_diff = atom_diff(parent.mol(), &target);
+    let lift_us = if let Some(c) = cands.first() {
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        if let Some(piece) = pieces.into_iter().next() {
+            let child = parent.adopt_product(piece);
+            let t0 = Instant::now();
+            for _ in 0..200 {
+                let _ = try_atom_diff_for_child(&parent, &parent_diff, &child, &target);
+            }
+            Some(t0.elapsed())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     println!(
         "Molecule.clone           {n}×  {:.3} µs/op",
         mol_clone.as_secs_f64() * 1e6 / n as f64
@@ -393,6 +447,12 @@ fn microbench() {
             a.as_secs_f64() * 1e6 / 50.0
         );
     }
+    if let Some(l) = lift_us {
+        println!(
+            "try_atom_diff_for_child  200×  {:.3} µs/op",
+            l.as_secs_f64() * 1e6 / 200.0
+        );
+    }
 }
 
 fn main() {
@@ -406,7 +466,7 @@ fn main() {
     let profile_t0 = Instant::now();
 
     println!(
-        "Rust find_path phase profile (tagged ForestMol, atom_diff + lazy closer; budget {budget_secs}s)\n"
+        "Rust find_path phase profile (tagged ForestMol + lazy tag-lift; budget {budget_secs}s)\n"
     );
 
     // Warm production API once.
@@ -457,6 +517,7 @@ fn main() {
             if hit { "ok" } else { "NO" },
             tm.rejected,
         );
+        let pops = tm.lift_hits + tm.mcs_falls;
         println!(
             "  nodes={} edits={} cand_kept={} pair_kept={} csmi_calls={} accounted={:.1}%",
             tm.nodes,
@@ -465,6 +526,10 @@ fn main() {
             tm.pair_kept,
             tm.csmi_calls,
             pct(tm.total_accounted(), w),
+        );
+        println!(
+            "  pops: lift={}/{} mcs={}  enqueue: lift_ok={} miss={}",
+            tm.lift_hits, pops, tm.mcs_falls, tm.enqueue_lifts, tm.enqueue_miss,
         );
     }
 
