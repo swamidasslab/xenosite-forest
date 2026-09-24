@@ -34,3 +34,6 @@ pyo3 = { version = "0.26", optional = true }
 
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[dev-dependencies]
+proptest = "1.11"

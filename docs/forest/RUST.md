@@ -341,3 +341,8 @@ the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a bound
 `Step`s + precedes); composite leaves expand via `RuleSet::canonical_plan`. Lazy and
 eager use `try_atom_diff_for_child` when parent/child share heavy tags; else
 full MCS (`atom_diff_for_child` on eager). Add/remove is always MCS.
+
+Plan fuzz ports of the Python Hypothesis suites live under
+[`tests/phase1_plan_fuzz.rs`](../../crates/xenosite-forest/tests/phase1_plan_fuzz.rs)
+(`proptest`, or equivalent). Case count follows `XENOSITE_FUZZ_EXAMPLES` or
+proptest's `PROPTEST_CASES`.

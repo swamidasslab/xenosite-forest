@@ -104,7 +104,7 @@ impl PartialEq for RuleSet {
             && self.members == other.members
             && match (self.plan_fn, other.plan_fn) {
                 (None, None) => true,
-                (Some(a), Some(b)) => a == b,
+                (Some(a), Some(b)) => std::ptr::fn_addr_eq(a, b),
                 _ => false,
             }
     }
