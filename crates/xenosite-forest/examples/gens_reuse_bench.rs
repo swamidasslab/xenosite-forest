@@ -42,11 +42,7 @@ fn main() {
         ("tetraMeO-biphenyl", "COc1ccc(-c2ccc(OC)c(OC)c2)cc1OC", 50),
         ("tetraMeO-naph", "COc1cc(OC)c2c(OC)cc(OC)cc2c1", 45),
         ("macrocycle-ND", "C1CCCCCCNC2CCCC(CC2)NCCCC1", 35),
-        (
-            "TBA",
-            "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12",
-            40,
-        ),
+        ("TBA", "CN(C/C=C/C#CC(C)(C)C)Cc1cccc2ccccc12", 40),
     ];
 
     println!("Generator reuse on larger mols (release)\n");
@@ -79,7 +75,9 @@ fn main() {
         );
     }
 
-    println!("\nPair-orbit ids on tetraMeO-biphenyl (first 20 unordered pairs among heavy atoms 0..10)");
+    println!(
+        "\nPair-orbit ids on tetraMeO-biphenyl (first 20 unordered pairs among heavy atoms 0..10)"
+    );
     let mol = parse_mol("COc1ccc(-c2ccc(OC)c(OC)c2)cc1OC").unwrap();
     let gens = atom_bond_generators(&mol);
     let n = mol.atom_count();
