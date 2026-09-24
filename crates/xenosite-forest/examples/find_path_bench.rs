@@ -14,7 +14,7 @@
 //! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
 //! `--nofilter`), `--paths N` (emit up to N plans; default 1),
-//! `--cleave-first N` (in-path cleave-only then exclude-cleaves; opt-in).
+//! `--cleave-first` (in-path cleave-while-present then exclude-cleaves; opt-in).
 //!
 //! Pair with:
 //! ```text
@@ -180,10 +180,11 @@ fn print_table(
     repeats: u32,
     budget: Duration,
 ) {
-    let cleave = config
-        .cleavage_first_depth
-        .map(|d| format!("cleave_first={d}"))
-        .unwrap_or_else(|| "cleave_first=off".into());
+    let cleave = if config.cleavage_first {
+        "cleave_first=on"
+    } else {
+        "cleave_first=off"
+    };
     println!(
         "\n=== {title} (atom_diff={}, lazy_closer={}, max_paths={}, {cleave}) ===",
         config.use_atom_diff, config.lazy_closer, config.max_paths
@@ -232,10 +233,8 @@ fn parse_paths(args: &[String]) -> usize {
         .max(1)
 }
 
-fn parse_cleave_first(args: &[String]) -> Option<usize> {
-    args.windows(2)
-        .find(|w| w[0] == "--cleave-first")
-        .and_then(|w| w[1].parse().ok())
+fn parse_cleave_first(args: &[String]) -> bool {
+    args.iter().any(|a| a == "--cleave-first")
 }
 
 fn main() {
@@ -253,8 +252,7 @@ fn main() {
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
     );
     println!(
-        "(release; tagged ForestMol; filter-only={filter_only}; cleave_first={:?}; budget={}s)",
-        cleave_first,
+        "(release; tagged ForestMol; filter-only={filter_only}; cleave_first={cleave_first}; budget={}s)",
         budget.as_secs()
     );
 
@@ -269,7 +267,7 @@ fn main() {
     let base = FindPathConfig {
         max_paths,
         max_nodes: MAX_NODES,
-        cleavage_first_depth: cleave_first,
+        cleavage_first: cleave_first,
         ..FindPathConfig::default()
     };
     if nofilter && !args.iter().any(|a| a == "--filter-only") {

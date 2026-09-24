@@ -124,9 +124,9 @@ struct Walk {
     /// [`try_atom_diff_for_child`] / cleavage lift when safe; else `None`
     /// and pop runs full MCS.
     diff: Option<crate::atom_diff::AtomDiff>,
-    /// Cleaving hops so far (root = 0). First-pass cleave-only while
-    /// `cleavage_depth < cleavage_first_depth`.
-    cleavage_depth: usize,
+    /// Cleavage-first: once a walk expands with **no** cleaving emissions,
+    /// further expands exclude cleaves (non-cleavage on that core).
+    cleavage_done: bool,
 }
 
 /// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
@@ -294,13 +294,14 @@ pub struct FindPathConfig {
     /// Skips MCS on siblings never popped. Do not HA-gate at enqueue —
     /// oxidation can raise HA distance while lowering cost. Default on.
     pub lazy_closer: bool,
-    /// When `Some(d)` and the target is smaller, walks with
-    /// `cleavage_depth < d` expand **cleaving** edits only (both matching
-    /// sides kept via tag-lift). Once `cleavage_depth >= d`, expansion
-    /// **excludes** cleave sites — non-cleavage chemistry on those cores.
-    /// find_path's heap decides which paths to expand; no separate seed
-    /// handoff / SMILES reparse. `None` disables.
-    pub cleavage_first_depth: Option<usize>,
+    /// When true and the target is smaller, prefer the cleavage net inside
+    /// the site-expansion loop: if this expand still has cleaving emissions,
+    /// take **only** those (both matching sides via tag-lift). When an expand
+    /// has no cleaving emissions, switch to non-cleavage on that core and
+    /// **exclude** later cleaves. No depth cap — presence of cleave emissions
+    /// is the gate. find_path's heap decides which paths to expand; no
+    /// separate seed handoff / SMILES reparse. Default off.
+    pub cleavage_first: bool,
 }
 
 impl Default for FindPathConfig {
@@ -311,8 +312,8 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: true,
-            // Opt in to measure; default off until lift-first pass is cheaper.
-            cleavage_first_depth: None,
+            // Opt in to measure redundancy collapse; default off.
+            cleavage_first: false,
         }
     }
 }
@@ -399,7 +400,7 @@ where
         max_nodes,
         use_atom_diff,
         lazy_closer,
-        cleavage_first_depth,
+        cleavage_first,
     } = config;
     let start = ForestMol::parse(reactant)?;
     let start_csmi = start.csmi();
@@ -410,7 +411,7 @@ where
         .filter(|(_, a)| a.element.atomic_number() > 1)
         .count();
     let start_ha = start.heavy_atom_count();
-    let cleave_first = cleavage_first_depth.filter(|_| target_ha < start_ha);
+    let cleave_first = cleavage_first && target_ha < start_ha;
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
@@ -425,7 +426,7 @@ where
             opens: Vec::new(),
             parent_cost: None,
             diff: None,
-            cleavage_depth: 0,
+            cleavage_done: false,
         },
     });
     seq += 1;
@@ -475,10 +476,6 @@ where
         counters.nodes += 1;
         counters.expansions += 1;
         let parent_cost = diff.as_ref().map(|d| d.cost());
-        // First-pass cleave net: only cleaving edits while under the depth cap.
-        // After that, exclude cleave sites — non-cleavage chemistry on survivors.
-        let cleave_only = cleave_first.is_some_and(|d| walk.cleavage_depth < d);
-        let no_cleave = cleave_first.is_some_and(|d| walk.cleavage_depth >= d);
         let emissions = expand(
             ruleset,
             &walk.mol,
@@ -487,6 +484,13 @@ where
             &keep,
             diff.as_ref(),
         )?;
+        // Cleavage net first (no depth cap): if cleaving emissions are present
+        // and this walk has not graduated, take only those. When expand has no
+        // cleaves, non-cleavage on the core and lock out later cleaves.
+        let any_cleave = cleave_first && !walk.cleavage_done && emissions.iter().any(|e| e.cleaves);
+        let cleave_only = any_cleave;
+        let no_cleave = cleave_first && (walk.cleavage_done || !any_cleave);
+        let graduate = cleave_first && !walk.cleavage_done && !any_cleave;
         let mut hits_from_here = 0usize;
         let parent_ha = walk.mol.heavy_atom_count();
 
@@ -561,11 +565,6 @@ where
                 steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
                 let mut plan = walk.plan.clone();
                 plan.extend(emission.plan.iter().cloned());
-                let child_cleavage_depth = if emission.cleaves {
-                    walk.cleavage_depth + 1
-                } else {
-                    walk.cleavage_depth
-                };
                 heap.push(HeapItem {
                     target_hit,
                     seq,
@@ -577,7 +576,7 @@ where
                         opens: child_opens,
                         parent_cost,
                         diff: child_diff,
-                        cleavage_depth: child_cleavage_depth,
+                        cleavage_done: walk.cleavage_done || graduate,
                     },
                 });
                 seq += 1;
@@ -811,7 +810,7 @@ where
         max_nodes,
         use_atom_diff: _,
         lazy_closer: _,
-        cleavage_first_depth: _,
+        cleavage_first: _,
     } = config;
     let start = ForestMol::parse(reactant)?;
     let start_csmi = start.csmi();
@@ -831,7 +830,7 @@ where
             opens: Vec::new(),
             parent_cost: None,
             diff: None,
-            cleavage_depth: 0,
+            cleavage_done: false,
         },
     });
     seq += 1;
@@ -908,11 +907,6 @@ where
                 });
                 let mut plan = walk.plan.clone();
                 plan.extend(emission.plan.iter().cloned());
-                let child_cleavage_depth = if emission.cleaves {
-                    walk.cleavage_depth + 1
-                } else {
-                    walk.cleavage_depth
-                };
                 heap.push(HeapItem {
                     target_hit,
                     seq,
@@ -924,7 +918,7 @@ where
                         opens: child_opens,
                         parent_cost: None,
                         diff: None,
-                        cleavage_depth: child_cleavage_depth,
+                        cleavage_done: false,
                     },
                 });
                 seq += 1;

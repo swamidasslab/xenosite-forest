@@ -4,6 +4,7 @@
 //! ```text
 //! cargo run -p xenosite-forest --example multipath_plans --release
 //! cargo run -p xenosite-forest --example multipath_plans --release -- --hard
+//! cargo run -p xenosite-forest --example multipath_plans --release -- --hard --cleave-first
 //! ```
 
 use std::env;
@@ -125,7 +126,7 @@ fn fmt_plan(hit: &PathOutcome) -> String {
     )
 }
 
-fn dump(name: &str, start: &str, target: &str) {
+fn dump(name: &str, start: &str, target: &str, cleave_first: bool) {
     println!("=== {name} ===");
     println!("reactant: {start}");
     println!("target:   {target}");
@@ -139,16 +140,29 @@ fn dump(name: &str, start: &str, target: &str) {
         FindPathConfig {
             max_paths: MAX_PATHS,
             max_nodes: MAX_NODES,
+            cleavage_first: cleave_first,
             ..FindPathConfig::default()
         },
         |_| true,
     )
     .unwrap();
     let ms = t0.elapsed().as_secs_f64() * 1e3;
+    let n_lin_sum: usize = hits.iter().map(|h| h.plan.n_linearizations()).sum();
+    let mut skeleton_pairs = 0usize;
+    let mut same_lin_pairs = 0usize;
+    for i in 0..hits.len() {
+        for j in (i + 1)..hits.len() {
+            if hits[i].plan.same_linearizations(&hits[j].plan) {
+                same_lin_pairs += 1;
+            }
+            if hits[i].plan.same_rule_maybe_skeleton(&hits[j].plan) {
+                skeleton_pairs += 1;
+            }
+        }
+    }
     println!(
-        "hits={}  wall={ms:.0} ms  billed={}  nodes={}  mol_edits={}",
+        "hits={}  n_lin_sum={n_lin_sum}  same_lin_pairs={same_lin_pairs}  skeleton_pairs={skeleton_pairs}  nodes={}  mol_edits={}  wall={ms:.0} ms",
         hits.len(),
-        counters.billed(),
         counters.nodes,
         counters.mol_edits
     );
@@ -162,7 +176,8 @@ fn dump(name: &str, start: &str, target: &str) {
         if i > 0 {
             let ov = hits[0].plan.linearization_overlap(&hit.plan);
             let same = hits[0].plan.same_linearizations(&hit.plan);
-            println!("  vs plan0: overlap={ov} same_linearizations={same}");
+            let sk = hits[0].plan.same_rule_maybe_skeleton(&hit.plan);
+            println!("  vs plan0: overlap={ov} same_linearizations={same} skeleton={sk}");
         }
     }
     println!();
@@ -170,12 +185,13 @@ fn dump(name: &str, start: &str, target: &str) {
 
 fn main() {
     let hard = env::args().any(|a| a == "--hard");
+    let cleave_first = env::args().any(|a| a == "--cleave-first");
     let cases = if hard { HARD } else { LARGER };
     println!(
-        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}\n",
+        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}  cleave_first={cleave_first}\n",
         if hard { "HARD" } else { "LARGER" }
     );
     for (name, start, target) in cases {
-        dump(name, start, target);
+        dump(name, start, target, cleave_first);
     }
 }
