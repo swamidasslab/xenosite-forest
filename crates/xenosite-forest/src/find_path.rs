@@ -309,6 +309,9 @@ fn accept_all_candidates(_c: &Candidate) -> bool {
     true
 }
 
+/// [`FindPath`] with the built-in accept-all keep predicate.
+pub type OpenFindPath<'a, 'b> = FindPath<'a, 'b, fn(&Candidate) -> bool>;
+
 /// HEURISTICS: a later walk that is only a reordering of an already-yielded
 /// [`Deps`] is not a new path. Also drop remapped-index free-step twins
 /// ([`Deps::same_rule_maybe_skeleton`]).
@@ -328,7 +331,7 @@ pub fn find_path<'a, 'b>(
     target: &str,
     ruleset: &'a RuleSet,
     counters: &'b mut PathCounters,
-) -> Result<FindPath<'a, 'b, fn(&Candidate) -> bool>, ForestError> {
+) -> Result<OpenFindPath<'a, 'b>, ForestError> {
     find_path_with(
         reactant,
         target,
@@ -344,7 +347,7 @@ pub fn find_path_default<'b>(
     reactant: &str,
     target: &str,
     counters: &'b mut PathCounters,
-) -> Result<FindPath<'static, 'b, fn(&Candidate) -> bool>, ForestError> {
+) -> Result<OpenFindPath<'static, 'b>, ForestError> {
     // Leak-free: borrow the process-wide default via once / static ruleset.
     find_path(reactant, target, default_ruleset_ref(), counters)
 }
@@ -361,7 +364,7 @@ pub fn find_path_diff<'a, 'b>(
     target: &str,
     ruleset: &'a RuleSet,
     counters: &'b mut PathCounters,
-) -> Result<FindPath<'a, 'b, fn(&Candidate) -> bool>, ForestError> {
+) -> Result<OpenFindPath<'a, 'b>, ForestError> {
     find_path_with(
         reactant,
         target,
@@ -525,7 +528,7 @@ where
             let parent_ha = walk.mol.heavy_atom_count();
             let mut hits_from_here = 0usize;
 
-            let mut expand = match Expand::new(
+            let expand = match Expand::new(
                 self.ruleset,
                 &walk.mol,
                 &self.target_mol,
@@ -540,7 +543,7 @@ where
                 }
             };
 
-            while let Some(emission) = expand.next() {
+            for emission in expand {
                 let emission = match emission {
                     Ok(e) => e,
                     Err(e) => {
@@ -1098,10 +1101,10 @@ where
             let mut hits_from_here = 0usize;
 
             // Pull metabolize one emission at a time — no full list.
-            let mut emissions =
+            let emissions =
                 self.ruleset
                     .metabolize(mol, &self.filter_rules, &self.filter_sites, true);
-            while let Some(emission) = emissions.next() {
+            for emission in emissions {
                 let emission = match emission {
                     Ok(e) => e,
                     Err(e) => {

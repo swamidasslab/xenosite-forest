@@ -22,8 +22,8 @@ use crate::unique_edit::{unique_sites, unique_sites_on_forms};
 pub struct Candidates<'a> {
     set: &'a RuleSet,
     mol: &'a Molecule,
-    /// Outer containers to append onto each candidate's `rule_path`.
-    suffix: Vec<Option<String>>,
+    /// When nested under a parent set, append that name on each yield (leaf-first).
+    parent_link: Option<Option<String>>,
     member_i: usize,
     pending: std::vec::IntoIter<Candidate>,
     child: Option<Box<Candidates<'a>>>,
@@ -35,7 +35,7 @@ impl<'a> Candidates<'a> {
         Self {
             set,
             mol,
-            suffix: Vec::new(),
+            parent_link: None,
             member_i: 0,
             pending: Vec::new().into_iter(),
             child: None,
@@ -43,13 +43,22 @@ impl<'a> Candidates<'a> {
         }
     }
 
-    fn with_suffix(mut self, suffix: Vec<Option<String>>) -> Self {
-        self.suffix = suffix;
-        self
+    fn nested(set: &'a RuleSet, mol: &'a Molecule, parent_name: Option<String>) -> Self {
+        Self {
+            set,
+            mol,
+            parent_link: Some(parent_name),
+            member_i: 0,
+            pending: Vec::new().into_iter(),
+            child: None,
+            done: false,
+        }
     }
 
     fn finish_candidate(&self, mut c: Candidate) -> Candidate {
-        c.rule_path.extend(self.suffix.iter().cloned());
+        if let Some(parent_name) = &self.parent_link {
+            c.rule_path.push(parent_name.clone());
+        }
         c
     }
 
@@ -102,10 +111,11 @@ impl Iterator for Candidates<'_> {
                     }
                 }
                 RuleMember::Set(child) => {
-                    let mut suffix = vec![child.name.clone()];
-                    suffix.extend(self.suffix.iter().cloned());
-                    self.child =
-                        Some(Box::new(Candidates::new(child, self.mol).with_suffix(suffix)));
+                    self.child = Some(Box::new(Candidates::nested(
+                        child,
+                        self.mol,
+                        self.set.name.clone(),
+                    )));
                 }
             }
         }
@@ -180,6 +190,13 @@ pub struct Metabolize<'a, R, S> {
     parent_link: Option<Option<String>>,
     done: bool,
 }
+
+/// [`Metabolize`] with accept-all filters (no closures).
+pub type OpenMetabolize<'a> = Metabolize<
+    'a,
+    fn(&Molecule, &RuleSet, &PatternInfo) -> bool,
+    fn(&Molecule, usize, &SiteInfo) -> bool,
+>;
 
 impl<'a, R, S> Metabolize<'a, R, S>
 where

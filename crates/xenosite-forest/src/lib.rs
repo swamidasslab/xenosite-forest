@@ -59,8 +59,8 @@ pub use cleavage_graph::{
     cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
 };
 pub use find_path::{
-    FindPath, FindPathConfig, FindPathFilters, PathCounters, PathOutcome, PathStep, find_path,
-    find_path_default, find_path_diff, find_path_with, find_path_with_filters,
+    FindPath, FindPathConfig, FindPathFilters, OpenFindPath, PathCounters, PathOutcome, PathStep,
+    find_path, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
 };
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;

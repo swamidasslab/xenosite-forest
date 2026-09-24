@@ -205,11 +205,7 @@ impl RuleSet {
         &'a self,
         mol: &'a Molecule,
         unique_csmi: bool,
-    ) -> crate::stream::Metabolize<
-        'a,
-        fn(&Molecule, &RuleSet, &PatternInfo) -> bool,
-        fn(&Molecule, usize, &SiteInfo) -> bool,
-    > {
+    ) -> crate::stream::OpenMetabolize<'a> {
         self.metabolize(mol, accept_all_rules, accept_all_sites, unique_csmi)
     }
 
@@ -243,6 +239,7 @@ impl RuleSet {
         crate::stream::PairEmissions::new(self, mol)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn metabolize_boxed<'a>(
         &'a self,
         mol: &'a Molecule,
