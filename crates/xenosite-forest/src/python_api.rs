@@ -22,6 +22,9 @@ fn py_err(err: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(err.to_string())
 }
 
+/// One `RuleSet.metabolize` row: `(pattern_name, site, products, rule_path)`.
+type MetabolizeRow = (String, usize, Vec<String>, Vec<Option<String>>);
+
 /// Python-visible formula. Nested `#[pyclass]` wrap of [`Formula`].
 #[pyclass(name = "Formula", frozen)]
 #[derive(Clone)]
@@ -291,7 +294,7 @@ impl PyRuleSet {
         mol: &Bound<'_, PyForestMol>,
         filter_rules: Option<Bound<'_, PyAny>>,
         filter_sites: Option<Bound<'_, PyAny>>,
-    ) -> PyResult<Vec<(String, usize, Vec<String>, Vec<Option<String>>)>> {
+    ) -> PyResult<Vec<MetabolizeRow>> {
         let chemistry = mol.borrow().inner.mol().clone();
         let set = slf.borrow().inner.clone();
         let emissions = if filter_rules.is_none() && filter_sites.is_none() {
@@ -477,7 +480,7 @@ mod tests {
                 2
             );
             let products = rs.call_method1("metabolize", (&mol,)).unwrap();
-            let products: Vec<(String, usize, Vec<String>, Vec<Option<String>>)> =
+            let products: Vec<MetabolizeRow> =
                 products.extract().unwrap();
             assert_eq!(products.len(), 1);
             assert_eq!(products[0].0, "h");
@@ -485,7 +488,7 @@ mod tests {
             let filt = py
                 .eval(c"lambda m, rule, p: p.name == 'h2'", None, None)
                 .unwrap();
-            let kept: Vec<(String, usize, Vec<String>, Vec<Option<String>>)> = rs
+            let kept: Vec<MetabolizeRow> = rs
                 .call_method1("metabolize", (&mol, filt))
                 .unwrap()
                 .extract()
