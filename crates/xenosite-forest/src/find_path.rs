@@ -334,11 +334,59 @@ where
             emissions.push(emission);
         }
     }
-    for emission in ruleset.pair_emissions(mol)? {
-        counters.mol_edits += 1;
-        emissions.push(emission);
-    }
+    emissions.extend(expand_pairs(ruleset, mol, counters, keep)?);
     Ok(emissions)
+}
+
+fn expand_pairs<K>(
+    ruleset: &RuleSet,
+    mol: &crate::Molecule,
+    counters: &mut PathCounters,
+    keep: &K,
+) -> Result<Vec<Emission>, ForestError>
+where
+    K: Fn(&Candidate) -> bool,
+{
+    let mut out = Vec::new();
+    for member in ruleset.members() {
+        if let crate::ruleset::RuleMember::Set(child) = member {
+            for mut emission in expand_pairs(child, mol, counters, keep)? {
+                emission.rule_path.push(ruleset.name.clone());
+                out.push(emission);
+            }
+        }
+    }
+    for pair in ruleset.pair_candidates_leaf(mol)? {
+        if !keep_pair(&pair, keep) {
+            continue;
+        }
+        counters.mol_edits += 1;
+        if let Some(emission) = pair.emit(mol)? {
+            out.push(Emission {
+                site: emission.site,
+                pattern_name: emission.pattern_name,
+                rule_path: vec![ruleset.name.clone()],
+                products: emission.products,
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn keep_pair<K>(pair: &crate::pair_edit::PairCandidate, keep: &K) -> bool
+where
+    K: Fn(&Candidate) -> bool,
+{
+    let mut stand_in = Candidate {
+        site: pair.site,
+        pattern: pair.left.clone(),
+        rule_path: Vec::new(),
+        mapped: Default::default(),
+        parent: crate::candidate::ParentRef::Context,
+    };
+    stand_in.pattern.effect = pair.effect.clone();
+    stand_in.pattern.name = pair.pattern_name.clone();
+    keep(&stand_in)
 }
 
 /// Python-style filter closures (optional). Prefer [`find_path_with`] + reading

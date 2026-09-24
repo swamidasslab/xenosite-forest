@@ -296,13 +296,114 @@ pub struct PairEmission {
     pub products: Vec<String>,
 }
 
+/// Discovered pair site before path flip / product CSMI.
+///
+/// Carries merged [`crate::pattern::Effect`] so a search can filter without
+/// running the edit. [`PairCandidate::materialize`] finds alternating paths
+/// and applies end edits.
+#[derive(Clone, Debug)]
+pub struct PairCandidate {
+    pub site: usize,
+    pub pattern_name: String,
+    pub left: PatternInfo,
+    pub right: PatternInfo,
+    /// Merged end effects (dearomatizes resolved against system aromaticity).
+    pub effect: crate::pattern::Effect,
+    map1: BTreeMap<u16, usize>,
+    map2: BTreeMap<u16, usize>,
+    start: usize,
+    end: usize,
+    system: HashSet<usize>,
+}
+
+impl PairCandidate {
+    pub fn materialize(&self, mol: &Molecule) -> Result<Vec<String>, ForestError> {
+        let forms = kekule_forms(mol)?;
+        let rings = ring_sets(mol);
+        let neighbors = system_neighbors(mol, &self.system);
+        let mut products = Vec::new();
+        let mut local_csmi = BTreeSet::new();
+        for form in &forms {
+            let bond_map = current_orders(form);
+            let mut paths = alternating_from(&bond_map, self.start, self.end, &neighbors, 2);
+            paths.extend(alternating_from(
+                &bond_map, self.end, self.start, &neighbors, 2,
+            ));
+            for path in paths {
+                if path.len() % 2 == 1 {
+                    continue;
+                }
+                let mut rw = form.clone();
+                clear_aromatic(&mut rw);
+                if !edit_end(&mut rw, &self.map1, &self.left, &rings) {
+                    continue;
+                }
+                if !edit_end(&mut rw, &self.map2, &self.right, &rings) {
+                    continue;
+                }
+                if !flip_path(&mut rw, &path) {
+                    continue;
+                }
+                if !accept_product(&rw) {
+                    continue;
+                }
+                let checked = aromatize(&rw);
+                if self.effect.dearomatizes && system_stayed_aromatic(mol, &checked, &self.system) {
+                    continue;
+                }
+                let smiles = canon_smiles(&checked);
+                if local_csmi.insert(smiles.clone()) {
+                    products.push(smiles);
+                }
+            }
+        }
+        Ok(products)
+    }
+
+    pub fn emit(&self, mol: &Molecule) -> Result<Option<PairEmission>, ForestError> {
+        let products = self.materialize(mol)?;
+        if products.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(PairEmission {
+            site: self.site,
+            pattern_name: self.pattern_name.clone(),
+            products,
+        }))
+    }
+}
+
 type EndpointHit<'a> = (BTreeMap<u16, usize>, &'a PatternInfo);
 
-/// Run ResonancePair metabolize for the given endpoint patterns.
-pub fn pair_metabolize(
+fn merge_effect_fields(
+    left: &PatternInfo,
+    right: &PatternInfo,
+    system_aromatic: bool,
+) -> crate::pattern::Effect {
+    let adds = match (&left.effect.adds, &right.effect.adds) {
+        (None, None) => None,
+        (Some(a), None) | (None, Some(a)) => Some(a.clone()),
+        (Some(a), Some(b)) => Some(format!("{a}{b}")),
+    };
+    let removes = match (&left.effect.removes, &right.effect.removes) {
+        (None, None) => None,
+        (Some(a), None) | (None, Some(a)) => Some(a.clone()),
+        (Some(a), Some(b)) => Some(format!("{a}{b}")),
+    };
+    crate::pattern::Effect {
+        adds,
+        removes,
+        cleaves: left.effect.cleaves || right.effect.cleaves,
+        methide: left.effect.methide || right.effect.methide,
+        dearomatizes: merge_dearomatizes(left, right, system_aromatic),
+    }
+}
+
+/// Discover pair sites without applying path flips.
+pub fn pair_candidates(
     mol: &Molecule,
     endpoints: &[PatternInfo],
-) -> Result<Vec<PairEmission>, ForestError> {
+) -> Result<Vec<PairCandidate>, ForestError> {
     let endpoints: Vec<&PatternInfo> = endpoints
         .iter()
         .filter(|p| matches!(p.edit, Edit::PairEndpoint(_)))
@@ -311,7 +412,6 @@ pub fn pair_metabolize(
         return Ok(Vec::new());
     }
 
-    // hits[map1_atom] = list of (mapped, pattern)
     let mut hits: HashMap<usize, Vec<EndpointHit<'_>>> = HashMap::new();
     for pattern in &endpoints {
         for mapped in smarts_matches(mol, &pattern.smarts)? {
@@ -325,7 +425,6 @@ pub fn pair_metabolize(
         return Ok(Vec::new());
     }
 
-    // Conjugated systems covering at least two anchors.
     let mut systems: Vec<HashSet<usize>> = Vec::new();
     let mut covered = HashSet::new();
     for &anchor in hits.keys() {
@@ -340,18 +439,14 @@ pub fn pair_metabolize(
         }
     }
     if systems.is_empty() {
-        // Fall back: whole-molecule atom set for small systems.
         let all: HashSet<usize> = mol.atoms().map(|(i, _)| atom_usize(i)).collect();
         if hits.keys().filter(|a| all.contains(a)).count() >= 2 {
             systems.push(all);
         }
     }
 
-    let forms = kekule_forms(mol)?;
-    let rings = ring_sets(mol);
-    let mut emissions = Vec::new();
+    let mut out = Vec::new();
     let mut seen_sig: BTreeSet<(usize, usize, String, String)> = BTreeSet::new();
-    let mut seen_csmi: BTreeSet<BTreeSet<String>> = BTreeSet::new();
 
     for system in &systems {
         let anchors: Vec<usize> = hits
@@ -395,59 +490,42 @@ pub fn pair_metabolize(
                         if !seen_sig.insert((sa, sb, n1.clone(), n2.clone())) {
                             continue;
                         }
-                        let dearomatizes = merge_dearomatizes(info1, info2, system_aromatic);
-                        let neighbors = system_neighbors(mol, system);
-                        let mut products = Vec::new();
-                        let mut local_csmi = BTreeSet::new();
-                        for form in &forms {
-                            let bond_map = current_orders(form);
-                            let mut paths = alternating_from(&bond_map, start, end, &neighbors, 2);
-                            paths.extend(alternating_from(&bond_map, end, start, &neighbors, 2));
-                            for path in paths {
-                                // Odd bond count ⇔ even atom count.
-                                if path.len() % 2 == 1 {
-                                    continue;
-                                }
-                                let mut rw = form.clone();
-                                clear_aromatic(&mut rw);
-                                if !edit_end(&mut rw, map1, info1, &rings) {
-                                    continue;
-                                }
-                                if !edit_end(&mut rw, map2, info2, &rings) {
-                                    continue;
-                                }
-                                if !flip_path(&mut rw, &path) {
-                                    continue;
-                                }
-                                if !accept_product(&rw) {
-                                    continue;
-                                }
-                                let checked = aromatize(&rw);
-                                if dearomatizes && system_stayed_aromatic(mol, &checked, system) {
-                                    continue;
-                                }
-                                let smiles = canon_smiles(&checked);
-                                if local_csmi.insert(smiles.clone()) {
-                                    products.push(smiles);
-                                }
-                            }
-                        }
-                        if products.is_empty() {
-                            continue;
-                        }
-                        let key: BTreeSet<String> = products.iter().cloned().collect();
-                        if !seen_csmi.insert(key) {
-                            continue;
-                        }
-                        emissions.push(PairEmission {
+                        out.push(PairCandidate {
                             site: sa,
                             pattern_name: format!("{n1}+{n2}"),
-                            products,
+                            left: (*info1).clone(),
+                            right: (*info2).clone(),
+                            effect: merge_effect_fields(info1, info2, system_aromatic),
+                            map1: map1.clone(),
+                            map2: map2.clone(),
+                            start,
+                            end,
+                            system: system.clone(),
                         });
                     }
                 }
             }
         }
+    }
+    Ok(out)
+}
+
+/// Run ResonancePair metabolize for the given endpoint patterns.
+pub fn pair_metabolize(
+    mol: &Molecule,
+    endpoints: &[PatternInfo],
+) -> Result<Vec<PairEmission>, ForestError> {
+    let mut emissions = Vec::new();
+    let mut seen_csmi: BTreeSet<BTreeSet<String>> = BTreeSet::new();
+    for candidate in pair_candidates(mol, endpoints)? {
+        let Some(emission) = candidate.emit(mol)? else {
+            continue;
+        };
+        let key: BTreeSet<String> = emission.products.iter().cloned().collect();
+        if !seen_csmi.insert(key) {
+            continue;
+        }
+        emissions.push(emission);
     }
     Ok(emissions)
 }
@@ -528,5 +606,37 @@ mod tests {
             }),
             "expected para-quinone from two add_carbonyl_o; got {emissions:?}"
         );
+    }
+
+    #[test]
+    fn pair_candidates_defer_path_flip() {
+        let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
+        let endpoints: Vec<_> = dehydrogenation()
+            .patterns()
+            .into_iter()
+            .cloned()
+            .filter(|p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .collect();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        assert!(!cands.is_empty());
+        assert!(
+            cands.iter().any(|c| c.effect.dearomatizes),
+            "aromatic hydroquinone pair should resolve dearomatizes"
+        );
+        // Refuse before materialize.
+        let kept: Vec<_> = cands
+            .into_iter()
+            .filter(|c| !c.effect.dearomatizes)
+            .collect();
+        assert!(kept.is_empty());
+        // Accept and materialize.
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        assert!(cands.iter().any(|c| {
+            c.materialize(&mol)
+                .unwrap()
+                .iter()
+                .any(|p| canon_of(p).unwrap() == want)
+        }));
     }
 }

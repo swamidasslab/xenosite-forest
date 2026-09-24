@@ -47,7 +47,7 @@ pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
 pub use orbits::{atom_pair_orbit_id, unordered_atom_pair_orbit_sizes};
-pub use pair_edit::dehydrogenate_hydroquinone;
+pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
 pub use rules::{all_rules, catalog_names, default_ruleset, phase_one};
 pub use ruleset::{

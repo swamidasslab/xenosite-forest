@@ -64,8 +64,9 @@ cargo test -p xenosite-forest --features python
 without applying edits. A search reads `PatternInfo` / `Effect` to filter, then
 [`Candidate::materialize`](../../crates/xenosite-forest/src/candidate.rs) only for
 survivors. Filter closures on `metabolize` remain for Python parity; they are
-not required. `metabolites(mol)` materializes everything. ResonancePair path
-emissions are still joint (`pair_emissions`) — not yet deferred triples.
+not required. `metabolites(mol)` materializes everything. ResonancePair uses
+[`PairCandidate`](../../crates/xenosite-forest/src/pair_edit.rs) the same way
+(merged `Effect` for filtering; path flip on materialize).
 
 **RuleSet / closures (optional):** Python `FilterRules` / `FilterSites` are
 `Callable`. Rust can still pass `impl Fn` on `RuleSet::metabolize`, or

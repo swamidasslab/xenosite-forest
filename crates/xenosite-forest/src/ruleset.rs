@@ -19,7 +19,7 @@ use crate::ForestError;
 use crate::candidate::{Candidate, ParentRef};
 use crate::kekule::kekule_forms;
 use crate::mol::{Molecule, atom_idx, canon_smiles};
-use crate::pair_edit::pair_metabolize;
+use crate::pair_edit::{pair_candidates, pair_metabolize};
 use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
 use crate::unique_edit::{unique_sites, unique_sites_on_forms};
@@ -192,11 +192,40 @@ impl RuleSet {
         self.metabolize(mol, accept_all_rules, accept_all_sites, unique_csmi)
     }
 
+    /// ResonancePair path candidates for this set and nested children.
+    ///
+    /// Discovery only — no path flip. Each candidate carries a merged
+    /// [`crate::pattern::Effect`] for filtering before
+    /// [`crate::pair_edit::PairCandidate::materialize`].
+    pub fn pair_candidates(
+        &self,
+        mol: &Molecule,
+    ) -> Result<Vec<crate::pair_edit::PairCandidate>, ForestError> {
+        let mut out = self.pair_candidates_leaf(mol)?;
+        for member in &self.members {
+            if let RuleMember::Set(child) = member {
+                out.extend(child.pair_candidates(mol)?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// Pair candidates from this leaf's own endpoint patterns only.
+    pub fn pair_candidates_leaf(
+        &self,
+        mol: &Molecule,
+    ) -> Result<Vec<crate::pair_edit::PairCandidate>, ForestError> {
+        let endpoints = self.leaf_pair_endpoints();
+        if endpoints.is_empty() {
+            return Ok(Vec::new());
+        }
+        pair_candidates(mol, &endpoints)
+    }
+
     /// ResonancePair path emissions for this set and nested children.
     ///
-    /// Pair ends need a joint walk, so they are not [`Candidate`] triples yet.
-    /// Each emission's `rule_path` is leaf-first with this set appended when
-    /// nested.
+    /// Materializes [`Self::pair_candidates`]. Each emission's `rule_path` is
+    /// leaf-first with this set appended when nested.
     pub fn pair_emissions(&self, mol: &Molecule) -> Result<Vec<Emission>, ForestError> {
         let mut out = Vec::new();
         for member in &self.members {
@@ -210,14 +239,13 @@ impl RuleSet {
                 }
             }
         }
-        let endpoints = self.leaf_pair_endpoints();
-        if !endpoints.is_empty() {
-            for pair in pair_metabolize(mol, &endpoints)? {
+        for pair in self.pair_candidates_leaf(mol)? {
+            if let Some(emission) = pair.emit(mol)? {
                 out.push(Emission {
-                    site: pair.site,
-                    pattern_name: pair.pattern_name,
+                    site: emission.site,
+                    pattern_name: emission.pattern_name,
                     rule_path: vec![self.name.clone()],
-                    products: pair.products,
+                    products: emission.products,
                 });
             }
         }
