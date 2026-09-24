@@ -237,8 +237,9 @@ uv run python tests/forest/bench_find_path_rust_h2h.py
 Raw: `artifacts/bench_find_path_{rust,python}_{mid,larger}.out`.
 
 Filter parity (`BondCompare::Any` + `match_bonds=false` MCS, multi-placement
-merge, `leave_count` on `Effect`, site/pattern could-help, cleavage-first
-order, atom_diff `closer`) closes the mid-size miss gap.
+merge, `leave_count` on `Effect`, site/pattern/pair-end could-help, QF
+`methide_end` + `partner: C`, cleavage-first order, atom_diff `closer`)
+closes the mid-size miss gap.
 
 ### Mid-size / multi-edit
 
