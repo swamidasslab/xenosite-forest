@@ -5,6 +5,7 @@ Pairs with ``cargo run -p xenosite-forest --example find_path_bench --release``.
 
   uv run python tests/forest/bench_find_path_rust_h2h.py
   uv run python tests/forest/bench_find_path_rust_h2h.py --larger
+  uv run python tests/forest/bench_find_path_rust_h2h.py --hard
 """
 
 from __future__ import annotations
@@ -62,6 +63,40 @@ LARGER: list[tuple[str, str, str]] = [
         "MeO-diphenyl→catechol",
         "COc1ccc(Cc2ccc(OC)cc2)cc1",
         "Oc1ccc(Cc2ccc(O)cc2)cc1",
+    ),
+]
+
+# Larger scaffolds with ≥3–8 PhaseOne hops (paired with find_path_bench --hard).
+HARD: list[tuple[str, str, str]] = [
+    (
+        "trimethoxy-PEA→catechol",
+        "COc1cc(OC)c(OC)c(CCN)c1",
+        "NCCc1cc(O)c(O)c(O)c1",
+    ),
+    (
+        "eugenol-MeO→allylQ",
+        "COc1cc(CC=C)cc(OC)c1O",
+        "O=C1C=C(CC=C)C(=O)C(O)=C1",
+    ),
+    (
+        "bisMeO-naph→1,2NQ",
+        "COc1ccc2c(OC)cccc2c1",
+        "O=C1C(=O)c2ccccc2C=C1",
+    ),
+    (
+        "tetraMeO-biphenyl→tetraOH",
+        "COc1ccc(-c2ccc(OC)c(OC)c2)cc1OC",
+        "Oc1ccc(-c2ccc(O)c(O)c2)cc1O",
+    ),
+    (
+        "veratrole-allyl→allylQ",
+        "COc1ccc(CC=C)c(OC)c1OC",
+        "O=C1C=C(CC=C)C(=O)C(O)=C1",
+    ),
+    (
+        "tetraMeO-naph→polyOH-NQ",
+        "COc1cc(OC)c2c(OC)cc(OC)cc2c1",
+        "O=C1C=C(O)C(=O)c2c(O)cc(O)cc12",
     ),
 ]
 
@@ -126,10 +161,19 @@ def run_one(reactant: str, target: str) -> tuple[bool, float, int, int, int, int
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--larger", action="store_true")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--larger", action="store_true")
+    group.add_argument("--hard", action="store_true")
     args = parser.parse_args()
-    cases = LARGER if args.larger else CASES
-    title = "larger HA≈17–26" if args.larger else "mid-size / multi-edit"
+    if args.hard:
+        cases = HARD
+        title = "hard HA≈14–20 · multi-step (≥3–8 hops)"
+    elif args.larger:
+        cases = LARGER
+        title = "larger HA≈17–26"
+    else:
+        cases = CASES
+        title = "mid-size / multi-edit"
 
     print(
         f"Python live find_path PhaseOne  max_nodes={MAX_NODES}  "
@@ -137,7 +181,7 @@ def main() -> None:
     )
     print(f"\n=== {title} (use_filters=True / atom_diff) ===")
     print(
-        f"{'case':<28} {'hit':>4} {'seconds':>9} {'steps':>5} "
+        f"{'case':<32} {'hit':>4} {'seconds':>9} {'steps':>5} "
         f"{'nodes':>6} {'edits':>7} {'bill':>6}"
     )
     total = 0.0
@@ -145,10 +189,10 @@ def main() -> None:
         hit, seconds, steps, nodes, edits, billed = run_one(reactant, target)
         total += seconds
         print(
-            f"{name:<28} {'ok' if hit else 'MISS':>4} {seconds:9.3f} "
+            f"{name:<32} {'ok' if hit else 'MISS':>4} {seconds:9.3f} "
             f"{steps:5d} {nodes:6d} {edits:7d} {billed:6d}"
         )
-    print(f"{'TOTAL':<28} {'':>4} {total:9.3f}")
+    print(f"{'TOTAL':<32} {'':>4} {total:9.3f}")
 
 
 if __name__ == "__main__":

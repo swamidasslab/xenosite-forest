@@ -230,11 +230,14 @@ Same PhaseOne cases / `max_nodes=800` / `max_paths=1` / best-of-5 as
 
 ```bash
 cargo run -p xenosite-forest --example find_path_bench --release
+cargo run -p xenosite-forest --example find_path_bench --release -- --larger
+cargo run -p xenosite-forest --example find_path_bench --release -- --hard
 uv run python tests/forest/bench_find_path_rust_h2h.py
-# optional: --larger
+uv run python tests/forest/bench_find_path_rust_h2h.py --larger
+uv run python tests/forest/bench_find_path_rust_h2h.py --hard
 ```
 
-Raw: `artifacts/bench_find_path_{rust,python}_{mid,larger}.out`.
+Raw: `artifacts/bench_find_path_{rust,python}_{mid,larger,hard}.out`.
 
 Filter parity (`BondCompare::Any` + `match_bonds=false` MCS, multi-placement
 merge, `leave_count` on `Effect`, site/pattern/pair-end could-help, QF
@@ -263,8 +266,24 @@ closes the mid-size miss gap.
 | MeO-diphenyl→catechol | **ok** 0.042s · bill=7 | **ok** 0.022s · bill=9 | **ok** 0.15s · bill=150 |
 | **TOTAL wall** | **0.32s (5/5)** | **0.24s (5/5)** | **1.92s (5/5)** |
 
+### Hard (HA≈14–20, ≥3–8 hops)
+
+Multi-dealkylation + hydroxylation + DH/QF on bigger rings. Without filters,
+Rust misses most rows under `max_nodes=800`.
+
+| Case | Python live | Rust atom_diff | Rust no filter |
+| --- | --- | --- | --- |
+| trimethoxy-PEA→catechol | **ok** 0.12s · 5 steps · bill=60 | **ok** 0.095s · 5 steps · bill=57 | MISS · bill≈43k |
+| eugenol-MeO→allylQ | **ok** 0.067s · 5 steps · bill=39 | **ok** 0.040s · 4 steps · bill=40 | **ok** 1.6s · bill≈17k |
+| bisMeO-naph→1,2NQ | **ok** 0.062s · 5 steps · bill=27 | **ok** 0.080s · 4 steps · bill=27 | MISS · bill≈47k |
+| tetraMeO-biphenyl→tetraOH | **ok** 0.13s · 4 steps · bill=52 | **ok** 0.14s · 4 steps · bill=54 | **ok** 16s · bill≈37k |
+| veratrole-allyl→allylQ | **ok** 1.16s · 7 steps · bill=873 | **ok** 0.17s · 5 steps · bill=132 | MISS · bill≈41k |
+| tetraMeO-naph→polyOH-NQ | **ok** 5.33s · 8 steps · bill=1311 | **ok** 3.34s · 7 steps · bill=802 | MISS · bill≈54k |
+| **TOTAL wall** | **6.86s (6/6)** | **3.86s (6/6)** | **55s (2/6)** |
+
 **Read:** with filters on, Rust hits every H2H row and is **faster than Python** on
-both mid (0.23s vs 0.38s) and larger (0.24s vs 0.32s). Pair-end could-help
-(per-end oxygen / `partner=="C"` methide, QF alkyl split to `methide_end`)
-cut MeOPhOH from bill≈899 to ≈328 (Python 226). Residual edits are search
-order / intermediate expansion, not a missing root filter.
+mid (0.23s vs 0.38s), larger (0.24s vs 0.32s), and hard (3.86s vs 6.86s). The
+hard suite is where atom_diff pays off most: veratrole-allyl bill 132 vs 873,
+tetraMeO-naph 802 vs 1311. Pair-end could-help cut MeOPhOH from ≈899 to ≈328
+(Python 226). Residual mid-size edits are search order / intermediate
+expansion, not a missing root filter.

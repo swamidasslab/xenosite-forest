@@ -4,11 +4,15 @@
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example find_path_bench --release
+//! cargo run -p xenosite-forest --example find_path_bench --release -- --larger
+//! cargo run -p xenosite-forest --example find_path_bench --release -- --hard
 //! ```
 //!
 //! Pair with:
 //! ```text
 //! uv run python tests/forest/bench_find_path_rust_h2h.py
+//! uv run python tests/forest/bench_find_path_rust_h2h.py --larger
+//! uv run python tests/forest/bench_find_path_rust_h2h.py --hard
 //! ```
 
 use std::time::Instant;
@@ -77,6 +81,40 @@ const LARGER: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// Larger scaffolds with ≥3–8 PhaseOne hops (dealk + OH + DH / QF).
+const HARD: &[(&str, &str, &str)] = &[
+    (
+        "trimethoxy-PEA→catechol",
+        "COc1cc(OC)c(OC)c(CCN)c1",
+        "NCCc1cc(O)c(O)c(O)c1",
+    ),
+    (
+        "eugenol-MeO→allylQ",
+        "COc1cc(CC=C)cc(OC)c1O",
+        "O=C1C=C(CC=C)C(=O)C(O)=C1",
+    ),
+    (
+        "bisMeO-naph→1,2NQ",
+        "COc1ccc2c(OC)cccc2c1",
+        "O=C1C(=O)c2ccccc2C=C1",
+    ),
+    (
+        "tetraMeO-biphenyl→tetraOH",
+        "COc1ccc(-c2ccc(OC)c(OC)c2)cc1OC",
+        "Oc1ccc(-c2ccc(O)c(O)c2)cc1O",
+    ),
+    (
+        "veratrole-allyl→allylQ",
+        "COc1ccc(CC=C)c(OC)c1OC",
+        "O=C1C=C(CC=C)C(=O)C(O)=C1",
+    ),
+    (
+        "tetraMeO-naph→polyOH-NQ",
+        "COc1cc(OC)c2c(OC)cc(OC)cc2c1",
+        "O=C1C=C(O)C(=O)c2c(O)cc(O)cc12",
+    ),
+];
+
 #[derive(Clone, Debug)]
 struct Row {
     hit: bool,
@@ -131,7 +169,7 @@ fn run_one(reactant: &str, target: &str, use_atom_diff: bool) -> Row {
 fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool) {
     println!("\n=== {title} (atom_diff={use_atom_diff}) ===");
     println!(
-        "{:<28} {:>4} {:>9} {:>5} {:>6} {:>7} {:>6}",
+        "{:<32} {:>4} {:>9} {:>5} {:>6} {:>7} {:>6}",
         "case", "hit", "seconds", "steps", "nodes", "edits", "bill"
     );
     let mut total = 0.0;
@@ -139,7 +177,7 @@ fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool) {
         let row = run_one(reactant, target, use_atom_diff);
         total += row.seconds;
         println!(
-            "{:<28} {:>4} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
+            "{:<32} {:>4} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
             name,
             if row.hit { "ok" } else { "MISS" },
             row.seconds,
@@ -149,21 +187,24 @@ fn print_table(title: &str, cases: &[(&str, &str, &str)], use_atom_diff: bool) {
             row.billed
         );
     }
-    println!("{:<28} {:>4} {:>9.3}", "TOTAL", "", total);
+    println!("{:<32} {:>4} {:>9.3}", "TOTAL", "", total);
 }
 
 fn main() {
-    let larger = std::env::args().any(|a| a == "--larger");
+    let args: Vec<String> = std::env::args().collect();
+    let larger = args.iter().any(|a| a == "--larger");
+    let hard = args.iter().any(|a| a == "--hard");
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={MAX_PATHS}  best-of-{REPEATS}"
     );
     println!("(release; chematic door; provisional atom_diff optional)");
 
-    let cases = if larger { LARGER } else { CASES };
-    let title = if larger {
-        "larger HA≈17–26"
+    let (cases, title) = if hard {
+        (HARD, "hard HA≈14–20 · multi-step (≥3–8 hops)")
+    } else if larger {
+        (LARGER, "larger HA≈17–26")
     } else {
-        "mid-size / multi-edit"
+        (CASES, "mid-size / multi-edit")
     };
 
     // Default live Python uses filters (atom_diff). Report both modes.
