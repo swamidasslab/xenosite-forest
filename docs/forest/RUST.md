@@ -260,14 +260,16 @@ closes the mid-size miss gap.
 
 ### Mid-size / multi-edit
 
+Interim (concrete MCS site-id filters, all SMARTS hits; topo promote deferred):
+
 | Case | Python live | Rust atom_diff | Rust no filter |
 | --- | --- | --- | --- |
-| eugenol→allyl-Q | **ok** 0.030s · bill=20 | **ok** 0.008s · bill=16 | MISS · bill≈7k |
+| eugenol→allyl-Q | **ok** 0.030s · bill=20 | MISS · bill=118 | MISS · bill≈7k |
 | dimethoxy-PEA→catechol | **ok** 0.011s · bill=10 | **ok** 0.003s · bill=12 | **ok** 0.039s · bill=391 |
 | MeOPhOH→hydroxyQ | **ok** 0.31s · bill=226 | **ok** 0.080s · bill=315 | MISS · bill≈29k |
 | TBA→aldehyde | **ok** 0.018s · bill=5 | **ok** 0.014s · bill=5 | **ok** 0.19s · bill=168 |
 | 2-MeO-naph→1,2-NQ | **ok** 0.010s · bill=7 | **ok** 0.008s · bill=7 | MISS · bill≈48k |
-| **TOTAL wall** | **0.38s (5/5)** | **0.11s (5/5)** | **8s (2/5)** |
+| **TOTAL wall** | **0.38s (5/5)** | **0.11s (4/5)** | **8s (2/5)** |
 
 ### Larger (HA≈17–26)
 
