@@ -167,9 +167,7 @@ fn keep_fragment(
             _ => {}
         }
     }
-    let Some((best_i, kept_csmi, _)) = best else {
-        return None;
-    };
+    let (best_i, kept_csmi, _) = best?;
     let kept = products[best_i].clone();
     let mut sides = Vec::new();
     for (i, mol) in products.iter().enumerate() {

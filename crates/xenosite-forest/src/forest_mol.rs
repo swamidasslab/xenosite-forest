@@ -19,8 +19,8 @@ use chematic::smiles::canonical_smiles_with_order;
 /// Write sidecar labels onto chematic `Atom.tag` so apply/fragments copy them.
 fn sync_tags_to_mol(mol: &mut Molecule, labels: &[Option<Tag>]) {
     let n = mol.atom_count().min(labels.len());
-    for i in 0..n {
-        mol.set_tag(atom_idx(i), labels[i].map(|t| t.0));
+    for (i, tag) in labels.iter().take(n).enumerate() {
+        mol.set_tag(atom_idx(i), tag.map(|t| t.0));
     }
 }
 
