@@ -151,7 +151,8 @@ impl Step {
         };
         let mut products = Vec::new();
         let mut seen = HashSet::new();
-        for c in rule.candidates(mol)? {
+        for c in rule.candidates(mol) {
+            let c = c?;
             if !wanted.contains(&c.site) {
                 continue;
             }
@@ -1130,8 +1131,7 @@ mod tests {
         let mol = parse_mol("CC").unwrap();
         let rule = crate::rules::hydroxylation();
         let em = rule
-            .metabolize(&mol, |_, _, _| true, |_, _, _| true, true)
-            .unwrap();
+            .metabolize(&mol, |_, _, _| true, |_, _, _| true, true).collect::<Result<Vec<_>, _>>().unwrap();
         assert!(!em.is_empty());
         let deps = Deps::bind(identity_plan("Hydroxylation", [em[0].site]));
         assert!(deps.reaches("CC", "CCO").unwrap());

@@ -1033,7 +1033,7 @@ mod tests {
         assert!(!diff.needs_oxygen.is_empty(), "{diff:?}");
         assert!(!diff.has_cleavage());
         let set = hydroxylation();
-        let cands = set.candidates(&reactant).unwrap();
+        let cands = set.candidates(&reactant).collect::<Result<Vec<_>, _>>().unwrap();
         assert!(cands.iter().any(|c| candidate_could_help(c, &diff)));
     }
 
@@ -1044,7 +1044,7 @@ mod tests {
         let diff = atom_diff(&reactant, &target);
         assert!(diff.has_cleavage() || diff.target_smaller(), "{diff:?}");
         let set = dealkylation();
-        let cands = set.candidates(&reactant).unwrap();
+        let cands = set.candidates(&reactant).collect::<Result<Vec<_>, _>>().unwrap();
         assert!(
             cands.iter().any(|c| c.pattern.effect.cleaves
                 && candidate_could_help_on(c, &diff, Some(&reactant), Some(&target))),
@@ -1075,7 +1075,7 @@ mod tests {
         let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
         let diff = atom_diff(&reactant, &target);
         let qf = quinone_formation();
-        let pairs = qf.pair_candidates(&reactant).unwrap();
+        let pairs = qf.pair_candidates(&reactant).collect::<Result<Vec<_>, _>>().unwrap();
         let kept: Vec<_> = pairs
             .iter()
             .filter(|p| pair_could_help(p, &diff, &reactant, &target))
@@ -1105,7 +1105,7 @@ mod tests {
         assert!(diff.target_smaller());
         assert!(diff.has_cleavage(), "{diff:?}");
         let set = dealkylation();
-        let cands = set.candidates(&reactant).unwrap();
+        let cands = set.candidates(&reactant).collect::<Result<Vec<_>, _>>().unwrap();
         let kept: Vec<_> = cands
             .iter()
             .filter(|c| candidate_could_help_on(c, &diff, Some(&reactant), Some(&target)))
@@ -1135,7 +1135,7 @@ mod tests {
         let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
         let diff = atom_diff(&reactant, &target);
         let set = hydrogenation();
-        let cands = set.candidates(&reactant).unwrap();
+        let cands = set.candidates(&reactant).collect::<Result<Vec<_>, _>>().unwrap();
         for c in &cands {
             if c.pattern.effect.adds.as_deref() == Some("HH") && !diff.h_gain() {
                 assert!(
@@ -1204,7 +1204,7 @@ mod tests {
         let parent = ForestMol::parse("CC").unwrap();
         let target = parse_mol("CCO").unwrap();
         let parent_diff = atom_diff(parent.mol(), &target);
-        let cands = hydroxylation().candidates(parent.mol()).unwrap();
+        let cands = hydroxylation().candidates(parent.mol()).collect::<Result<Vec<_>, _>>().unwrap();
         let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
         let child = parent.adopt_product(pieces[0].clone());
         assert_eq!(child.mol().atom_count(), 3);
@@ -1233,7 +1233,7 @@ mod tests {
         let target = parse_mol("Oc1ccccc1").unwrap();
         let parent_diff = atom_diff(parent.mol(), &target);
         let parent_cost = parent_diff.cost();
-        let cands = dealkylation().candidates(parent.mol()).unwrap();
+        let cands = dealkylation().candidates(parent.mol()).collect::<Result<Vec<_>, _>>().unwrap();
         assert!(!cands.is_empty());
         let phenol = canon_of("Oc1ccccc1").unwrap();
         let mut child = None;

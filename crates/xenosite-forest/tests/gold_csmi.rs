@@ -19,7 +19,7 @@ fn assert_path_hits_target(
     let want = canon_of(target).expect(target);
     let mut counters = PathCounters::default();
     let hits = find_path_with(reactant, target, ruleset, &mut counters, config, |_| true)
-        .unwrap_or_else(|e| panic!("{reactant} → {target}: {e}"));
+        .unwrap_or_else(|e| panic!("{reactant} → {target}: {e}")).collect_all().unwrap();
     assert!(
         !hits.is_empty(),
         "{reactant} → {target}: no path (billed={} nodes={} edits={})",
@@ -147,7 +147,7 @@ fn gold_terbinafine_to_tba_phase_one() {
         },
         |_| true,
     )
-    .unwrap();
+    .unwrap().collect_all().unwrap();
     assert!(
         !hits.is_empty(),
         "billed={} nodes={} edits={}",
@@ -243,7 +243,7 @@ fn gold_epoxide_opening_depth_one_misses_diol() {
         },
         |_| true,
     )
-    .unwrap();
+    .unwrap().collect_all().unwrap();
     assert!(hits.is_empty());
 }
 

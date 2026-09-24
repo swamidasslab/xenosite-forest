@@ -70,8 +70,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
     let mol = parse_mol("COc1ccccc1").unwrap();
     let only_cleave = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| p.effect.cleaves;
     let emissions = set
-        .metabolize(&mol, only_cleave, accept_all_sites, true)
-        .unwrap();
+        .metabolize(&mol, only_cleave, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
     assert_eq!(emissions.len(), 1);
     assert_eq!(emissions[0].pattern_name, "O-Me");
     assert_eq!(emissions[0].namespace(), vec!["Dealkylation", "probe"]);
@@ -83,8 +82,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
             .any(|s| canon_of(s).unwrap() == phenol)
     );
     let unfiltered = set
-        .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-        .unwrap();
+        .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
     assert!(unfiltered.len() > 1);
 }
 
@@ -92,7 +90,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
 fn find_path_uses_ruleset_namespaces() {
     let set = RuleSet::compose(Some("Forest".into()), [hydroxylation(), o_dealkylation()]);
     let mut counters = PathCounters::default();
-    let hits = find_path("CC", "CCO", &set, &mut counters).unwrap();
+    let hits = find_path("CC", "CCO", &set, &mut counters).unwrap().collect_all().unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
     assert_eq!(

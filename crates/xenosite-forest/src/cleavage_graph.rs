@@ -280,7 +280,8 @@ pub fn cleavage_layer(
 
     let mut raw: Vec<CleavageArm> = Vec::new();
 
-    for c in ruleset.candidates(mol)? {
+    for c in ruleset.candidates(mol) {
+        let c = c?;
         if !c.pattern.effect.cleaves {
             continue;
         }
@@ -319,7 +320,8 @@ pub fn cleavage_layer(
         });
     }
 
-    for pair in ruleset.pair_candidates(mol)? {
+    for pair in ruleset.pair_candidates(mol) {
+        let pair = pair?;
         if !pair.effect.cleaves {
             continue;
         }
@@ -564,7 +566,8 @@ pub fn cleavage_first_seeds(
 
         let mut expandable: Vec<(ForestMol, AtomDiff, CleavageArm)> = Vec::new();
 
-        for c in ruleset.candidates(parent.mol.mol())? {
+        for c in ruleset.candidates(parent.mol.mol()) {
+            let c = c?;
             if !c.pattern.effect.cleaves {
                 continue;
             }
@@ -629,7 +632,8 @@ pub fn cleavage_first_seeds(
             }
         }
 
-        for pair in ruleset.pair_candidates(parent.mol.mol())? {
+        for pair in ruleset.pair_candidates(parent.mol.mol()) {
+            let pair = pair?;
             if !pair.effect.cleaves {
                 continue;
             }

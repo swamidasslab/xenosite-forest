@@ -1938,8 +1938,7 @@ mod tests {
     fn dealkylation_anisole_emits_phenol() {
         let mol = parse_mol("COc1ccccc1").unwrap();
         let emissions = dealkylation()
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-            .unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
         let phenol = canon_of("Oc1ccccc1").unwrap();
         assert!(
             emissions
@@ -1953,8 +1952,7 @@ mod tests {
     fn hydroxylation_still_matches_built_in_door() {
         let mol = parse_mol("CC").unwrap();
         let emissions = hydroxylation()
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-            .unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(emissions.len(), 1);
         assert_eq!(
             canon_of(&emissions[0].products[0]).unwrap(),

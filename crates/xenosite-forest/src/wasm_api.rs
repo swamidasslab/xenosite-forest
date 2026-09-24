@@ -100,6 +100,7 @@ impl JsRuleSet {
         let emissions = self
             .inner
             .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|err| err.to_string())?;
         Ok(emissions
             .into_iter()

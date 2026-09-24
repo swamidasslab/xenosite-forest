@@ -301,6 +301,7 @@ impl PyRuleSet {
         let set = slf.borrow().inner.clone();
         let emissions = if filter_rules.is_none() && filter_sites.is_none() {
             set.metabolize(&chemistry, accept_all_rules, accept_all_sites, true)
+                .collect::<Result<Vec<_>, _>>()
                 .map_err(py_err)?
         } else {
             metabolize_with_python(mol, &set, &chemistry, filter_rules, filter_sites)?
@@ -398,6 +399,7 @@ fn metabolize_with_python(
     };
     let emissions = set
         .metabolize(chemistry, rules, sites, true)
+        .collect::<Result<Vec<_>, _>>()
         .map_err(py_err)?;
     if let Some(e) = err.into_inner() {
         return Err(e);

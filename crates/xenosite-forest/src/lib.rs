@@ -29,6 +29,7 @@ pub mod rules;
 pub mod ruleset;
 pub mod smarts;
 pub mod smirks;
+pub mod stream;
 pub mod unique_edit;
 pub mod valence;
 
@@ -58,8 +59,8 @@ pub use cleavage_graph::{
     cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
 };
 pub use find_path::{
-    FindPathConfig, PathCounters, PathOutcome, PathStep, find_path, find_path_default,
-    find_path_diff, find_path_with, find_path_with_filters,
+    FindPath, FindPathConfig, FindPathFilters, PathCounters, PathOutcome, PathStep, find_path,
+    find_path_default, find_path_diff, find_path_with, find_path_with_filters,
 };
 pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
@@ -80,6 +81,7 @@ pub use ruleset::{
 };
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;
+pub use stream::{Candidates, Metabolize, PairCandidates};
 pub use unique_edit::{
     UniqueSite, same_site_orbit, unique_atom_sites, unique_atom_sites_with_orbits,
 };

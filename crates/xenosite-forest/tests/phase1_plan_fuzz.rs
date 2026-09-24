@@ -134,8 +134,7 @@ proptest! {
         let rule = quinone_formation();
         let mut plans = Vec::new();
         for emission in rule
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-            .unwrap()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
         {
             if !emission.plan.is_empty() {
                 plans.push(emission.plan);
@@ -163,8 +162,7 @@ proptest! {
         let mol = parse_mol("C=C").unwrap();
         let rule = epoxidation();
         let emissions = rule
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-            .unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
         prop_assume!(!emissions.is_empty());
         let emission = &emissions[0];
         let names: Vec<_> = emission.plan.iter().map(|s| s.rule.as_str()).collect();
@@ -178,8 +176,7 @@ proptest! {
         let mol = parse_mol("CCN").unwrap();
         let rule = n_dealkylation();
         let emissions = rule
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-            .unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
         prop_assume!(!emissions.is_empty());
         let emission = &emissions[0];
         let names: Vec<_> = emission.plan.iter().map(|s| s.rule.as_str()).collect();
@@ -197,8 +194,7 @@ proptest! {
         let rule = quinone_formation();
         let mut seen = 0usize;
         for emission in rule
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-            .unwrap()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
         {
             if emission.plan.is_empty() {
                 continue;
@@ -233,7 +229,7 @@ proptest! {
             },
             |_| true,
         )
-        .unwrap();
+        .unwrap().collect_all().unwrap();
         prop_assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_plan_elementary(&hits[0], &target);
         let names: Vec<_> = hits[0].plan.iter().map(|s| s.rule.as_str()).collect();
@@ -271,8 +267,7 @@ proptest! {
         let start_ha = heavy_atom_count(&mol);
         'outer: for rule in &create_rules {
             for emission in rule
-                .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-                .unwrap()
+                .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
             {
                 for product in &emission.products {
                     if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
@@ -306,7 +301,7 @@ proptest! {
             },
             |_| true,
         )
-        .unwrap();
+        .unwrap().collect_all().unwrap();
         if let Some(hit) = hits.first() {
             assert_plan_elementary(hit, target);
         }
@@ -335,7 +330,7 @@ proptest! {
             },
             |_| true,
         )
-        .unwrap();
+        .unwrap().collect_all().unwrap();
         prop_assume!(!hits.is_empty());
         prop_assert!(hits.iter().all(|h| h.smiles == want));
         if hits.len() >= 2 {
@@ -363,8 +358,7 @@ proptest! {
         let start_ha = heavy_atom_count(&mol);
         'outer: for rule in &create_rules {
             for emission in rule
-                .metabolize(&mol, accept_all_rules, accept_all_sites, true)
-                .unwrap()
+                .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
             {
                 for product in &emission.products {
                     if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
@@ -398,7 +392,7 @@ proptest! {
             },
             |_| true,
         )
-        .unwrap();
+        .unwrap().collect_all().unwrap();
         if hits.len() < 2 {
             return Ok(());
         }

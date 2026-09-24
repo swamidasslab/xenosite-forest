@@ -143,7 +143,7 @@ fn dump(name: &str, start: &str, target: &str) {
         },
         |_| true,
     )
-    .unwrap();
+    .unwrap().collect_all().unwrap();
     let ms = t0.elapsed().as_secs_f64() * 1e3;
     let n_lin_sum: usize = hits.iter().map(|h| h.plan.n_linearizations()).sum();
     let mut skeleton_pairs = 0usize;
