@@ -136,24 +136,9 @@ struct Row {
     billed: usize,
 }
 
-fn run_one(
-    reactant: &str,
-    target: &str,
-    use_atom_diff: bool,
-    lazy_closer: bool,
-    max_paths: usize,
-    cleavage_first_depth: Option<usize>,
-    repeats: u32,
-) -> Row {
+fn run_one(reactant: &str, target: &str, config: FindPathConfig, repeats: u32) -> Row {
     let want = canon_of(target).unwrap_or_else(|e| panic!("{target}: {e}"));
     let set = phase_one();
-    let config = FindPathConfig {
-        max_paths,
-        max_nodes: MAX_NODES,
-        use_atom_diff,
-        lazy_closer,
-        cleavage_first_depth,
-    };
 
     // Warmup
     {
@@ -191,18 +176,17 @@ fn run_one(
 fn print_table(
     title: &str,
     cases: &[(&str, &str, &str)],
-    use_atom_diff: bool,
-    lazy_closer: bool,
-    max_paths: usize,
-    cleavage_first_depth: Option<usize>,
+    config: FindPathConfig,
     repeats: u32,
     budget: Duration,
 ) {
-    let cleave = cleavage_first_depth
+    let cleave = config
+        .cleavage_first_depth
         .map(|d| format!("cleave_first={d}"))
         .unwrap_or_else(|| "cleave_first=off".into());
     println!(
-        "\n=== {title} (atom_diff={use_atom_diff}, lazy_closer={lazy_closer}, max_paths={max_paths}, {cleave}) ==="
+        "\n=== {title} (atom_diff={}, lazy_closer={}, max_paths={}, {cleave}) ===",
+        config.use_atom_diff, config.lazy_closer, config.max_paths
     );
     println!(
         "{:<32} {:>4} {:>5} {:>9} {:>5} {:>6} {:>7} {:>6}",
@@ -215,15 +199,7 @@ fn print_table(
             println!("{name:<32} SKIP  (budget {:.0}s)", budget.as_secs_f64());
             continue;
         }
-        let row = run_one(
-            reactant,
-            target,
-            use_atom_diff,
-            lazy_closer,
-            max_paths,
-            cleavage_first_depth,
-            repeats,
-        );
+        let row = run_one(reactant, target, config, repeats);
         total += row.seconds;
         println!(
             "{:<32} {:>4} {:>5} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
@@ -290,14 +266,21 @@ fn main() {
         (CASES, "mid-size / multi-edit")
     };
 
+    let base = FindPathConfig {
+        max_paths,
+        max_nodes: MAX_NODES,
+        cleavage_first_depth: cleave_first,
+        ..FindPathConfig::default()
+    };
     if nofilter && !args.iter().any(|a| a == "--filter-only") {
         print_table(
             title,
             cases,
-            false,
-            false,
-            max_paths,
-            cleave_first,
+            FindPathConfig {
+                use_atom_diff: false,
+                lazy_closer: false,
+                ..base
+            },
             NOFILTER_REPEATS,
             budget,
         );
@@ -305,10 +288,11 @@ fn main() {
     print_table(
         title,
         cases,
-        true,
-        true,
-        max_paths,
-        cleave_first,
+        FindPathConfig {
+            use_atom_diff: true,
+            lazy_closer: true,
+            ..base
+        },
         REPEATS,
         budget,
     );
@@ -316,10 +300,11 @@ fn main() {
         print_table(
             title,
             cases,
-            true,
-            false,
-            max_paths,
-            cleave_first,
+            FindPathConfig {
+                use_atom_diff: true,
+                lazy_closer: false,
+                ..base
+            },
             REPEATS,
             budget,
         );
