@@ -141,9 +141,15 @@ fn expand_timed(
 ) -> Vec<ForestEmission> {
     let mol = parent.mol();
     let t0 = Instant::now();
-    let mut candidates = ruleset.candidates(mol).collect::<Result<Vec<_>, _>>().unwrap();
+    let mut candidates = ruleset
+        .candidates(mol)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
     // Nested sets: full pair_candidates (same as production walk).
-    let mut pairs = ruleset.pair_candidates(mol).collect::<Result<Vec<_>, _>>().unwrap();
+    let mut pairs = ruleset
+        .pair_candidates(mol)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
     t.discover += t0.elapsed();
 
     let t0 = Instant::now();
@@ -349,7 +355,10 @@ fn microbench() {
     let diff = t0.elapsed();
 
     // Adopt cost: one real hydroxylation-style product if any candidate exists.
-    let cands = set.candidates(parent.mol()).collect::<Result<Vec<_>, _>>().unwrap();
+    let cands = set
+        .candidates(parent.mol())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
     let adopt = if let Some(c) = cands.first() {
         let pieces = c.materialize_mols(parent.mol()).unwrap();
         if let Some(piece) = pieces.into_iter().next() {
@@ -413,7 +422,10 @@ fn main() {
             &mut c,
             FindPathConfig::default(),
             |_: &Candidate| true,
-        ).unwrap().collect_all().unwrap();
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
     }
 
     println!(
@@ -485,7 +497,10 @@ fn main() {
             for _ in 0..3 {
                 let mut c = PathCounters::default();
                 let t0 = Instant::now();
-                let _ = find_path_with(r, tgt, &set, &mut c, config, |_: &Candidate| true).unwrap().collect_all().unwrap();
+                let _ = find_path_with(r, tgt, &set, &mut c, config, |_: &Candidate| true)
+                    .unwrap()
+                    .collect_all()
+                    .unwrap();
                 let sec = t0.elapsed().as_secs_f64();
                 if sec < best {
                     best = sec;

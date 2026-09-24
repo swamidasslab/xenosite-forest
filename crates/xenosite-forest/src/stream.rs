@@ -255,7 +255,11 @@ where
         }
     }
 
-    fn take_emission(&mut self, mut emission: Emission, from_nested_child: bool) -> Option<Emission> {
+    fn take_emission(
+        &mut self,
+        mut emission: Emission,
+        from_nested_child: bool,
+    ) -> Option<Emission> {
         if let Some(parent_name) = &self.parent_link {
             emission.rule_path.push(parent_name.clone());
         }
@@ -395,18 +399,14 @@ where
             }
 
             while let Some(pair) = self.pairs.next() {
-                let pattern = self
-                    .pair_patterns
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        PatternInfo::new(
-                            "pair",
-                            "[#6:1]",
-                            Edit::PairEndpoint("x".into()),
-                            Default::default(),
-                        )
-                    });
+                let pattern = self.pair_patterns.first().cloned().unwrap_or_else(|| {
+                    PatternInfo::new(
+                        "pair",
+                        "[#6:1]",
+                        Edit::PairEndpoint("x".into()),
+                        Default::default(),
+                    )
+                });
                 let info = SiteInfo {
                     site: pair.site,
                     orbit: vec![pair.site],
@@ -615,10 +615,9 @@ impl Iterator for PairEmissions<'_> {
                     Ok(Some(emission)) => {
                         let site_atoms = pending.pair.plan_site_atoms();
                         let ends = [&pending.pair.left.effect, &pending.pair.right.effect];
-                        let plan =
-                            pending
-                                .set
-                                .canonical_plan(self.mol, &site_atoms, Some(&ends));
+                        let plan = pending
+                            .set
+                            .canonical_plan(self.mol, &site_atoms, Some(&ends));
                         return Some(Ok(Emission {
                             site: emission.site,
                             site_orbit: vec![emission.site],

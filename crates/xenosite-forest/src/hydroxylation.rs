@@ -10,7 +10,8 @@ pub use crate::rules::hydroxylation;
 /// Unique hydroxylation products as canonical SMILES.
 pub fn hydroxylate(mol: &Molecule) -> Result<Vec<String>, ForestError> {
     Ok(hydroxylation()
-        .metabolize(mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>()?
+        .metabolize(mol, accept_all_rules, accept_all_sites, true)
+        .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .flat_map(|emission| emission.products)
         .collect())

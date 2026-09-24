@@ -763,7 +763,10 @@ where
         })
     }
 
-    fn emit_candidate(&mut self, candidate: &Candidate) -> Result<Option<ForestEmission>, ForestError> {
+    fn emit_candidate(
+        &mut self,
+        candidate: &Candidate,
+    ) -> Result<Option<ForestEmission>, ForestError> {
         let pieces = candidate.materialize_mols(self.parent.mol())?;
         if pieces.is_empty() {
             return Ok(None);
@@ -1127,8 +1130,14 @@ where
                         return Some(Err(e));
                     }
                 };
-                let keeps =
-                    keep_fragments(&walk.mol, &products, &self.target_csmi, self.target_ha, None, None);
+                let keeps = keep_fragments(
+                    &walk.mol,
+                    &products,
+                    &self.target_csmi,
+                    self.target_ha,
+                    None,
+                    None,
+                );
                 for (kept, sides, _) in keeps {
                     let kept_csmi = kept.csmi().as_ref().to_string();
                     let child_ha = kept.heavy_atom_count();
@@ -1208,7 +1217,10 @@ mod tests {
     #[test]
     fn ethane_to_ethanol_is_one_hydroxylation() {
         let mut counters = PathCounters::default();
-        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let outcome = &hits[0];
         assert_eq!(outcome.smiles, canon_of("CCO").unwrap());
@@ -1224,7 +1236,10 @@ mod tests {
     #[test]
     fn anisole_to_phenol_cleaves_and_records_side() {
         let mut counters = PathCounters::default();
-        let hits = find_path("COc1ccccc1", "Oc1ccccc1", &o_dealkylation(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("COc1ccccc1", "Oc1ccccc1", &o_dealkylation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let outcome = &hits[0];
         assert_eq!(outcome.smiles, canon_of("Oc1ccccc1").unwrap());
@@ -1247,7 +1262,10 @@ mod tests {
     fn composed_ruleset_path_keeps_leaf_and_outer_namespace() {
         let set = RuleSet::compose(Some("Forest".into()), [hydroxylation(), o_dealkylation()]);
         let mut counters = PathCounters::default();
-        let hits = find_path("CC", "CCO", &set, &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("CC", "CCO", &set, &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty());
         let step = &hits[0].steps[0];
         assert_eq!(step.namespace(), vec!["Hydroxylation", "Forest"]);
@@ -1259,7 +1277,10 @@ mod tests {
         let inner = RuleSet::compose(Some("Inner".into()), [hydroxylation()]);
         let outer = RuleSet::compose(Some("Outer".into()), [inner]);
         let mut counters = PathCounters::default();
-        let hits = find_path("CC", "CCO", &outer, &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("CC", "CCO", &outer, &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty());
         assert_eq!(
             hits[0].steps[0].namespace(),
@@ -1270,7 +1291,10 @@ mod tests {
     #[test]
     fn already_at_target_yields_empty_plan() {
         let mut counters = PathCounters::default();
-        let hits = find_path("CCO", "CCO", &hydroxylation(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("CCO", "CCO", &hydroxylation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert_eq!(hits.len(), 1);
         assert!(hits[0].steps.is_empty());
         assert!(hits[0].plan.is_empty());
@@ -1292,7 +1316,9 @@ mod tests {
             FindPathConfig::default(),
             refuse_h2,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         // Ethane only matches h2; refusing it yields no path and no edits.
         assert!(hits.is_empty());
         assert_eq!(counters.mol_edits, 0);
@@ -1301,7 +1327,10 @@ mod tests {
     #[test]
     fn default_ruleset_ethane_to_ethanol() {
         let mut counters = PathCounters::default();
-        let hits = find_path_default("CC", "CCO", &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_default("CC", "CCO", &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("Hydroxylation"));
@@ -1311,7 +1340,10 @@ mod tests {
     #[test]
     fn default_ruleset_anisole_to_phenol() {
         let mut counters = PathCounters::default();
-        let hits = find_path_default("COc1ccccc1", "Oc1ccccc1", &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_default("COc1ccccc1", "Oc1ccccc1", &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("Oc1ccccc1").unwrap());
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("Dealkylation"));
@@ -1321,7 +1353,10 @@ mod tests {
     #[test]
     fn phase_one_ethene_to_epoxide() {
         let mut counters = PathCounters::default();
-        let hits = find_path("C=C", "C1CO1", &crate::rules::phase_one(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("C=C", "C1CO1", &crate::rules::phase_one(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("C1CO1").unwrap());
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("Epoxidation"));
@@ -1330,7 +1365,10 @@ mod tests {
     #[test]
     fn default_ruleset_hydroquinone_to_quinone() {
         let mut counters = PathCounters::default();
-        let hits = find_path_default("Oc1ccc(O)cc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_default("Oc1ccc(O)cc1", "O=C1C=CC(=O)C=C1", &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("O=C1C=CC(=O)C=C1").unwrap());
         let leaf = hits[0].steps[0].leaf_rule();
@@ -1350,7 +1388,10 @@ mod tests {
     fn benzene_to_quinone_plan_precedes_both_oh_before_dh() {
         // Python test_find_path_uses_atom_diff_filters: precedes (0,2),(1,2).
         let mut counters = PathCounters::default();
-        let hits = find_path_default("c1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_default("c1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let names: Vec<_> = hits[0].plan.iter().map(|s| s.rule.as_str()).collect();
         assert_eq!(
@@ -1380,7 +1421,10 @@ mod tests {
     #[test]
     fn phenol_to_quinone_plan_oh_precedes_dh() {
         let mut counters = PathCounters::default();
-        let hits = find_path_default("Oc1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_default("Oc1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let names: Vec<_> = hits[0].plan.iter().map(|s| s.rule.as_str()).collect();
         assert!(!names.contains(&"QuinoneFormation"));
@@ -1395,7 +1439,10 @@ mod tests {
     #[test]
     fn path_hit_plan_replays_to_hit() {
         let mut counters = PathCounters::default();
-        let hits = find_path_default("c1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_default("c1ccccc1", "O=C1C=CC(=O)C=C1", &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert!(
             hits[0].plan.reaches("c1ccccc1", &hits[0].smiles).unwrap(),
@@ -1408,7 +1455,10 @@ mod tests {
     #[test]
     fn ethane_plan_replays_to_ethanol() {
         let mut counters = PathCounters::default();
-        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty());
         assert!(hits[0].plan.reaches("CC", "CCO").unwrap());
     }
@@ -1416,7 +1466,10 @@ mod tests {
     #[test]
     fn atom_diff_gates_ethane_to_ethanol() {
         let mut counters = PathCounters::default();
-        let hits = find_path_diff("CC", "CCO", &hydroxylation(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path_diff("CC", "CCO", &hydroxylation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
         // Diff gating should not inflate edits beyond the one helpful site.
@@ -1437,7 +1490,9 @@ mod tests {
             },
             accept_all_candidates,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert_eq!(hits[0].smiles, canon_of("O=C1C=CC(=O)C=C1").unwrap());
     }
@@ -1448,11 +1503,17 @@ mod tests {
         let t0 = parent.tag_of(0).expect("stamped");
         let t1 = parent.tag_of(1).expect("stamped");
         let mut counters = PathCounters::default();
-        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters).unwrap().collect_all().unwrap();
+        let hits = find_path("CC", "CCO", &hydroxylation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
         assert!(!hits.is_empty());
         // Product mol is not on the outcome; check adopt via a fresh emit.
         let set = hydroxylation();
-        let cands = set.candidates(parent.mol()).collect::<Result<Vec<_>, _>>().unwrap();
+        let cands = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
         let child = parent.adopt_product(pieces[0].clone());
         assert!(child.shares_tag_gen(&parent));
@@ -1505,7 +1566,9 @@ mod tests {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let with_bag: Vec<_> = hits.iter().filter(|h| !h.maybe().is_empty()).collect();
         assert!(!with_bag.is_empty(), "expected CleavageSide on hydrolysis");
@@ -1542,7 +1605,9 @@ mod tests {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         assert!(
             hits.iter().any(|h| !h.maybe().is_empty()),
@@ -1574,7 +1639,9 @@ mod tests {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         assert_eq!(one.len(), 1);
 
         let mut counters = PathCounters::default();
@@ -1590,7 +1657,9 @@ mod tests {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         assert!(
             many.len() > 1 && many.len() <= 4,
             "max_paths=1 → {} hits; max_paths=4 → {} (want >1)",
@@ -1634,7 +1703,9 @@ mod tests {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         assert!(!hits.is_empty(), "billed={}", counters.billed());
         let direct: Vec<_> = hits
             .iter()

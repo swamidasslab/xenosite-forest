@@ -142,7 +142,10 @@ fn run_one(reactant: &str, target: &str, config: FindPathConfig, repeats: u32) -
     // Warmup
     {
         let mut c = PathCounters::default();
-        let _ = find_path_with(reactant, target, &set, &mut c, config, |_| true).unwrap().collect_all().unwrap();
+        let _ = find_path_with(reactant, target, &set, &mut c, config, |_| true)
+            .unwrap()
+            .collect_all()
+            .unwrap();
     }
 
     let mut best: Option<Row> = None;
@@ -150,7 +153,9 @@ fn run_one(reactant: &str, target: &str, config: FindPathConfig, repeats: u32) -
         let mut counters = PathCounters::default();
         let t0 = Instant::now();
         let hits = find_path_with(reactant, target, &set, &mut counters, config, |_| true)
-            .unwrap_or_else(|e| panic!("{reactant} → {target}: {e}")).collect_all().unwrap();
+            .unwrap_or_else(|e| panic!("{reactant} → {target}: {e}"))
+            .collect_all()
+            .unwrap();
         let seconds = t0.elapsed().as_secs_f64();
         let hit = hits.first().is_some_and(|h| h.smiles == want);
         let steps = hits.first().map(|h| h.steps.len()).unwrap_or(0);

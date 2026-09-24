@@ -232,10 +232,7 @@ impl RuleSet {
     ///
     /// Pull iterator: materializes one pair at a time (discovery may buffer
     /// SMARTS hits for a leaf). Prefer [`Self::metabolize`] when filters apply.
-    pub fn pair_emissions<'a>(
-        &'a self,
-        mol: &'a Molecule,
-    ) -> crate::stream::PairEmissions<'a> {
+    pub fn pair_emissions<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairEmissions<'a> {
         crate::stream::PairEmissions::new(self, mol)
     }
 
@@ -370,7 +367,9 @@ mod tests {
         filter_sites: impl Fn(&Molecule, usize, &SiteInfo) -> bool,
     ) -> BTreeSet<String> {
         let mol = parse_mol(smiles).unwrap();
-        set.metabolize(&mol, filter_rules, filter_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
+        set.metabolize(&mol, filter_rules, filter_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
             .into_iter()
             .flat_map(|e| e.products)
             .map(|s| canon_of(&s).unwrap())
@@ -387,11 +386,16 @@ mod tests {
     fn benzene_hydroxylation_passes_orbit_of_six() {
         let mol = parse_mol("c1ccccc1").unwrap();
         let emissions = hydroxylation()
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(emissions.len(), 1);
         assert_eq!(emissions[0].site_orbit.len(), 6);
         assert!(emissions[0].site_orbit.contains(&emissions[0].site));
-        let cands = hydroxylation().candidates(&mol).collect::<Result<Vec<_>, _>>().unwrap();
+        let cands = hydroxylation()
+            .candidates(&mol)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let h = cands.iter().find(|c| c.pattern.name == "h").unwrap();
         assert_eq!(h.orbit.len(), 6);
         let plan = &emissions[0].plan;
@@ -430,7 +434,9 @@ mod tests {
         };
         let mol = parse_mol("CCC").unwrap();
         let got: BTreeSet<String> = hydroxylation()
-            .metabolize_boxed(&mol, &filters, true).collect::<Result<Vec<_>, _>>().unwrap()
+            .metabolize_boxed(&mol, &filters, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
             .into_iter()
             .flat_map(|e| e.products)
             .map(|s| canon_of(&s).unwrap())
@@ -439,7 +445,9 @@ mod tests {
         let benzene = parse_mol("c1ccccc1").unwrap();
         assert!(
             hydroxylation()
-                .metabolize_boxed(&benzene, &filters, true).collect::<Result<Vec<_>, _>>().unwrap()
+                .metabolize_boxed(&benzene, &filters, true)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
                 .is_empty()
         );
     }
@@ -472,7 +480,9 @@ mod tests {
         assert_eq!(set.patterns().len(), 3);
         let anisole = parse_mol("COc1ccccc1").unwrap();
         let emissions = set
-            .metabolize(&anisole, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&anisole, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let names: BTreeSet<String> = emissions.iter().map(|e| e.pattern_name.clone()).collect();
         assert!(names.contains("O-Me"));
         assert!(names.contains("h"));
@@ -501,7 +511,9 @@ mod tests {
         let outer = RuleSet::compose(Some("Outer".into()), [inner]);
         let mol = parse_mol("CC").unwrap();
         let emissions = outer
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert!(!emissions.is_empty());
         for emission in &emissions {
             assert_eq!(
@@ -516,7 +528,9 @@ mod tests {
         let outer = RuleSet::compose(None, [hydroxylation()]);
         let mol = parse_mol("CC").unwrap();
         let emissions = outer
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let emission = &emissions[0];
         assert_eq!(emission.rule_path, vec![Some("Hydroxylation".into()), None]);
         assert_eq!(emission.namespace(), vec!["Hydroxylation"]);
@@ -537,7 +551,9 @@ mod tests {
         let set = RuleSet::compose(Some("OverlapSet".into()), [a, b]);
         let mol = parse_mol("CC").unwrap();
         let with_dedup = set
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(with_dedup.len(), 1);
         assert_eq!(with_dedup[0].leaf_rule(), Some("OverlapOhA"));
         assert_eq!(with_dedup[0].namespace(), vec!["OverlapOhA", "OverlapSet"]);
@@ -547,7 +563,9 @@ mod tests {
         );
 
         let without = set
-            .metabolize(&mol, accept_all_rules, accept_all_sites, false).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, false)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(without.len(), 2);
         assert_eq!(without[0].leaf_rule(), Some("OverlapOhA"));
         assert_eq!(without[1].leaf_rule(), Some("OverlapOhB"));
@@ -592,7 +610,9 @@ mod tests {
         let outer = RuleSet::compose(Some("Outer".into()), [inner]);
         let mol = parse_mol("CC").unwrap();
         let products = outer
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(products.len(), 1);
         assert_eq!(
             products[0].namespace(),
@@ -605,7 +625,9 @@ mod tests {
         use crate::rules::dehydrogenation;
         let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
         let emissions = dehydrogenation()
-            .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
         assert!(
             emissions.iter().any(|e| {
@@ -620,13 +642,19 @@ mod tests {
     fn epoxidation_matches_kekule_forms_on_benzene() {
         use crate::rules::epoxidation;
         let mol = parse_mol("c1ccccc1").unwrap();
-        let candidates = epoxidation().candidates(&mol).collect::<Result<Vec<_>, _>>().unwrap();
+        let candidates = epoxidation()
+            .candidates(&mol)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(candidates.len(), 1, "{candidates:?}");
         assert!(matches!(
             candidates[0].parent,
             crate::candidate::ParentRef::Form(_)
         ));
-        let emissions = epoxidation().metabolites(&mol, true).collect::<Result<Vec<_>, _>>().unwrap();
+        let emissions = epoxidation()
+            .metabolites(&mol, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert_eq!(emissions.len(), 1, "{emissions:?}");
         assert_eq!(emissions[0].pattern_name, "epoxide");
         assert_eq!(emissions[0].leaf_rule(), Some("Epoxidation"));
