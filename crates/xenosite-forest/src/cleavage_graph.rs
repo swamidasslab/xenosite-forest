@@ -485,7 +485,7 @@ pub fn cleavage_product_graph(
 /// One core reached by a shallow cleavage-only BFS (measurement helper).
 ///
 /// Search itself does **not** consume these: [`crate::find_path`] runs the
-/// depth-capped cleave-first phase on its own heap walks (tagged
+/// cleave-first phase on its own heap walks when configured (tagged
 /// [`ForestMol`] stays on [`Walk`]). This builder exists to size the net
 /// standalone via `cleavage_graph_bench` / unit tests.
 #[derive(Clone)]
