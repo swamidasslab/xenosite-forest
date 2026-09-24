@@ -646,9 +646,11 @@ fn place_added_atom(
 
 /// Child [`AtomDiff`] via tag-lifted parent MCS when possible.
 ///
-/// Lift surviving atoms (removed → shrink). Locally place added atoms
-/// ([`extend_mapping_for_added`]). Returns `None` when lift is impossible or
-/// an added heavy atom stays unmapped — caller should run full [`atom_diff`].
+/// **Safe lift only:** parent and child share the same heavy-atom tag set
+/// (no add/remove — typically DH / bond-order edits). Add or remove can
+/// produce a cheaper/dearer cost than true MCS and poison the closer; those
+/// return `None` so the caller runs full [`atom_diff`].
+///
 /// Never runs MCS itself.
 pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
@@ -656,23 +658,25 @@ pub fn try_atom_diff_for_child(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
 ) -> Option<AtomDiff> {
+    if !added_heavy_atoms(parent, child).is_empty() {
+        return None;
+    }
+    // Any heavy parent atom missing on the child → shrink; lift cost unreliable.
+    for i in 0..parent.mol().atom_count() {
+        if parent.mol().atom(atom_idx(i)).element.atomic_number() <= 1 {
+            continue;
+        }
+        let Some(tag) = parent.tag_of(i) else {
+            continue;
+        };
+        child.index_of(tag)?;
+    }
     let parent_maps = if parent_diff.mappings.is_empty() {
         vec![parent_diff.mapping.clone()]
     } else {
         parent_diff.mappings.clone()
     };
-    let mut lifted = lift_mappings(parent, child, &parent_maps)?;
-    let added = added_heavy_atoms(parent, child);
-    if !added.is_empty() {
-        for m in &mut lifted {
-            extend_mapping_for_added(child.mol(), target, m, &added);
-        }
-        // Prefer a view that covered every addition; else refuse (full MCS).
-        lifted.retain(|m| added.iter().all(|a| m.contains_key(a)));
-        if lifted.is_empty() {
-            return None;
-        }
-    }
+    let lifted = lift_mappings(parent, child, &parent_maps)?;
     Some(atom_diff_from_mappings(child.mol(), target, lifted))
 }
 
@@ -1167,10 +1171,13 @@ mod tests {
             child.mol().atom(atom_idx(added[0])).element.atomic_number(),
             8
         );
-        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
-            .expect("local add should extend without MCS");
-        // Child is the target → cost 0 whether lift or full MCS.
-        assert_eq!(lifted.cost(), 0, "{lifted:?}");
+        // Add/remove lifts are unsafe for closer cost → try is None; MCS fallback.
+        assert!(
+            try_atom_diff_for_child(&parent, &parent_diff, &child, &target).is_none(),
+            "add should fall back to full MCS"
+        );
+        let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        assert_eq!(via.cost(), 0, "{via:?}");
         assert!(child.shares_tag_gen(&parent));
     }
 
@@ -1205,12 +1212,15 @@ mod tests {
             added_heavy_atoms(&parent, &child).is_empty(),
             "dealkylation keeps no new heavies on the kept fragment"
         );
-        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
-            .expect("removal should shrink-lift without MCS");
         assert!(
-            lifted.cost() <= parent_cost,
-            "shrink toward phenol: parent={parent_cost} child={}",
-            lifted.cost()
+            try_atom_diff_for_child(&parent, &parent_diff, &child, &target).is_none(),
+            "shrink should fall back to full MCS"
+        );
+        let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        assert!(
+            via.cost() <= parent_cost,
+            "toward phenol: parent={parent_cost} child={}",
+            via.cost()
         );
     }
 }

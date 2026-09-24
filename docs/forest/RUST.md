@@ -296,8 +296,8 @@ Rust misses most rows under `max_nodes=800`.
 
 **Read:** with filters on, Rust hits every H2H row and is **faster than Python** on
 mid (0.11s vs 0.38s), larger, and hard (1.60s vs 6.86s). Walks carry tagged
-`ForestMol` + `CanonicalStep` plans; eager closer tag-lifts MCS (else full MCS);
-lazy closer always MCS on pop.
+`ForestMol` + `CanonicalStep` plans; lazy try-lifts same-tag edits (else MCS on
+pop); eager `atom_diff_for_child` (lift else MCS).
 
 ### Profile: where hard wall goes (not copies)
 
@@ -311,10 +311,11 @@ clone elision is noise.
 
 ### Lazy closer (landed)
 
-`FindPathConfig::lazy_closer` (default on with `use_atom_diff`): enqueue kept
-fragments without child MCS; on pop verify `cost() < parent_cost` before
-expand (fresh MCS). Eager closer uses [`atom_diff_for_child`](../../crates/xenosite-forest/src/atom_diff.rs)
-(tag-lift + local add extend, else full MCS) at enqueue.
+`FindPathConfig::lazy_closer` (default on with `use_atom_diff`): try tag-lift at
+enqueue when parent/child share the same heavy tags (DH-style); on pop use that
+diff or full MCS if lift was `None`. Eager closer uses `atom_diff_for_child`
+(same try, else MCS) at enqueue. Add/remove hops always MCS — lifted costs were
+not always equal to true MCS and poisoned the closer.
 
 Hard H2H (release, best-of-5), atom_diff on:
 
@@ -332,6 +333,6 @@ oxidation can raise HA distance while lowering cost.
 `find_path` walks carry [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs)
 (not bare SMILES). Edits use `materialize_mols` → `adopt_product` so tags and
 the structure/`csmi` cache stay on the walk. `PathOutcome.plan` is a
-`Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Eager
-closer uses `atom_diff_for_child` (tag-lift + local add extend, else full MCS).
-Lazy closer always runs fresh MCS on pop.
+`Vec<CanonicalStep>`; quinone leaves expand via `RuleSet::plan_kind`. Lazy and
+eager use `try_atom_diff_for_child` when parent/child share heavy tags; else
+full MCS (`atom_diff_for_child` on eager). Add/remove is always MCS.
