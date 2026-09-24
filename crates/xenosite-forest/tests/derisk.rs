@@ -90,3 +90,19 @@ fn ruleset_compose_and_closures_are_the_public_door() {
         .unwrap();
     assert!(unfiltered.len() > 1);
 }
+
+#[test]
+fn find_path_uses_ruleset_namespaces() {
+    let set = RuleSet::compose(
+        Some("Forest".into()),
+        [hydroxylation(), o_dealkylation()],
+    );
+    let mut counters = PathCounters::default();
+    let hits = find_path("CC", "CCO", &set, &mut counters).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].smiles, canon_of("CCO").unwrap());
+    assert_eq!(
+        hits[0].steps[0].namespace(),
+        vec!["Hydroxylation", "Forest"]
+    );
+}
