@@ -3,6 +3,8 @@
 //! `SiteKind`, `Edit`, and `Effect` are the categories. Methide is an effect
 //! field, not a pathway flag.
 
+use std::collections::BTreeMap;
+
 /// What kind of site this pattern names. Discovery indexes follow this.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteKind {
@@ -23,11 +25,106 @@ pub enum Edit {
     PairEndpoint(String),
 }
 
+/// Constraint that picks one branch of a SMARTS OR once atoms are known.
+///
+/// Same role as Python ``When``. Used when ``delta_formula`` (or other effect
+/// fields) disagree across OR arms — annotate each arm, do not invent a search
+/// branch.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct When {
+    pub map: u16,
+    pub z: Option<u8>,
+    pub h: Option<u8>,
+}
+
+impl When {
+    pub fn atomic(map: u16, z: u8) -> Self {
+        Self {
+            map,
+            z: Some(z),
+            h: None,
+        }
+    }
+
+    pub fn atomic_h(map: u16, z: u8, h: u8) -> Self {
+        Self {
+            map,
+            z: Some(z),
+            h: Some(h),
+        }
+    }
+}
+
+/// Known element symbols, longest first (for bag strings like ``Cl``, ``Br``).
+const ELEMENT_SYMBOLS: &[&str] = &["At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H"];
+
+/// Parse an ``adds`` / ``removes`` bag (``"OO"``, ``"HH"``, ``"Cl"``, ``"OH"``)
+/// into element → count. Unknown characters are skipped.
+pub fn bag_counts(bag: &str) -> BTreeMap<String, i32> {
+    let mut counts = BTreeMap::new();
+    let bytes = bag.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let rest = &bag[i..];
+        let mut matched = None;
+        for sym in ELEMENT_SYMBOLS {
+            if rest.starts_with(sym) {
+                matched = Some(*sym);
+                break;
+            }
+        }
+        match matched {
+            Some(sym) => {
+                *counts.entry(sym.to_string()).or_insert(0) += 1;
+                i += sym.len();
+            }
+            None => i += 1,
+        }
+    }
+    counts
+}
+
+/// Net formula change from ``adds`` / ``removes`` bags. Zero-count keys omitted.
+pub fn bag_delta_formula(adds: Option<&str>, removes: Option<&str>) -> BTreeMap<String, i32> {
+    let mut delta = BTreeMap::new();
+    if let Some(bag) = adds {
+        for (el, n) in bag_counts(bag) {
+            *delta.entry(el).or_insert(0) += n;
+        }
+    }
+    if let Some(bag) = removes {
+        for (el, n) in bag_counts(bag) {
+            *delta.entry(el).or_insert(0) -= n;
+        }
+    }
+    delta.retain(|_, n| *n != 0);
+    delta
+}
+
+/// Merge two delta maps (pair ends). Zero keys dropped.
+pub fn merge_delta_formula(
+    left: &BTreeMap<String, i32>,
+    right: &BTreeMap<String, i32>,
+) -> BTreeMap<String, i32> {
+    let mut out = left.clone();
+    for (el, n) in right {
+        *out.entry(el.clone()).or_insert(0) += n;
+    }
+    out.retain(|_, n| *n != 0);
+    out
+}
+
 /// One concrete outcome. Filters read these fields.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Effect {
     pub adds: Option<String>,
     pub removes: Option<String>,
+    /// Declared net formula change (element → delta). Zeros omitted.
+    ///
+    /// Filled from ``adds`` / ``removes`` when sealed. When OR arms disagree
+    /// (e.g. halogen removal), each possibility carries its own map under a
+    /// [`When`].
+    pub delta_formula: BTreeMap<String, i32>,
     pub cleaves: bool,
     /// Named leaving heavy-atom count (methyl dealkylation = 1). `None` = open.
     pub leave_count: Option<u16>,
@@ -37,6 +134,30 @@ pub struct Effect {
     pub dearomatizes: bool,
     /// Methide / alkyl partner element hint (`"C"`). Filters read this.
     pub partner: Option<String>,
+    /// Branch constraint when this effect is one arm of a SMARTS OR.
+    pub when: Option<When>,
+}
+
+impl Effect {
+    /// Fill [`Self::delta_formula`] from adds/removes when still empty.
+    pub fn sealed(mut self) -> Self {
+        if self.delta_formula.is_empty() {
+            self.delta_formula = bag_delta_formula(self.adds.as_deref(), self.removes.as_deref());
+        }
+        self
+    }
+
+    /// Declared delta, deriving from bags if the map was never sealed.
+    pub fn resolved_delta_formula(&self) -> BTreeMap<String, i32> {
+        if self.delta_formula.is_empty()
+            && (self.adds.as_ref().is_some_and(|s| !s.is_empty())
+                || self.removes.as_ref().is_some_and(|s| !s.is_empty()))
+        {
+            bag_delta_formula(self.adds.as_deref(), self.removes.as_deref())
+        } else {
+            self.delta_formula.clone()
+        }
+    }
 }
 
 /// What a SMARTS pattern can do, before a match.
@@ -49,6 +170,9 @@ pub struct PatternInfo {
     pub site_map: Vec<u16>,
     pub edit: Edit,
     pub effect: Effect,
+    /// When OR arms need distinct effect data (especially ``delta_formula``).
+    /// Empty ⇒ use [`Self::effect`] alone. Non-empty ⇒ resolve via [`When`].
+    pub possibilities: Vec<Effect>,
     /// Refuse single-to-double when maps 1 and 2 share the same ring set.
     pub skip_same_rings: bool,
     /// Cleavage side groups `(leave, keep)` aligned to [`Self::site_map`] order.
@@ -79,7 +203,8 @@ impl PatternInfo {
             site_kind: SiteKind::Atom,
             site_map: vec![1],
             edit,
-            effect,
+            effect: effect.sealed(),
+            possibilities: Vec::new(),
             skip_same_rings: false,
             cleave_side_group: None,
             search_bias: 0,
@@ -94,13 +219,16 @@ impl PatternInfo {
             Effect {
                 adds: Some("O".into()),
                 removes: Some("H".into()),
-                cleaves: false,
-                leave_count: None,
-                methide: false,
-                dearomatizes: false,
-                partner: None,
+                ..Effect::default()
             },
         )
+    }
+
+    /// Attach When-branched possibilities (each sealed). Span [`Self::effect`]
+    /// stays the collapsed / representative effect for rule-level filters.
+    pub fn with_possibilities(mut self, branches: impl IntoIterator<Item = Effect>) -> Self {
+        self.possibilities = branches.into_iter().map(Effect::sealed).collect();
+        self
     }
 
     /// Set cleavage side groups (leave, keep). Equal labels ⇒ swappable.
@@ -127,6 +255,15 @@ impl PatternInfo {
     /// Resolved side-group signature for cross-rule cleavage fold.
     pub fn cleave_side_sig(&self) -> CleaveSideSig {
         CleaveSideSig::resolve(self.cleave_side_group.as_ref())
+    }
+
+    /// Effects to consider for this pattern (possibilities, or the single effect).
+    pub fn effect_arms(&self) -> Vec<&Effect> {
+        if self.possibilities.is_empty() {
+            vec![&self.effect]
+        } else {
+            self.possibilities.iter().collect()
+        }
     }
 }
 
@@ -213,5 +350,51 @@ impl Emission {
     /// Emitting (leaf) rule name, if the leaf was named.
     pub fn leaf_rule(&self) -> Option<&str> {
         self.rule_path.first().and_then(|n| n.as_deref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bag_delta_hydroxyl() {
+        let d = bag_delta_formula(Some("O"), Some("H"));
+        assert_eq!(d.get("O"), Some(&1));
+        assert_eq!(d.get("H"), Some(&-1));
+        assert_eq!(d.len(), 2);
+    }
+
+    #[test]
+    fn bag_delta_omits_zeros() {
+        let d = bag_delta_formula(Some("O"), Some("O"));
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn bag_counts_two_letter_halogen() {
+        assert_eq!(bag_counts("Cl").get("Cl"), Some(&1));
+        assert_eq!(bag_counts("Br").get("Br"), Some(&1));
+        assert_eq!(bag_counts("OH").get("O"), Some(&1));
+        assert_eq!(bag_counts("OH").get("H"), Some(&1));
+    }
+
+    #[test]
+    fn seal_fills_delta_formula() {
+        let e = Effect {
+            adds: Some("OO".into()),
+            removes: Some("HH".into()),
+            ..Effect::default()
+        }
+        .sealed();
+        assert_eq!(e.delta_formula.get("O"), Some(&2));
+        assert_eq!(e.delta_formula.get("H"), Some(&-2));
+    }
+
+    #[test]
+    fn hydroxyl_pattern_carries_delta() {
+        let p = PatternInfo::hydroxyl("h", "[#6h1:1]");
+        assert_eq!(p.effect.delta_formula.get("O"), Some(&1));
+        assert_eq!(p.effect.delta_formula.get("H"), Some(&-1));
     }
 }

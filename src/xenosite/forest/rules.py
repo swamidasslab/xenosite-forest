@@ -453,6 +453,51 @@ def formula_delta(before: Formula, after: Formula) -> Formula:
     }
 
 
+_ELEMENT_SYMBOLS = (
+    "At",
+    "Br",
+    "Cl",
+    "I",
+    "F",
+    "O",
+    "N",
+    "S",
+    "P",
+    "C",
+    "H",
+)
+
+
+def bag_counts(bag: str) -> dict[str, int]:
+    """Parse an ``adds`` / ``removes`` bag into element → count."""
+
+    counts: dict[str, int] = {}
+    i = 0
+    while i < len(bag):
+        matched = None
+        for sym in _ELEMENT_SYMBOLS:
+            if bag.startswith(sym, i):
+                matched = sym
+                break
+        if matched is None:
+            i += 1
+            continue
+        counts[matched] = counts.get(matched, 0) + 1
+        i += len(matched)
+    return counts
+
+
+def bag_delta_formula(adds: str | None = "", removes: str | None = "") -> dict[str, int]:
+    """Net formula change from bag strings. Zero-count keys omitted."""
+
+    delta: dict[str, int] = {}
+    for el, n in bag_counts(adds or "").items():
+        delta[el] = delta.get(el, 0) + n
+    for el, n in bag_counts(removes or "").items():
+        delta[el] = delta.get(el, 0) - n
+    return {el: n for el, n in delta.items() if n}
+
+
 def _rule_name(rule: ReactionRule | str | None) -> str | None:
     if rule is None:
         return None
@@ -513,6 +558,7 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     effect: Effect = {
         "adds": "",
         "removes": "",
+        "delta_formula": {},
         "cleaves": False,
         "leave_count": None,
         "breaks_ring": False,
@@ -564,6 +610,15 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     when = value.get("when")
     if isinstance(when, dict):
         effect["when"] = _copy_when(when)
+    raw_delta = value.get("delta_formula")
+    if isinstance(raw_delta, dict) and raw_delta:
+        effect["delta_formula"] = {
+            str(k): int(v) for k, v in raw_delta.items() if int(v)
+        }
+    else:
+        effect["delta_formula"] = bag_delta_formula(
+            effect.get("adds") or "", effect.get("removes") or ""
+        )
     return effect
 
 
@@ -662,6 +717,7 @@ def _apply_forest_trace(
 _EFFECT_DEFAULTS: Effect = {
     "adds": "",
     "removes": "",
+    "delta_formula": {},
     "cleaves": False,
     "leave_count": None,
     "breaks_ring": False,
@@ -733,6 +789,9 @@ def branches(
                 item["partner"] = symbol
                 if removes_partner:
                     item["removes"] = symbol
+                    item["delta_formula"] = bag_delta_formula(
+                        item.get("adds") or "", item.get("removes") or ""
+                    )
             if "h" in when:
                 item["partner_h"] = when["h"]
         out.append(item)

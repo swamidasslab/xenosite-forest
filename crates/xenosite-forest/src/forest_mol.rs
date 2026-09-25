@@ -368,6 +368,18 @@ mod tests {
     }
 
     #[test]
+    fn formula_delta_ethane_to_ethanol_is_plus_oxygen() {
+        let parent = ForestMol::parse("CC").unwrap();
+        let child = ForestMol::parse("CCO").unwrap();
+        let delta = crate::forest::formula_delta(&parent.formula(), &child.formula());
+        // Pattern bags say adds=O removes=H; mol formula is +O (OH restores H).
+        assert_eq!(delta.counts.get("O"), Some(&1));
+        assert!(!delta.counts.contains_key("H"));
+        assert!(!delta.counts.contains_key("C"));
+        assert_eq!(delta.charge, 0);
+    }
+
+    #[test]
     fn disconnected_wrap_does_not_share_caches() {
         let parent = ForestMol::parse("c1ccccc1O").unwrap();
         let parent_csmi = parent.csmi();

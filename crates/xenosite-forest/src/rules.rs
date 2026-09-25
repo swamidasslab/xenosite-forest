@@ -22,7 +22,8 @@ fn smirks_row(
         site_kind,
         site_map,
         edit: Edit::Smirks(smirks.into()),
-        effect,
+        effect: effect.sealed(),
+        possibilities: Vec::new(),
         skip_same_rings: false,
         cleave_side_group: None,
         search_bias: 0,
@@ -43,11 +44,30 @@ fn endpoint_row(
         site_kind: SiteKind::AtomPair,
         site_map,
         edit: Edit::PairEndpoint(pair_edit.into()),
-        effect,
+        effect: effect.sealed(),
+        possibilities: Vec::new(),
         skip_same_rings,
         cleave_side_group: None,
         search_bias: 0,
     }
+}
+
+/// Halogen atomic numbers used by dehalogenation / replace_halogen Whens.
+const HALIDE_Z: &[(u8, &str)] = &[(9, "F"), (17, "Cl"), (35, "Br"), (53, "I"), (85, "At")];
+
+fn halide_remove_branches(map: u16, base: Effect) -> Vec<Effect> {
+    HALIDE_Z
+        .iter()
+        .map(|&(z, sym)| {
+            Effect {
+                when: Some(crate::pattern::When::atomic(map, z)),
+                removes: Some(sym.into()),
+                partner: Some(sym.into()),
+                ..base.clone()
+            }
+            .sealed()
+        })
+        .collect()
 }
 
 /// `Hydroxylation` from Python `xenosite.forest.rules`.
@@ -79,6 +99,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -95,6 +116,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -110,6 +132,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -125,6 +148,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             endpoint_row(
@@ -139,6 +163,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "single_to_double",
             ),
@@ -154,6 +179,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "single_to_double",
             ),
@@ -169,6 +195,7 @@ pub fn dehydrogenation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: Some("C".into()),
+                    ..Default::default()
                 },
                 "single_to_double",
             ),
@@ -193,6 +220,7 @@ pub fn quinone_formation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "single_to_double",
             ),
@@ -208,6 +236,7 @@ pub fn quinone_formation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: Some("C".into()),
+                    ..Default::default()
                 },
                 "single_to_double",
             ),
@@ -223,6 +252,7 @@ pub fn quinone_formation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "add_carbonyl_o",
             ),
@@ -238,9 +268,18 @@ pub fn quinone_formation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "replace_halogen",
-            ),
+            )
+            .with_possibilities(halide_remove_branches(
+                2,
+                Effect {
+                    adds: Some("O".into()),
+                    dearomatizes: true,
+                    ..Default::default()
+                },
+            )),
             endpoint_row(
                 "iminium",
                 "[#6H0R:1][#7D3:2]",
@@ -253,6 +292,7 @@ pub fn quinone_formation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "iminium",
             ),
@@ -268,6 +308,7 @@ pub fn quinone_formation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "dealkylate",
             ),
@@ -294,6 +335,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: Some(1),
                     partner: None,
+                    ..Default::default()
                 },
             )
             .with_cleave_side_group("Me", "hetero"),
@@ -310,6 +352,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: Some(1),
                     partner: None,
+                    ..Default::default()
                 },
             )
             .with_cleave_side_group("Me", "hetero"),
@@ -326,6 +369,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: Some(1),
                     partner: None,
+                    ..Default::default()
                 },
             )
             .with_cleave_side_group("Me", "hetero"),
@@ -342,6 +386,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -357,6 +402,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -372,6 +418,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -387,6 +434,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -402,6 +450,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -417,6 +466,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -432,6 +482,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -447,6 +498,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -462,6 +514,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -477,6 +530,7 @@ pub fn dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -501,6 +555,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: Some(1),
                     partner: None,
+                    ..Default::default()
                 },
             )
             .with_cleave_side_group("Me", "hetero"),
@@ -517,6 +572,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: Some(1),
                     partner: None,
+                    ..Default::default()
                 },
             )
             .with_cleave_side_group("Me", "hetero"),
@@ -533,6 +589,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: Some(1),
                     partner: None,
+                    ..Default::default()
                 },
             )
             .with_cleave_side_group("Me", "hetero"),
@@ -549,6 +606,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -564,6 +622,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -579,6 +638,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -594,6 +654,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -609,6 +670,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -624,6 +686,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -639,6 +702,7 @@ pub fn n_dealkylation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -662,6 +726,7 @@ pub fn azo_splitting() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )
         .with_cleave_side_group("azo", "azo")],
@@ -685,6 +750,7 @@ pub fn benzodioxole_reduction() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )],
     )
@@ -708,6 +774,7 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -723,6 +790,7 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -746,6 +814,7 @@ pub fn thiophene_sulfur_oxidation() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )],
     )
@@ -768,6 +837,7 @@ pub fn dephosphorylation() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )],
     )
@@ -791,6 +861,7 @@ pub fn epoxide_opening() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -806,6 +877,7 @@ pub fn epoxide_opening() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -830,6 +902,7 @@ pub fn hydrolysis() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -845,6 +918,7 @@ pub fn hydrolysis() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -869,6 +943,7 @@ pub fn dehydration() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -886,6 +961,7 @@ pub fn dehydration() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -901,6 +977,7 @@ pub fn dehydration() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -930,6 +1007,7 @@ pub fn hydrogenation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             )),
             demote_reductive(smirks_row(
@@ -945,6 +1023,7 @@ pub fn hydrogenation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             )),
             demote_reductive(endpoint_row(
@@ -959,6 +1038,7 @@ pub fn hydrogenation() -> RuleSet {
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
                 "keep",
             )),
@@ -984,6 +1064,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -999,6 +1080,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1014,6 +1096,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1029,6 +1112,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1044,6 +1128,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1059,6 +1144,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1074,6 +1160,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1089,6 +1176,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1122,6 +1210,7 @@ pub fn oxygen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             )),
             demote_reductive(smirks_row(
@@ -1137,6 +1226,7 @@ pub fn oxygen_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             )),
         ],
@@ -1145,6 +1235,10 @@ pub fn oxygen_reduction() -> RuleSet {
 
 /// `ReductiveDehalogenation` from Python `xenosite.forest.rules`.
 pub fn reductive_dehalogenation() -> RuleSet {
+    let base = Effect {
+        cleaves: true,
+        ..Default::default()
+    };
     RuleSet::new(
         Some("ReductiveDehalogenation".into()),
         [
@@ -1153,31 +1247,17 @@ pub fn reductive_dehalogenation() -> RuleSet {
                 "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: None,
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                base.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, base.clone())),
             smirks_row(
                 "alkene",
                 "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: None,
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                base.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, base)),
         ],
     )
 }
@@ -1200,6 +1280,7 @@ pub fn sulfur_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1215,6 +1296,7 @@ pub fn sulfur_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1230,6 +1312,7 @@ pub fn sulfur_reduction() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1253,6 +1336,7 @@ pub fn epoxidation() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )],
     )
@@ -1276,6 +1360,7 @@ pub fn sulfur_oxidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1291,6 +1376,7 @@ pub fn sulfur_oxidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1306,6 +1392,7 @@ pub fn sulfur_oxidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1330,6 +1417,7 @@ pub fn nitrogen_oxidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1345,6 +1433,7 @@ pub fn nitrogen_oxidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1360,6 +1449,7 @@ pub fn nitrogen_oxidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1368,6 +1458,16 @@ pub fn nitrogen_oxidation() -> RuleSet {
 
 /// `OxidativeDehalogenation` from Python `xenosite.forest.rules`.
 pub fn oxidative_dehalogenation() -> RuleSet {
+    let o_cleave = Effect {
+        adds: Some("O".into()),
+        cleaves: true,
+        ..Default::default()
+    };
+    let oo_cleave = Effect {
+        adds: Some("OO".into()),
+        cleaves: true,
+        ..Default::default()
+    };
     RuleSet::new(
         Some("OxidativeDehalogenation".into()),
         [
@@ -1376,46 +1476,26 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: Some("O".into()),
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                o_cleave.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, o_cleave.clone())),
             smirks_row(
                 "carbonyl",
                 "[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: Some("O".into()),
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                o_cleave.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, o_cleave.clone())),
             smirks_row(
                 "carboxylic",
                 "[#9,#17,#35,#53,#85:1]-[#6H2:2]>>[*:1].[*:2](O)=O",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: Some("OO".into()),
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                oo_cleave.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, oo_cleave.clone())),
+            // Halogen migrates onto the adjacent carbon — net formula keeps X.
             smirks_row(
                 "rearrange",
                 "[#9,#17,#35,#53,#85:1]-[#6:2][#6H1:3]>>[*:2](O)[*:3]-[*:1]",
@@ -1423,12 +1503,7 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 vec![2],
                 Effect {
                     adds: Some("O".into()),
-                    removes: None,
-                    cleaves: false,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1436,31 +1511,17 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: Some("OO".into()),
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                oo_cleave.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, oo_cleave.clone())),
             smirks_row(
                 "gem_hydrate",
                 "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]",
                 SiteKind::Atom,
                 vec![2],
-                Effect {
-                    adds: Some("OO".into()),
-                    removes: None,
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                },
-            ),
+                oo_cleave.clone(),
+            )
+            .with_possibilities(halide_remove_branches(1, oo_cleave)),
         ],
     )
 }
@@ -1482,6 +1543,7 @@ pub fn acetylation() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )],
     )
@@ -1505,6 +1567,7 @@ pub fn sulfation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1520,6 +1583,7 @@ pub fn sulfation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1544,6 +1608,7 @@ pub fn glucuronidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1559,6 +1624,7 @@ pub fn glucuronidation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1583,6 +1649,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1598,6 +1665,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1613,6 +1681,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1628,6 +1697,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1643,6 +1713,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1658,6 +1729,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1673,6 +1745,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1688,6 +1761,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1703,6 +1777,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1718,6 +1793,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1733,6 +1809,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1748,6 +1825,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
             smirks_row(
@@ -1763,6 +1841,7 @@ pub fn glutathionation() -> RuleSet {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         ],
@@ -1943,6 +2022,47 @@ mod tests {
             );
         }
         assert_eq!(hydroxylation().patterns()[0].search_bias, 0);
+    }
+
+    #[test]
+    fn patterns_seal_delta_formula_from_adds_removes() {
+        let hydroxy = hydroxylation();
+        let h_patterns = hydroxy.patterns();
+        let h = &h_patterns[0];
+        assert_eq!(h.effect.delta_formula.get("O"), Some(&1));
+        assert_eq!(h.effect.delta_formula.get("H"), Some(&-1));
+        let dh_set = dehydrogenation();
+        let dh_patterns = dh_set.patterns();
+        let dh = dh_patterns.iter().find(|p| p.name == "sulfoxide").unwrap();
+        assert_eq!(dh.effect.delta_formula.get("H"), Some(&-2));
+    }
+
+    #[test]
+    fn halide_whens_carry_per_branch_delta_formula() {
+        let red = reductive_dehalogenation();
+        let red_patterns = red.patterns();
+        let cleave = red_patterns.iter().find(|p| p.name == "cleave").unwrap();
+        assert_eq!(cleave.possibilities.len(), 5);
+        let symbols: std::collections::BTreeSet<_> = cleave
+            .possibilities
+            .iter()
+            .map(|e| {
+                let (el, n) = e.delta_formula.iter().next().unwrap();
+                (el.clone(), *n)
+            })
+            .collect();
+        assert!(symbols.contains(&("Cl".into(), -1)));
+        assert!(symbols.contains(&("F".into(), -1)));
+        let ox = oxidative_dehalogenation();
+        let ox_patterns = ox.patterns();
+        let alcohol = ox_patterns.iter().find(|p| p.name == "alcohol").unwrap();
+        let cl = alcohol
+            .possibilities
+            .iter()
+            .find(|e| e.when.as_ref().and_then(|w| w.z) == Some(17))
+            .unwrap();
+        assert_eq!(cl.delta_formula.get("O"), Some(&1));
+        assert_eq!(cl.delta_formula.get("Cl"), Some(&-1));
     }
 
     #[test]

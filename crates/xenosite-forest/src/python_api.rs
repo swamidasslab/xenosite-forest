@@ -184,6 +184,7 @@ impl PyPatternInfo {
                     dearomatizes: false,
                     leave_count: None,
                     partner: None,
+                    ..Default::default()
                 },
             ),
         }

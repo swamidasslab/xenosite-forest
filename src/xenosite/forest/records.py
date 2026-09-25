@@ -199,10 +199,15 @@ class Effect(TypedDict, total=False):
     Small-ion cleavage and N-dealkylation are the same ``cleaves`` bit plus
     different ``leave_count``. Ring opening is ``breaks_ring``, not a separate
     rule class in the search.
+
+    ``delta_formula`` is the declared net change as element → signed count
+    (zeros omitted). Derived from ``adds`` / ``removes`` bags when not set;
+    When branches that disagree (halogen removal) each carry their own map.
     """
 
     adds: str
     removes: str
+    delta_formula: dict[str, int]
     cleaves: bool
     leave_count: int | None
     breaks_ring: bool
@@ -234,6 +239,7 @@ class _SpanCore(TypedDict):
 
     adds: _StrSpan
     removes: _StrSpan
+    delta_formula: dict[str, int] | tuple[dict[str, int], ...]
     cleaves: _BoolSpan
     leave_count: _LeaveSpan
     breaks_ring: _BoolSpan

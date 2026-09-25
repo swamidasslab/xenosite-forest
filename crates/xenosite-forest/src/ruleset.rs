@@ -82,6 +82,7 @@ impl Default for BoxedFilters {
 
 /// One child of a [`RuleSet`]: a leaf pattern or a nested set (a namespace).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)] // PatternInfo carries sealed formula / When arms.
 pub enum RuleMember {
     Pattern(PatternInfo),
     Set(RuleSet),
@@ -340,6 +341,7 @@ pub fn o_dealkylation() -> RuleSet {
                 dearomatizes: false,
                 leave_count: None,
                 partner: None,
+                ..Default::default()
             },
         )
         .with_cleave_side_group("Me", "hetero")],
@@ -464,6 +466,7 @@ mod tests {
             dearomatizes: false,
             leave_count: None,
             partner: None,
+            ..Default::default()
         };
         let set = RuleSet::new(Some("probe".into()), [pattern]);
         let refuse_methide = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| !p.effect.methide;

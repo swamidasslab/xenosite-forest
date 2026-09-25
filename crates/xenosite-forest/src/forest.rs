@@ -7,9 +7,13 @@ use std::rc::Rc;
 
 use crate::mol::Molecule;
 
-/// Heavy-atom counts, hydrogens included, and formal charge.
+/// Element → count (hydrogens included) plus formal charge.
+///
+/// Cached on each [`crate::forest_mol::ForestMol`]. ``counts`` is the map
+/// filters and pattern ``delta_formula`` compare against.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Formula {
+    /// Map of element symbol → count, including hydrogens.
     pub counts: BTreeMap<String, i32>,
     pub charge: i32,
 }
@@ -30,11 +34,15 @@ pub struct Structure {
     pub smarts_matches: BTreeMap<String, Rc<Vec<BTreeMap<u16, usize>>>>,
 }
 
+/// Heavy-atom counts, explicit + implicit hydrogens, and formal charge.
 pub fn molecule_formula(mol: &Molecule) -> Formula {
     let mut counts = BTreeMap::new();
     let mut charge = 0i32;
     for (idx, atom) in mol.atoms() {
-        if atom.element.atomic_number() == 1 {
+        let z = atom.element.atomic_number();
+        if z == 1 {
+            *counts.entry("H".to_string()).or_insert(0) += 1;
+            charge += i32::from(atom.charge);
             continue;
         }
         *counts.entry(atom.element.symbol().to_string()).or_insert(0) += 1;
@@ -45,4 +53,31 @@ pub fn molecule_formula(mol: &Molecule) -> Formula {
         charge += i32::from(atom.charge);
     }
     Formula { counts, charge }
+}
+
+/// Change in element counts (and charge) from ``before`` to ``after``.
+///
+/// Zero-count keys are omitted from ``counts``. Charge is always the signed
+/// difference (may be zero).
+pub fn formula_delta(before: &Formula, after: &Formula) -> Formula {
+    let mut counts = BTreeMap::new();
+    let mut keys: Vec<&str> = before
+        .counts
+        .keys()
+        .chain(after.counts.keys())
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    for key in keys {
+        let delta = after.counts.get(key).copied().unwrap_or(0)
+            - before.counts.get(key).copied().unwrap_or(0);
+        if delta != 0 {
+            counts.insert(key.to_string(), delta);
+        }
+    }
+    Formula {
+        counts,
+        charge: after.charge - before.charge,
+    }
 }

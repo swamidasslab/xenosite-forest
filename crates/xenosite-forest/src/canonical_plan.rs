@@ -1053,6 +1053,7 @@ mod tests {
             methide: false,
             dearomatizes: true,
             partner: Some("O".into()),
+            ..Default::default()
         };
         let ends = [&phenol, &phenol];
         let plan = hydroxylation_then_dehydrogenation(&mol, &ends, &carbons);
@@ -1072,6 +1073,7 @@ mod tests {
             methide: false,
             dearomatizes: true,
             partner: None,
+            ..Default::default()
         };
         let ends = [&end, &end];
         let plan = hydroxylation_then_dehydrogenation(&mol, &ends, &[0, 3]);
@@ -1098,6 +1100,7 @@ mod tests {
             methide: false,
             dearomatizes: true,
             partner: None,
+            ..Default::default()
         };
         let ends = [&end, &end];
         let plan = hydroxylation_then_dehydrogenation(&mol, &ends, &[0, 3]);
@@ -1162,6 +1165,7 @@ mod tests {
             methide: false,
             dearomatizes: true,
             partner: None,
+            ..Default::default()
         };
         let ends = [&end, &end];
         let deps = Deps::bind(hydroxylation_then_dehydrogenation(&mol, &ends, &[0, 3]));

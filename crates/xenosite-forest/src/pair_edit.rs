@@ -421,6 +421,10 @@ fn merge_effect_fields(
     crate::pattern::Effect {
         adds,
         removes,
+        delta_formula: crate::pattern::merge_delta_formula(
+            &left.effect.resolved_delta_formula(),
+            &right.effect.resolved_delta_formula(),
+        ),
         cleaves: left.effect.cleaves || right.effect.cleaves,
         leave_count: left.effect.leave_count.or(right.effect.leave_count),
         methide: left.effect.methide || right.effect.methide,
@@ -430,6 +434,7 @@ fn merge_effect_fields(
             .partner
             .clone()
             .or_else(|| right.effect.partner.clone()),
+        when: None,
     }
 }
 
@@ -580,7 +585,9 @@ pub fn dehydrogenate_hydroquinone(mol: &Molecule) -> Result<Vec<String>, ForestE
             removes: Some("H".into()),
             dearomatizes: true,
             ..Default::default()
-        },
+        }
+        .sealed(),
+        possibilities: Vec::new(),
         skip_same_rings: false,
         cleave_side_group: None,
         search_bias: 0,
