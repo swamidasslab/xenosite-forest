@@ -960,10 +960,7 @@ impl<'a, K> Expand<'a, K>
 where
     K: Fn(&Candidate) -> bool,
 {
-    fn new(
-        counters: &'a mut PathCounters,
-        input: ExpandInput<'a, K>,
-    ) -> Result<Self, ForestError> {
+    fn new(counters: &'a mut PathCounters, input: ExpandInput<'a, K>) -> Result<Self, ForestError> {
         let ExpandInput {
             ruleset,
             parent,
@@ -1002,20 +999,17 @@ where
                 let (a, b, cname, pname) = crate::atom_diff::candidate_order_key(cand, d);
                 // Novel pattern+site before those already in yielded plans.
                 // Higher search_bias first (negated so sort ascending prefers high).
-                (
-                    a,
-                    b,
-                    cname,
-                    !novel as u8,
-                    -cand.pattern.search_bias,
-                    pname,
-                )
+                (a, b, cname, !novel as u8, -cand.pattern.search_bias, pname)
             });
         } else if !known_sites.is_empty() {
             deferred.sort_by_key(|cand| {
                 let novel =
                     hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
-                (!novel as u8, -cand.pattern.search_bias, cand.pattern.name.clone())
+                (
+                    !novel as u8,
+                    -cand.pattern.search_bias,
+                    cand.pattern.name.clone(),
+                )
             });
         }
         Ok(Self {
