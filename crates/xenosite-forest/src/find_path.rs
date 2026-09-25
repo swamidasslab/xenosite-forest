@@ -39,7 +39,7 @@ pub struct PathCounters {
     /// multipath; HEURISTICS).
     pub signal_contained_plan: usize,
     /// Child walks enqueued with lower heap priority because the hop's
-    /// rule+site already appears in a yielded plan.
+    /// pattern+site already appears in a yielded path.
     pub deprioritized_known_site: usize,
 }
 
@@ -146,7 +146,7 @@ struct Walk {
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
-    /// `false` when this hop's rule+site already appears in a yielded plan.
+    /// `false` when this hop's pattern+site already appears in a yielded path.
     /// Deprioritize only — never drop or abort (HEURISTICS).
     novel_site: bool,
     seq: usize,
@@ -370,25 +370,31 @@ fn record_yield_plan_signals(counters: &mut PathCounters, found: &[PathOutcome],
     }
 }
 
-/// Rule → site atoms from already-yielded plans (orbit or Index anchors).
-/// Used to soft-demote matching expand sites — not to prune.
+/// Pattern name → site atoms from already-yielded path steps (unique-edit
+/// orbit). Soft-demote matching expand hops — not prune. Key is pattern+site,
+/// not bare site or leaf rule (same atom under another pattern stays novel).
 fn yielded_plan_sites(found: &[PathOutcome]) -> std::collections::HashMap<String, HashSet<usize>> {
     let mut out: std::collections::HashMap<String, HashSet<usize>> =
         std::collections::HashMap::new();
     for h in found {
-        for step in h.plan.iter() {
-            out.entry(step.rule.clone())
+        for step in &h.steps {
+            let atoms = if step.site_orbit.is_empty() {
+                std::slice::from_ref(&step.site)
+            } else {
+                step.site_orbit.as_slice()
+            };
+            out.entry(step.pattern_name.clone())
                 .or_default()
-                .extend(step.site_orbit());
+                .extend(atoms.iter().copied());
         }
     }
     out
 }
 
-/// True when this hop's leaf rule + site (or unique-edit orbit) is absent from
+/// True when this hop's pattern + site (or unique-edit orbit) is absent from
 /// yielded plans. Empty `known` → always novel.
 fn hop_site_is_novel(
-    rule_path: &[Option<String>],
+    pattern_name: &str,
     site: usize,
     site_orbit: &[usize],
     known: &std::collections::HashMap<String, HashSet<usize>>,
@@ -396,10 +402,7 @@ fn hop_site_is_novel(
     if known.is_empty() {
         return true;
     }
-    let Some(rule) = rule_path.first().and_then(|n| n.as_deref()) else {
-        return true;
-    };
-    let Some(atoms) = known.get(rule) else {
+    let Some(atoms) = known.get(pattern_name) else {
         return true;
     };
     let site_atoms: &[usize] = if site_orbit.is_empty() {
@@ -415,7 +418,7 @@ fn emission_site_is_novel(
     known: &std::collections::HashMap<String, HashSet<usize>>,
 ) -> bool {
     hop_site_is_novel(
-        &emission.rule_path,
+        &emission.pattern_name,
         emission.site,
         &emission.site_orbit,
         known,
@@ -873,14 +876,16 @@ where
         }
         if let Some(d) = diff {
             deferred.sort_by_key(|cand| {
-                let novel = hop_site_is_novel(&cand.rule_path, cand.site, &cand.orbit, known_sites);
+                let novel =
+                    hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
                 let (a, b, cname, pname) = crate::atom_diff::candidate_order_key(cand, d);
-                // Novel sites before sites already in yielded plans.
+                // Novel pattern+site before those already in yielded plans.
                 (a, b, cname, !novel as u8, pname)
             });
         } else if !known_sites.is_empty() {
             deferred.sort_by_key(|cand| {
-                let novel = hop_site_is_novel(&cand.rule_path, cand.site, &cand.orbit, known_sites);
+                let novel =
+                    hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
                 (!novel as u8, cand.pattern.name.clone())
             });
         }
@@ -1267,7 +1272,7 @@ where
                 };
                 self.counters.mol_edits += 1;
                 let novel_site = hop_site_is_novel(
-                    &emission.rule_path,
+                    &emission.pattern_name,
                     emission.site,
                     &emission.site_orbit,
                     &known_sites,
@@ -1875,32 +1880,27 @@ mod tests {
     }
 
     #[test]
-    fn hop_site_novel_reads_yielded_plan_orbits() {
-        use crate::canonical_plan::{PlanAtom, Step};
+    fn hop_site_novel_reads_yielded_pattern_and_site() {
         let found = vec![PathOutcome {
-            steps: vec![],
-            plan: as_deps([Step::new("Dealkylation", [PlanAtom::index(3)]).with_orbit([3, 5])]),
+            steps: vec![PathStep {
+                rule_path: vec![Some("Dealkylation".into())],
+                pattern_name: "O-Me".into(),
+                site: 3,
+                site_orbit: vec![3, 5],
+                product: "C".into(),
+                sides: vec![],
+            }],
+            plan: as_deps([]),
             smiles: "C".into(),
         }];
         let known = yielded_plan_sites(&found);
-        assert!(!hop_site_is_novel(
-            &[Some("Dealkylation".into())],
-            5,
-            &[],
-            &known
-        ));
-        assert!(hop_site_is_novel(
-            &[Some("Dealkylation".into())],
-            9,
-            &[],
-            &known
-        ));
-        assert!(hop_site_is_novel(
-            &[Some("Hydroxylation".into())],
-            3,
-            &[],
-            &known
-        ));
+        // Same pattern + orbit atom → known.
+        assert!(!hop_site_is_novel("O-Me", 5, &[], &known));
+        // Same pattern, other site → novel.
+        assert!(hop_site_is_novel("O-Me", 9, &[], &known));
+        // Different pattern at same atom → novel.
+        assert!(hop_site_is_novel("N-Me", 3, &[], &known));
+        assert!(hop_site_is_novel("phenol", 3, &[], &known));
     }
 
     #[test]
