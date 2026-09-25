@@ -96,28 +96,26 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   **Current default — `HeapScoreMode::Match(MatchScoreSpec::product_both())`.** After hard tiers `target_hit` then `novel_site`, match-family score from data `combine × metric` (not a SoftStack lex key). Default recipe is **product × both**: `improvement × closeness` with `formula_l1` (includes H) and atom_diff cost. Improvement = max(0, parent − child) + 1; closeness = `SCALE / (1 + child)`; both-metrics multiply factors. Plain [`BinaryHeap::pop`]. Bench: `find_path_bench --score product-both` (aliases `match` / `product`); `--matrix` runs all 9 + soft. Status: approved (Rust derisk) as default pending matrix follow-up.
 
-  **Match-score matrix (filter-only, plain pop; mid + hard).** Axes: combine = close | improve | product; metric = atom | formula | both. SoftStack included as baseline.
+  **Match-score matrix (filter-only, plain pop; mid + hard).** Axes: combine = close | improve | product; metric = atom | formula | both. SoftStack included as baseline. Cost = MCS HA gaps only; `formula_l1` includes H (no special `h_off`).
 
   | score | mid Σbill | hard Σbill | hard s |
   | --- | ---: | ---: | ---: |
-  | close-atom | 59 | **203** | **0.99** |
-  | product-both (default) | 59 | 228 | 1.25 |
-  | close-both | 61 | 232 | 1.02 |
-  | product-atom | 59 | 234 | 1.23 |
-  | soft | 59 | 300 | 1.35 |
-  | improve-atom | 59 | 326 | 1.54 |
-  | close-formula | 94 | 391 | 1.11 |
-  | improve-both | 59 | 403 | 1.86 |
-  | improve-formula | 87 | 657 | 2.42 |
-  | product-formula | 93 | 849 | 2.48 |
+  | close-atom | 79 | **241** | **0.97** |
+  | close-formula | 79 | 250 | 0.93 |
+  | product-atom | 79 | 255 | 1.05 |
+  | product-both (default) | 79 | 260 | 0.99 |
+  | close-both | 79 | 260 | 0.99 |
+  | soft | 79 | 354 | 1.35 |
+  | improve-atom | 79 | 354 | 1.35 |
+  | product-formula | 79 | 376 | 1.33 |
+  | improve-formula | 79 | 474 | 1.91 |
+  | improve-both | 79 | 494 | 1.93 |
 
-  Read: **atom beats formula**; formula-only inflates eugenol mid and most hard rows. **Close beats improve** on hard (improve-* and product-* with formula drag). **close-atom** lowest hard bill; product-both still ahead of SoftStack. No misses. Whether to switch default to close-atom: not decided.
+  Read: mid bills collapsed (all 79; MeOPhOH edits up). Hard still ranks **close-atom** best; product-both ahead of SoftStack. No misses. Vs prior HA+H cost (`|h_delta≠0|` in `field_cost`): hard product-both was 217 / close-atom 210 — simplification costs ~40–50 hard bill. Whether to switch default to close-atom: not decided.
 
-  **Tried — slim `AtomDiff::field_cost` to HA alignment only** (`3·(|cleaved|+n_extra+|cleavage_bonds|)`), no H. Damaged atom/both bills. Status: not approved.
+  **Current — no special H in atom cost.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|)`. H is not a cost term; `formula_l1` counts it like any element; filters still read `h_delta`. Soft aromatic / bond-order stay filter-only. Dropped cached `needs_oxygen` / carbonyl / alcohol (recompute N1). Status: approved (simplify; bill regression vs HA+H accepted).
 
-  **Current trial — HA alignment cost only; H via `formula_l1`.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|)`. No `h_delta` in cost (filters still use `h_delta`). Match formula distance is `formula_l1` (**includes H**). Soft aromatic / bond-order stay filter-only. Dropped cached `needs_oxygen` / carbonyl / alcohol (recompute N1). Status: not decided (measuring).
-
-  Prior HA+H cost mid/hard bills (with `|h_delta≠0|` in cost) kept for comparison in git history / artifacts; re-bench after dropping h_delta from cost.
+  **Tried — HA+H in both atom cost and `formula_l1`.** `field_cost` included `|h_delta≠0|`. Better hard bills (product-both 217). Status: not approved (H as special cost term).
 
   **Previous — `HeapScoreMode::SoftStack` (opt-in `--score soft`).** Lexicographic soft key: `search_bias` → `site_progress` → `cost_gain` → `seq`. Kept for comparison. Status: not decided (superseded as default). Tests: `heap_prefers_higher_search_bias_over_seq` / `heap_lack_of_improvement_counters_dfs` / `hop_cost_gain_is_parent_minus_child` / `heap_pops_best_ord_value_only` / `match_product_prefers_joint_improvement_and_closeness` / `match_combine_and_metric_axes`.
 
