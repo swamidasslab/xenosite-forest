@@ -212,8 +212,6 @@ fn main() {
                     (Some(f), Some(a)) => {
                         if f == &a {
                             exact_match += 1;
-                        } else if f.is_unchanged() && a.is_unchanged() {
-                            exact_match += 1;
                         } else if f.is_unchanged() {
                             actual_only += 1;
                             println!("    r{r} ACTUAL_ONLY  actual={}", env_line(&a));
