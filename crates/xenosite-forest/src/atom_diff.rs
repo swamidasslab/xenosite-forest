@@ -1059,7 +1059,10 @@ pub fn effect_removes_h(effect: &Effect) -> bool {
 }
 
 /// MCS map then [`crate::matched_atom::align_shells`].
-pub fn aligned_shells(reactant: &Molecule, target: &Molecule) -> crate::matched_atom::AlignedShells {
+pub fn aligned_shells(
+    reactant: &Molecule,
+    target: &Molecule,
+) -> crate::matched_atom::AlignedShells {
     let diff = atom_diff(reactant, target);
     crate::matched_atom::align_shells(
         &crate::matched_atom::molecule_shells(reactant),
@@ -1092,12 +1095,7 @@ pub fn projected_unaligned_reductions(
         red_r = leave.min(current.unaligned_reactant);
     }
     if effect_adds_oxygen(effect) && !effect.cleaves {
-        let o = effect
-            .delta_formula
-            .get("O")
-            .copied()
-            .unwrap_or(0)
-            .max(0) as usize;
+        let o = effect.delta_formula.get("O").copied().unwrap_or(0).max(0) as usize;
         red_t = o.max(1).min(current.unaligned_target);
     }
     (red_r, red_t)

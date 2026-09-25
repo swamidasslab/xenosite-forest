@@ -55,6 +55,22 @@ impl AtomNeighborhood {
         }
         c
     }
+
+    /// Walk n0, n1, n2 (in that order).
+    pub fn shells(&self) -> [(&str, &Shell); 3] {
+        [("n0", &self.n0), ("n1", &self.n1), ("n2", &self.n2)]
+    }
+
+    /// Count of `el` in one shell (`"n0"` / `"n1"` / `"n2"`), or 0.
+    pub fn shell_get(&self, which: &str, el: &str) -> i32 {
+        let shell = match which {
+            "n0" => &self.n0,
+            "n1" => &self.n1,
+            "n2" => &self.n2,
+            _ => return 0,
+        };
+        shell.get(el).copied().unwrap_or(0)
+    }
 }
 
 /// Neighborhoods for **all** heavy atoms in one molecule (keyed by atom index).
@@ -357,11 +373,7 @@ mod tests {
         let ra = parse_mol(a).unwrap();
         let rb = parse_mol(b).unwrap();
         let diff = atom_diff(&ra, &rb);
-        align_shells(
-            &molecule_shells(&ra),
-            &molecule_shells(&rb),
-            &diff.mapping,
-        )
+        align_shells(&molecule_shells(&ra), &molecule_shells(&rb), &diff.mapping)
     }
 
     #[test]
@@ -476,5 +488,37 @@ mod tests {
             "closeness: carbonyl ({carbonyl_c}) > alcohol ({alcohol_c})"
         );
         assert!(cleave.without_unchanged().cost() > 0);
+    }
+
+    #[test]
+    fn per_shell_o_h_not_summed() {
+        // Attachment alcohol: n1 O:+1 H:−1; n2 may have H:+1 (new OH).
+        // Summing H across shells would cancel; same-shell read stays Alcohol.
+        let alcohol = aligned("CC", "CCO");
+        let attach = alcohol
+            .atoms
+            .values()
+            .find(|e| e.shell_get("n1", "O") == 1)
+            .expect("attachment has O in n1");
+        assert_eq!(attach.shell_get("n1", "H"), -1);
+        assert_eq!(
+            attach.shell_get("n1", "H") + attach.shell_get("n2", "H"),
+            0,
+            "summed H cancels on alcohol attachment"
+        );
+        let carbonyl = aligned("CC", "CC=O");
+        let co = carbonyl
+            .atoms
+            .values()
+            .find(|e| e.shell_get("n1", "O") == 1)
+            .expect("carbonyl C has O in n1");
+        assert_eq!(co.shell_get("n1", "H"), -2);
+        // Neighbor of alcohol addition: O appears in n2, not n1.
+        let nbr = alcohol
+            .atoms
+            .values()
+            .find(|e| e.shell_get("n2", "O") == 1 && e.shell_get("n1", "O") == 0)
+            .expect("neighbor sees O in n2");
+        assert_eq!(nbr.shell_get("n2", "H"), -1);
     }
 }
