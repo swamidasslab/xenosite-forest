@@ -521,7 +521,7 @@ mod tests {
             .map(|(&i, _)| i)
             .expect("phenol O after demethylation");
         let cleave_site = cleave.at_sites(&[o]);
-        assert!(cleave_site.atoms[&o].n1.get("O").is_none());
+        assert!(!cleave_site.atoms[&o].n1.contains_key("O"));
         assert_eq!(cleave.unaligned_reactant, 1);
 
         // Product closeness: full-align cost still separates the transforms.

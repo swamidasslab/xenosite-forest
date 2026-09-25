@@ -1081,7 +1081,7 @@ pub fn projected_unaligned_reductions(
     if effect.cleaves {
         let leave = effect
             .leave_count
-            .map(|n| n.max(0) as usize)
+            .map(|n| n as usize)
             .or_else(|| {
                 let n: usize = effect
                     .leave_formula
