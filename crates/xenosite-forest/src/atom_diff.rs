@@ -1572,11 +1572,7 @@ mod tests {
             child.index_of(tag_a).expect("product end a"),
             child.index_of(tag_b).expect("product end b"),
         ];
-        assert!(dh_product_ends_match(
-            child.mol(),
-            &product_ends,
-            &target
-        ));
+        assert!(dh_product_ends_match(child.mol(), &product_ends, &target));
     }
 
     #[test]

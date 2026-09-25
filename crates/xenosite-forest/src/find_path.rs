@@ -295,7 +295,11 @@ fn root_ancestors(start: &ForestMol) -> HashSet<String> {
 }
 
 /// Product index of the atom that carried ``parent_idx``'s forest tag.
-fn parent_to_product_idx(parent: &ForestMol, product: &ForestMol, parent_idx: usize) -> Option<usize> {
+fn parent_to_product_idx(
+    parent: &ForestMol,
+    product: &ForestMol,
+    parent_idx: usize,
+) -> Option<usize> {
     let tag = parent.tag_of(parent_idx)?;
     product.index_of(tag)
 }
@@ -954,12 +958,7 @@ where
                     // DH / QF path ends: each end must match target neighbors
                     // **after** the edit (product), not on the reactant before.
                     if let Some(ends) = emission.dh_ends {
-                        if !dh_product_ends_match_target(
-                            &walk.mol,
-                            &kept,
-                            ends,
-                            &self.target_mol,
-                        ) {
+                        if !dh_product_ends_match_target(&walk.mol, &kept, ends, &self.target_mol) {
                             continue;
                         }
                     }
