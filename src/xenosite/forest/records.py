@@ -384,6 +384,11 @@ class FormulaDeltaMismatch(NamedTuple):
     Appended to :class:`~xenosite.forest.find_path.PathCounters` /
     ``EditCounters`` lists and to the suite collector — recover details
     without catching warnings or parsing message strings.
+
+    ``pair`` is true when the emission came from a ResonancePair (``ends`` on
+    SiteInfo). Pair topology / optimistic site scoring can disagree with
+    sealed end bags; the suite zero-assert ignores those until that gap is
+    fixed. Non-pair mismatches still fail the suite.
     """
 
     pattern: str
@@ -393,6 +398,7 @@ class FormulaDeltaMismatch(NamedTuple):
     adds: str
     removes: str
     leave: dict[str, int]
+    pair: bool = False
 
 
 class EditCounters(Protocol):

@@ -334,12 +334,14 @@ pub fn o_dealkylation() -> RuleSet {
             "[#6H3:1][#8H0:2]",
             Edit::Smirks("[C:1][O:2]>>[O:2].[C:1](=O)O".into()),
             crate::pattern::Effect {
-                adds: None,
+                // Formic acid leave adds two O; Me leave cancels in the net.
+                adds: Some("OO".into()),
                 removes: None,
                 cleaves: true,
                 methide: false,
                 dearomatizes: false,
-                leave_count: None,
+                leave_count: Some(1),
+                leave_formula: crate::pattern::leave_me(),
                 partner: None,
                 ..Default::default()
             },

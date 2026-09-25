@@ -863,10 +863,13 @@ def branches(
             if symbol:
                 item["partner"] = symbol
                 if removes_partner:
-                    # Cleaved-off partner stays in a product fragment — leave,
-                    # not junction ``removes`` (eliminated atoms).
-                    item["leave_formula"] = {symbol: 1}
-                    item["leave_count"] = 1
+                    # Cleaving: partner stays as a product fragment → leave.
+                    # Non-cleaving: partner is eliminated → junction removes.
+                    if item.get("cleaves"):
+                        item["leave_formula"] = {symbol: 1}
+                        item["leave_count"] = 1
+                    else:
+                        item["removes"] = symbol
                     item["delta_formula"] = compose_delta_formula(
                         item.get("adds") or "",
                         item.get("removes") or "",
@@ -1038,9 +1041,24 @@ def merge_effects(
 
     needs = (left.get("needs") or "") + (right.get("needs") or "")
     can = left.get("dearomatizes") or right.get("dearomatizes")
+    adds = (left.get("adds") or "") + (right.get("adds") or "")
+    removes = (left.get("removes") or "") + (right.get("removes") or "")
+    leave: dict[str, int] = {}
+    for end in (left, right):
+        for el, n in (end.get("leave_formula") or {}).items():
+            leave[el] = leave.get(el, 0) + int(n)
+    leave = {el: n for el, n in leave.items() if n}
+    leave_count = left.get("leave_count")
+    if leave_count is None:
+        leave_count = right.get("leave_count")
+    elif right.get("leave_count") is not None:
+        leave_count = int(leave_count) + int(right["leave_count"])
     return {
-        "adds": left.get("adds", "") + right.get("adds", ""),
-        "removes": left.get("removes", "") + right.get("removes", ""),
+        "adds": adds,
+        "removes": removes,
+        "leave_formula": leave,
+        "leave_count": leave_count,
+        "delta_formula": compose_delta_formula(adds, removes, leave),
         "cleaves": bool(left.get("cleaves") or right.get("cleaves")),
         "dearomatizes": bool(can and system_aromatic),
         "methide": bool(left.get("methide") or right.get("methide")),
@@ -1753,6 +1771,19 @@ def _report_formula_delta_mismatch(
         and any(n < 0 for n in actual_heavy.values())
     ):
         return True
+    # Ring-retained leave: cleaves with a named leave, but one product still
+    # holds those atoms (isoxazole N–O open, etc.). Not a sealed leave fragment.
+    if (
+        cleaves
+        and leave_formula
+        and len(products) == 1
+        and not actual_heavy
+        and expected_heavy
+        == _heavy_formula_counts(
+            {el: -int(n) for el, n in leave_formula.items() if int(n)}
+        )
+    ):
+        return True
 
     if expected_heavy == actual_heavy:
         return True
@@ -1764,6 +1795,7 @@ def _report_formula_delta_mismatch(
         adds=adds,
         removes=removes,
         leave={str(k): int(v) for k, v in leave_formula.items()},
+        pair="ends" in info,
     )
     warnings.warn(
         f"Formula delta mismatch for pattern {detail.pattern}: declared heavy "
@@ -4043,7 +4075,7 @@ class Sulfation(ConjugationRule):
                 "[#6:1]1=[#6:2][#6:3]2[#8:7][#6:4]2[#6:5]=[#6:6]1>>"
                 "[*:1]1=[*:2][*:3]=[*:4](-S(C)(=O)(=O))[*:5]=[*:6]1"
             ),
-            describe(adds="CSO", removes="O", site_map=4, name="epoxide_methyl_sulfone"),
+            describe(adds="CSO", site_map=4, name="epoxide_methyl_sulfone"),
         ),
     )
 

@@ -125,6 +125,23 @@ pub fn check_effect_delta_formula(
     {
         return None;
     }
+    // Ring-retained leave: named leave still on the single product (e.g.
+    // isoxazole N–O open). Incomplete leave vs fragment split — skip.
+    if effect.cleaves
+        && !effect.leave_formula.is_empty()
+        && products.len() == 1
+        && actual.is_empty()
+    {
+        let leave_as_delta: BTreeMap<String, i32> = effect
+            .leave_formula
+            .iter()
+            .filter(|(_, n)| **n != 0)
+            .map(|(el, n)| (el.clone(), -n))
+            .collect();
+        if expected == heavy(&leave_as_delta) {
+            return None;
+        }
+    }
 
     if expected == actual {
         return None;

@@ -146,7 +146,19 @@ def test_restamp_does_not_rewrite_history():
 
 
 class _CarbonToOxygen(SmirksReactionRule):
-    smirks = (("[C:1]Cl>>[O:1].[Cl:2]", describe(site_map=1, adds="")),)
+    smirks = (
+        (
+            "[C:1]Cl>>[O:1].[Cl:2]",
+            describe(
+                site_map=1,
+                adds="O",
+                removes="C",
+                cleaves=True,
+                leave_count=1,
+                leave_formula={"Cl": 1},
+            ),
+        ),
+    )
 
     def __init__(self):
         super().__init__(name="CarbonToOxygen")

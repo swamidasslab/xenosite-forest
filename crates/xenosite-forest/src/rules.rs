@@ -61,16 +61,20 @@ fn halide_remove_branches(map: u16, base: Effect) -> Vec<Effect> {
     HALIDE_Z
         .iter()
         .map(|&(z, sym)| {
-            Effect {
+            let mut effect = Effect {
                 when: Some(crate::pattern::When::atomic(map, z)),
-                // Cleaved-off halide stays in a product fragment — leave, not
-                // junction ``removes``.
-                leave_formula: BTreeMap::from([(sym.to_string(), 1)]),
-                leave_count: Some(1),
                 partner: Some(sym.into()),
                 ..base.clone()
+            };
+            // Cleaving: partner stays as a product fragment → leave.
+            // Non-cleaving: partner is eliminated → junction removes.
+            if effect.cleaves {
+                effect.leave_formula = BTreeMap::from([(sym.to_string(), 1)]);
+                effect.leave_count = Some(1);
+            } else {
+                effect.removes = Some(sym.into());
             }
-            .sealed()
+            effect.sealed()
         })
         .collect()
 }
@@ -1497,7 +1501,7 @@ pub fn sulfation() -> RuleSet {
                 vec![4],
                 Effect {
                     adds: Some("CSO".into()),
-                    removes: Some("O".into()),
+                    removes: None,
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
