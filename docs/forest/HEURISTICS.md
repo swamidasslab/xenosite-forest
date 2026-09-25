@@ -117,6 +117,17 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   **Current trial — HA alignment + H counts, no soft O/aromatic/bond in cost.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|) + |h_delta≠0|`. Match formula distance is `formula_l1` (**includes H**); `formula_heavy_l1` kept for heavy-only callers. Soft `needs_oxygen` / aromatic / bond-order remain filter-only. Status: not decided (measuring).
 
+  | score | mid Σbill | hard Σbill (vs full-cost baseline) |
+  | --- | ---: | ---: |
+  | close-atom | 67 | 210 (+7) |
+  | product-both | 74 | **217 (−11)** |
+  | close-both | 66 | 217 (−15) |
+  | product-atom | 67 | 215 (−19) |
+  | soft | 64 | 292 (−8) |
+  | product-formula | 79 | 371 (−478) |
+
+  Hard atom/both often **improve** vs full cost once H is in both formula and atom_diff; mid atom/both slightly worse (59→67/74). Soft O/aromatic/bond terms not needed for these bills.
+
   **Previous — `HeapScoreMode::SoftStack` (opt-in `--score soft`).** Lexicographic soft key: `search_bias` → `site_progress` → `cost_gain` → `seq`. Kept for comparison. Status: not decided (superseded as default). Tests: `heap_prefers_higher_search_bias_over_seq` / `heap_lack_of_improvement_counters_dfs` / `hop_cost_gain_is_parent_minus_child` / `heap_pops_best_ord_value_only` / `match_product_prefers_joint_improvement_and_closeness` / `match_combine_and_metric_axes`.
 
   **`delta_formula` is not a heap score** — soft mismatch warn/counter only. **Dropped:** alternate DFS/BFS among equal scores.
