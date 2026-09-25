@@ -1768,10 +1768,7 @@ mod tests {
         let d3 = atom_diff(&carbonyl, &alcohol);
         assert!(d3.h_gain(&carbonyl, &alcohol), "{d3:?}");
         assert_eq!(
-            formula_l1(
-                &molecule_formula(&carbonyl),
-                &molecule_formula(&alcohol)
-            ),
+            formula_l1(&molecule_formula(&carbonyl), &molecule_formula(&alcohol)),
             2,
             "CC=O C2H4O → CCO C2H6O: ΔH=2"
         );
@@ -1788,12 +1785,7 @@ mod tests {
         let ammonium = parse_mol("[NH4+]").unwrap();
         let ammonia = parse_mol("N").unwrap();
         assert_eq!(
-            atom_h_delta(
-                &ammonium,
-                &ammonia,
-                &[(0, 0)].into_iter().collect(),
-                0
-            ),
+            atom_h_delta(&ammonium, &ammonia, &[(0, 0)].into_iter().collect(), 0),
             -1,
             "[NH4+] has 4 H, N has 3 → delta −1 (not −5 from double-count)"
         );
@@ -1822,11 +1814,16 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         for c in &cands {
-            if c.pattern.effect.adds.as_deref() == Some("HH") && !any_h_gain(&reactant, &target, &diff)
+            if c.pattern.effect.adds.as_deref() == Some("HH")
+                && !any_h_gain(&reactant, &target, &diff)
             {
                 assert!(
-                    !pattern_could_help_on(&c.pattern.effect, &diff, Some(&reactant), Some(&target))
-                        || c.pattern.effect.cleaves,
+                    !pattern_could_help_on(
+                        &c.pattern.effect,
+                        &diff,
+                        Some(&reactant),
+                        Some(&target)
+                    ) || c.pattern.effect.cleaves,
                     "pattern {} should not help toward quinone",
                     c.pattern.name
                 );

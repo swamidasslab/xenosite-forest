@@ -64,19 +64,17 @@ def test_aliphatic_path_hydrogenation_resolves_dearomatizes_false():
 
 
 def test_adds_h_filter_refuses_when_no_atom_gains_hydrogen():
-    """Oxidative MeOPhOH→hydroxyQ: no atom gains H → Hydrogenation skipped.
+    """Oxidative MeOPhOH→hydroxyQ: h_delta all ≤0 → Hydrogenation skipped.
 
     Dearomatize-alone would still allow H (target is non-aromatic); reading
-    ``adds`` vs on-demand H delta is what blocks reductive saturation.
+    ``adds`` vs ``h_delta`` is what blocks reductive saturation.
     """
-
-    from xenosite.forest.find_path import any_h_gain
 
     reactant = wipe_forest(copy_mol(as_mol("COc1ccc(O)cc1"))).xf.tracing._stamp()
     target = as_mol("O=C1C=C(O)C(=O)C(O)=C1")
     diff = atom_diff(reactant, target)
     assert diff.loses_aromaticity  # dearomatize filter alone would allow
-    assert not any_h_gain(diff)
+    assert not any(delta > 0 for delta in diff.h_delta.values())
     fr, filter_sites = _filters(diff, True)
     kept = list(
         Hydrogenation().metabolites(
@@ -87,12 +85,10 @@ def test_adds_h_filter_refuses_when_no_atom_gains_hydrogen():
 
 
 def test_adds_h_filter_allows_alkene_when_target_gains_hydrogen():
-    from xenosite.forest.find_path import any_h_gain
-
     reactant = wipe_forest(copy_mol(as_mol("C=C"))).xf.tracing._stamp()
     target = as_mol("CC")
     diff = atom_diff(reactant, target)
-    assert any_h_gain(diff)
+    assert any(delta > 0 for delta in diff.h_delta.values())
     fr, fs = _filters(diff, True)
     hits = list(Hydrogenation().metabolites(reactant, filter_rules=fr, filter_sites=fs))
     assert hits, "alkene→alkane must keep Hydrogenation under adds-H filter"
