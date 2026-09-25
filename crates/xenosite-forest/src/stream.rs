@@ -320,6 +320,7 @@ where
                     site: c.site,
                     orbit: c.orbit.clone(),
                     pattern: c.pattern.clone(),
+                    shell_forecast: None,
                 };
                 if !(self.filter_sites)(self.mol, c.site, &info) {
                     continue;
@@ -424,6 +425,7 @@ where
                     site: pair.site,
                     orbit: vec![pair.site],
                     pattern,
+                    shell_forecast: None,
                 };
                 if !(self.filter_sites)(self.mol, pair.site, &info) {
                     continue;

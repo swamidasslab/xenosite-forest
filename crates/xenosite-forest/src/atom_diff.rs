@@ -1054,8 +1054,64 @@ fn effect_adds_h(effect: &Effect) -> bool {
     effect.adds.as_deref().is_some_and(|a| a.contains('H'))
 }
 
-fn effect_removes_h(effect: &Effect) -> bool {
+pub fn effect_removes_h(effect: &Effect) -> bool {
     effect.removes.as_deref().is_some_and(|r| r.contains('H'))
+}
+
+/// MCS map then [`crate::matched_atom::align_shells`].
+pub fn aligned_shells(reactant: &Molecule, target: &Molecule) -> crate::matched_atom::AlignedShells {
+    let diff = atom_diff(reactant, target);
+    crate::matched_atom::align_shells(
+        &crate::matched_atom::molecule_shells(reactant),
+        &crate::matched_atom::molecule_shells(target),
+        &diff.mapping,
+    )
+}
+
+/// Projected unmatched reductions from an effect against the current align.
+pub fn projected_unaligned_reductions(
+    effect: &Effect,
+    current: &crate::matched_atom::AlignedShells,
+) -> (usize, usize) {
+    let mut red_r = 0usize;
+    let mut red_t = 0usize;
+    if effect.cleaves {
+        let leave = effect
+            .leave_count
+            .map(|n| n.max(0) as usize)
+            .or_else(|| {
+                let n: usize = effect
+                    .leave_formula
+                    .values()
+                    .filter(|&&c| c > 0)
+                    .map(|&c| c as usize)
+                    .sum();
+                if n > 0 { Some(n) } else { None }
+            })
+            .unwrap_or(1);
+        red_r = leave.min(current.unaligned_reactant);
+    }
+    if effect_adds_oxygen(effect) && !effect.cleaves {
+        let o = effect
+            .delta_formula
+            .get("O")
+            .copied()
+            .unwrap_or(0)
+            .max(0) as usize;
+        red_t = o.max(1).min(current.unaligned_target);
+    }
+    (red_r, red_t)
+}
+
+/// Site info shell forecast: same [`AlignedShells`] shape, unchanged dropped,
+/// `unaligned_*` = projected unmatched reductions.
+pub fn site_shell_forecast(
+    current: &crate::matched_atom::AlignedShells,
+    site_atoms: &[usize],
+    effect: &Effect,
+) -> crate::matched_atom::AlignedShells {
+    let (red_r, red_t) = projected_unaligned_reductions(effect, current);
+    crate::matched_atom::site_delta_forecast(current, site_atoms, red_r, red_t)
 }
 
 /// Same as [`pattern_could_help`], with optional live mol / target for O gates.

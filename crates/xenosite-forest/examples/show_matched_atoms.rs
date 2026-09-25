@@ -17,18 +17,22 @@ fn dump_mol(label: &str, smi: &str, shells: &MoleculeShells) {
 }
 
 fn dump_aligned(label: &str, a_smi: &str, b_smi: &str, d: &AlignedShells) {
+    let kept = d.without_unchanged();
     println!(
-        "=== {label}  ({a_smi} → {b_smi})  unaligned R={} T={} ===",
-        d.unaligned_reactant, d.unaligned_target
+        "=== {label}  ({a_smi} → {b_smi})  unaligned R={} T={}  cost={} ===",
+        d.unaligned_reactant,
+        d.unaligned_target,
+        kept.cost()
     );
     for (&r, env) in &d.atoms {
         let t = d.alignment[&r];
         println!(
-            "  r{r}→t{t}  arΔ={}  n0={{{}}}  n1={{{}}}  n2={{{}}}",
+            "  r{r}→t{t}  arΔ={}  n0={{{}}}  n1={{{}}}  n2={{{}}}  |δ|={}",
             env.aromatic,
             format_shell(&env.n0),
             format_shell(&env.n1),
-            format_shell(&env.n2)
+            format_shell(&env.n2),
+            env.abs_delta()
         );
     }
     println!();
@@ -48,6 +52,8 @@ fn main() {
     println!();
     case("ethane→ethene", "CC", "C=C");
     case("ethene→ethane", "C=C", "CC");
-    case("ethane→ethanol", "CC", "CCO");
+    case("alcohol add (ethane→ethanol)", "CC", "CCO");
+    case("carbonyl add (ethane→acetaldehyde)", "CC", "CC=O");
     case("acetaldehyde→ethanol", "CC=O", "CCO");
+    case("cleavage (anisole→phenol)", "COc1ccccc1", "Oc1ccccc1");
 }

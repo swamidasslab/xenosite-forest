@@ -45,16 +45,17 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_diff::{
-    AtomDiff, added_heavy_atoms, any_h_gain, any_h_loss, any_needs_oxygen, atom_diff,
-    atom_diff_after_cleavage, atom_diff_after_cleavage_tracked, atom_diff_for_child,
+    AtomDiff, added_heavy_atoms, aligned_shells, any_h_gain, any_h_loss, any_needs_oxygen,
+    atom_diff, atom_diff_after_cleavage, atom_diff_after_cleavage_tracked, atom_diff_for_child,
     atom_diff_from_mappings, atom_h_delta, atom_needs_carbonyl, atom_needs_oxygen,
     candidate_could_help, candidate_could_help_on, candidate_order_key, candidate_order_key_on,
     dh_neighbors_match_any_view, dh_product_ends_match, extend_mapping_for_added,
     extend_mapping_where_possible, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
     pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
-    residual_cost_after_site_cast, site_h_progress, site_h_progress_best_placement,
-    try_atom_diff_for_child, try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked,
-    try_lift_cleaved_child, try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
+    projected_unaligned_reductions, residual_cost_after_site_cast, site_h_progress,
+    site_h_progress_best_placement, site_shell_forecast, try_atom_diff_for_child,
+    try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked, try_lift_cleaved_child,
+    try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
@@ -84,8 +85,8 @@ pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use matched_atom::{
-    AlignedShells, AtomNeighborhood, MoleculeShells, Shell, align_shells, aligned_shells,
-    atom_neighborhood, format_shell, molecule_shells,
+    AlignedShells, AtomNeighborhood, MoleculeShells, Shell, align_shells, atom_neighborhood,
+    format_shell, molecule_shells, site_delta_forecast,
 };
 pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
