@@ -102,14 +102,15 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
 - **``search_bias: i8``** on `PatternInfo` (default `0`). Soft heap preference in `find_path` after novel-site: higher pops sooner on the max-heap (before site H-progress and DFS `seq`). Negative demotes. **Hydrogenation** and **OxygenReduction** use `-1` (shared `demote_reductive`): real but less-common / counter-oxidative — prone to undo other edits under DFS — not invalid. Never drops or aborts. Pair emissions take `min(left, right)`. Status: not decided — schema for “less likely” still open; this is a score knob that overrides DFS, not a filter. Tests: `heap_prefers_higher_search_bias_over_seq` / `reductive_patterns_carry_negative_search_bias`.
 
-- **``delta_formula: {element: delta}``** on `Effect` / possibility (zeros omitted). Declared net formula change, sealed from ``adds`` / ``removes`` bags when empty. ForestMol caches formula as element→count (incl. H). When OR arms disagree on the delta (halogen removal), each arm carries its own map under a ``When`` — do not invent a search branch. Status: approved (Rust derisk + Python annotate). Redundancy with existing keys: see below.
+- **``delta_formula: {element: delta}``** on `Effect` / possibility (zeros omitted). Declared net formula change, sealed from junction ``adds`` / ``removes`` bags **minus** ``leave_formula``. ForestMol caches formula as element→count (incl. H). Cleavage: named leave as negative counts, plus O/H at the cut from the bags. When OR arms disagree on the delta (halogen removal), each arm carries its own map under a ``When`` — do not invent a search branch. Status: approved (Rust derisk + Python annotate). Redundancy with existing keys: see below.
 
 ### Formula vs existing Effect keys (audit)
 
 | Key | Redundant with ``delta_formula``? | Notes |
 | --- | --- | --- |
-| ``adds`` / ``removes`` | **Yes** (bag encoding of the same map) | Positive entries ≡ adds bag; negative ≡ removes. Keep bags until callers migrate; filters may read either. Note: sealed pattern delta is edit stoichiometry (hydroxyl ``O:+1,H:-1``); mol ``formula_delta`` after sanitize may differ (``O:+1`` only — OH restores H). |
-| ``leave_count`` | **No** | Names leaving heavy atoms on a cleaved fragment, not the keep-side delta. |
+| ``adds`` / ``removes`` | **Yes** (bag encoding of the junction part) | Positive ≡ adds bag; negative ≡ removes. Keep bags until callers migrate. Note: sealed pattern delta is edit stoichiometry (hydroxyl ``O:+1,H:-1``); mol ``formula_delta`` after sanitize may differ (``O:+1`` only — OH restores H). |
+| ``leave_formula`` | **Yes** (negative part of the sealed map) | Positive counts of the named leave; sealed as negatives. ``Me`` → ``{C:1,H:3}``. Open leaves (`leave_count` None) stay empty. |
+| ``leave_count`` | **Partial** | When ``leave_formula`` is set, equals its heavy-atom count. Still useful when leave is open (None) or as a cheap filter without walking the map. |
 | ``partner`` / ``partner_h`` | **No** | Site role / identity, not stoichiometry (though When+delta covers partner *removal*). |
 | ``needs`` | **No** | Capability / gating (e.g. needs O), not a count. |
 | ``cleaves`` / ``breaks_ring`` / ``dearomatizes`` / ``methide`` | **No** | Structural / pathway bits. |

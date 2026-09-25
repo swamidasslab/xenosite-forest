@@ -425,6 +425,14 @@ fn merge_effect_fields(
             &left.effect.resolved_delta_formula(),
             &right.effect.resolved_delta_formula(),
         ),
+        leave_formula: {
+            let mut leave = left.effect.leave_formula.clone();
+            for (el, n) in &right.effect.leave_formula {
+                *leave.entry(el.clone()).or_insert(0) += n;
+            }
+            leave.retain(|_, n| *n != 0);
+            leave
+        },
         cleaves: left.effect.cleaves || right.effect.cleaves,
         leave_count: left.effect.leave_count.or(right.effect.leave_count),
         methide: left.effect.methide || right.effect.methide,

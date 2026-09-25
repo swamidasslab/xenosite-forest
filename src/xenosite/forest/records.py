@@ -201,13 +201,16 @@ class Effect(TypedDict, total=False):
     rule class in the search.
 
     ``delta_formula`` is the declared net change as element → signed count
-    (zeros omitted). Derived from ``adds`` / ``removes`` bags when not set;
-    When branches that disagree (halogen removal) each carry their own map.
+    (zeros omitted). Derived from junction ``adds`` / ``removes`` bags minus
+    ``leave_formula``; When branches that disagree (halogen removal) each
+    carry their own map. Cleavage: named leave as negative, plus O/H at the cut.
     """
 
     adds: str
     removes: str
     delta_formula: dict[str, int]
+    leave_formula: dict[str, int]
+    leave_formula: dict[str, int]
     cleaves: bool
     leave_count: int | None
     breaks_ring: bool
@@ -240,6 +243,7 @@ class _SpanCore(TypedDict):
     adds: _StrSpan
     removes: _StrSpan
     delta_formula: dict[str, int] | tuple[dict[str, int], ...]
+    leave_formula: dict[str, int] | tuple[dict[str, int], ...]
     cleaves: _BoolSpan
     leave_count: _LeaveSpan
     breaks_ring: _BoolSpan

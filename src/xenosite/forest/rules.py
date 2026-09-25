@@ -498,6 +498,32 @@ def bag_delta_formula(adds: str | None = "", removes: str | None = "") -> dict[s
     return {el: n for el, n in delta.items() if n}
 
 
+def compose_delta_formula(
+    adds: str | None = "",
+    removes: str | None = "",
+    leave_formula: Mapping[str, int] | None = None,
+) -> dict[str, int]:
+    """Junction bags minus named leave. Zeros omitted."""
+
+    delta = bag_delta_formula(adds, removes)
+    for el, n in (leave_formula or {}).items():
+        delta[el] = delta.get(el, 0) - int(n)
+    return {el: n for el, n in delta.items() if n}
+
+
+LEAVE_ME: dict[str, int] = {"C": 1, "H": 3}
+LEAVE_CH2: dict[str, int] = {"C": 1, "H": 2}
+LEAVE_O: dict[str, int] = {"O": 1}
+
+
+def named_leave_formula(leave: str) -> dict[str, int] | None:
+    """Resolve a ``cleave_side_group`` leave label into a formula bag."""
+
+    if leave == "Me":
+        return dict(LEAVE_ME)
+    return None
+
+
 def _rule_name(rule: ReactionRule | str | None) -> str | None:
     if rule is None:
         return None
@@ -559,6 +585,7 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
         "adds": "",
         "removes": "",
         "delta_formula": {},
+        "leave_formula": {},
         "cleaves": False,
         "leave_count": None,
         "breaks_ring": False,
@@ -610,14 +637,21 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     when = value.get("when")
     if isinstance(when, dict):
         effect["when"] = _copy_when(when)
+    raw_leave = value.get("leave_formula")
+    if isinstance(raw_leave, dict) and raw_leave:
+        effect["leave_formula"] = {
+            str(k): int(v) for k, v in raw_leave.items() if int(v)
+        }
     raw_delta = value.get("delta_formula")
     if isinstance(raw_delta, dict) and raw_delta:
         effect["delta_formula"] = {
             str(k): int(v) for k, v in raw_delta.items() if int(v)
         }
     else:
-        effect["delta_formula"] = bag_delta_formula(
-            effect.get("adds") or "", effect.get("removes") or ""
+        effect["delta_formula"] = compose_delta_formula(
+            effect.get("adds") or "",
+            effect.get("removes") or "",
+            effect.get("leave_formula") or {},
         )
     return effect
 
@@ -718,6 +752,7 @@ _EFFECT_DEFAULTS: Effect = {
     "adds": "",
     "removes": "",
     "delta_formula": {},
+    "leave_formula": {},
     "cleaves": False,
     "leave_count": None,
     "breaks_ring": False,
@@ -789,8 +824,10 @@ def branches(
                 item["partner"] = symbol
                 if removes_partner:
                     item["removes"] = symbol
-                    item["delta_formula"] = bag_delta_formula(
-                        item.get("adds") or "", item.get("removes") or ""
+                    item["delta_formula"] = compose_delta_formula(
+                        item.get("adds") or "",
+                        item.get("removes") or "",
+                        item.get("leave_formula") or {},
                     )
             if "h" in when:
                 item["partner_h"] = when["h"]
@@ -2657,7 +2694,13 @@ class Dealkylation(ResonanceRule):
         (
             Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)"),
             describe(
-                *branches(_whens(2, (7, 8, 16)), adds="OO", cleaves=True),
+                *branches(
+                    _whens(2, (7, 8, 16)),
+                    adds="OO",
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_ME),
+                ),
                 site_map=(1, 2),
                 name="methyl_carboxylic",
             ),
@@ -2665,7 +2708,13 @@ class Dealkylation(ResonanceRule):
         (
             Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)"),
             describe(
-                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                *branches(
+                    _whens(2, (7, 8, 16)),
+                    adds="O",
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_ME),
+                ),
                 site_map=(1, 2),
                 name="methyl_carbonyl",
             ),
@@ -2673,7 +2722,13 @@ class Dealkylation(ResonanceRule):
         (
             Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)"),
             describe(
-                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                *branches(
+                    _whens(2, (7, 8, 16)),
+                    adds="O",
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_ME),
+                ),
                 site_map=(1, 2),
                 name="methyl_alcohol",
             ),
@@ -2788,6 +2843,8 @@ def _ndealk(
 ) -> tuple[Smirks, PatternInfo]:
     """One N-dealkylation pattern. ``leave_count`` is the named leaving atoms."""
 
+    if leave_count == 1 and "leave_formula" not in effect:
+        effect["leave_formula"] = dict(LEAVE_ME)
     return (
         smirks,
         describe(
@@ -2900,6 +2957,7 @@ class BenzodioxoleReduction(SmirksReactionRule):
                 cleaves=True,
                 partner="O",
                 leave_count=1,
+                leave_formula=dict(LEAVE_CH2),
                 site_map=(2, 3),
                 name="dioxole_methylene",
             ),
@@ -2926,6 +2984,7 @@ class NitroaromaticReduction(SmirksReactionRule):
                 cleaves=True,
                 partner="N",
                 leave_count=1,
+                leave_formula=dict(LEAVE_O),
                 site_map=(1, 2),
                 name="nitro_charged",
             ),
@@ -2936,6 +2995,7 @@ class NitroaromaticReduction(SmirksReactionRule):
                 cleaves=True,
                 partner="N",
                 leave_count=1,
+                leave_formula=dict(LEAVE_O),
                 site_map=(1, 2),
                 name="nitro_neutral",
             ),

@@ -80,7 +80,8 @@ pub use orbits::{
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
-    bag_counts, bag_delta_formula, merge_delta_formula,
+    bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o,
+    merge_delta_formula, named_leave_formula,
 };
 pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};
 pub use ruleset::{

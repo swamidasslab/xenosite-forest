@@ -743,13 +743,10 @@ pub fn benzodioxole_reduction() -> RuleSet {
             SiteKind::DirectedBond,
             vec![2, 3],
             Effect {
-                adds: None,
-                removes: None,
                 cleaves: true,
-                methide: false,
-                dearomatizes: false,
-                leave_count: None,
-                partner: None,
+                leave_count: Some(1),
+                leave_formula: crate::pattern::leave_ch2(),
+                partner: Some("O".into()),
                 ..Default::default()
             },
         )],
@@ -767,13 +764,10 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: None,
-                    removes: None,
                     cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("N".into()),
                     ..Default::default()
                 },
             ),
@@ -783,13 +777,10 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: None,
-                    removes: None,
                     cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("N".into()),
                     ..Default::default()
                 },
             ),
@@ -2063,6 +2054,28 @@ mod tests {
             .unwrap();
         assert_eq!(cl.delta_formula.get("O"), Some(&1));
         assert_eq!(cl.delta_formula.get("Cl"), Some(&-1));
+    }
+
+    #[test]
+    fn cleavage_variants_include_leave_and_junction() {
+        let dealk = dealkylation();
+        let patterns = dealk.patterns();
+        let methyl = patterns
+            .iter()
+            .find(|p| p.name == "methyl_carboxylic")
+            .unwrap();
+        assert_eq!(methyl.effect.leave_formula.get("C"), Some(&1));
+        assert_eq!(methyl.effect.leave_formula.get("H"), Some(&3));
+        assert_eq!(methyl.effect.delta_formula.get("C"), Some(&-1));
+        assert_eq!(methyl.effect.delta_formula.get("H"), Some(&-3));
+        assert_eq!(methyl.effect.delta_formula.get("O"), Some(&2));
+
+        let dioxole = benzodioxole_reduction().patterns()[0].clone();
+        assert_eq!(dioxole.effect.delta_formula.get("C"), Some(&-1));
+        assert_eq!(dioxole.effect.delta_formula.get("H"), Some(&-2));
+
+        let nitro = nitroaromatic_reduction().patterns()[0].clone();
+        assert_eq!(nitro.effect.delta_formula.get("O"), Some(&-1));
     }
 
     #[test]

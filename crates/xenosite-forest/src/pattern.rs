@@ -101,6 +101,43 @@ pub fn bag_delta_formula(adds: Option<&str>, removes: Option<&str>) -> BTreeMap<
     delta
 }
 
+/// Junction bags ± named leave (leave counts subtracted). Zeros omitted.
+pub fn compose_delta_formula(
+    adds: Option<&str>,
+    removes: Option<&str>,
+    leave_formula: &BTreeMap<String, i32>,
+) -> BTreeMap<String, i32> {
+    let mut delta = bag_delta_formula(adds, removes);
+    for (el, n) in leave_formula {
+        *delta.entry(el.clone()).or_insert(0) -= n;
+    }
+    delta.retain(|_, n| *n != 0);
+    delta
+}
+
+/// Named methyl leave (``cleave_side_group`` / ``leave_count=1`` methyl carbon).
+pub fn leave_me() -> BTreeMap<String, i32> {
+    BTreeMap::from([("C".into(), 1), ("H".into(), 3)])
+}
+
+/// Named methylene leave (benzodioxole CH2).
+pub fn leave_ch2() -> BTreeMap<String, i32> {
+    BTreeMap::from([("C".into(), 1), ("H".into(), 2)])
+}
+
+/// Named oxygen leave (nitroaromatic N–O cleavage).
+pub fn leave_o() -> BTreeMap<String, i32> {
+    BTreeMap::from([("O".into(), 1)])
+}
+
+/// Resolve a ``cleave_side_group`` leave label into a formula bag, if known.
+pub fn named_leave_formula(leave: &str) -> Option<BTreeMap<String, i32>> {
+    match leave {
+        "Me" => Some(leave_me()),
+        _ => None,
+    }
+}
+
 /// Merge two delta maps (pair ends). Zero keys dropped.
 pub fn merge_delta_formula(
     left: &BTreeMap<String, i32>,
@@ -121,10 +158,17 @@ pub struct Effect {
     pub removes: Option<String>,
     /// Declared net formula change (element → delta). Zeros omitted.
     ///
-    /// Filled from ``adds`` / ``removes`` when sealed. When OR arms disagree
-    /// (e.g. halogen removal), each possibility carries its own map under a
-    /// [`When`].
+    /// Sealed from junction ``adds`` / ``removes`` bags minus
+    /// [`Self::leave_formula`]. Cleavage: leave as negative, O/H at the cut
+    /// from the bags. When OR arms disagree (halogen removal), each arm
+    /// carries its own map under a [`When`].
     pub delta_formula: BTreeMap<String, i32>,
+    /// Named leaving-piece formula (positive counts). Cleavage only.
+    ///
+    /// Sealed into [`Self::delta_formula`] as a negative contribution. Empty
+    /// when the leave is open (`leave_count` None) or already encoded in
+    /// ``removes`` (e.g. dehydration ``OH``).
+    pub leave_formula: BTreeMap<String, i32>,
     pub cleaves: bool,
     /// Named leaving heavy-atom count (methyl dealkylation = 1). `None` = open.
     pub leave_count: Option<u16>,
@@ -139,24 +183,49 @@ pub struct Effect {
 }
 
 impl Effect {
-    /// Fill [`Self::delta_formula`] from adds/removes when still empty.
+    /// Fill [`Self::delta_formula`] from bags − leave when still empty.
     pub fn sealed(mut self) -> Self {
         if self.delta_formula.is_empty() {
-            self.delta_formula = bag_delta_formula(self.adds.as_deref(), self.removes.as_deref());
+            self.delta_formula = compose_delta_formula(
+                self.adds.as_deref(),
+                self.removes.as_deref(),
+                &self.leave_formula,
+            );
         }
         self
     }
 
-    /// Declared delta, deriving from bags if the map was never sealed.
+    /// Recompute [`Self::delta_formula`] from bags − leave (after mutating leave).
+    pub fn reseal_delta(mut self) -> Self {
+        self.delta_formula = compose_delta_formula(
+            self.adds.as_deref(),
+            self.removes.as_deref(),
+            &self.leave_formula,
+        );
+        self
+    }
+
+    /// Declared delta, deriving from bags − leave if the map was never sealed.
     pub fn resolved_delta_formula(&self) -> BTreeMap<String, i32> {
         if self.delta_formula.is_empty()
             && (self.adds.as_ref().is_some_and(|s| !s.is_empty())
-                || self.removes.as_ref().is_some_and(|s| !s.is_empty()))
+                || self.removes.as_ref().is_some_and(|s| !s.is_empty())
+                || !self.leave_formula.is_empty())
         {
-            bag_delta_formula(self.adds.as_deref(), self.removes.as_deref())
+            compose_delta_formula(
+                self.adds.as_deref(),
+                self.removes.as_deref(),
+                &self.leave_formula,
+            )
         } else {
             self.delta_formula.clone()
         }
+    }
+
+    /// Attach a named leave formula and reseal delta.
+    pub fn with_leave_formula(mut self, leave: BTreeMap<String, i32>) -> Self {
+        self.leave_formula = leave;
+        self.reseal_delta()
     }
 }
 
@@ -232,12 +301,35 @@ impl PatternInfo {
     }
 
     /// Set cleavage side groups (leave, keep). Equal labels ⇒ swappable.
+    ///
+    /// Known leave labels (e.g. ``Me``) fill [`Effect::leave_formula`] and
+    /// reseal [`Effect::delta_formula`] when leave was empty.
     pub fn with_cleave_side_group(
         mut self,
         leave: impl Into<String>,
         keep: impl Into<String>,
     ) -> Self {
-        self.cleave_side_group = Some((leave.into(), keep.into()));
+        let leave = leave.into();
+        let keep = keep.into();
+        if self.effect.leave_formula.is_empty() {
+            if let Some(formula) = named_leave_formula(&leave) {
+                self.effect.leave_formula = formula;
+                self.effect = self.effect.reseal_delta();
+            }
+        }
+        for arm in &mut self.possibilities {
+            if arm.leave_formula.is_empty() {
+                if let Some(formula) = named_leave_formula(&leave) {
+                    arm.leave_formula = formula.clone();
+                    arm.delta_formula = compose_delta_formula(
+                        arm.adds.as_deref(),
+                        arm.removes.as_deref(),
+                        &arm.leave_formula,
+                    );
+                }
+            }
+        }
+        self.cleave_side_group = Some((leave, keep));
         self
     }
 
@@ -396,5 +488,33 @@ mod tests {
         let p = PatternInfo::hydroxyl("h", "[#6h1:1]");
         assert_eq!(p.effect.delta_formula.get("O"), Some(&1));
         assert_eq!(p.effect.delta_formula.get("H"), Some(&-1));
+    }
+
+    #[test]
+    fn cleavage_me_leave_is_negative_plus_junction_o() {
+        let d = compose_delta_formula(Some("OO"), None, &leave_me());
+        assert_eq!(d.get("C"), Some(&-1));
+        assert_eq!(d.get("H"), Some(&-3));
+        assert_eq!(d.get("O"), Some(&2));
+    }
+
+    #[test]
+    fn cleave_side_group_me_fills_leave_formula() {
+        let p = PatternInfo::new(
+            "methyl_alcohol",
+            "[#6H3:1][#8H0:2]",
+            Edit::Smirks("[C:1][O:2]>>[O:2].[C:1]O".into()),
+            Effect {
+                adds: Some("O".into()),
+                cleaves: true,
+                leave_count: Some(1),
+                ..Effect::default()
+            },
+        )
+        .with_cleave_side_group("Me", "hetero");
+        assert_eq!(p.effect.leave_formula, leave_me());
+        assert_eq!(p.effect.delta_formula.get("C"), Some(&-1));
+        assert_eq!(p.effect.delta_formula.get("H"), Some(&-3));
+        assert_eq!(p.effect.delta_formula.get("O"), Some(&1));
     }
 }

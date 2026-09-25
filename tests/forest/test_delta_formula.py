@@ -13,6 +13,7 @@ from xenosite.forest.rules import (
     ReductiveDehalogenation,
     bag_counts,
     bag_delta_formula,
+    compose_delta_formula,
     describe,
 )
 
@@ -52,7 +53,7 @@ def test_removes_partner_whens_disagree_on_delta():
 
 
 def test_delta_formula_matches_adds_removes_across_catalog():
-    """adds/removes bags are redundant with sealed delta_formula."""
+    """delta_formula == junction bags minus leave_formula."""
 
     mismatched = []
     for cls in discover_reaction_rule_classes():
@@ -61,8 +62,10 @@ def test_delta_formula_matches_adds_removes_across_catalog():
         rule = instantiate_rule(cls)
         for _group, _smarts, info in patterns_on(rule):
             for poss in info.get("possibilities") or ():
-                expected = bag_delta_formula(
-                    poss.get("adds") or "", poss.get("removes") or ""
+                expected = compose_delta_formula(
+                    poss.get("adds") or "",
+                    poss.get("removes") or "",
+                    poss.get("leave_formula") or {},
                 )
                 got = dict(poss.get("delta_formula") or {})
                 if got != expected:
@@ -76,3 +79,27 @@ def test_delta_formula_matches_adds_removes_across_catalog():
                         )
                     )
     assert mismatched == []
+
+
+def test_cleavage_methyl_leave_plus_junction_oxygen():
+    from xenosite.forest.rules import Dealkylation, LEAVE_ME
+
+    info = next(
+        i for _s, i in Dealkylation().smirks if i.get("name") == "methyl_carboxylic"
+    )
+    for poss in info["possibilities"]:
+        assert poss["leave_formula"] == LEAVE_ME
+        assert poss["delta_formula"] == {"C": -1, "H": -3, "O": 2}
+
+
+def test_cleavage_named_leaves_benzodioxole_and_nitro():
+    from xenosite.forest.rules import BenzodioxoleReduction, NitroaromaticReduction
+
+    dioxole = next(i for _s, i in BenzodioxoleReduction().smirks)
+    assert dioxole["possibilities"][0]["delta_formula"] == {"C": -1, "H": -2}
+    nitro = next(
+        i
+        for _s, i in NitroaromaticReduction().smirks
+        if i.get("name") == "nitro_neutral"
+    )
+    assert nitro["possibilities"][0]["delta_formula"] == {"O": -1}
