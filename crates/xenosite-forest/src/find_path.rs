@@ -268,7 +268,8 @@ pub fn hop_match_product_score(
 }
 
 /// Heap entry: hits first, then novel sites vs yielded plans, then the mode's
-/// soft score(s). Among equal scores, [`pop_frontier`] alternates DFS/BFS.
+/// soft score(s), then `seq` as a pure tiebreak. Pop is plain
+/// [`BinaryHeap::pop`] — best Ord value only (no DFS/BFS alternation).
 /// BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
@@ -323,51 +324,9 @@ impl Ord for HeapItem {
                     .then_with(|| self.cost_gain.cmp(&other.cost_gain)),
                 HeapScoreMode::MatchProduct => self.match_score.cmp(&other.match_score),
             })
-            // DFS seq keeps equal-score band contiguous for [`pop_frontier`].
+            // Tiebreak only — higher seq preferred among equal scores.
             .then_with(|| self.seq.cmp(&other.seq))
     }
-}
-
-fn same_heap_score(a: &HeapItem, b: &HeapItem) -> bool {
-    a.mode == b.mode
-        && a.target_hit == b.target_hit
-        && a.novel_site == b.novel_site
-        && match a.mode {
-            HeapScoreMode::SoftStack => {
-                a.search_bias == b.search_bias
-                    && a.site_progress == b.site_progress
-                    && a.cost_gain == b.cost_gain
-            }
-            HeapScoreMode::MatchProduct => a.match_score == b.match_score,
-        }
-}
-
-/// Pop one frontier walk: among the top equal-score band, take max `seq` (DFS)
-/// or min `seq` (BFS). Caller flips `prefer_dfs` after a real expand / yield.
-fn pop_frontier(heap: &mut BinaryHeap<HeapItem>, prefer_dfs: bool) -> Option<HeapItem> {
-    let first = heap.pop()?;
-    let mut band = vec![first];
-    while heap.peek().is_some_and(|p| same_heap_score(p, &band[0])) {
-        band.push(heap.pop().unwrap());
-    }
-    let idx = if prefer_dfs {
-        band.iter()
-            .enumerate()
-            .max_by_key(|(_, it)| it.seq)
-            .map(|(i, _)| i)
-            .unwrap()
-    } else {
-        band.iter()
-            .enumerate()
-            .min_by_key(|(_, it)| it.seq)
-            .map(|(i, _)| i)
-            .unwrap()
-    };
-    let chosen = band.swap_remove(idx);
-    for item in band {
-        heap.push(item);
-    }
-    Some(chosen)
 }
 
 fn ha_distance(ha: usize, target_ha: usize) -> usize {
@@ -920,7 +879,6 @@ where
         target_ha,
         heap,
         seq,
-        prefer_dfs: true,
         seen,
         yielded: Vec::new(),
         done: false,
@@ -942,8 +900,6 @@ pub struct FindPath<'a, 'b, K> {
     target_ha: usize,
     heap: BinaryHeap<HeapItem>,
     seq: usize,
-    /// Alternating frontier pop: true → DFS (max seq), false → BFS (min seq).
-    prefer_dfs: bool,
     seen: HashSet<String>,
     /// Already-yielded hits (for [`plan_already_yielded`] only).
     yielded: Vec<PathOutcome>,
@@ -978,7 +934,7 @@ where
             heap_score,
         } = self.config;
 
-        while let Some(item) = pop_frontier(&mut self.heap, self.prefer_dfs) {
+        while let Some(item) = self.heap.pop() {
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
@@ -997,7 +953,6 @@ where
                     smiles: here.as_ref().to_string(),
                 };
                 self.yielded.push(outcome.clone());
-                self.prefer_dfs = !self.prefer_dfs;
                 return Some(Ok(outcome));
             }
 
@@ -1019,7 +974,6 @@ where
             };
             self.counters.nodes += 1;
             self.counters.expansions += 1;
-            self.prefer_dfs = !self.prefer_dfs;
             let parent_cost = diff.as_ref().map(|d| d.cost());
             let parent_ha = walk.mol.heavy_atom_count();
             let mut hits_from_here = 0usize;
@@ -1768,7 +1722,6 @@ where
         target_ha,
         heap,
         seq,
-        prefer_dfs: true,
         seen,
         yielded: Vec::new(),
         done: false,
@@ -1786,8 +1739,6 @@ pub struct FindPathFilters<'a, 'b, R, S> {
     target_ha: usize,
     heap: BinaryHeap<HeapItem>,
     seq: usize,
-    /// Alternating frontier pop: true → DFS (max seq), false → BFS (min seq).
-    prefer_dfs: bool,
     seen: HashSet<String>,
     yielded: Vec<PathOutcome>,
     done: bool,
@@ -1810,7 +1761,7 @@ where
             ..
         } = self.config;
 
-        while let Some(item) = pop_frontier(&mut self.heap, self.prefer_dfs) {
+        while let Some(item) = self.heap.pop() {
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
@@ -1829,13 +1780,11 @@ where
                     smiles: here.as_ref().to_string(),
                 };
                 self.yielded.push(outcome.clone());
-                self.prefer_dfs = !self.prefer_dfs;
                 return Some(Ok(outcome));
             }
 
             let mol = walk.mol.mol();
             self.counters.expansions += 1;
-            self.prefer_dfs = !self.prefer_dfs;
             let mut hits_from_here = 0usize;
             let known_sites = yielded_plan_sites(&self.yielded);
 
@@ -1982,7 +1931,7 @@ mod tests {
 
     #[test]
     fn heap_prefers_most_recently_queued_among_peers() {
-        // Ord keeps DFS seq so equal-score band is contiguous for pop_frontier.
+        // Among equal soft scores, higher seq pops first (Ord tiebreak).
         let older = HeapItem {
             mode: HeapScoreMode::SoftStack,
             target_hit: false,
@@ -2024,7 +1973,8 @@ mod tests {
     }
 
     #[test]
-    fn pop_frontier_alternates_dfs_and_bfs() {
+    fn heap_pops_best_ord_value_only() {
+        // Plain BinaryHeap::pop — among equal soft scores, higher seq wins.
         let walk = Walk {
             mol: ForestMol::parse("CC").unwrap(),
             steps: vec![],
@@ -2052,12 +2002,10 @@ mod tests {
         heap.push(mk(1));
         heap.push(mk(2));
         heap.push(mk(3));
-        // DFS first: max seq
-        assert_eq!(pop_frontier(&mut heap, true).unwrap().seq, 3);
-        // BFS next among remaining: min seq
-        assert_eq!(pop_frontier(&mut heap, false).unwrap().seq, 1);
-        assert_eq!(pop_frontier(&mut heap, true).unwrap().seq, 2);
-        assert!(pop_frontier(&mut heap, false).is_none());
+        assert_eq!(heap.pop().unwrap().seq, 3);
+        assert_eq!(heap.pop().unwrap().seq, 2);
+        assert_eq!(heap.pop().unwrap().seq, 1);
+        assert!(heap.pop().is_none());
     }
 
     #[test]
