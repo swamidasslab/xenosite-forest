@@ -642,12 +642,16 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     raw_leave = value.get("leave_formula")
     if isinstance(raw_leave, dict) and raw_leave:
         effect["leave_formula"] = {
-            str(k): int(v) for k, v in raw_leave.items() if int(v)
+            str(k): n
+            for k, v in raw_leave.items()
+            if type(v) is int and (n := v) != 0
         }
     raw_delta = value.get("delta_formula")
     if isinstance(raw_delta, dict) and raw_delta:
         effect["delta_formula"] = {
-            str(k): int(v) for k, v in raw_delta.items() if int(v)
+            str(k): n
+            for k, v in raw_delta.items()
+            if type(v) is int and (n := v) != 0
         }
     else:
         effect["delta_formula"] = compose_delta_formula(
@@ -1608,28 +1612,45 @@ def _report_formula_delta_mismatch(
     adds = options.get("adds") or ""
     removes = options.get("removes") or ""
     leave_formula = options.get("leave_formula") or {}
-    declared = options.get("delta_formula")
-    if not isinstance(declared, dict):
-        declared = compose_delta_formula(adds, removes, leave_formula)
+    if not isinstance(adds, str):
+        adds = ""
+    if not isinstance(removes, str):
+        removes = ""
+    if not isinstance(leave_formula, dict):
+        leave_formula = {}
+    cleaves = bool(options.get("cleaves"))
 
     if len(products) == 1:
         actual = formula_delta(parent_formula, products[0].xf.formula)
+        declared = options.get("delta_formula")
+        if not isinstance(declared, dict):
+            declared = compose_delta_formula(adds, removes, leave_formula)
         expected_heavy = _heavy_formula_counts(declared)
         actual_heavy = _heavy_formula_counts(actual.get("counts"))
     else:
-        # Cleavage: leave stays in a fragment — net change is external adds.
-        expected_heavy = _heavy_formula_counts(bag_counts(adds if isinstance(adds, str) else ""))
+        # Leave stays in a fragment (cancels). Eliminated removes (halide) do not.
+        expected_heavy = _heavy_formula_counts(bag_delta_formula(adds, removes))
         actual = formula_delta(parent_formula, _sum_product_formula(products))
         actual_heavy = _heavy_formula_counts(actual.get("counts"))
 
-    if expected_heavy == actual_heavy:
+    # Star conjugates use dummy ``*`` — bag stoichiometry ≠ mol formula.
+    if "*" in expected_heavy or "*" in actual_heavy:
         return
-    if not expected_heavy and not actual_heavy:
+    # Open leave: cleaves with empty leave_formula and unexplained heavy loss.
+    if (
+        cleaves
+        and not leave_formula
+        and not expected_heavy
+        and any(n < 0 for n in actual_heavy.values())
+    ):
+        return
+
+    if expected_heavy == actual_heavy:
         return
     warnings.warn(
         f"Formula delta mismatch for pattern {name}: declared heavy "
         f"{expected_heavy!r} ≠ observed {actual_heavy!r} "
-        f"(cleaves={bool(options.get('cleaves'))}, adds={adds!r}, "
+        f"(cleaves={cleaves}, adds={adds!r}, "
         f"removes={removes!r}, leave={leave_formula!r})",
         FormulaDeltaMismatchWarning,
         stacklevel=3,

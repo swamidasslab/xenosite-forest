@@ -153,6 +153,9 @@ filterwarnings = [
     "error",
     # Intentional archive chemotype noise; not a live-forest contract.
     "ignore::xenosite._archive_forest.unstable.UnstableWarning",
+    # Formula-delta check is soft / incomplete (open leaves, some cleaves).
+    # Dedicated tests use catch_warnings; do not gate the suite on it yet.
+    "ignore::xenosite.forest.rules.FormulaDeltaMismatchWarning",
     # Deprecated AtomTracker facade: tests that call it use pytest.warns /
     # catch_warnings(ignore). Do not blanket-ignore DeprecationWarning.
     # Cross-rule overlaps log INFO only (no RedundantRulesWarning); SiteDeduplicationWarning

@@ -210,7 +210,6 @@ class Effect(TypedDict, total=False):
     removes: str
     delta_formula: dict[str, int]
     leave_formula: dict[str, int]
-    leave_formula: dict[str, int]
     cleaves: bool
     leave_count: int | None
     breaks_ring: bool
@@ -376,7 +375,7 @@ SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
 RuleSiteKind: TypeAlias = Literal["atom", "bond", "directed_bond", "atom_pair"]
 
 # Keyword values :func:`~xenosite.forest.rules.describe` / ``branches`` accept.
-EffectField: TypeAlias = str | bool | int | When | None
+EffectField: TypeAlias = str | bool | int | When | dict[str, int] | None
 
 
 class EditCounters(Protocol):

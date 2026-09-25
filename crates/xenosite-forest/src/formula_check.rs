@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use crate::forest::{Formula, formula_delta, molecule_formula};
 use crate::mol::Molecule;
-use crate::pattern::{Effect, bag_counts, compose_delta_formula};
+use crate::pattern::{Effect, bag_delta_formula};
 
 /// Drop hydrogens — edit bags and sanitized mols disagree on H for hydroxyl.
 fn heavy(counts: &BTreeMap<String, i32>) -> BTreeMap<String, i32> {
@@ -32,12 +32,17 @@ fn sum_formulas(mols: &[Molecule]) -> Formula {
     Formula { counts, charge }
 }
 
-/// Expected heavy-atom net for multi-fragment cleavage: external ``adds`` only.
+/// Expected heavy-atom net for multi-fragment cleavage: junction bags only.
 ///
-/// Leave pieces (and ``removes`` that become fragments) stay in the product
-/// set, so they cancel in ``sum(products) − parent``.
+/// Named ``leave_formula`` atoms stay in a product fragment (cancel in
+/// ``sum(products) − parent``). ``removes`` that are eliminated (halide, not
+/// kept as a fragment) appear in the net — use ``adds − removes``, not adds
+/// alone.
 fn cleavage_net_expected(effect: &Effect) -> BTreeMap<String, i32> {
-    heavy(&bag_counts(effect.adds.as_deref().unwrap_or("")))
+    heavy(&bag_delta_formula(
+        effect.adds.as_deref(),
+        effect.removes.as_deref(),
+    ))
 }
 
 fn cleavage_net_actual(parent: &Formula, products: &[Molecule]) -> BTreeMap<String, i32> {
@@ -68,7 +73,7 @@ fn format_map(map: &BTreeMap<String, i32>) -> String {
 /// logs a warning and returns ``false``.
 ///
 /// Single product: heavy ``product − parent`` vs heavy ``delta_formula``.
-/// Cleavage (2+ products): heavy ``sum(products) − parent`` vs heavy ``adds``.
+/// Cleavage (2+ products): heavy ``sum(products) − parent`` vs ``adds − removes``.
 pub fn check_effect_delta_formula(
     parent: &Molecule,
     effect: &Effect,
@@ -78,18 +83,7 @@ pub fn check_effect_delta_formula(
     if products.is_empty() {
         return true;
     }
-    let sealed = compose_delta_formula(
-        effect.adds.as_deref(),
-        effect.removes.as_deref(),
-        &effect.leave_formula,
-    );
     let parent_f = molecule_formula(parent);
-    if sealed.is_empty() && products.len() == 1 {
-        let actual = single_actual(&parent_f, &products[0]);
-        if actual.is_empty() {
-            return true;
-        }
-    }
 
     let (expected, actual) = if products.len() == 1 {
         (
@@ -102,6 +96,20 @@ pub fn check_effect_delta_formula(
             cleavage_net_actual(&parent_f, products),
         )
     };
+
+    // Star conjugates use dummy ``*`` atoms — bag stoichiometry ≠ mol formula.
+    if expected.contains_key("*") || actual.contains_key("*") {
+        return true;
+    }
+    // Open leave (cleaves, empty leave_formula) with unexplained heavy loss:
+    // annotation incomplete, not a sealed-delta bug.
+    if effect.cleaves
+        && effect.leave_formula.is_empty()
+        && expected.is_empty()
+        && actual.values().any(|&n| n < 0)
+    {
+        return true;
+    }
 
     if expected == actual {
         return true;

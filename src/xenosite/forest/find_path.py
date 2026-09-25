@@ -571,6 +571,8 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
     span: Span = info.get("span") or {
         "adds": "",
         "removes": "",
+        "delta_formula": {},
+        "leave_formula": {},
         "cleaves": False,
         "leave_count": None,
         "breaks_ring": False,

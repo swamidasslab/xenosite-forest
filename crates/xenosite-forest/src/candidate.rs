@@ -96,7 +96,7 @@ impl Candidate {
         );
         let products = mols
             .iter()
-            .map(|m| crate::mol::canon_smiles(m))
+            .map(crate::mol::canon_smiles)
             .collect::<Vec<_>>();
         Ok(Some(Emission {
             site: self.site,
