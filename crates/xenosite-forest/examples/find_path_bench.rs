@@ -242,7 +242,7 @@ fn parse_score(args: &[String]) -> HeapScoreMode {
             "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
             other => panic!("unknown --score {other} (soft|match)"),
         })
-        .unwrap_or(HeapScoreMode::SoftStack)
+        .unwrap_or(HeapScoreMode::MatchProduct)
 }
 
 fn main() {

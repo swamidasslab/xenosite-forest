@@ -491,7 +491,7 @@ fn main() {
                 max_nodes: 800,
                 use_atom_diff: true,
                 lazy_closer: lazy,
-                heap_score: HeapScoreMode::SoftStack,
+                heap_score: HeapScoreMode::MatchProduct,
             };
             let mut best = f64::MAX;
             let mut bill = 0usize;

@@ -224,14 +224,14 @@ struct OxygenSite {
 /// How the find_path frontier ranks walks (after `target_hit` / `novel_site`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HeapScoreMode {
-    /// Current soft stack: `search_bias`, then site H-progress, then
-    /// `cost_gain` (= parent atom_diff cost − child), then DFS/BFS `seq`.
-    #[default]
+    /// Previous soft stack: `search_bias`, site H-progress, `cost_gain`, then
+    /// `seq`. Opt-in via `FindPathConfig` / `--score soft`.
     SoftStack,
-    /// Simpler product score across **formula** (heavy L1) and **atom_diff**
-    /// cost: `(formula_improvement × atom_improvement) × (formula_closeness ×
+    /// Default: product score across **formula** (heavy L1) and **atom_diff**
+    /// cost — `(formula_improvement × atom_improvement) × (formula_closeness ×
     /// atom_closeness)`. Improvement is max(0, parent_dist − child_dist) + 1;
     /// closeness is `SCALE / (1 + child_dist)`.
+    #[default]
     MatchProduct,
 }
 
@@ -609,7 +609,7 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: false,
-            heap_score: HeapScoreMode::SoftStack,
+            heap_score: HeapScoreMode::MatchProduct,
         }
     }
 }
