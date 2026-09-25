@@ -13,7 +13,9 @@
 //!
 //! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
-//! `--nofilter`), `--paths N` (emit up to N plans; default 1).
+//! `--nofilter`), `--paths N` (emit up to N plans; default 1),
+//! `--score LABEL` (`soft` or `combine-metric` e.g. `product-both`),
+//! `--matrix` (run all 9 match variants + soft; summary ranked by miss/bill/time).
 //!
 //! Pair with:
 //! ```text
@@ -25,7 +27,8 @@
 use std::time::{Duration, Instant};
 
 use xenosite_forest::{
-    FindPathConfig, HeapScoreMode, PathCounters, canon_of, find_path_with, phase_one,
+    FindPathConfig, HeapScoreMode, MatchCombine, MatchMetric, MatchScoreSpec, PathCounters,
+    canon_of, find_path_with, phase_one,
 };
 
 const MAX_NODES: usize = 800;
@@ -179,45 +182,6 @@ fn run_one(reactant: &str, target: &str, config: FindPathConfig, repeats: u32) -
     best.expect("repeats")
 }
 
-fn print_table(
-    title: &str,
-    cases: &[(&str, &str, &str)],
-    config: FindPathConfig,
-    repeats: u32,
-    budget: Duration,
-) {
-    println!(
-        "\n=== {title} (atom_diff={}, lazy_closer={}, max_paths={}) ===",
-        config.use_atom_diff, config.lazy_closer, config.max_paths
-    );
-    println!(
-        "{:<32} {:>4} {:>5} {:>9} {:>5} {:>6} {:>7} {:>6}",
-        "case", "hit", "hits", "seconds", "steps", "nodes", "edits", "bill"
-    );
-    let mut total = 0.0;
-    let suite_t0 = Instant::now();
-    for &(name, reactant, target) in cases {
-        if suite_t0.elapsed() >= budget {
-            println!("{name:<32} SKIP  (budget {:.0}s)", budget.as_secs_f64());
-            continue;
-        }
-        let row = run_one(reactant, target, config, repeats);
-        total += row.seconds;
-        println!(
-            "{:<32} {:>4} {:>5} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
-            name,
-            if row.hit { "ok" } else { "MISS" },
-            row.hits,
-            row.seconds,
-            row.steps,
-            row.nodes,
-            row.mol_edits,
-            row.billed
-        );
-    }
-    println!("{:<32} {:>4} {:>5} {:>9.3}", "TOTAL", "", "", total);
-}
-
 fn parse_budget(args: &[String], default_secs: u64) -> Duration {
     args.windows(2)
         .find(|w| w[0] == "--budget-secs")
@@ -234,21 +198,185 @@ fn parse_paths(args: &[String]) -> usize {
         .max(1)
 }
 
+fn parse_score_label(label: &str) -> HeapScoreMode {
+    match label {
+        "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
+        "match" | "match-product" | "product" | "product-both" | "default" => {
+            HeapScoreMode::match_product()
+        }
+        "close" | "dist" | "close-both" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Close,
+            metric: MatchMetric::Both,
+        }),
+        "improve" | "imp" | "improve-both" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Improve,
+            metric: MatchMetric::Both,
+        }),
+        "atom" | "product-atom" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Product,
+            metric: MatchMetric::Atom,
+        }),
+        "formula" | "product-formula" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Product,
+            metric: MatchMetric::Formula,
+        }),
+        "close-atom" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Close,
+            metric: MatchMetric::Atom,
+        }),
+        "close-formula" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Close,
+            metric: MatchMetric::Formula,
+        }),
+        "improve-atom" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Improve,
+            metric: MatchMetric::Atom,
+        }),
+        "improve-formula" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Improve,
+            metric: MatchMetric::Formula,
+        }),
+        other => panic!(
+            "unknown --score {other} (soft|product-both|close-both|improve-both|…-atom|…-formula)"
+        ),
+    }
+}
+
 fn parse_score(args: &[String]) -> HeapScoreMode {
     args.windows(2)
         .find(|w| w[0] == "--score")
-        .map(|w| match w[1].as_str() {
-            "match" | "match-product" | "product" => HeapScoreMode::MatchProduct,
-            "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
-            other => panic!("unknown --score {other} (soft|match)"),
-        })
-        .unwrap_or(HeapScoreMode::MatchProduct)
+        .map(|w| parse_score_label(&w[1]))
+        .unwrap_or_else(HeapScoreMode::match_product)
+}
+
+#[derive(Clone, Debug)]
+struct SuiteSummary {
+    label: String,
+    total_secs: f64,
+    total_bill: usize,
+    misses: usize,
+    rows: Vec<(String, Row)>,
+}
+
+fn run_suite(
+    cases: &[(&str, &str, &str)],
+    config: FindPathConfig,
+    repeats: u32,
+    budget: Duration,
+) -> SuiteSummary {
+    let label = config.heap_score.label().to_string();
+    let mut total_secs = 0.0;
+    let mut total_bill = 0;
+    let mut misses = 0;
+    let mut rows = Vec::new();
+    let suite_t0 = Instant::now();
+    for &(name, reactant, target) in cases {
+        if suite_t0.elapsed() >= budget {
+            misses += 1;
+            rows.push((
+                name.to_string(),
+                Row {
+                    hit: false,
+                    hits: 0,
+                    seconds: 0.0,
+                    steps: 0,
+                    nodes: 0,
+                    mol_edits: 0,
+                    billed: 0,
+                },
+            ));
+            continue;
+        }
+        let row = run_one(reactant, target, config, repeats);
+        total_secs += row.seconds;
+        total_bill += row.billed;
+        if !row.hit {
+            misses += 1;
+        }
+        rows.push((name.to_string(), row));
+    }
+    SuiteSummary {
+        label,
+        total_secs,
+        total_bill,
+        misses,
+        rows,
+    }
+}
+
+fn print_suite_detail(title: &str, summary: &SuiteSummary, config: &FindPathConfig) {
+    println!(
+        "\n=== {title} (atom_diff={}, lazy_closer={}, max_paths={}, score={}) ===",
+        config.use_atom_diff, config.lazy_closer, config.max_paths, summary.label
+    );
+    println!(
+        "{:<32} {:>4} {:>5} {:>9} {:>5} {:>6} {:>7} {:>6}",
+        "case", "hit", "hits", "seconds", "steps", "nodes", "edits", "bill"
+    );
+    for (name, row) in &summary.rows {
+        if row.hits == 0 && row.seconds == 0.0 && !row.hit {
+            println!("{name:<32} SKIP");
+            continue;
+        }
+        println!(
+            "{:<32} {:>4} {:>5} {:>9.3} {:>5} {:>6} {:>7} {:>6}",
+            name,
+            if row.hit { "ok" } else { "MISS" },
+            row.hits,
+            row.seconds,
+            row.steps,
+            row.nodes,
+            row.mol_edits,
+            row.billed
+        );
+    }
+    println!(
+        "{:<32} {:>4} {:>5} {:>9.3} miss={} bill={}",
+        "TOTAL", "", "", summary.total_secs, summary.misses, summary.total_bill
+    );
+}
+
+fn print_matrix_summary(summaries: &[SuiteSummary]) {
+    println!("\n=== score matrix summary ===");
+    println!(
+        "{:<18} {:>9} {:>8} {:>5}",
+        "score", "seconds", "bill", "miss"
+    );
+    let mut ranked: Vec<&SuiteSummary> = summaries.iter().collect();
+    ranked.sort_by(|a, b| {
+        a.misses
+            .cmp(&b.misses)
+            .then_with(|| a.total_bill.cmp(&b.total_bill))
+            .then_with(|| {
+                a.total_secs
+                    .partial_cmp(&b.total_secs)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+    for s in ranked {
+        println!(
+            "{:<18} {:>9.3} {:>8} {:>5}",
+            s.label, s.total_secs, s.total_bill, s.misses
+        );
+    }
+}
+
+fn print_table(
+    title: &str,
+    cases: &[(&str, &str, &str)],
+    config: FindPathConfig,
+    repeats: u32,
+    budget: Duration,
+) {
+    let summary = run_suite(cases, config, repeats, budget);
+    print_suite_detail(title, &summary, &config);
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let larger = args.iter().any(|a| a == "--larger");
     let hard = args.iter().any(|a| a == "--hard");
+    let matrix = args.iter().any(|a| a == "--matrix");
     // Default: filter-only. Unfiltered (slow) is --nofilter.
     let nofilter = args.iter().any(|a| a == "--nofilter");
     let filter_only = !nofilter || args.iter().any(|a| a == "--filter-only");
@@ -259,10 +387,6 @@ fn main() {
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
     );
-    println!(
-        "(release; tagged ForestMol; filter-only={filter_only}; heap_score={heap_score:?}; budget={}s)",
-        budget.as_secs()
-    );
 
     let (cases, title) = if hard {
         (HARD, "hard HA≈14–20 · multi-step (≥3–8 hops)")
@@ -271,6 +395,39 @@ fn main() {
     } else {
         (CASES, "mid-size / multi-edit")
     };
+
+    if matrix {
+        println!(
+            "(release; filter-only={filter_only}; score matrix 3×3 + soft; budget={}s)",
+            budget.as_secs()
+        );
+        let mut modes: Vec<HeapScoreMode> = MatchScoreSpec::matrix()
+            .into_iter()
+            .map(HeapScoreMode::Match)
+            .collect();
+        modes.push(HeapScoreMode::SoftStack);
+        let mut summaries = Vec::new();
+        for mode in modes {
+            let config = FindPathConfig {
+                max_paths,
+                max_nodes: MAX_NODES,
+                use_atom_diff: true,
+                lazy_closer: true,
+                heap_score: mode,
+            };
+            let summary = run_suite(cases, config, REPEATS, budget);
+            print_suite_detail(title, &summary, &config);
+            summaries.push(summary);
+        }
+        print_matrix_summary(&summaries);
+        return;
+    }
+
+    println!(
+        "(release; tagged ForestMol; filter-only={filter_only}; heap_score={}; budget={}s)",
+        heap_score.label(),
+        budget.as_secs()
+    );
 
     let base = FindPathConfig {
         max_paths,

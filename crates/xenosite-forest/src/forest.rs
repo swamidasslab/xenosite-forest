@@ -84,8 +84,7 @@ pub fn formula_delta(before: &Formula, after: &Formula) -> Formula {
 
 /// Heavy-atom L1 distance between two formulas (H ignored; charge ignored).
 ///
-/// Used by [`crate::find_path::HeapScoreMode::MatchProduct`] closeness /
-/// improvement scoring.
+/// Used by [`crate::find_path::MatchScoreSpec`] closeness / improvement scoring.
 pub fn formula_heavy_l1(a: &Formula, b: &Formula) -> usize {
     let mut keys: Vec<&str> = a
         .counts
