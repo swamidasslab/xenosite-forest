@@ -1075,7 +1075,7 @@ pub fn candidate_order_key_on(
 /// How much applying this H-direction effect helps at `atoms` ∪ path ends
 /// (plus carbonyl partners). Positive ⇒ applying moves toward the target;
 /// undo would move away (and would not pass [`scope_could_help`]).
-fn site_h_progress(
+pub fn site_h_progress(
     effect: &Effect,
     atoms: &[usize],
     path_ends: &[usize],

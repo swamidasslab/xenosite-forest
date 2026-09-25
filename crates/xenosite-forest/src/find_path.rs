@@ -160,9 +160,10 @@ struct OxygenSite {
     atoms: BTreeSet<usize>,
 }
 
-/// Heap entry: hits first, then novel sites vs yielded plans, then pattern
-/// [`PatternInfo::search_bias`], then **FIFO** enqueue order (reduced DFS bias).
-/// BinaryHeap is max-heap.
+/// Heap entry: hits first, then novel sites vs yielded plans, then soft
+/// scores ([`PatternInfo::search_bias`], site H-progress). Among equal scores,
+/// **DFS** (LIFO `seq`: most recently queued first). Scores override the DFS
+/// bias — not pure FIFO and not score-blind LIFO. BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
@@ -171,6 +172,8 @@ struct HeapItem {
     novel_site: bool,
     /// From [`PatternInfo::search_bias`] (higher preferred). Soft demotion.
     search_bias: i8,
+    /// Site H-progress vs parent diff (higher preferred). Soft; overrides DFS.
+    site_progress: i32,
     seq: usize,
     walk: Walk,
 }
@@ -180,6 +183,7 @@ impl PartialEq for HeapItem {
         self.target_hit == other.target_hit
             && self.novel_site == other.novel_site
             && self.search_bias == other.search_bias
+            && self.site_progress == other.site_progress
             && self.seq == other.seq
     }
 }
@@ -198,8 +202,9 @@ impl Ord for HeapItem {
             .cmp(&other.target_hit)
             .then_with(|| self.novel_site.cmp(&other.novel_site))
             .then_with(|| self.search_bias.cmp(&other.search_bias))
-            // Lower seq = enqueued earlier = pop first (FIFO; DFS LIFO reduced).
-            .then_with(|| other.seq.cmp(&self.seq))
+            .then_with(|| self.site_progress.cmp(&other.site_progress))
+            // Higher seq = enqueued later = pop first (DFS among equal scores).
+            .then_with(|| self.seq.cmp(&other.seq))
     }
 }
 
@@ -237,6 +242,8 @@ struct ForestEmission {
     pattern_name: String,
     /// From [`PatternInfo::search_bias`] (pair: min of ends).
     search_bias: i8,
+    /// Site H-progress vs parent diff at emit (0 if no diff). Soft heap score.
+    site_progress: i32,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
     plan: Vec<CanonicalStep>,
@@ -611,6 +618,7 @@ where
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
         search_bias: 0,
+        site_progress: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -858,6 +866,7 @@ where
                         target_hit,
                         novel_site,
                         search_bias: emission.search_bias,
+                        site_progress: emission.site_progress,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1074,6 +1083,19 @@ where
             .map(|piece| self.parent.adopt_product(piece))
             .collect();
         let site_atoms = candidate_site_atoms(candidate);
+        let atoms: Vec<usize> = site_atoms.iter().copied().collect();
+        let site_progress = self
+            .diff
+            .map(|d| {
+                crate::atom_diff::site_h_progress(
+                    &candidate.pattern.effect,
+                    &atoms,
+                    &[],
+                    d,
+                    Some(self.parent.mol()),
+                )
+            })
+            .unwrap_or(0);
         Ok(Some(ForestEmission {
             site: candidate.site,
             site_orbit: candidate.orbit.clone(),
@@ -1085,6 +1107,7 @@ where
             oxygen_site: oxygen_site_from_parts(candidate.site, &candidate.orbit, site_atoms),
             pattern_name: candidate.pattern.name.clone(),
             search_bias: candidate.pattern.search_bias,
+            site_progress,
             rule_path: candidate.rule_path.clone(),
             products,
             plan: candidate.identity_plan_with_gens(
@@ -1114,6 +1137,17 @@ where
         let site_atoms_set: BTreeSet<usize> = site_atoms.iter().copied().collect();
         let ends = [&pair.left.effect, &pair.right.effect];
         let plan = pending.set.canonical_plan(mol, &site_atoms, Some(&ends));
+        let (p0, p1) = pair.path_ends();
+        let site_progress = self
+            .diff
+            .map(|d| {
+                let atoms = pair
+                    .end_atoms()
+                    .map(|(a, b)| [a, b])
+                    .unwrap_or([pair.site, pair.site]);
+                crate::atom_diff::site_h_progress(&pair.effect, &atoms, &[p0, p1], d, Some(mol))
+            })
+            .unwrap_or(0);
         Ok(Some(ForestEmission {
             site: pair.site,
             site_orbit: vec![pair.site],
@@ -1133,6 +1167,7 @@ where
             oxygen_site: oxygen_site_from_parts(pair.site, &[pair.site], site_atoms_set),
             pattern_name: pair.pattern_name.clone(),
             search_bias: pair.left.search_bias.min(pair.right.search_bias),
+            site_progress,
             rule_path: pending.rule_path.clone(),
             products,
             plan,
@@ -1356,6 +1391,7 @@ where
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
         search_bias: 0,
+        site_progress: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -1535,6 +1571,7 @@ where
                         target_hit,
                         novel_site,
                         search_bias: emission.search_bias,
+                        site_progress: 0,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1575,12 +1612,13 @@ mod tests {
     use crate::ruleset::o_dealkylation;
 
     #[test]
-    fn heap_prefers_earlier_queued_among_peers() {
-        // FIFO (DFS bias reduced): smaller seq pops before larger seq.
+    fn heap_prefers_most_recently_queued_among_peers() {
+        // DFS among equal scores: larger seq pops before smaller seq.
         let older = HeapItem {
             target_hit: false,
             novel_site: true,
             search_bias: 0,
+            site_progress: 0,
             seq: 1,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1598,23 +1636,25 @@ mod tests {
             target_hit: false,
             novel_site: true,
             search_bias: 0,
+            site_progress: 0,
             seq: 2,
             walk: older.walk.clone(),
         };
         let mut heap = BinaryHeap::new();
         heap.push(older);
         heap.push(newer);
-        assert_eq!(heap.pop().unwrap().seq, 1);
         assert_eq!(heap.pop().unwrap().seq, 2);
+        assert_eq!(heap.pop().unwrap().seq, 1);
     }
 
     #[test]
     fn heap_prefers_higher_search_bias_over_seq() {
-        // Demoted Hydrogenation (bias -1) loses to default bias even if enqueued later.
+        // Good scores override DFS: demoted bias loses even if enqueued later.
         let demoted = HeapItem {
             target_hit: false,
             novel_site: true,
             search_bias: -1,
+            site_progress: 0,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1632,6 +1672,7 @@ mod tests {
             target_hit: false,
             novel_site: true,
             search_bias: 0,
+            site_progress: 0,
             seq: 1,
             walk: demoted.walk.clone(),
         };
@@ -1640,6 +1681,42 @@ mod tests {
         heap.push(preferred);
         assert_eq!(heap.pop().unwrap().search_bias, 0);
         assert_eq!(heap.pop().unwrap().search_bias, -1);
+    }
+
+    #[test]
+    fn heap_prefers_higher_site_progress_over_seq() {
+        // Site H-progress overrides DFS among equal search_bias.
+        let low = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: 0,
+            site_progress: 0,
+            seq: 99,
+            walk: Walk {
+                mol: ForestMol::parse("CC").unwrap(),
+                steps: vec![],
+                plan: vec![],
+                maybe: vec![],
+                opens: vec![],
+                o_added: vec![],
+                o_removed: vec![],
+                parent_cost: None,
+                diff: None,
+            },
+        };
+        let high = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: 0,
+            site_progress: 2,
+            seq: 1,
+            walk: low.walk.clone(),
+        };
+        let mut heap = BinaryHeap::new();
+        heap.push(low);
+        heap.push(high);
+        assert_eq!(heap.pop().unwrap().site_progress, 2);
+        assert_eq!(heap.pop().unwrap().site_progress, 0);
     }
 
     #[test]

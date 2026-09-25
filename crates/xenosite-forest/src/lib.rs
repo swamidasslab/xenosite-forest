@@ -43,8 +43,8 @@ pub use atom_diff::{
     AtomDiff, added_heavy_atoms, atom_diff, atom_diff_after_cleavage, atom_diff_for_child,
     atom_diff_from_mappings, candidate_could_help, candidate_could_help_on, candidate_order_key,
     candidate_order_key_on, extend_mapping_for_added, keep_against_diff, lift_mappings,
-    pair_could_help, pattern_could_help, pattern_could_help_mol, try_atom_diff_for_child,
-    try_lift_cleaved_child,
+    pair_could_help, pattern_could_help, pattern_could_help_mol, site_h_progress,
+    try_atom_diff_for_child, try_lift_cleaved_child,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
