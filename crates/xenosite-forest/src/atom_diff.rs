@@ -59,7 +59,6 @@ pub struct AtomDiff {
     pub cleaved: BTreeSet<usize>,
     pub cleavage_bonds: BTreeSet<(usize, usize)>,
     pub loses_aromaticity: BTreeSet<usize>,
-    pub h_delta: BTreeMap<usize, i32>,
     pub bond_raises: BTreeSet<(usize, usize)>,
     pub bond_order_mismatches: usize,
     pub n_extra: usize,
@@ -78,14 +77,6 @@ impl AtomDiff {
         !self.cleaved.is_empty() || !self.cleavage_bonds.is_empty()
     }
 
-    pub fn h_loss(&self) -> bool {
-        self.h_delta.values().any(|&d| d < 0)
-    }
-
-    pub fn h_gain(&self) -> bool {
-        self.h_delta.values().any(|&d| d > 0)
-    }
-
     pub fn cost(&self) -> usize {
         if !self.view_costs.is_empty() {
             return *self.view_costs.iter().min().unwrap_or(&0);
@@ -94,8 +85,8 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // MCS map gaps only. H is not a special cost term: `formula_l1` counts
-        // it like any element; `h_delta` stays on the struct for filters.
+        // MCS map gaps only. H is not a cost term: `formula_l1` counts it
+        // like any element; filters recompute H from the mapping + mols.
         3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len()
     }
 
@@ -184,6 +175,60 @@ pub fn any_needs_oxygen(target: &Molecule, diff: &AtomDiff) -> bool {
     for mapping in diff.mappings_slice() {
         for &r in mapping.keys() {
             if unmapped_oxygen_order(target, mapping, r).is_some() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Target−reactant H count for `atom` (or a same-rank mapped mate).
+///
+/// Same-rank mates keep the more negative delta (stronger H loss), matching
+/// the old expand-by-rank merge. No cached `h_delta` on [`AtomDiff`].
+pub fn atom_h_delta(
+    reactant: &Molecule,
+    target: &Molecule,
+    mapping: &BTreeMap<usize, usize>,
+    atom: usize,
+) -> i32 {
+    let rank = ranks(reactant);
+    let want = rank.get(atom).copied().unwrap_or(usize::MAX);
+    let mut best: Option<i32> = None;
+    for (i, &ri) in rank.iter().enumerate() {
+        if ri != want {
+            continue;
+        }
+        let Some(&t) = mapping.get(&i) else {
+            continue;
+        };
+        let d = hydrogens(target, t) - hydrogens(reactant, i);
+        best = Some(match best {
+            Some(b) if d < b => d,
+            Some(b) => b,
+            None => d,
+        });
+    }
+    best.unwrap_or(0)
+}
+
+/// Some mapped atom needs fewer H under any placement.
+pub fn any_h_loss(reactant: &Molecule, target: &Molecule, diff: &AtomDiff) -> bool {
+    for mapping in diff.mappings_slice() {
+        for &r in mapping.keys() {
+            if atom_h_delta(reactant, target, mapping, r) < 0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Some mapped atom needs more H under any placement.
+pub fn any_h_gain(reactant: &Molecule, target: &Molecule, diff: &AtomDiff) -> bool {
+    for mapping in diff.mappings_slice() {
+        for &r in mapping.keys() {
+            if atom_h_delta(reactant, target, mapping, r) > 0 {
                 return true;
             }
         }
@@ -298,27 +343,6 @@ fn expand_by_rank(mol: &Molecule, sites: BTreeSet<usize>) -> BTreeSet<usize> {
     out
 }
 
-fn expand_h_delta(mol: &Molecule, h_delta: BTreeMap<usize, i32>) -> BTreeMap<usize, i32> {
-    let rank = ranks(mol);
-    let mut out = BTreeMap::new();
-    for (&atom, &delta) in &h_delta {
-        let r = rank.get(atom).copied().unwrap_or(usize::MAX);
-        for (i, &ri) in rank.iter().enumerate() {
-            if ri == r {
-                // Keep the more negative (stronger H loss) when ranks collide.
-                out.entry(i)
-                    .and_modify(|d| {
-                        if delta < *d {
-                            *d = delta;
-                        }
-                    })
-                    .or_insert(delta);
-            }
-        }
-    }
-    out
-}
-
 fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, usize>) -> AtomDiff {
     let image: HashSet<usize> = mapping.values().copied().collect();
     let r_rings = ring_atom_flags(reactant);
@@ -337,7 +361,6 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
 
     let mut cleavage_bonds = BTreeSet::new();
     let mut loses_aromaticity = BTreeSet::new();
-    let mut h_delta = BTreeMap::new();
     let mut bond_raises = BTreeSet::new();
     let mut bond_order_mismatches = 0usize;
 
@@ -347,7 +370,6 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
         if ra.aromatic && !ta.aromatic {
             loses_aromaticity.insert(r_idx);
         }
-        h_delta.insert(r_idx, hydrogens(target, t_idx) - hydrogens(reactant, r_idx));
     }
 
     for (_, bond) in reactant.bonds() {
@@ -399,7 +421,6 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
         .count();
 
     let loses_aromaticity = expand_by_rank(reactant, loses_aromaticity);
-    let h_delta = expand_h_delta(reactant, h_delta);
 
     let mut diff = AtomDiff {
         mapping: mapping.clone(),
@@ -407,7 +428,6 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
         cleaved,
         cleavage_bonds,
         loses_aromaticity,
-        h_delta,
         bond_raises,
         bond_order_mismatches,
         n_extra,
@@ -433,17 +453,6 @@ fn merge_views(mut views: Vec<AtomDiff>) -> AtomDiff {
         primary.cleavage_bonds.extend(&view.cleavage_bonds);
         primary.bond_raises.extend(&view.bond_raises);
         primary.loses_aromaticity.extend(&view.loses_aromaticity);
-        for (&atom, &delta) in &view.h_delta {
-            primary
-                .h_delta
-                .entry(atom)
-                .and_modify(|d| {
-                    if delta < *d {
-                        *d = delta;
-                    }
-                })
-                .or_insert(delta);
-        }
         primary.bond_order_mismatches = primary
             .bond_order_mismatches
             .max(view.bond_order_mismatches);
@@ -596,8 +605,8 @@ fn best_diff_from_lifted_maps(
 /// Casts the effect onto the parent MCS-gap cost: clear `n_extra` and cleavage
 /// bond + leave heavies the effect is declared to fix on
 /// `site_atoms ∪ path_ends`. Same weights as [`AtomDiff::field_cost`].
-/// H is not a cost term (`formula_l1` / filter `h_delta`). Useful for tests /
-/// filters. Not used to decide lift vs MCS.
+/// H is not a cost term (`formula_l1` / on-demand [`atom_h_delta`]). Useful for
+/// tests / filters. Not used to decide lift vs MCS.
 pub fn residual_cost_after_site_cast(
     parent: &AtomDiff,
     effect: &Effect,
@@ -1065,12 +1074,20 @@ pub fn pattern_could_help_on(
         return false;
     }
     let drops_h_only = !can_cleave && effect.adds.is_none() && effect_removes_h(effect);
-    if drops_h_only && !diff.h_loss() && diff.loses_aromaticity.is_empty() {
-        return false;
+    if drops_h_only && diff.loses_aromaticity.is_empty() {
+        match (mol, target) {
+            (Some(m), Some(t)) if !any_h_loss(m, t, diff) => return false,
+            (None, _) | (_, None) => {}
+            (Some(_), Some(_)) => {}
+        }
     }
     let adds_h_only = !can_cleave && effect_adds_h(effect) && effect.removes.is_none();
-    if adds_h_only && !diff.h_gain() {
-        return false;
+    if adds_h_only {
+        match (mol, target) {
+            (Some(m), Some(t)) if !any_h_gain(m, t, diff) => return false,
+            (None, _) | (_, None) => {}
+            (Some(_), Some(_)) => {}
+        }
     }
     true
 }
@@ -1242,6 +1259,7 @@ fn scope_could_help(
     path_ends: &[usize],
     diff: &AtomDiff,
     mol: Option<&Molecule>,
+    target: Option<&Molecule>,
 ) -> bool {
     let mut scope: HashSet<usize> = atoms.iter().copied().collect();
     scope.extend(path_ends.iter().copied());
@@ -1255,10 +1273,13 @@ fn scope_could_help(
         return false;
     }
     if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let loses_h = scope
-            .iter()
-            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) < 0);
         let loses_ar = scope.iter().any(|a| diff.loses_aromaticity.contains(a));
+        let loses_h = match (mol, target) {
+            (Some(m), Some(t)) => scope
+                .iter()
+                .any(|&a| atom_h_delta(m, t, &diff.mapping, a) < 0),
+            _ => false,
+        };
         if !loses_h && !loses_ar {
             return false;
         }
@@ -1266,9 +1287,12 @@ fn scope_could_help(
     // Adding H helps only where the target needs more H. Then undoing (remove H)
     // would move away from the target — so it would not help.
     if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let gains = scope
-            .iter()
-            .any(|a| diff.h_delta.get(a).copied().unwrap_or(0) > 0);
+        let gains = match (mol, target) {
+            (Some(m), Some(t)) => scope
+                .iter()
+                .any(|&a| atom_h_delta(m, t, &diff.mapping, a) > 0),
+            _ => true, // no live pair: defer to pattern-level gate
+        };
         if !gains {
             return false;
         }
@@ -1381,7 +1405,7 @@ fn candidate_could_help_on_view(
         }
     }
 
-    scope_could_help(effect, atoms, &[], view, mol)
+    scope_could_help(effect, atoms, &[], view, mol, target)
 }
 
 /// Pair-site gate (Python `_site_could_help` when ``"ends"`` is on the info).
@@ -1427,7 +1451,7 @@ pub fn pair_could_help(
         if !pair_ends_match_view(pair, end_a, end_b, &view, mol, target) {
             continue;
         }
-        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol)) {
+        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol), Some(target)) {
             return true;
         }
     }
@@ -1483,7 +1507,7 @@ pub fn candidate_order_key_on(
     let secondary = if want_dear { dear } else { 0 };
     let tertiary = if want_oxy { oxy } else { 0 };
     let atoms = site_atoms(candidate);
-    let progress = site_h_progress(effect, &atoms, &[], diff, mol);
+    let progress = site_h_progress(effect, &atoms, &[], diff, mol, target);
     // Negate so ascending sort prefers higher progress (apply helps more).
     (
         primary,
@@ -1503,26 +1527,28 @@ pub fn site_h_progress(
     path_ends: &[usize],
     diff: &AtomDiff,
     mol: Option<&Molecule>,
+    target: Option<&Molecule>,
 ) -> i32 {
     if effect.cleaves || effect_adds_oxygen(effect) {
         return 0;
     }
+    let (Some(m), Some(t)) = (mol, target) else {
+        return 0;
+    };
     let mut scope: HashSet<usize> = atoms.iter().copied().collect();
     scope.extend(path_ends.iter().copied());
-    if let Some(m) = mol {
-        extend_h_edit_partners(m, &mut scope);
-    }
+    extend_h_edit_partners(m, &mut scope);
     let mut progress = 0i32;
     if effect_adds_h(effect) {
-        for a in &scope {
-            let d = diff.h_delta.get(a).copied().unwrap_or(0);
+        for &a in &scope {
+            let d = atom_h_delta(m, t, &diff.mapping, a);
             if d > 0 {
                 progress += d;
             }
         }
     } else if effect_removes_h(effect) {
-        for a in &scope {
-            let d = diff.h_delta.get(a).copied().unwrap_or(0);
+        for &a in &scope {
+            let d = atom_h_delta(m, t, &diff.mapping, a);
             if d < 0 {
                 progress += -d;
             }
@@ -1531,7 +1557,7 @@ pub fn site_h_progress(
     progress
 }
 
-/// Best [`site_h_progress`] under any one MCS placement (not merged h_delta).
+/// Best [`site_h_progress`] under any one MCS placement.
 pub fn site_h_progress_best_placement(
     effect: &Effect,
     atoms: &[usize],
@@ -1549,7 +1575,7 @@ pub fn site_h_progress_best_placement(
         .iter()
         .map(|mapping| {
             let view = diff_for(mol, target, mapping);
-            site_h_progress(effect, atoms, path_ends, &view, Some(mol))
+            site_h_progress(effect, atoms, path_ends, &view, Some(mol), Some(target))
         })
         .max()
         .unwrap_or(0)
@@ -1696,7 +1722,7 @@ mod tests {
         let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
         let diff = atom_diff(&reactant, &target);
         assert!(
-            !diff.loses_aromaticity.is_empty() || diff.h_loss(),
+            !diff.loses_aromaticity.is_empty() || any_h_loss(&reactant, &target, &diff),
             "{diff:?}"
         );
     }
@@ -1713,9 +1739,11 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         for c in &cands {
-            if c.pattern.effect.adds.as_deref() == Some("HH") && !diff.h_gain() {
+            if c.pattern.effect.adds.as_deref() == Some("HH") && !any_h_gain(&reactant, &target, &diff)
+            {
                 assert!(
-                    !pattern_could_help(&c.pattern.effect, &diff) || c.pattern.effect.cleaves,
+                    !pattern_could_help_on(&c.pattern.effect, &diff, Some(&reactant), Some(&target))
+                        || c.pattern.effect.cleaves,
                     "pattern {} should not help toward quinone",
                     c.pattern.name
                 );
@@ -1752,7 +1780,7 @@ mod tests {
         let reactant = parse_mol("CC=O").unwrap();
         let target = parse_mol("CCO").unwrap();
         let diff = atom_diff(&reactant, &target);
-        assert!(diff.h_gain(), "{diff:?}");
+        assert!(any_h_gain(&reactant, &target, &diff), "{diff:?}");
         let set = oxygen_reduction();
         let cands = set
             .candidates(&reactant)
@@ -1782,7 +1810,10 @@ mod tests {
         let reactant = parse_mol("CC=O").unwrap();
         let target = parse_mol("CC(=O)O").unwrap();
         let diff = atom_diff(&reactant, &target);
-        assert!(diff.h_loss() || !diff.h_gain(), "{diff:?}");
+        assert!(
+            any_h_loss(&reactant, &target, &diff) || !any_h_gain(&reactant, &target, &diff),
+            "{diff:?}"
+        );
         let set = oxygen_reduction();
         let cands = set
             .candidates(&reactant)

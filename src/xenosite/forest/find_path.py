@@ -23,6 +23,7 @@ from xenosite.forest.rdkitutil import (
     TracingMol,
     as_mol,
     canon_smiles,
+    cip_ids,
     copy_mol,
     mcs_matches,
     mcs_target_matches,
@@ -212,7 +213,7 @@ class AtomDiff:
     A mapped atom can need an element, lose aromaticity, or lose hydrogens.
     An unmapped reactant atom, or a mapped bond that is absent in the target,
     is cleavage. ``filter_rules`` sees the molecule-level summary. ``filter_sites``
-    sees one site.
+    sees one site. H deltas are recomputed from the MCS mapping (no cache).
     """
 
     def __init__(
@@ -226,7 +227,6 @@ class AtomDiff:
         cleaved: Iterable[int],
         cleavage_bonds: Iterable[frozenset[int]],
         loses_aromaticity: Iterable[int],
-        h_delta: Mapping[int, int],
         n_extra: int,
         bond_order_mismatches: int,
         bond_raises: Iterable[frozenset[int]],
@@ -240,7 +240,6 @@ class AtomDiff:
         self.cleaved = frozenset(cleaved)
         self.cleavage_bonds = set(cleavage_bonds)
         self.loses_aromaticity = frozenset(loses_aromaticity)
-        self.h_delta = dict(h_delta)
         self.n_extra = n_extra
         self.bond_order_mismatches = bond_order_mismatches
         self.bond_raises = set(bond_raises)
@@ -256,10 +255,6 @@ class AtomDiff:
     @property
     def has_cleavage(self) -> bool:
         return bool(self.cleaved or self.cleavage_bonds)
-
-    @property
-    def h_loss(self) -> bool:
-        return any(delta < 0 for delta in self.h_delta.values())
 
     def site_is_cleavage(self, atoms: Iterable[int]) -> bool:
         """True when ``atoms`` is the bond that separates kept from gone.
@@ -289,16 +284,51 @@ class AtomDiff:
         return self._field_cost()
 
     def _field_cost(self) -> int:
-        h_off = sum(1 for delta in self.h_delta.values() if delta)
+        # MCS map gaps only (parity with Rust). Soft aromatic / O / H stay
+        # filter-only; H via ``atom_h_delta`` / ``formula`` when needed.
         return (
             3 * len(self.cleaved)
             + 3 * self.n_extra
-            + 2 * len(self.needs_oxygen)
-            + len(self.loses_aromaticity)
-            + h_off
             + 3 * len(self.cleavage_bonds)
-            + self.bond_order_mismatches
         )
+
+
+def atom_h_delta(
+    reactant: Mol, target: Mol, mapping: Mapping[int, int], atom: int
+) -> int:
+    """Target−reactant H count for ``atom`` (or a same-rank mapped mate)."""
+
+    rank = cip_ids(reactant, include_stereo=False)
+    want = rank[atom] if atom < len(rank) else -1
+    best: int | None = None
+    for i, ri in enumerate(rank):
+        if ri != want:
+            continue
+        t_idx = mapping.get(i)
+        if t_idx is None:
+            continue
+        d = _hydrogens(target.GetAtomWithIdx(t_idx)) - _hydrogens(
+            reactant.GetAtomWithIdx(i)
+        )
+        if best is None or d < best:
+            best = d
+    return 0 if best is None else best
+
+
+def any_h_loss(diff: AtomDiff) -> bool:
+    for mapping in diff.mappings:
+        for r in mapping:
+            if atom_h_delta(diff.reactant, diff.target, mapping, r) < 0:
+                return True
+    return False
+
+
+def any_h_gain(diff: AtomDiff) -> bool:
+    for mapping in diff.mappings:
+        for r in mapping:
+            if atom_h_delta(diff.reactant, diff.target, mapping, r) > 0:
+                return True
+    return False
 
 
 def _mapping_score(
@@ -401,13 +431,8 @@ def _merge_views(views: tuple[AtomDiff, ...]) -> AtomDiff:
     primary.loses_aromaticity = frozenset().union(
         *(view.loses_aromaticity for view in views)
     )
-    h_delta: dict[int, int] = {}
-    for view in views:
-        for atom, delta in view.h_delta.items():
-            held = h_delta.get(atom)
-            if held is None or delta < held:
-                h_delta[atom] = delta
-    primary.h_delta = h_delta
+    primary.bond_order_mismatches = max(view.bond_order_mismatches for view in views)
+    primary.n_extra = max(view.n_extra for view in views)
     return primary
 
 
@@ -459,7 +484,6 @@ def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
 
     cleavage_bonds = set()
     loses_aromaticity = set()
-    h_delta = {}
     bond_order_mismatches = 0
     bond_raises = set()
     for r_idx, t_idx in mapping.items():
@@ -467,7 +491,6 @@ def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
         ta = target.GetAtomWithIdx(t_idx)
         if ra.GetIsAromatic() and not ta.GetIsAromatic():
             loses_aromaticity.add(r_idx)
-        h_delta[r_idx] = _hydrogens(ta) - _hydrogens(ra)
 
     for bond in reactant.GetBonds():
         i = bond.GetBeginAtomIdx()
@@ -516,7 +539,6 @@ def _diff_for(reactant: Mol, target: Mol, mapping: dict[int, int]) -> AtomDiff:
         cleaved,
         cleavage_bonds,
         loses_aromaticity,
-        h_delta,
         n_extra,
         bond_order_mismatches,
         bond_raises,
@@ -622,17 +644,17 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
         and not _any_span(span, "adds", lambda value: bool(value), "")
         and _any_span(span, "removes", lambda value: bool(value) and "H" in value, "")
     )
-    if drops_h_only and not diff.h_loss and not diff.loses_aromaticity:
+    if drops_h_only and not any_h_loss(diff) and not diff.loses_aromaticity:
         return False
     # Mirror of drops_h_only: a pattern that only adds H cannot help when no
-    # mapped atom needs more hydrogens. Reads span.adds vs h_delta — not a
-    # rule-name branch (Hydrogenation / OxygenReduction declare adds=H/HH).
+    # mapped atom needs more hydrogens. Reads span.adds vs on-demand H delta
+    # (Hydrogenation / OxygenReduction declare adds=H/HH).
     adds_h_only = (
         not can_cleave
         and _any_span(span, "adds", lambda value: bool(value) and "H" in value, "")
         and not _any_span(span, "removes", lambda value: bool(value), "")
     )
-    if adds_h_only and not any(delta > 0 for delta in diff.h_delta.values()):
+    if adds_h_only and not any_h_gain(diff):
         return False
     return True
 
@@ -837,7 +859,10 @@ def _site_could_help_on_view(
         and not _effect_adds_oxygen(effect)
         and not effect.get("cleaves")
     ):
-        loses_h = any(view.h_delta.get(atom, 0) < 0 for atom in scope)
+        loses_h = any(
+            atom_h_delta(view.reactant, view.target, view.mapping, atom) < 0
+            for atom in scope
+        )
         if not loses_h and not (scope & set(view.loses_aromaticity)):
             return False
     adds = effect.get("adds") or ""
@@ -847,7 +872,10 @@ def _site_could_help_on_view(
         and not _effect_adds_oxygen(effect)
         and not effect.get("cleaves")
     ):
-        gains_h = any(view.h_delta.get(atom, 0) > 0 for atom in scope)
+        gains_h = any(
+            atom_h_delta(view.reactant, view.target, view.mapping, atom) > 0
+            for atom in scope
+        )
         if not gains_h:
             return False
     return True

@@ -3437,7 +3437,7 @@ class Hydrogenation(ResonancePairRule):
             # Span ``dearomatizes`` is capability for filter_rules. Leaving it
             # false here: aliphatic C=C→CC must not be refused when the target
             # has no loses_aromaticity. Aromatic one-bond hits still add HH;
-            # ``filter_sites`` reads adds vs h_delta. Path dearomatizing
+            # ``filter_sites`` reads adds vs on-demand H delta. Path dearomatizing
             # reductions are the ``path_end`` capability below.
             describe(adds="HH", name="alkene", site_map=(1, 2)),
         ),
