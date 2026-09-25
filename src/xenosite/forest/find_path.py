@@ -51,6 +51,7 @@ from xenosite.forest.rules import (
     _accept_all_rules,
     _accept_all_sites,
     _as_site,
+    _report_formula_delta_mismatch,
 )
 from xenosite.forest.rulesets import RuleSet
 
@@ -74,6 +75,7 @@ class PathCounters:
         self.sites_skipped = 0
         self.mol_edits = 0
         self.sanitize_dropped = 0
+        self.formula_delta_mismatch = 0
         self.nodes = 0
 
     @property
@@ -1121,6 +1123,8 @@ def find_path(
             finished = _finish(walk.mol, por.products, por.info, counters)
             if not finished:
                 continue
+            # metabolites bypass ReactionRule.metabolize — still warn+count.
+            _report_formula_delta_mismatch(walk.mol, por.info, finished, counters)
             kept, discarded = _keep_fragment(finished, target_mol, target_smiles)
             if kept is None:
                 continue

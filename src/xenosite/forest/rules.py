@@ -387,7 +387,9 @@ class ReactionRule:
             if any(_repeats_ancestor_dedup_smi(p) for p in finished):
                 continue
 
-            _report_formula_delta_mismatch(mol, info, finished)
+            _report_formula_delta_mismatch(
+                mol, info, finished, kwargs.get("counters")
+            )
 
             if unique_csmi and emission_csmi is not None:
                 key = _unique_csmi_key(info, emission_csmi)
@@ -1650,11 +1652,17 @@ def _report_formula_delta_mismatch(
     parent: Mol,
     info: SiteInfo,
     products: Sequence[Mol],
-) -> None:
-    """Warn when heavy-atom product Δformula ≠ declared effect delta."""
+    counters: EditCounters | None = None,
+) -> bool:
+    """Warn + count when heavy-atom product Δformula ≠ declared effect delta.
+
+    Returns ``True`` when the check matches or is skipped; ``False`` on a
+    mismatch (warning issued, ``formula_delta_mismatch`` bumped when counters
+    are given). Soft only — never drops chemistry.
+    """
 
     if not products:
-        return
+        return True
     options = info.get("options") or {}
     pattern = info.get("pattern") or {}
     name = pattern.get("name") or _pattern_dedup_token(info) or "?"
@@ -1685,7 +1693,7 @@ def _report_formula_delta_mismatch(
 
     # Star conjugates use dummy ``*`` — bag stoichiometry ≠ mol formula.
     if "*" in expected_heavy or "*" in actual_heavy:
-        return
+        return True
     # Open leave: cleaves with empty leave_formula and unexplained heavy loss.
     if (
         cleaves
@@ -1693,10 +1701,10 @@ def _report_formula_delta_mismatch(
         and not expected_heavy
         and any(n < 0 for n in actual_heavy.values())
     ):
-        return
+        return True
 
     if expected_heavy == actual_heavy:
-        return
+        return True
     warnings.warn(
         f"Formula delta mismatch for pattern {name}: declared heavy "
         f"{expected_heavy!r} ≠ observed {actual_heavy!r} "
@@ -1705,6 +1713,8 @@ def _report_formula_delta_mismatch(
         FormulaDeltaMismatchWarning,
         stacklevel=3,
     )
+    _bump(counters, "formula_delta_mismatch")
+    return False
 
 
 def _rule_dedup_name(rule: object) -> str:

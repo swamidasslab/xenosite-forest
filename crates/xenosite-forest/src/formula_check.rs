@@ -1,8 +1,9 @@
 //! Check declared [`Effect::delta_formula`] against observed product formulas.
 //!
 //! Mismatches emit [`log::warn!`] (Python analogue: ``warnings.warn`` /
-//! ``FormulaDeltaMismatchWarning``). The host app chooses a logger
-//! (``env_logger``, etc.). Soft only — never drops chemistry.
+//! ``FormulaDeltaMismatchWarning``) and return ``false`` so callers can
+//! increment [`crate::find_path::PathCounters::formula_delta_mismatch`].
+//! Soft only — never drops chemistry.
 
 use std::collections::BTreeMap;
 

@@ -47,6 +47,9 @@ pub struct PathCounters {
     /// Product lacked a Chematic `canonical_smiles_stable_key` — CSMI dedup
     /// skipped for that child (fail-closed; may re-explore).
     pub unstable_csmi_key: usize,
+    /// Declared [`crate::pattern::Effect::delta_formula`] ≠ observed product
+    /// Δformula (heavy). Soft — warn only; never drops.
+    pub formula_delta_mismatch: usize,
 }
 
 impl PathCounters {
@@ -1218,6 +1221,14 @@ where
         if pieces.is_empty() {
             return Ok(None);
         }
+        if !crate::formula_check::check_effect_delta_formula(
+            self.parent.mol(),
+            &candidate.pattern.effect,
+            &pieces,
+            &candidate.pattern.name,
+        ) {
+            self.counters.formula_delta_mismatch += 1;
+        }
         let products: Vec<ForestMol> = pieces
             .into_iter()
             .map(|piece| self.parent.adopt_product(piece))
@@ -1270,6 +1281,14 @@ where
             return Ok(None);
         }
         self.counters.mol_edits += 1;
+        if !crate::formula_check::check_effect_delta_formula(
+            mol,
+            &pair.effect,
+            &pieces,
+            &pair.pattern_name,
+        ) {
+            self.counters.formula_delta_mismatch += 1;
+        }
         let products: Vec<ForestMol> = pieces
             .into_iter()
             .map(|piece| self.parent.adopt_product(piece))

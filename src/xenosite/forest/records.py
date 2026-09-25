@@ -386,6 +386,7 @@ class EditCounters(Protocol):
     sites_considered: int
     sites_skipped: int
     sanitize_dropped: int
+    formula_delta_mismatch: int
 
 
 class Addition(NamedTuple):
