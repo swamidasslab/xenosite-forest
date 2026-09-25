@@ -60,8 +60,9 @@ pub struct PatternInfo {
     /// N-methyl dealks) let distinct rules fold when fragments match.
     pub cleave_side_group: Option<(String, String)>,
     /// Heap preference for `find_path` (higher pops sooner on the max-heap).
-    /// Default `0`. Negative demotes (e.g. Hydrogenation). Soft only — never
-    /// drops. Schema trial; see HEURISTICS.
+    /// Default `0`. Negative demotes patterns that are real but less likely /
+    /// counter-directional (e.g. Hydrogenation). Soft only — never drops.
+    /// Schema trial; see HEURISTICS.
     pub search_bias: i8,
 }
 
