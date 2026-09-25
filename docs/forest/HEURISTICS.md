@@ -113,7 +113,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   Read: mid bills collapsed (all 79; MeOPhOH edits up). Hard still ranks **close-atom** best; product-both ahead of SoftStack. No misses. Vs prior HA+H cost (`|h_delta≠0|` in `field_cost`): hard product-both was 217 / close-atom 210 — simplification costs ~40–50 hard bill. Whether to switch default to close-atom: not decided.
 
-  **Current — no special H in atom cost or on AtomDiff.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|)`. No cached `h_delta` / `h_loss` / `h_gain` — filters recompute via `atom_h_delta` / `any_h_loss` / `any_h_gain` from MCS mapping + mols. `formula_l1` counts H like any element. Soft aromatic / bond-order stay filter-only. Dropped cached `needs_oxygen` / carbonyl / alcohol (recompute N1). Status: approved.
+  **Current — no special H in atom cost or on AtomDiff.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|)`. No cached `h_delta` / `h_loss` / `h_gain` — methods `AtomDiff::atom_h_delta` / `h_loss` / `h_gain` recompute from MCS mapping + mols (same idea as N1 oxygen). `formula_l1` counts H like any element. Soft aromatic / bond-order stay filter-only. Dropped cached `needs_oxygen` / carbonyl / alcohol (recompute N1). Status: approved.
 
   **Tried — HA+H in both atom cost and `formula_l1`.** `field_cost` included `|h_delta≠0|`. Better hard bills (product-both 217). Status: not approved (H as special cost term).
 

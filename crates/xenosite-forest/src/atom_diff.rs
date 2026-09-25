@@ -18,10 +18,9 @@ use crate::pair_edit::PairCandidate;
 use crate::pattern::Effect;
 
 fn hydrogens(mol: &Molecule, idx: usize) -> i32 {
-    let atom = mol.atom(atom_idx(idx));
-    let explicit = atom.hydrogen_count.unwrap_or(0) as i32;
-    let implicit = mol.implicit_hydrogen_count(atom_idx(idx)) as i32;
-    explicit + implicit
+    // `implicit_hydrogen_count` already returns bracket `hydrogen_count` when
+    // set, else valence-inferred H. Do not add them — that double-counts.
+    mol.implicit_hydrogen_count(atom_idx(idx)) as i32
 }
 
 fn order_value(order: BondOrder) -> f32 {
@@ -86,8 +85,23 @@ impl AtomDiff {
 
     fn field_cost(&self) -> usize {
         // MCS map gaps only. H is not a cost term: `formula_l1` counts it
-        // like any element; filters recompute H from the mapping + mols.
+        // like any element; H at atoms is via [`Self::atom_h_delta`] (no cache).
         3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len()
+    }
+
+    /// Target−reactant H for `atom` under this view's primary mapping.
+    pub fn atom_h_delta(&self, reactant: &Molecule, target: &Molecule, atom: usize) -> i32 {
+        atom_h_delta(reactant, target, &self.mapping, atom)
+    }
+
+    /// Some mapped atom needs fewer H (any placement). No stored field.
+    pub fn h_loss(&self, reactant: &Molecule, target: &Molecule) -> bool {
+        any_h_loss(reactant, target, self)
+    }
+
+    /// Some mapped atom needs more H (any placement). No stored field.
+    pub fn h_gain(&self, reactant: &Molecule, target: &Molecule) -> bool {
+        any_h_gain(reactant, target, self)
     }
 
     /// True when ``atoms`` is the bond that separates kept from gone.
@@ -1717,12 +1731,81 @@ mod tests {
     }
 
     #[test]
+    fn h_via_methods_not_stored_cost_or_field() {
+        // H is never a stored AtomDiff field and never a field_cost term.
+        // Per-atom H is recomputed; global H rides formula_l1 (like any element).
+        use crate::forest::{formula_l1, molecule_formula};
+
+        // ethane → ethene: same MCS skeleton → atom cost 0; H 6→4 → formula_l1=2;
+        // carbons need fewer H.
+        let ethane = parse_mol("CC").unwrap();
+        let ethene = parse_mol("C=C").unwrap();
+        let d = atom_diff(&ethane, &ethene);
+        assert_eq!(d.cost(), 0, "HA alignment only; H not in cost: {d:?}");
+        assert_eq!(
+            formula_l1(&molecule_formula(&ethane), &molecule_formula(&ethene)),
+            2
+        );
+        assert!(d.h_loss(&ethane, &ethene), "{d:?}");
+        assert!(!d.h_gain(&ethane, &ethene), "{d:?}");
+        let mapped: Vec<_> = d.mapping.keys().copied().collect();
+        assert!(
+            mapped
+                .iter()
+                .any(|&a| d.atom_h_delta(&ethane, &ethene, a) < 0),
+            "mapped carbons should show negative H delta: {d:?}"
+        );
+
+        // ethene → ethane: needs more H (Hydrogenation direction).
+        let d2 = atom_diff(&ethene, &ethane);
+        assert_eq!(d2.cost(), 0, "{d2:?}");
+        assert!(d2.h_gain(&ethene, &ethane), "{d2:?}");
+        assert!(!d2.h_loss(&ethene, &ethane), "{d2:?}");
+
+        // carbonyl → alcohol: adds H on the carbon (and formula H).
+        let carbonyl = parse_mol("CC=O").unwrap();
+        let alcohol = parse_mol("CCO").unwrap();
+        let d3 = atom_diff(&carbonyl, &alcohol);
+        assert!(d3.h_gain(&carbonyl, &alcohol), "{d3:?}");
+        assert_eq!(
+            formula_l1(
+                &molecule_formula(&carbonyl),
+                &molecule_formula(&alcohol)
+            ),
+            2,
+            "CC=O C2H4O → CCO C2H6O: ΔH=2"
+        );
+
+        // ethane → ethanol: O is n_extra (atom cost); formula Δ is O only (both C2H6*).
+        let ethanol = parse_mol("CCO").unwrap();
+        let d4 = atom_diff(&ethane, &ethanol);
+        assert!(d4.n_extra >= 1, "unmapped target O: {d4:?}");
+        assert!(d4.cost() >= 3, "n_extra in cost: {d4:?}");
+        let f_l1 = formula_l1(&molecule_formula(&ethane), &molecule_formula(&ethanol));
+        assert_eq!(f_l1, 1, "C2H6 → C2H6O: only O; H already matched");
+        // Bracket atom with explicit H: hydrogens() must not double-count
+        // (implicit_hydrogen_count already returns stored hydrogen_count).
+        let ammonium = parse_mol("[NH4+]").unwrap();
+        let ammonia = parse_mol("N").unwrap();
+        assert_eq!(
+            atom_h_delta(
+                &ammonium,
+                &ammonia,
+                &[(0, 0)].into_iter().collect(),
+                0
+            ),
+            -1,
+            "[NH4+] has 4 H, N has 3 → delta −1 (not −5 from double-count)"
+        );
+    }
+
+    #[test]
     fn hydroquinone_to_quinone_loses_aromaticity_and_h() {
         let reactant = parse_mol("Oc1ccc(O)cc1").unwrap();
         let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
         let diff = atom_diff(&reactant, &target);
         assert!(
-            !diff.loses_aromaticity.is_empty() || any_h_loss(&reactant, &target, &diff),
+            !diff.loses_aromaticity.is_empty() || diff.h_loss(&reactant, &target),
             "{diff:?}"
         );
     }
