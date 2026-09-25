@@ -43,7 +43,8 @@ mod wasm_api;
 pub use atom_diff::{
     AtomDiff, added_heavy_atoms, atom_diff, atom_diff_after_cleavage, atom_diff_for_child,
     atom_diff_from_mappings, candidate_could_help, candidate_could_help_on, candidate_order_key,
-    candidate_order_key_on, extend_mapping_for_added, keep_against_diff, lift_mappings,
+    candidate_order_key_on, dh_neighbors_match_any_view, dh_product_ends_match,
+    extend_mapping_for_added, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
     pair_could_help, pattern_could_help, pattern_could_help_mol, site_h_progress,
     try_atom_diff_for_child, try_lift_cleaved_child,
 };

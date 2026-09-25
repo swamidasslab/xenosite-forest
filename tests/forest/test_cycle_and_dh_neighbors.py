@@ -1,4 +1,4 @@
-"""Reject cycles by ancestor dedup_smi; DH sites need matching heavy neighbors."""
+"""Reject cycles by ancestor dedup_smi; DH ends match target after application."""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ from rdkit import Chem
 
 from xenosite.forest.find_path import (
     _dh_neighbors_match_any_view,
+    _dh_product_ends_match_target,
     _is_dehydrogenation_effect,
-    _site_could_help,
     atom_diff,
 )
 from xenosite.forest.rules import (
+    Dehydrogenation,
     Hydroxylation,
     _repeats_ancestor_dedup_smi,
     describe,
@@ -76,21 +77,27 @@ def test_dh_neighbors_mismatch_on_anisole_toward_quinone():
     assert mismatches
 
 
-def test_dh_filter_sites_refuses_mismatched_neighbors():
-    reactant = Chem.MolFromSmiles("COc1ccc(O)cc1")
+def test_dh_product_ends_match_after_hydroquinone_dh():
+    """Applied DH: product ends match the quinone target."""
+
+    parent = Chem.MolFromSmiles("Oc1ccc(O)cc1")
     target = Chem.MolFromSmiles("O=C1C=CC(=O)C=C1")
-    diff = atom_diff(reactant, target)
-    oxygens = [a.GetIdx() for a in reactant.GetAtoms() if a.GetAtomicNum() == 8]
-    bad = next(
-        o for o in oxygens if not _dh_neighbors_match_any_view(reactant, o, diff)
+    finished, info = next(Dehydrogenation().metabolize(parent))
+    product = finished[0]
+    assert product.xf.csmi == Chem.MolToSmiles(target)
+    assert _dh_product_ends_match_target(
+        parent, product, info["end_atoms"], target
     )
-    other = next(o for o in oxygens if o != bad)
-    end = describe(removes="H", dearomatizes=True, partner="O")["possibilities"][0]
-    info = {
-        "options": describe(removes="H", dearomatizes=True)["possibilities"][0],
-        "ends": (end, end),
-        "end_atoms": (bad, other),
-        "path_ends": frozenset(),
-        "site": frozenset({bad, other}),
-    }
-    assert not _site_could_help(info["site"], info, diff, reactant)
+
+
+def test_dh_product_ends_refuse_when_connectivity_still_wrong():
+    """Post-check uses product MCS — reactant mismatch alone is not the gate."""
+
+    # Synthetic: check product (still anisole-like connectivity) vs quinone.
+    parent = Chem.MolFromSmiles("COc1ccc(O)cc1")
+    parent.xf.tracing._stamp()
+    product = Chem.Mol(parent)
+    product.xf.tracing._stamp()
+    target = Chem.MolFromSmiles("O=C1C=CC(=O)C=C1")
+    oxygens = [a.GetIdx() for a in parent.GetAtoms() if a.GetAtomicNum() == 8]
+    assert not _dh_product_ends_match_target(parent, product, oxygens, target)

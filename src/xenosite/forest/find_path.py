@@ -670,12 +670,7 @@ def _heavy_neighbor_idxs(mol: Mol, atom_idx: int) -> frozenset[int]:
 def _dh_site_neighbors_match_target(
     mol: Mol, atom_idx: int, mapping: Mapping[int, int], target: Mol
 ) -> bool:
-    """Heavy neighbors of ``atom_idx`` map onto exactly the target's heavy neighbors.
-
-    Dehydrogenation keeps heavy connectivity; only H and bond orders change.
-    If the imaged neighbor set ≠ the target atom's heavy neighbors, DH cannot
-    produce what the target needs at that site.
-    """
+    """Heavy neighbors of ``atom_idx`` map onto exactly the target's heavy neighbors."""
 
     t_idx = mapping.get(atom_idx)
     if t_idx is None:
@@ -701,6 +696,44 @@ def _dh_neighbors_match_any_view(
         if _dh_site_neighbors_match_target(mol, atom_idx, mapping, target):
             return True
     return False
+
+
+def _parent_to_product_idx(parent: Mol, product: Mol, parent_idx: int) -> int | None:
+    """Product index of the atom that carried ``parent_idx``'s forest label."""
+
+    atom = parent.GetAtomWithIdx(parent_idx)
+    if not atom.HasProp("forestLabel"):
+        return None
+    tag = atom.GetProp("forestLabel")
+    for product_atom in product.GetAtoms():
+        if product_atom.HasProp("forestLabel") and product_atom.GetProp("forestLabel") == tag:
+            return int(product_atom.GetIdx())
+    return None
+
+
+def _dh_product_ends_match_target(
+    parent: Mol,
+    product: Mol,
+    end_atoms: Sequence[int],
+    target: Mol,
+) -> bool:
+    """After DH: each end's heavy neighbors on the **product** match the target.
+
+    Parent ``end_atoms`` are mapped onto the product via forest labels, then
+    checked against ``atom_diff(product, target)``. Pre-application reactant
+    connectivity is not enough — the edit must have been applied.
+    """
+
+    if not end_atoms:
+        return True
+    diff = atom_diff(product, target)
+    for end in end_atoms:
+        product_idx = _parent_to_product_idx(parent, product, int(end))
+        if product_idx is None:
+            return False
+        if not _dh_neighbors_match_any_view(product, product_idx, diff):
+            return False
+    return True
 
 
 def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
@@ -762,12 +795,6 @@ def _site_could_help(
                 mol, atom, diff
             ):
                 return False
-        # Dehydrogenation keeps heavy connectivity. Refuse when a site end's
-        # heavy neighbors do not map exactly onto the target's at that atom.
-        if _is_dehydrogenation_effect(effect):
-            for atom in end_atoms:
-                if not _dh_neighbors_match_any_view(mol, int(atom), diff):
-                    return False
     elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
         oxygen_sites = [atom for atom in atoms if atom in diff.needs_oxygen]
         if not oxygen_sites:
@@ -1103,11 +1130,21 @@ def find_path(
             closer = target_hit or atom_diff(child, target_mol).cost() < parent_cost
             if not closer:
                 continue
+            options = por.info["options"]
+            # DH / QF path ends: each end must match target neighbors **after**
+            # the edit (product), not on the reactant before application.
+            if (
+                _is_dehydrogenation_effect(options)
+                and "end_atoms" in por.info
+                and not _dh_product_ends_match_target(
+                    walk.mol, child, por.info["end_atoms"], target_mol
+                )
+            ):
+                continue
             if child_smiles in seen and not target_hit:
                 continue
             seen.add(child_smiles)
 
-            options = por.info["options"]
             cleaves = bool(options.get("cleaves"))
             if len(finished) == 1 and cleaves:
                 opens = walk.opens + (_cleavage_site(por.info["site"]),)

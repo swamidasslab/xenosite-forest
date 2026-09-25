@@ -862,7 +862,8 @@ fn alkyl_bond_raises(mol: &Molecule, atom_idx_u: usize, diff: &AtomDiff) -> bool
     false
 }
 
-fn is_dehydrogenation_effect(effect: &Effect) -> bool {
+/// Dearomatizing removes-H edit (DH / QF path ends) — not cleavage or OH.
+pub fn is_dehydrogenation_effect(effect: &Effect) -> bool {
     effect_removes_h(effect)
         && effect.dearomatizes
         && !effect.cleaves
@@ -895,7 +896,8 @@ fn dh_site_neighbors_match(
     imaged == heavy_neighbor_idxs(target, t_idx)
 }
 
-fn dh_neighbors_match_any_view(
+/// True when some MCS view has matching heavy neighbors for this site atom.
+pub fn dh_neighbors_match_any_view(
     mol: &Molecule,
     target: &Molecule,
     atom: usize,
@@ -910,6 +912,27 @@ fn dh_neighbors_match_any_view(
         }
     }
     false
+}
+
+/// After DH: each **product** end's heavy neighbors match the target.
+///
+/// `product_ends` are already mapped from the reactant site onto the product
+/// (via forest tags). Pre-application reactant connectivity is not enough.
+pub fn dh_product_ends_match(
+    product: &Molecule,
+    product_ends: &[usize],
+    target: &Molecule,
+) -> bool {
+    if product_ends.is_empty() {
+        return true;
+    }
+    let diff = atom_diff(product, target);
+    for &atom in product_ends {
+        if !dh_neighbors_match_any_view(product, target, atom, &diff) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Site-level gate (Python `_site_could_help`) for a deferred candidate.
@@ -1078,15 +1101,8 @@ pub fn pair_could_help(
             return false;
         }
     }
-    // Dehydrogenation keeps heavy connectivity — imaged neighbors must equal
-    // the target atom's heavy neighbors (any MCS view).
-    if is_dehydrogenation_effect(effect) {
-        for &atom in &atoms {
-            if !dh_neighbors_match_any_view(mol, target, atom, diff) {
-                return false;
-            }
-        }
-    }
+    // DH heavy-neighbor match is post-application (product ends vs target),
+    // not a pre-edit pair_could_help gate. See find_path expand keep.
 
     let (p0, p1) = pair.path_ends();
     scope_could_help(effect, &atoms, &[p0, p1], diff, Some(mol))
@@ -1531,5 +1547,47 @@ mod tests {
         if lifted.cost() < parent_cost {
             assert_eq!(via.cost(), lifted.cost());
         }
+    }
+
+    #[test]
+    fn dh_product_ends_match_after_hydroquinone_dh() {
+        use crate::forest_mol::ForestMol;
+        use crate::rules::dehydrogenation;
+
+        let parent = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let pairs = dehydrogenation()
+            .pair_candidates_leaf(parent.mol())
+            .unwrap();
+        assert!(!pairs.is_empty());
+        let pair = &pairs[0];
+        let (end_a, end_b) = pair.end_atoms().expect("DH pair ends");
+        // Pre-application reactant ends also match here — but the gate is
+        // defined on the product.
+        let pieces = pair.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let tag_a = parent.tag_of(end_a).expect("tagged");
+        let tag_b = parent.tag_of(end_b).expect("tagged");
+        let product_ends = [
+            child.index_of(tag_a).expect("product end a"),
+            child.index_of(tag_b).expect("product end b"),
+        ];
+        assert!(dh_product_ends_match(
+            child.mol(),
+            &product_ends,
+            &target
+        ));
+    }
+
+    #[test]
+    fn dh_product_ends_refuse_wrong_connectivity() {
+        // Identity "product" still carrying methoxy vs quinone target.
+        let product = parse_mol("COc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let oxygens: Vec<usize> = (0..product.atom_count())
+            .filter(|&i| product.atom(atom_idx(i)).element.atomic_number() == 8)
+            .collect();
+        assert_eq!(oxygens.len(), 2);
+        assert!(!dh_product_ends_match(&product, &oxygens, &target));
     }
 }

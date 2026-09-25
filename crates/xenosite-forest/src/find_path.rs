@@ -294,6 +294,30 @@ fn root_ancestors(start: &ForestMol) -> HashSet<String> {
     ancestors
 }
 
+/// Product index of the atom that carried ``parent_idx``'s forest tag.
+fn parent_to_product_idx(parent: &ForestMol, product: &ForestMol, parent_idx: usize) -> Option<usize> {
+    let tag = parent.tag_of(parent_idx)?;
+    product.index_of(tag)
+}
+
+/// After DH: each end's heavy neighbors on the **product** match the target.
+fn dh_product_ends_match_target(
+    parent: &ForestMol,
+    product: &ForestMol,
+    ends: (usize, usize),
+    target: &crate::Molecule,
+) -> bool {
+    let (a, b) = ends;
+    let mut product_ends = Vec::with_capacity(2);
+    for end in [a, b] {
+        let Some(idx) = parent_to_product_idx(parent, product, end) else {
+            return false;
+        };
+        product_ends.push(idx);
+    }
+    crate::atom_diff::dh_product_ends_match(product.mol(), &product_ends, target)
+}
+
 /// Tagged emission: ForestMol products + elementary plan + cleavage site data.
 #[derive(Clone)]
 struct ForestEmission {
@@ -312,6 +336,8 @@ struct ForestEmission {
     search_bias: i8,
     /// Site H-progress vs parent diff at emit (0 if no diff). Soft heap score.
     site_progress: i32,
+    /// Parent end atoms for post-application DH neighbor match (None if not DH).
+    dh_ends: Option<(usize, usize)>,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
     plan: Vec<CanonicalStep>,
@@ -925,6 +951,18 @@ where
                     if !allow {
                         continue;
                     }
+                    // DH / QF path ends: each end must match target neighbors
+                    // **after** the edit (product), not on the reactant before.
+                    if let Some(ends) = emission.dh_ends {
+                        if !dh_product_ends_match_target(
+                            &walk.mol,
+                            &kept,
+                            ends,
+                            &self.target_mol,
+                        ) {
+                            continue;
+                        }
+                    }
                     if repeats_ancestor(&walk.ancestors, &kept) {
                         continue;
                     }
@@ -1211,6 +1249,7 @@ where
             pattern_name: candidate.pattern.name.clone(),
             search_bias: candidate.pattern.search_bias,
             site_progress,
+            dh_ends: None,
             rule_path: candidate.rule_path.clone(),
             products,
             plan: candidate.identity_plan_with_gens(
@@ -1251,6 +1290,11 @@ where
                 crate::atom_diff::site_h_progress(&pair.effect, &atoms, &[p0, p1], d, Some(mol))
             })
             .unwrap_or(0);
+        let dh_ends = if crate::atom_diff::is_dehydrogenation_effect(&pair.effect) {
+            pair.end_atoms()
+        } else {
+            None
+        };
         Ok(Some(ForestEmission {
             site: pair.site,
             site_orbit: vec![pair.site],
@@ -1271,6 +1315,7 @@ where
             pattern_name: pair.pattern_name.clone(),
             search_bias: pair.left.search_bias.min(pair.right.search_bias),
             site_progress,
+            dh_ends,
             rule_path: pending.rule_path.clone(),
             products,
             plan,
