@@ -545,14 +545,18 @@ pub fn extend_mapping_where_possible(
 /// 4. Keep minimum-cost maps.
 ///
 /// **Stop (guarantees a best map among seeds' Aut-orbit):**
-/// - `field_cost == 0` — global lower bound; cannot improve (no need to
-///   discover the rest of the orbit).
+/// - `field_cost <= goal_cost` when `goal_cost` is set — typically
+///   [`residual_cost_after_site_cast`] (effect cast onto the parent diff at
+///   the site). A lower bound on achievable cost if the edit succeeds; hitting
+///   it means a best-for-this-hop map is in hand (no need for the rest of the
+///   Aut-orbit). `goal_cost == 0` is the global lower bound.
 /// - Otherwise when no new mapping appears under any generator (orbit of
 ///   the seeds closed). Seen-set prevents infinite loops.
 fn best_diff_from_lifted_maps(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
     seed_maps: Vec<BTreeMap<usize, usize>>,
+    goal_cost: Option<usize>,
 ) -> Option<AtomDiff> {
     if seed_maps.is_empty() {
         return None;
@@ -575,6 +579,7 @@ fn best_diff_from_lifted_maps(
         return None;
     }
 
+    let goal = goal_cost.unwrap_or(0);
     let mut best_cost = usize::MAX;
     let mut best_maps: Vec<BTreeMap<usize, usize>> = Vec::new();
 
@@ -587,11 +592,10 @@ fn best_diff_from_lifted_maps(
         } else if cost == best_cost {
             best_maps.push(mapping.clone());
         }
-        // Cost 0 is a hard lower bound → one of the best maps is in hand.
-        if best_cost == 0 {
+        // Hit the site-cast residual (or 0) → a best map for this hop.
+        if best_cost <= goal {
             break;
         }
-        // No generators → only the extended seeds (already scored).
         if gens.is_empty() {
             continue;
         }
@@ -611,12 +615,107 @@ fn best_diff_from_lifted_maps(
     if best_maps.is_empty() {
         None
     } else {
-        // Prefer fewer maps for merge: one per distinct cost-tied alignment is
-        // enough; dedup by content (seen already unique, but best_maps can
-        // repeat equal-cost from different paths only if we push duplicates —
-        // we don't).
         Some(atom_diff_from_mappings(mol, target, best_maps))
     }
+}
+
+/// Lower bound on child [`AtomDiff::cost`] after this effect succeeds at `site`.
+///
+/// Casts the effect onto the parent diff: clear cost contributions the effect
+/// is declared to fix on `site_atoms ∪ path_ends` (oxygen need / n_extra,
+/// cleavage bond + leave heavies, dearomatization, H delta). Same weights as
+/// [`AtomDiff::field_cost`].
+///
+/// **Safe for early stop when under-bound (over-credit):** residual ≤ true
+/// best ⇒ hitting it guarantees a best-for-this-hop map. Over-clearing site
+/// fields is preferred; under-clearing would inflate the residual and risk
+/// stopping on a suboptimal Aut member. When the cast cannot prove a bound,
+/// callers may pass `None` and fall back to cost `0` / orbit closure.
+pub fn residual_cost_after_site_cast(
+    parent: &AtomDiff,
+    effect: &Effect,
+    site_atoms: &[usize],
+    path_ends: &[usize],
+) -> usize {
+    let scope: HashSet<usize> = site_atoms.iter().chain(path_ends.iter()).copied().collect();
+
+    let mut needs_oxygen = parent.needs_oxygen.clone();
+    let mut loses_aromaticity = parent.loses_aromaticity.clone();
+    let mut h_delta = parent.h_delta.clone();
+    let mut cleaved = parent.cleaved.clone();
+    let mut cleavage_bonds = parent.cleavage_bonds.clone();
+    let mut n_extra = parent.n_extra;
+    let bond_order_mismatches = parent.bond_order_mismatches;
+
+    if effect_adds_oxygen(effect) {
+        let mut cleared = 0usize;
+        for &a in &scope {
+            if needs_oxygen.remove(&a) {
+                cleared += 1;
+            }
+        }
+        let o_delta = effect.delta_formula.get("O").copied().unwrap_or(0).max(0) as usize;
+        let o_place = o_delta.max(cleared).max(1);
+        n_extra = n_extra.saturating_sub(o_place);
+    }
+    if effect.cleaves {
+        cleavage_bonds.retain(|&(a, b)| !(scope.contains(&a) && scope.contains(&b)));
+        let leave_heavies = effect
+            .leave_count
+            .map(|n| n as usize)
+            .or_else(|| {
+                let n = effect
+                    .leave_formula
+                    .values()
+                    .filter(|&&c| c > 0)
+                    .map(|&c| c as usize)
+                    .sum::<usize>();
+                if n > 0 { Some(n) } else { None }
+            })
+            .unwrap_or(0);
+        if leave_heavies > 0 {
+            let mut drop = leave_heavies;
+            cleaved = cleaved
+                .into_iter()
+                .filter(|_| {
+                    if drop > 0 {
+                        drop -= 1;
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect();
+        }
+    }
+    if effect.dearomatizes {
+        for &a in &scope {
+            loses_aromaticity.remove(&a);
+        }
+    }
+    if effect_removes_h(effect) {
+        for &a in &scope {
+            if h_delta.get(&a).copied().unwrap_or(0) < 0 {
+                h_delta.insert(a, 0);
+            }
+        }
+    }
+    if effect_adds_h(effect) {
+        for &a in &scope {
+            if h_delta.get(&a).copied().unwrap_or(0) > 0 {
+                h_delta.insert(a, 0);
+            }
+        }
+    }
+
+    let h_off = h_delta.values().filter(|&&d| d != 0).count();
+    3 * cleaved.len()
+        + 3 * n_extra
+        + 2 * needs_oxygen.len()
+        + loses_aromaticity.len()
+        + h_off
+        + 3 * cleavage_bonds.len()
+        + bond_order_mismatches
 }
 
 /// Heavy child atoms whose tags are not on `parent` (local additions).
@@ -785,7 +884,8 @@ fn place_added_atom(
 /// gap is placeable, reorder under product Aut generators, pick best cost.
 /// Add/remove heavies are allowed — generators + extend replace full MCS.
 ///
-/// Cleavage shrinks: use [`try_lift_cleaved_child`] / [`atom_diff_after_cleavage`].
+/// `goal_cost`: early-stop bound from [`residual_cost_after_site_cast`] (or
+/// `0`). Cleavage shrinks: use [`try_lift_cleaved_child`].
 ///
 /// Never runs MCS itself.
 pub fn try_atom_diff_for_child(
@@ -793,6 +893,17 @@ pub fn try_atom_diff_for_child(
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
+) -> Option<AtomDiff> {
+    try_atom_diff_for_child_goal(parent, parent_diff, child, target, None)
+}
+
+/// Like [`try_atom_diff_for_child`], with a site-cast residual early-stop goal.
+pub fn try_atom_diff_for_child_goal(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+    goal_cost: Option<usize>,
 ) -> Option<AtomDiff> {
     // Any heavy parent atom missing on the child → shrink; closer cost from a
     // non-cleavage lift is unreliable. Cleavage expand uses
@@ -812,7 +923,7 @@ pub fn try_atom_diff_for_child(
         parent_diff.mappings.clone()
     };
     let lifted = lift_mappings(parent, child, &parent_maps)?;
-    best_diff_from_lifted_maps(child, target, lifted)
+    best_diff_from_lifted_maps(child, target, lifted, goal_cost)
 }
 
 /// Diff when a child shares tags but carries none of the parent MCS image
@@ -852,6 +963,17 @@ pub fn try_lift_cleaved_child(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
 ) -> Option<AtomDiff> {
+    try_lift_cleaved_child_goal(parent, parent_diff, child, target, None)
+}
+
+/// Like [`try_lift_cleaved_child`], with a site-cast residual early-stop goal.
+pub fn try_lift_cleaved_child_goal(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+    goal_cost: Option<usize>,
+) -> Option<AtomDiff> {
     if !parent.shares_tag_gen(child) {
         return None;
     }
@@ -861,7 +983,7 @@ pub fn try_lift_cleaved_child(
         parent_diff.mappings.clone()
     };
     match lift_mappings(parent, child, &parent_maps) {
-        Some(lifted) => best_diff_from_lifted_maps(child, target, lifted),
+        Some(lifted) => best_diff_from_lifted_maps(child, target, lifted, goal_cost),
         None => Some(unmapped_child_diff(child.mol(), target)),
     }
 }
@@ -879,18 +1001,21 @@ pub fn atom_diff_after_cleavage(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
 ) -> AtomDiff {
-    atom_diff_after_cleavage_tracked(parent, parent_diff, child, target, None)
+    atom_diff_after_cleavage_tracked(parent, parent_diff, child, target, None, None)
 }
 
-/// Like [`atom_diff_after_cleavage`], optionally counting MCS rematch fallbacks.
+/// Like [`atom_diff_after_cleavage`], with optional MCS-fallback counter and
+/// site-cast early-stop goal.
 pub fn atom_diff_after_cleavage_tracked(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
     mut mcs_fallback: Option<&mut usize>,
+    goal_cost: Option<usize>,
 ) -> AtomDiff {
-    if let Some(lifted) = try_lift_cleaved_child(parent, parent_diff, child, target) {
+    if let Some(lifted) = try_lift_cleaved_child_goal(parent, parent_diff, child, target, goal_cost)
+    {
         return lifted;
     }
     if let Some(c) = mcs_fallback.as_mut() {
@@ -1768,6 +1893,72 @@ mod tests {
         let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
         assert_eq!(via.cost(), 0, "{via:?}");
         assert!(child.shares_tag_gen(&parent));
+    }
+
+    #[test]
+    fn site_cast_residual_is_lower_bound_for_hydroxylation() {
+        use crate::forest_mol::ForestMol;
+        use crate::hydroxylation::hydroxylation;
+
+        let parent = ForestMol::parse("CC").unwrap();
+        let target = parse_mol("CCO").unwrap();
+        let parent_diff = atom_diff(parent.mol(), &target);
+        assert!(parent_diff.cost() > 0, "{parent_diff:?}");
+        let cands = hydroxylation()
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let c = &cands[0];
+        let atoms = [c.site];
+        let goal = residual_cost_after_site_cast(&parent_diff, &c.pattern.effect, &atoms, &[]);
+        // Casting hydroxyl onto a needs-oxygen site should claim the O gap.
+        assert!(
+            goal < parent_diff.cost(),
+            "goal={goal} parent={}",
+            parent_diff.cost()
+        );
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let lifted =
+            try_atom_diff_for_child_goal(&parent, &parent_diff, &child, &target, Some(goal))
+                .expect("lift");
+        assert!(
+            lifted.cost() <= goal,
+            "lifted={} goal={goal} parent_diff={parent_diff:?}",
+            lifted.cost()
+        );
+        assert_eq!(lifted.cost(), 0);
+    }
+
+    #[test]
+    fn site_cast_residual_cleavage_credits_leave() {
+        let reactant = parse_mol("COc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        let effect = Effect {
+            adds: Some("O".into()),
+            cleaves: true,
+            leave_count: Some(1),
+            leave_formula: crate::pattern::leave_me(),
+            delta_formula: crate::pattern::compose_delta_formula(
+                Some("O"),
+                None,
+                &crate::pattern::leave_me(),
+            ),
+            ..Effect::default()
+        };
+        // Site = cleaved bond atoms (O–Me): use any cleavage bond from the diff.
+        let (a, b) = *diff
+            .cleavage_bonds
+            .iter()
+            .next()
+            .expect("anisole→phenol cleavage bond");
+        let goal = residual_cost_after_site_cast(&diff, &effect, &[a, b], &[]);
+        assert!(
+            goal < diff.cost(),
+            "cleavage cast should drop leave/bond cost; goal={goal} parent={}",
+            diff.cost()
+        );
     }
 
     #[test]
