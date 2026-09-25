@@ -191,7 +191,13 @@ fn dump(name: &str, start: &str, target: &str, lazy_closer: bool) {
 
 fn main() {
     let hard = env::args().any(|a| a == "--hard");
-    let lazy_closer = !env::args().any(|a| a == "--no-lazy");
+    let lazy_closer = if env::args().any(|a| a == "--no-lazy") {
+        false
+    } else if env::args().any(|a| a == "--lazy") {
+        true
+    } else {
+        FindPathConfig::default().lazy_closer
+    };
     let cases = if hard { HARD } else { LARGER };
     println!(
         "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}  lazy_closer={lazy_closer}\n",
