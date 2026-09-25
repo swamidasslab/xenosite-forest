@@ -538,13 +538,13 @@ pub fn extend_mapping_where_possible(
 }
 
 /// Best [`AtomDiff`] from lifted seed maps: **extend**, reorder under product
-/// Aut, then **MCS rematch** when the lift is still worse than a fresh MCS.
+/// Aut looking for cost `0`; otherwise **stick with MCS**.
 ///
 /// 1. Extend each seed where the mapping gap is placeable.
 /// 2. Apply product generators (ForestMol-cached); extend after each reorder.
-/// 3. Keep minimum-cost maps. Stop at cost `0` or when the Aut orbit closes.
-/// 4. If the best lift still costs more than a fresh MCS, return the MCS
-///    (caller counts `mcs_lift_rematch`). Cost-0 lifts skip MCS entirely.
+/// 3. Stop at cost `0` (guaranteed best — skip MCS) or when the Aut orbit closes.
+/// 4. Any non-zero lift is not MCS-complete in general → return a fresh MCS
+///    (caller counts `mcs_lift_rematch`). Do not trust a non-zero lift cost.
 fn best_diff_from_lifted_maps(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
@@ -605,16 +605,11 @@ fn best_diff_from_lifted_maps(
     if best_maps.is_empty() {
         return None;
     }
-    let lifted = atom_diff_from_mappings(mol, target, best_maps);
-    if lifted.cost() == 0 {
-        return Some((lifted, false));
+    if best_cost == 0 {
+        return Some((atom_diff_from_mappings(mol, target, best_maps), false));
     }
-    // Lift+extend+Aut is not always MCS-complete; rematch for correctness.
-    let mcs = atom_diff(mol, target);
-    if mcs.cost() < lifted.cost() {
-        return Some((mcs, true));
-    }
-    Some((lifted, false))
+    // Non-zero lift is not guaranteed correct → stick with MCS.
+    Some((atom_diff(mol, target), true))
 }
 
 /// Lower bound sketch on child [`AtomDiff::cost`] after this effect at `site`.
@@ -870,8 +865,8 @@ fn place_added_atom(
 
 /// Child [`AtomDiff`] via tag-lift + extend + product generators when possible.
 ///
-/// Same heavy-tag set (no shrink). Rematches MCS when the lift is still
-/// worse than a fresh MCS (counted via [`try_atom_diff_for_child_tracked`]).
+/// Same heavy-tag set (no shrink). Cost-0 lifts are kept; any non-zero lift
+/// sticks with MCS ([`try_atom_diff_for_child_tracked`] counts rematches).
 /// Cleavage shrinks: use [`try_lift_cleaved_child`].
 pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
@@ -917,7 +912,7 @@ pub fn try_atom_diff_for_child_tracked(
     Some(diff)
 }
 
-/// Deprecated alias: `goal_cost` is ignored (MCS rematch covers correctness).
+/// Deprecated alias: `goal_cost` is ignored (cost-0 lift or MCS).
 pub fn try_atom_diff_for_child_goal(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
@@ -964,7 +959,7 @@ fn unmapped_child_diff(child: &Molecule, target: &Molecule) -> AtomDiff {
 ///
 /// Removed atoms drop out of the parent MCS map via [`lift_mappings`]; product
 /// generators + [`extend_mapping_where_possible`] pick a good reordering;
-/// MCS rematch covers cases Aut missed.
+/// non-zero lifts stick with MCS.
 ///
 /// When the child shares tags but inherits **no** mapped atoms (discarded
 /// cleavage side vs an MCS that lives on the other fragment), returns a
@@ -1047,7 +1042,7 @@ pub fn atom_diff_after_cleavage(
 /// Like [`atom_diff_after_cleavage`], with optional counters.
 ///
 /// - `mcs_fallback`: lift impossible (no shared tags).
-/// - `mcs_rematch`: lift left cleaved heavies; cheaper MCS replaced it.
+/// - `mcs_rematch`: non-zero lift → stuck with MCS (not guaranteed correct).
 pub fn atom_diff_after_cleavage_tracked(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,

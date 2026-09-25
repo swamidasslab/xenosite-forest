@@ -56,9 +56,9 @@ pub struct PathCounters {
     /// Child diff fell back to a fresh MCS because tag-lift was impossible
     /// (no shared tags). Expect zero.
     pub mcs_lift_fallback: usize,
-    /// Generator Aut orbit left cleaved heavies; a cheaper full MCS replaced
-    /// the lift. Counted for derisk — drive toward zero by improving extend /
-    /// seeds; not a Drop assert yet.
+    /// Generator Aut left a non-zero cost; stuck with a fresh MCS (lift not
+    /// guaranteed correct). Counted for derisk — drive toward zero by hitting
+    /// cost-0 lifts more often; not a Drop assert yet.
     pub mcs_lift_rematch: usize,
     /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
     #[cfg(test)]

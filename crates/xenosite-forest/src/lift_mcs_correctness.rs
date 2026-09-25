@@ -594,7 +594,7 @@ fn find_path_mcs_fallback_zero_tba() {
 
 #[test]
 fn lift_with_mcs_rematch_matches_full_mcs_cost() {
-    // Lift+extend+Aut, with MCS rematch when the lift is worse, equals MCS.
+    // Cost-0 lift kept; non-zero always sticks with MCS → equals MCS cost.
     let parent = ForestMol::parse("c1ccccc1").unwrap();
     let target = parse_mol("Oc1ccccc1").unwrap();
     let parent_diff = atom_diff(parent.mol(), &target);
@@ -604,6 +604,47 @@ fn lift_with_mcs_rematch_matches_full_mcs_cost() {
     let mcs = atom_diff(child.mol(), &target);
     assert_eq!(lifted.cost(), mcs.cost());
     assert_eq!(lifted.cost(), 0);
+}
+
+#[test]
+fn nonzero_lift_always_sticks_with_mcs() {
+    // Shrink cleavage: lift may leave cleaved heavies; must return MCS cost.
+    let parent = ForestMol::parse("COc1ccccc1").unwrap();
+    let target = parse_mol("Oc1ccccc1").unwrap();
+    let parent_diff = atom_diff(parent.mol(), &target);
+    let phenol = crate::mol::canon_of("Oc1ccccc1").unwrap();
+    let cands = dealkylation()
+        .candidates(parent.mol())
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let child = cands
+        .iter()
+        .find_map(|c| {
+            c.materialize_mols(parent.mol()).ok().and_then(|pieces| {
+                pieces.into_iter().find_map(|p| {
+                    let a = parent.adopt_product(p);
+                    (a.csmi().as_ref() == phenol.as_str()).then_some(a)
+                })
+            })
+        })
+        .expect("phenol");
+    let mut rematch = 0usize;
+    let out = crate::atom_diff::try_lift_cleaved_child_tracked(
+        &parent,
+        &parent_diff,
+        &child,
+        &target,
+        Some(&mut rematch),
+    )
+    .expect("cleave lift");
+    let mcs = atom_diff(child.mol(), &target);
+    assert_eq!(out.cost(), mcs.cost());
+    if out.cost() > 0 {
+        assert!(
+            rematch >= 1,
+            "non-zero result must come from MCS (rematch={rematch})"
+        );
+    }
 }
 
 #[test]
