@@ -918,6 +918,9 @@ pub fn dh_neighbors_match_any_view(
 ///
 /// `product_ends` are already mapped from the reactant site onto the product
 /// (via forest tags). Pre-application reactant connectivity is not enough.
+///
+/// Both ends must match under the **same** MCS mapping — not each end's best
+/// independent top-group / view match (optimistic split vs pair topology).
 pub fn dh_product_ends_match(
     product: &Molecule,
     product_ends: &[usize],
@@ -927,12 +930,14 @@ pub fn dh_product_ends_match(
         return true;
     }
     let diff = atom_diff(product, target);
-    for &atom in product_ends {
-        if !dh_neighbors_match_any_view(product, target, atom, &diff) {
-            return false;
+    for mapping in &diff.mappings {
+        if product_ends.iter().all(|&atom| {
+            mapping.contains_key(&atom) && dh_site_neighbors_match(product, target, atom, mapping)
+        }) {
+            return true;
         }
     }
-    true
+    false
 }
 
 /// Site-level gate (Python `_site_could_help`) for a deferred candidate.
@@ -1001,6 +1006,10 @@ fn extend_h_edit_partners(mol: &Molecule, scope: &mut HashSet<usize>) {
 }
 
 /// Full site gate with live mol (leave_count / methide partner).
+///
+/// Non-cleavage: the whole site must help under **one** MCS placement (same
+/// rule for atom / bond / pair). Merged top-rank unions across placements are
+/// optimistic when the site has more than one atom.
 pub fn candidate_could_help_on(
     candidate: &Candidate,
     diff: &AtomDiff,
@@ -1030,18 +1039,44 @@ pub fn candidate_could_help_on(
         return true;
     }
 
+    match (mol, target) {
+        (Some(m), Some(t)) => {
+            let mappings = if diff.mappings.is_empty() {
+                std::slice::from_ref(&diff.mapping)
+            } else {
+                diff.mappings.as_slice()
+            };
+            for mapping in mappings {
+                let view = diff_for(m, t, mapping);
+                if candidate_could_help_on_view(candidate, &atoms, &view, Some(m)) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => candidate_could_help_on_view(candidate, &atoms, diff, mol),
+    }
+}
+
+fn candidate_could_help_on_view(
+    candidate: &Candidate,
+    atoms: &[usize],
+    view: &AtomDiff,
+    mol: Option<&Molecule>,
+) -> bool {
+    let effect = &candidate.pattern.effect;
     if effect_adds_oxygen(effect) && !effect.dearomatizes {
         let oxygen_sites: Vec<_> = atoms
             .iter()
             .copied()
-            .filter(|a| diff.needs_oxygen.contains(a))
+            .filter(|a| view.needs_oxygen.contains(a))
             .collect();
         if oxygen_sites.is_empty() {
             return false;
         }
         if oxygen_sites
             .iter()
-            .all(|a| diff.needs_carbonyl.contains(a) && diff.loses_aromaticity.contains(a))
+            .all(|a| view.needs_carbonyl.contains(a) && view.loses_aromaticity.contains(a))
         {
             return false;
         }
@@ -1051,19 +1086,19 @@ pub fn candidate_could_help_on(
     // Pair ends use [`pair_could_help`] (per-end partner), not this merge.
     if effect.partner.as_deref() == Some("C") {
         if let Some(m) = mol {
-            if !atoms.iter().any(|&a| alkyl_bond_raises(m, a, diff)) {
+            if !atoms.iter().any(|&a| alkyl_bond_raises(m, a, view)) {
                 return false;
             }
         }
     }
 
-    scope_could_help(effect, &atoms, &[], diff, mol)
+    scope_could_help(effect, atoms, &[], view, mol)
 }
 
 /// Pair-site gate (Python `_site_could_help` when ``"ends"`` is on the info).
 ///
-/// Per-end oxygen and ``partner == "C"`` (methide) read each end's effect, not
-/// the merged span. Dearomatize / H gates use end atoms ∪ path anchors.
+/// Same one-placement rule as [`candidate_could_help_on`]. Per-end oxygen /
+/// ``partner == "C"`` read each end's effect (pair data), not the merged span.
 pub fn pair_could_help(
     pair: &PairCandidate,
     diff: &AtomDiff,
@@ -1092,20 +1127,41 @@ pub fn pair_could_help(
         return true;
     }
 
+    let (p0, p1) = pair.path_ends();
+    let mappings = if diff.mappings.is_empty() {
+        std::slice::from_ref(&diff.mapping)
+    } else {
+        diff.mappings.as_slice()
+    };
+    for mapping in mappings {
+        let view = diff_for(mol, target, mapping);
+        if !pair_ends_match_view(pair, end_a, end_b, &view, mol) {
+            continue;
+        }
+        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol)) {
+            return true;
+        }
+    }
+    false
+}
+
+fn pair_ends_match_view(
+    pair: &PairCandidate,
+    end_a: usize,
+    end_b: usize,
+    view: &AtomDiff,
+    mol: &Molecule,
+) -> bool {
     let ends = [(&pair.left.effect, end_a), (&pair.right.effect, end_b)];
     for (end, atom) in ends {
-        if effect_adds_oxygen(end) && !diff.needs_oxygen.contains(&atom) {
+        if effect_adds_oxygen(end) && !view.needs_oxygen.contains(&atom) {
             return false;
         }
-        if end.partner.as_deref() == Some("C") && !alkyl_bond_raises(mol, atom, diff) {
+        if end.partner.as_deref() == Some("C") && !alkyl_bond_raises(mol, atom, view) {
             return false;
         }
     }
-    // DH heavy-neighbor match is post-application (product ends vs target),
-    // not a pre-edit pair_could_help gate. See find_path expand keep.
-
-    let (p0, p1) = pair.path_ends();
-    scope_could_help(effect, &atoms, &[p0, p1], diff, Some(mol))
+    true
 }
 
 /// Sort key for expand: cleavage / dearom / oxygen first (Python `order_key`).
@@ -1182,6 +1238,45 @@ pub fn site_h_progress(
         }
     }
     progress
+}
+
+/// Best [`site_h_progress`] under any one MCS placement (not merged h_delta).
+pub fn site_h_progress_best_placement(
+    effect: &Effect,
+    atoms: &[usize],
+    path_ends: &[usize],
+    diff: &AtomDiff,
+    mol: &Molecule,
+    target: &Molecule,
+) -> i32 {
+    let mappings = if diff.mappings.is_empty() {
+        std::slice::from_ref(&diff.mapping)
+    } else {
+        diff.mappings.as_slice()
+    };
+    mappings
+        .iter()
+        .map(|mapping| {
+            let view = diff_for(mol, target, mapping);
+            site_h_progress(effect, atoms, path_ends, &view, Some(mol))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Pair emit: H-progress for both ends under the best consistent placement.
+pub fn pair_site_h_progress(
+    pair: &PairCandidate,
+    diff: &AtomDiff,
+    mol: &Molecule,
+    target: &Molecule,
+) -> i32 {
+    let atoms = pair
+        .end_atoms()
+        .map(|(a, b)| [a, b])
+        .unwrap_or([pair.site, pair.site]);
+    let (p0, p1) = pair.path_ends();
+    site_h_progress_best_placement(&pair.effect, &atoms, &[p0, p1], diff, mol, target)
 }
 
 /// Keep predicate for [`crate::find_path::find_path_with`] from an [`AtomDiff`].

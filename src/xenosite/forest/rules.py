@@ -1049,10 +1049,11 @@ def merge_effects(
             leave[el] = leave.get(el, 0) + int(n)
     leave = {el: n for el, n in leave.items() if n}
     leave_count = left.get("leave_count")
+    right_leave = right.get("leave_count")
     if leave_count is None:
-        leave_count = right.get("leave_count")
-    elif right.get("leave_count") is not None:
-        leave_count = int(leave_count) + int(right["leave_count"])
+        leave_count = right_leave
+    elif isinstance(leave_count, int) and isinstance(right_leave, int):
+        leave_count = leave_count + right_leave
     return {
         "adds": adds,
         "removes": removes,
@@ -1639,14 +1640,16 @@ _formula_delta_mismatch_bag: ContextVar[list[FormulaDeltaMismatch] | None] = Con
 
 def begin_formula_delta_mismatch_collector(
     bag: list[FormulaDeltaMismatch] | None = None,
-) -> tuple[list[FormulaDeltaMismatch], Token]:
+) -> tuple[list[FormulaDeltaMismatch], Token[list[FormulaDeltaMismatch] | None]]:
     """Install a shared mismatch list for this context; return ``(bag, token)``."""
 
     installed = bag if bag is not None else []
     return installed, _formula_delta_mismatch_bag.set(installed)
 
 
-def end_formula_delta_mismatch_collector(token: Token) -> None:
+def end_formula_delta_mismatch_collector(
+    token: Token[list[FormulaDeltaMismatch] | None],
+) -> None:
     """Restore the previous collector (pass the token from :func:`begin_...`)."""
 
     _formula_delta_mismatch_bag.reset(token)

@@ -45,7 +45,8 @@ pub use atom_diff::{
     atom_diff_from_mappings, candidate_could_help, candidate_could_help_on, candidate_order_key,
     candidate_order_key_on, dh_neighbors_match_any_view, dh_product_ends_match,
     extend_mapping_for_added, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
-    pair_could_help, pattern_could_help, pattern_could_help_mol, site_h_progress,
+    pair_could_help, pattern_could_help, pattern_could_help_mol, pair_site_h_progress,
+    site_h_progress, site_h_progress_best_placement,
     try_atom_diff_for_child, try_lift_cleaved_child,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};

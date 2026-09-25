@@ -702,6 +702,22 @@ def _dh_neighbors_match_any_view(
     return False
 
 
+def _dh_ends_match_under_mapping(
+    mol: Mol,
+    end_idxs: Sequence[int],
+    mapping: Mapping[int, int],
+    target: Mol,
+) -> bool:
+    """True when **all** ends match heavy neighbors under this one MCS mapping."""
+
+    for atom_idx in end_idxs:
+        if atom_idx not in mapping:
+            return False
+        if not _dh_site_neighbors_match_target(mol, int(atom_idx), mapping, target):
+            return False
+    return True
+
+
 def _parent_to_product_idx(parent: Mol, product: Mol, parent_idx: int) -> int | None:
     """Product index of the atom that carried ``parent_idx``'s forest label."""
 
@@ -721,23 +737,27 @@ def _dh_product_ends_match_target(
     end_atoms: Sequence[int],
     target: Mol,
 ) -> bool:
-    """After DH: each end's heavy neighbors on the **product** match the target.
+    """After DH: product ends' heavy neighbors match the target under one MCS map.
 
     Parent ``end_atoms`` are mapped onto the product via forest labels, then
-    checked against ``atom_diff(product, target)``. Pre-application reactant
-    connectivity is not enough — the edit must have been applied.
+    checked against ``atom_diff(product, target)``. Both ends must succeed under
+    the **same** placement — not each end's best top-group / view match
+    independently (that optimistic split can disagree with pair topology).
     """
 
     if not end_atoms:
         return True
     diff = atom_diff(product, target)
+    product_ends: list[int] = []
     for end in end_atoms:
         product_idx = _parent_to_product_idx(parent, product, int(end))
         if product_idx is None:
             return False
-        if not _dh_neighbors_match_any_view(product, product_idx, diff):
-            return False
-    return True
+        product_ends.append(product_idx)
+    return any(
+        _dh_ends_match_under_mapping(product, product_ends, mapping, target)
+        for mapping in diff.mappings
+    )
 
 
 def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
@@ -768,6 +788,71 @@ def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
     return (_side(left, right), _side(right, left))
 
 
+def _site_could_help_on_view(
+    site: Site,
+    info: SiteInfo,
+    view: AtomDiff,
+    mol: TracingMol | Mol,
+) -> bool:
+    """Site gates against one MCS placement (whole site, one topology).
+
+    Multi-atom sites (bonds, pairs) must all help under this view — not each
+    atom's best match from a merged top-rank union across placements.
+    """
+
+    effect = info["options"]
+    atoms = _flat_ints(site)
+    path_ends: frozenset[int] | tuple[()] = (
+        info["path_ends"] if "path_ends" in info else ()
+    )
+
+    if "ends" in info:
+        # Per-end effect bags (oxygen / methide partner) — data on the pair.
+        for atom, end in zip(info["end_atoms"], info["ends"]):
+            if _effect_adds_oxygen(end) and atom not in view.needs_oxygen:
+                return False
+            if (end.get("partner") or "") == "C" and not _alkyl_bond_raises(
+                mol, atom, view
+            ):
+                return False
+    elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
+        oxygen_sites = [atom for atom in atoms if atom in view.needs_oxygen]
+        if not oxygen_sites:
+            return False
+        if all(
+            atom in view.needs_carbonyl and atom in view.loses_aromaticity
+            for atom in oxygen_sites
+        ):
+            return False
+
+    scope = atoms | set(path_ends)
+    if effect.get("dearomatizes"):
+        if not (scope & set(view.loses_aromaticity)):
+            return False
+
+    removes = effect.get("removes") or ""
+    if (
+        isinstance(removes, str)
+        and "H" in removes
+        and not _effect_adds_oxygen(effect)
+        and not effect.get("cleaves")
+    ):
+        loses_h = any(view.h_delta.get(atom, 0) < 0 for atom in scope)
+        if not loses_h and not (scope & set(view.loses_aromaticity)):
+            return False
+    adds = effect.get("adds") or ""
+    if (
+        isinstance(adds, str)
+        and "H" in adds
+        and not _effect_adds_oxygen(effect)
+        and not effect.get("cleaves")
+    ):
+        gains_h = any(view.h_delta.get(atom, 0) > 0 for atom in scope)
+        if not gains_h:
+            return False
+    return True
+
+
 def _site_could_help(
     site: Site, info: SiteInfo, diff: AtomDiff, mol: TracingMol | Mol
 ) -> bool:
@@ -787,64 +872,15 @@ def _site_could_help(
                 return False
         return True
 
-    if "ends" in info:
-        ends = info["ends"]
-        end_atoms = info["end_atoms"]
-        for atom, end in zip(end_atoms, ends):
-            if _effect_adds_oxygen(end) and atom not in diff.needs_oxygen:
-                return False
-            # An alkyl partner turns the ring bond into an exocyclic double
-            # bond (methide). Skip it unless that C-C bond is higher in the target.
-            if (end.get("partner") or "") == "C" and not _alkyl_bond_raises(
-                mol, atom, diff
-            ):
-                return False
-    elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
-        oxygen_sites = [atom for atom in atoms if atom in diff.needs_oxygen]
-        if not oxygen_sites:
-            return False
-        # The local change is a carbonyl on a ring that stops being aromatic.
-        # A bare hydroxylation does not do that; the dearomatizing edit does.
-        if all(
-            atom in diff.needs_carbonyl and atom in diff.loses_aromaticity
-            for atom in oxygen_sites
-        ):
-            return False
-
-    path_ends: frozenset[int] | tuple[()] = (
-        info["path_ends"] if "path_ends" in info else ()
+    # Whole site under one MCS placement (pair / bond / atom). Merged
+    # top-rank unions across placements are optimistic for multi-atom sites.
+    mappings = diff.mappings or (diff.mapping,)
+    return any(
+        _site_could_help_on_view(
+            site, info, _diff_for(diff.reactant, diff.target, mapping), mol
+        )
+        for mapping in mappings
     )
-    if effect.get("dearomatizes"):
-        scope = atoms | set(path_ends)
-        if not (scope & set(diff.loses_aromaticity)):
-            return False
-
-    removes = effect.get("removes") or ""
-    if (
-        isinstance(removes, str)
-        and "H" in removes
-        and not _effect_adds_oxygen(effect)
-        and not effect.get("cleaves")
-    ):
-        scope = atoms | set(path_ends)
-        loses_h = any(diff.h_delta.get(atom, 0) < 0 for atom in scope)
-        if not loses_h and not (scope & set(diff.loses_aromaticity)):
-            return False
-    # Symmetric to removes-H: adding H is only helpful where h_delta > 0.
-    # Do not use loses_aromaticity as an escape — reductive dearomatization
-    # clears that term in cost() while moving away from oxidative targets.
-    adds = effect.get("adds") or ""
-    if (
-        isinstance(adds, str)
-        and "H" in adds
-        and not _effect_adds_oxygen(effect)
-        and not effect.get("cleaves")
-    ):
-        scope = atoms | set(path_ends)
-        gains_h = any(diff.h_delta.get(atom, 0) > 0 for atom in scope)
-        if not gains_h:
-            return False
-    return True
 
 
 def _filters(diff: AtomDiff, enabled: bool) -> tuple[FilterRules, FilterSites]:

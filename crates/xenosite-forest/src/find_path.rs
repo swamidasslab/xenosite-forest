@@ -1271,12 +1271,13 @@ where
         let site_progress = self
             .diff
             .map(|d| {
-                crate::atom_diff::site_h_progress(
+                crate::atom_diff::site_h_progress_best_placement(
                     &candidate.pattern.effect,
                     &atoms,
                     &[],
                     d,
-                    Some(self.parent.mol()),
+                    self.parent.mol(),
+                    self.target,
                 )
             })
             .unwrap_or(0);
@@ -1333,13 +1334,7 @@ where
         let (p0, p1) = pair.path_ends();
         let site_progress = self
             .diff
-            .map(|d| {
-                let atoms = pair
-                    .end_atoms()
-                    .map(|(a, b)| [a, b])
-                    .unwrap_or([pair.site, pair.site]);
-                crate::atom_diff::site_h_progress(&pair.effect, &atoms, &[p0, p1], d, Some(mol))
-            })
+            .map(|d| crate::atom_diff::pair_site_h_progress(pair, d, mol, self.target))
             .unwrap_or(0);
         let dh_ends = if crate::atom_diff::is_dehydrogenation_effect(&pair.effect) {
             pair.end_atoms()
