@@ -38,6 +38,9 @@ pub struct PathCounters {
     /// Counted only — not used to drop or abort (that lever over-collapsed
     /// multipath; HEURISTICS).
     pub signal_contained_plan: usize,
+    /// Child walks enqueued with lower heap priority because the hop's
+    /// rule+site already appears in a yielded plan.
+    pub deprioritized_known_site: usize,
 }
 
 impl PathCounters {
@@ -138,17 +141,23 @@ struct Walk {
     diff: Option<crate::atom_diff::AtomDiff>,
 }
 
-/// Heap entry: hits first, then FIFO (`seq`). Lower priority value pops first.
+/// Heap entry: hits first, then novel sites vs yielded plans, then FIFO.
+/// Lower Ord value is popped later (BinaryHeap is max-heap).
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
+    /// `false` when this hop's rule+site already appears in a yielded plan.
+    /// Deprioritize only — never drop or abort (HEURISTICS).
+    novel_site: bool,
     seq: usize,
     walk: Walk,
 }
 
 impl PartialEq for HeapItem {
     fn eq(&self, other: &Self) -> bool {
-        self.target_hit == other.target_hit && self.seq == other.seq
+        self.target_hit == other.target_hit
+            && self.novel_site == other.novel_site
+            && self.seq == other.seq
     }
 }
 
@@ -164,6 +173,7 @@ impl Ord for HeapItem {
     fn cmp(&self, other: &Self) -> Ordering {
         self.target_hit
             .cmp(&other.target_hit)
+            .then_with(|| self.novel_site.cmp(&other.novel_site))
             .then_with(|| other.seq.cmp(&self.seq))
     }
 }
@@ -360,6 +370,58 @@ fn record_yield_plan_signals(counters: &mut PathCounters, found: &[PathOutcome],
     }
 }
 
+/// Rule → site atoms from already-yielded plans (orbit or Index anchors).
+/// Used to soft-demote matching expand sites — not to prune.
+fn yielded_plan_sites(found: &[PathOutcome]) -> std::collections::HashMap<String, HashSet<usize>> {
+    let mut out: std::collections::HashMap<String, HashSet<usize>> =
+        std::collections::HashMap::new();
+    for h in found {
+        for step in h.plan.iter() {
+            out.entry(step.rule.clone())
+                .or_default()
+                .extend(step.site_orbit());
+        }
+    }
+    out
+}
+
+/// True when this hop's leaf rule + site (or unique-edit orbit) is absent from
+/// yielded plans. Empty `known` → always novel.
+fn hop_site_is_novel(
+    rule_path: &[Option<String>],
+    site: usize,
+    site_orbit: &[usize],
+    known: &std::collections::HashMap<String, HashSet<usize>>,
+) -> bool {
+    if known.is_empty() {
+        return true;
+    }
+    let Some(rule) = rule_path.first().and_then(|n| n.as_deref()) else {
+        return true;
+    };
+    let Some(atoms) = known.get(rule) else {
+        return true;
+    };
+    let site_atoms: &[usize] = if site_orbit.is_empty() {
+        std::slice::from_ref(&site)
+    } else {
+        site_orbit
+    };
+    !site_atoms.iter().any(|a| atoms.contains(a))
+}
+
+fn emission_site_is_novel(
+    emission: &ForestEmission,
+    known: &std::collections::HashMap<String, HashSet<usize>>,
+) -> bool {
+    hop_site_is_novel(
+        &emission.rule_path,
+        emission.site,
+        &emission.site_orbit,
+        known,
+    )
+}
+
 /// Yield walks that turn ``reactant`` into ``target``.
 ///
 /// Pull iterator (Python generator parity): each [`Iterator::next`] resumes the
@@ -445,6 +507,7 @@ where
     let mut seq = 0usize;
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
+        novel_site: true,
         seq,
         walk: Walk {
             mol: start,
@@ -569,6 +632,8 @@ where
             let mut hits_from_here = 0usize;
             // Cross-rule cleave Or: enqueue each (fold_key, continue_csmi) once.
             let mut seen_cleave_continues: HashSet<(CleaveFoldKey, String)> = HashSet::new();
+            let known_sites = yielded_plan_sites(&self.yielded);
+            let mut deprio_known = 0usize;
 
             let expand = match Expand::new(
                 self.ruleset,
@@ -577,6 +642,7 @@ where
                 self.counters,
                 &self.keep,
                 diff.as_ref(),
+                &known_sites,
             ) {
                 Ok(e) => e,
                 Err(e) => {
@@ -593,6 +659,7 @@ where
                         return Some(Err(e));
                     }
                 };
+                let novel_site = emission_site_is_novel(&emission, &known_sites);
                 let keeps = keep_fragments(
                     &walk.mol,
                     &emission.products,
@@ -668,8 +735,12 @@ where
                     steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
                     let mut plan = walk.plan.clone();
                     plan.extend(emission.plan.iter().cloned());
+                    if !novel_site {
+                        deprio_known += 1;
+                    }
                     self.heap.push(HeapItem {
                         target_hit,
+                        novel_site,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -693,6 +764,7 @@ where
                     break;
                 }
             }
+            self.counters.deprioritized_known_site += deprio_known;
         }
 
         self.done = true;
@@ -782,6 +854,7 @@ where
         counters: &'a mut PathCounters,
         keep: &'a K,
         diff: Option<&'a crate::atom_diff::AtomDiff>,
+        known_sites: &'a std::collections::HashMap<String, HashSet<usize>>,
     ) -> Result<Self, ForestError> {
         let mol = parent.mol();
         // Pull candidates; buffer only survivors for order_key sort.
@@ -799,7 +872,17 @@ where
             }
         }
         if let Some(d) = diff {
-            deferred.sort_by_key(|c| crate::atom_diff::candidate_order_key(c, d));
+            deferred.sort_by_key(|cand| {
+                let novel = hop_site_is_novel(&cand.rule_path, cand.site, &cand.orbit, known_sites);
+                let (a, b, cname, pname) = crate::atom_diff::candidate_order_key(cand, d);
+                // Novel sites before sites already in yielded plans.
+                (a, b, cname, !novel as u8, pname)
+            });
+        } else if !known_sites.is_empty() {
+            deferred.sort_by_key(|cand| {
+                let novel = hop_site_is_novel(&cand.rule_path, cand.site, &cand.orbit, known_sites);
+                (!novel as u8, cand.pattern.name.clone())
+            });
         }
         Ok(Self {
             parent,
@@ -1077,6 +1160,7 @@ where
     let mut seq = 0usize;
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
+        novel_site: true,
         seq,
         walk: Walk {
             mol: start,
@@ -1167,6 +1251,7 @@ where
             let mol = walk.mol.mol();
             self.counters.expansions += 1;
             let mut hits_from_here = 0usize;
+            let known_sites = yielded_plan_sites(&self.yielded);
 
             // Pull metabolize one emission at a time — no full list.
             let emissions =
@@ -1181,6 +1266,12 @@ where
                     }
                 };
                 self.counters.mol_edits += 1;
+                let novel_site = hop_site_is_novel(
+                    &emission.rule_path,
+                    emission.site,
+                    &emission.site_orbit,
+                    &known_sites,
+                );
                 // Filter-path emissions are CSMI strings (no tag continuity). Prefer
                 // find_path_with + Candidate materialize for tagged walks.
                 let products: Result<Vec<_>, _> = emission
@@ -1240,8 +1331,12 @@ where
                     });
                     let mut plan = walk.plan.clone();
                     plan.extend(emission.plan.iter().cloned());
+                    if !novel_site {
+                        self.counters.deprioritized_known_site += 1;
+                    }
                     self.heap.push(HeapItem {
                         target_hit,
+                        novel_site,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1777,6 +1872,35 @@ mod tests {
         assert_eq!(counters.signal_contained_plan, 1);
         assert!(!plan_already_yielded(&found, &longer));
         assert_eq!(counters.plan_drops(), 1);
+    }
+
+    #[test]
+    fn hop_site_novel_reads_yielded_plan_orbits() {
+        use crate::canonical_plan::{PlanAtom, Step};
+        let found = vec![PathOutcome {
+            steps: vec![],
+            plan: as_deps([Step::new("Dealkylation", [PlanAtom::index(3)]).with_orbit([3, 5])]),
+            smiles: "C".into(),
+        }];
+        let known = yielded_plan_sites(&found);
+        assert!(!hop_site_is_novel(
+            &[Some("Dealkylation".into())],
+            5,
+            &[],
+            &known
+        ));
+        assert!(hop_site_is_novel(
+            &[Some("Dealkylation".into())],
+            9,
+            &[],
+            &known
+        ));
+        assert!(hop_site_is_novel(
+            &[Some("Hydroxylation".into())],
+            3,
+            &[],
+            &known
+        ));
     }
 
     #[test]
