@@ -25,6 +25,7 @@ fn smirks_row(
         effect,
         skip_same_rings: false,
         cleave_side_group: None,
+        search_bias: 0,
     }
 }
 
@@ -45,6 +46,7 @@ fn endpoint_row(
         effect,
         skip_same_rings,
         cleave_side_group: None,
+        search_bias: 0,
     }
 }
 
@@ -906,6 +908,9 @@ pub fn dehydration() -> RuleSet {
 }
 
 /// `Hydrogenation` from Python `xenosite.forest.rules`.
+///
+/// Patterns carry `search_bias = -1` so `find_path` soft-demotes H₂ hops on the
+/// heap (HEURISTICS: not decided).
 pub fn hydrogenation() -> RuleSet {
     RuleSet::new(
         Some("Hydrogenation".into()),
@@ -924,7 +929,8 @@ pub fn hydrogenation() -> RuleSet {
                     leave_count: None,
                     partner: None,
                 },
-            ),
+            )
+            .with_search_bias(-1),
             smirks_row(
                 "alkene",
                 "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
@@ -939,7 +945,8 @@ pub fn hydrogenation() -> RuleSet {
                     leave_count: None,
                     partner: None,
                 },
-            ),
+            )
+            .with_search_bias(-1),
             endpoint_row(
                 "path_end",
                 "[*:1]",
@@ -954,7 +961,8 @@ pub fn hydrogenation() -> RuleSet {
                     partner: None,
                 },
                 "keep",
-            ),
+            )
+            .with_search_bias(-1),
         ],
     )
 }
@@ -1909,6 +1917,22 @@ mod tests {
     fn all_rules_registers_every_leaf() {
         assert_eq!(all_rules().members().len(), 26);
         assert_eq!(catalog_names().len(), 26);
+    }
+
+    #[test]
+    fn hydrogenation_patterns_carry_negative_search_bias() {
+        let set = hydrogenation();
+        let patterns = set.patterns();
+        assert!(!patterns.is_empty());
+        assert!(
+            patterns.iter().all(|p| p.search_bias == -1),
+            "Hydrogenation soft-demotes on the find_path heap; got {:?}",
+            patterns
+                .iter()
+                .map(|p| (p.name.as_str(), p.search_bias))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(hydroxylation().patterns()[0].search_bias, 0);
     }
 
     #[test]

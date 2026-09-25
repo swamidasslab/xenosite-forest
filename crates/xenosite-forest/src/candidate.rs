@@ -105,6 +105,7 @@ impl Candidate {
             },
             cleaves: self.pattern.effect.cleaves,
             pattern_name: self.pattern.name.clone(),
+            search_bias: self.pattern.search_bias,
             rule_path: self.rule_path.clone(),
             products,
             plan: self.identity_plan(context),

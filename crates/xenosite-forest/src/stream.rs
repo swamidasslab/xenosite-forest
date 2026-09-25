@@ -426,6 +426,7 @@ where
                             site_atoms: site_atoms.clone(),
                             cleaves: pair.effect.cleaves,
                             pattern_name: emission.pattern_name,
+                            search_bias: pair.left.search_bias.min(pair.right.search_bias),
                             rule_path: vec![self.set.name.clone()],
                             products: emission.products,
                             plan,
@@ -624,6 +625,11 @@ impl Iterator for PairEmissions<'_> {
                             site_atoms: site_atoms.clone(),
                             cleaves: pending.pair.effect.cleaves,
                             pattern_name: emission.pattern_name,
+                            search_bias: pending
+                                .pair
+                                .left
+                                .search_bias
+                                .min(pending.pair.right.search_bias),
                             rule_path: pending.rule_path,
                             products: emission.products,
                             plan,

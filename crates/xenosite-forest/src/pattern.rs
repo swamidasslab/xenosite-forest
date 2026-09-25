@@ -59,6 +59,10 @@ pub struct PatternInfo {
     /// (normalize order in the key). Shared leave labels (e.g. `"Me"` on O- and
     /// N-methyl dealks) let distinct rules fold when fragments match.
     pub cleave_side_group: Option<(String, String)>,
+    /// Heap preference for `find_path` (higher pops sooner on the max-heap).
+    /// Default `0`. Negative demotes (e.g. Hydrogenation). Soft only — never
+    /// drops. Schema trial; see HEURISTICS.
+    pub search_bias: i8,
 }
 
 impl PatternInfo {
@@ -77,6 +81,7 @@ impl PatternInfo {
             effect,
             skip_same_rings: false,
             cleave_side_group: None,
+            search_bias: 0,
         }
     }
 
@@ -104,6 +109,12 @@ impl PatternInfo {
         keep: impl Into<String>,
     ) -> Self {
         self.cleave_side_group = Some((leave.into(), keep.into()));
+        self
+    }
+
+    /// Soft heap preference (higher first). Does not filter or drop.
+    pub fn with_search_bias(mut self, bias: i8) -> Self {
+        self.search_bias = bias;
         self
     }
 
@@ -180,6 +191,8 @@ pub struct Emission {
     pub site_atoms: Vec<usize>,
     pub cleaves: bool,
     pub pattern_name: String,
+    /// From [`PatternInfo::search_bias`] (pair: min of both ends).
+    pub search_bias: i8,
     pub rule_path: Vec<Option<String>>,
     pub products: Vec<String>,
     /// Elementary steps for this hop (identity or quinone-shaped expansion).

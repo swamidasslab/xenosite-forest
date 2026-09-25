@@ -157,14 +157,17 @@ struct OxygenSite {
     atoms: BTreeSet<usize>,
 }
 
-/// Heap entry: hits first, then novel sites vs yielded plans, then LIFO
-/// (most recently queued first — DFS bias). BinaryHeap is max-heap.
+/// Heap entry: hits first, then novel sites vs yielded plans, then pattern
+/// [`PatternInfo::search_bias`], then LIFO (most recently queued first — DFS).
+/// BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
     /// `false` when this hop's pattern+site already appears in a yielded path.
     /// Deprioritize only — never drop or abort (HEURISTICS).
     novel_site: bool,
+    /// From [`PatternInfo::search_bias`] (higher preferred). Soft demotion.
+    search_bias: i8,
     seq: usize,
     walk: Walk,
 }
@@ -173,6 +176,7 @@ impl PartialEq for HeapItem {
     fn eq(&self, other: &Self) -> bool {
         self.target_hit == other.target_hit
             && self.novel_site == other.novel_site
+            && self.search_bias == other.search_bias
             && self.seq == other.seq
     }
 }
@@ -190,6 +194,7 @@ impl Ord for HeapItem {
         self.target_hit
             .cmp(&other.target_hit)
             .then_with(|| self.novel_site.cmp(&other.novel_site))
+            .then_with(|| self.search_bias.cmp(&other.search_bias))
             // Higher seq = enqueued later = pop first (DFS / stack bias).
             .then_with(|| self.seq.cmp(&other.seq))
     }
@@ -213,6 +218,8 @@ struct ForestEmission {
     removes_oxygen: bool,
     oxygen_site: OxygenSite,
     pattern_name: String,
+    /// From [`PatternInfo::search_bias`] (pair: min of ends).
+    search_bias: i8,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
     plan: Vec<CanonicalStep>,
@@ -584,6 +591,7 @@ where
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
+        search_bias: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -714,15 +722,17 @@ where
             let mut deprio_known = 0usize;
 
             let expand = match Expand::new(
-                self.ruleset,
-                &walk.mol,
-                &self.target_mol,
                 self.counters,
-                &self.keep,
-                diff.as_ref(),
-                &known_sites,
-                &walk.o_added,
-                &walk.o_removed,
+                ExpandInput {
+                    ruleset: self.ruleset,
+                    parent: &walk.mol,
+                    target: &self.target_mol,
+                    keep: &self.keep,
+                    diff: diff.as_ref(),
+                    known_sites: &known_sites,
+                    o_added: &walk.o_added,
+                    o_removed: &walk.o_removed,
+                },
             ) {
                 Ok(e) => e,
                 Err(e) => {
@@ -827,6 +837,7 @@ where
                     self.heap.push(HeapItem {
                         target_hit,
                         novel_site,
+                        search_bias: emission.search_bias,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -914,6 +925,18 @@ struct PendingPair<'a> {
     rule_path: Vec<Option<String>>,
 }
 
+/// Inputs for one expand (bundled so `Expand::new` stays under clippy's arity cap).
+struct ExpandInput<'a, K> {
+    ruleset: &'a RuleSet,
+    parent: &'a ForestMol,
+    target: &'a crate::Molecule,
+    keep: &'a K,
+    diff: Option<&'a crate::atom_diff::AtomDiff>,
+    known_sites: &'a std::collections::HashMap<String, HashSet<usize>>,
+    o_added: &'a [OxygenSite],
+    o_removed: &'a [OxygenSite],
+}
+
 /// Pull tagged emissions one at a time.
 ///
 /// Candidate survivors may be buffered for `order_key` sort (discovery, no
@@ -938,16 +961,19 @@ where
     K: Fn(&Candidate) -> bool,
 {
     fn new(
-        ruleset: &'a RuleSet,
-        parent: &'a ForestMol,
-        target: &'a crate::Molecule,
         counters: &'a mut PathCounters,
-        keep: &'a K,
-        diff: Option<&'a crate::atom_diff::AtomDiff>,
-        known_sites: &'a std::collections::HashMap<String, HashSet<usize>>,
-        o_added: &'a [OxygenSite],
-        o_removed: &'a [OxygenSite],
+        input: ExpandInput<'a, K>,
     ) -> Result<Self, ForestError> {
+        let ExpandInput {
+            ruleset,
+            parent,
+            target,
+            keep,
+            diff,
+            known_sites,
+            o_added,
+            o_removed,
+        } = input;
         let mol = parent.mol();
         // Pull candidates; buffer only survivors for order_key sort.
         let mut deferred = Vec::new();
@@ -975,13 +1001,21 @@ where
                     hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
                 let (a, b, cname, pname) = crate::atom_diff::candidate_order_key(cand, d);
                 // Novel pattern+site before those already in yielded plans.
-                (a, b, cname, !novel as u8, pname)
+                // Higher search_bias first (negated so sort ascending prefers high).
+                (
+                    a,
+                    b,
+                    cname,
+                    !novel as u8,
+                    -cand.pattern.search_bias,
+                    pname,
+                )
             });
         } else if !known_sites.is_empty() {
             deferred.sort_by_key(|cand| {
                 let novel =
                     hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
-                (!novel as u8, cand.pattern.name.clone())
+                (!novel as u8, -cand.pattern.search_bias, cand.pattern.name.clone())
             });
         }
         Ok(Self {
@@ -1025,6 +1059,7 @@ where
             removes_oxygen: crate::atom_diff::effect_removes_oxygen(&candidate.pattern.effect),
             oxygen_site: oxygen_site_from_parts(candidate.site, &candidate.orbit, site_atoms),
             pattern_name: candidate.pattern.name.clone(),
+            search_bias: candidate.pattern.search_bias,
             rule_path: candidate.rule_path.clone(),
             products,
             plan: candidate.identity_plan_with_gens(
@@ -1072,6 +1107,7 @@ where
             removes_oxygen: crate::atom_diff::effect_removes_oxygen(&pair.effect),
             oxygen_site: oxygen_site_from_parts(pair.site, &[pair.site], site_atoms_set),
             pattern_name: pair.pattern_name.clone(),
+            search_bias: pair.left.search_bias.min(pair.right.search_bias),
             rule_path: pending.rule_path.clone(),
             products,
             plan,
@@ -1292,6 +1328,7 @@ where
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
+        search_bias: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -1470,6 +1507,7 @@ where
                     self.heap.push(HeapItem {
                         target_hit,
                         novel_site,
+                        search_bias: emission.search_bias,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1511,10 +1549,11 @@ mod tests {
 
     #[test]
     fn heap_prefers_most_recently_queued_among_peers() {
-        // DFS bias: larger seq pops before smaller seq (same hit/novel tier).
+        // DFS bias: larger seq pops before smaller seq (same hit/novel/bias tier).
         let older = HeapItem {
             target_hit: false,
             novel_site: true,
+            search_bias: 0,
             seq: 1,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1531,6 +1570,7 @@ mod tests {
         let newer = HeapItem {
             target_hit: false,
             novel_site: true,
+            search_bias: 0,
             seq: 2,
             walk: older.walk.clone(),
         };
@@ -1539,6 +1579,40 @@ mod tests {
         heap.push(newer);
         assert_eq!(heap.pop().unwrap().seq, 2);
         assert_eq!(heap.pop().unwrap().seq, 1);
+    }
+
+    #[test]
+    fn heap_prefers_higher_search_bias_over_seq() {
+        // Demoted Hydrogenation (bias -1) loses to default bias even if enqueued later.
+        let demoted = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: -1,
+            seq: 99,
+            walk: Walk {
+                mol: ForestMol::parse("CC").unwrap(),
+                steps: vec![],
+                plan: vec![],
+                maybe: vec![],
+                opens: vec![],
+                o_added: vec![],
+                o_removed: vec![],
+                parent_cost: None,
+                diff: None,
+            },
+        };
+        let preferred = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: 0,
+            seq: 1,
+            walk: demoted.walk.clone(),
+        };
+        let mut heap = BinaryHeap::new();
+        heap.push(demoted);
+        heap.push(preferred);
+        assert_eq!(heap.pop().unwrap().search_bias, 0);
+        assert_eq!(heap.pop().unwrap().search_bias, -1);
     }
 
     #[test]
