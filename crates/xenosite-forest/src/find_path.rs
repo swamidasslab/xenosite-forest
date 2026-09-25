@@ -1950,4 +1950,68 @@ mod tests {
         assert!(outcome.allows(Some(&demethyl), None));
         assert!(outcome.allows(None, Some(outcome.maybe().entries[0].side.as_str())));
     }
+
+    /// Ethane → ethanol → ethene with **only** Hydroxylation + Dehydration.
+    /// The OH carbon is the dehydration site — productive beta-elim, not a
+    /// circular undo. A blanket “O-add blocks O-remove at overlapping site”
+    /// would refuse this. (`find_path` closer also refuses the HA bump toward
+    /// ethene; this test walks metabolize so the chemistry is visible.)
+    #[test]
+    fn hydroxylation_then_dehydration_same_site_yields_ethene() {
+        use crate::rules::dehydration;
+        use crate::ruleset::{accept_all_rules, accept_all_sites};
+
+        let set = RuleSet::compose(
+            Some("HydrateDehydrate".into()),
+            [hydroxylation(), dehydration()],
+        );
+        let ethane = ForestMol::parse("CC").unwrap();
+        let ethane_c0 = ethane.tag_of(0).expect("tag");
+
+        let oh_cands: Vec<_> = hydroxylation()
+            .candidates(ethane.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!oh_cands.is_empty());
+        let oh = &oh_cands[0];
+        let oh_pieces = oh.materialize_mols(ethane.mol()).unwrap();
+        assert_eq!(oh_pieces.len(), 1);
+        let ethanol = ethane.adopt_product(oh_pieces[0].clone());
+        assert_eq!(ethanol.csmi().as_ref(), canon_of("CCO").unwrap());
+        let oh_carbon = ethanol.index_of(ethane_c0).expect("tagged carbon");
+        assert!(
+            oh.site == oh_carbon || oh.orbit.contains(&oh_carbon),
+            "OH site {} orbit {:?} should name tagged carbon {}",
+            oh.site,
+            oh.orbit,
+            oh_carbon
+        );
+
+        let ethene_csmi = canon_of("C=C").unwrap();
+        let mut saw_ethene = false;
+        let mut shared_site = false;
+        for emission in set.metabolize(ethanol.mol(), accept_all_rules, accept_all_sites, true) {
+            let emission = emission.unwrap();
+            if emission.leaf_rule() != Some("Dehydration") {
+                continue;
+            }
+            let site_atoms: BTreeSet<usize> = emission.site_atoms.iter().copied().collect();
+            if site_atoms.contains(&oh_carbon) || emission.site == oh_carbon {
+                shared_site = true;
+            }
+            for p in &emission.products {
+                if p.as_str() == ethene_csmi.as_str() {
+                    saw_ethene = true;
+                }
+            }
+        }
+        assert!(
+            shared_site,
+            "dehydration should act on the hydroxylated carbon {oh_carbon}"
+        );
+        assert!(
+            saw_ethene,
+            "hydroxylation then dehydration at that carbon yields ethene (productive)"
+        );
+    }
 }
