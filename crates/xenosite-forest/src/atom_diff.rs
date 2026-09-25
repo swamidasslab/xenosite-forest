@@ -97,11 +97,12 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // HA alignment + H counts. Soft chemistry (`needs_oxygen`, aromatic,
-        // bond-order) stays on the struct for filters / order_key but is not
-        // double-counted here — unmapped target O is already in `n_extra`.
-        let h_off = self.h_delta.values().filter(|&&d| d != 0).count();
-        3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len() + h_off
+        // HA alignment only: unmapped reactant / target heavies and cut bonds.
+        // Soft chemistry (`needs_oxygen`, aromatic, H-delta, bond-order) stays on
+        // the struct for filters / order_key but is not scored here — unmapped
+        // target O is already in `n_extra`; H belongs on formula distance, not
+        // a second atom_diff term.
+        3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len()
     }
 
     /// True when ``atoms`` is the bond that separates kept from gone.
