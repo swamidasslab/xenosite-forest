@@ -18,6 +18,7 @@ pub mod cleavage_graph;
 pub mod find_path;
 pub mod forest;
 pub mod forest_mol;
+pub mod formula_check;
 pub mod hydroxylation;
 pub mod kekule;
 pub mod labels;
@@ -65,6 +66,7 @@ pub use find_path::{
     find_path, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
 };
 pub use forest::{Formula, Structure, formula_delta, molecule_formula};
+pub use formula_check::check_effect_delta_formula;
 pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;

@@ -29,6 +29,7 @@ chematic = { path = "../../vendor/chematic/crates/chematic", default-features = 
     "perception",
 ] }
 canonaut = "1.0.0"
+log = "0.4"
 wasm-bindgen = { version = "0.2", optional = true }
 pyo3 = { version = "0.26", optional = true }
 

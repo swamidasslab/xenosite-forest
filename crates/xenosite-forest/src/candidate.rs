@@ -84,10 +84,20 @@ impl Candidate {
 
     /// Materialize into an [`Emission`] (site + namespace + products).
     pub fn emit(&self, context: &Molecule) -> Result<Option<Emission>, ForestError> {
-        let products = self.materialize(context)?;
-        if products.is_empty() {
+        let mols = self.materialize_mols(context)?;
+        if mols.is_empty() {
             return Ok(None);
         }
+        crate::formula_check::check_effect_delta_formula(
+            context,
+            &self.pattern.effect,
+            &mols,
+            &self.pattern.name,
+        );
+        let products = mols
+            .iter()
+            .map(|m| crate::mol::canon_smiles(m))
+            .collect::<Vec<_>>();
         Ok(Some(Emission {
             site: self.site,
             site_orbit: self.orbit.clone(),

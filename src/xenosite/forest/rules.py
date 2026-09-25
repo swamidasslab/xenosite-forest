@@ -367,6 +367,8 @@ class ReactionRule:
             for p in finished:
                 assert p.xf.tracing.active
 
+            _report_formula_delta_mismatch(mol, info, finished)
+
             if unique_csmi:
                 key = _unique_csmi_key(info, emission_csmi)
                 if key in seen_yield:
@@ -1563,6 +1565,75 @@ def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:
 
 class SiteDeduplicationWarning(UserWarning):
     """Unique-edit miss: later emission repeats a keeper's CSMI set + site ranks."""
+
+
+class FormulaDeltaMismatchWarning(UserWarning):
+    """Observed product formula change disagrees with PatternInfo ``delta_formula``."""
+
+
+def _heavy_formula_counts(counts: Mapping[str, int] | None) -> dict[str, int]:
+    """Drop H — edit bags and sanitized mols disagree on H for hydroxyl."""
+
+    return {
+        str(el): int(n)
+        for el, n in (counts or {}).items()
+        if el != "H" and int(n)
+    }
+
+
+def _sum_product_formula(products: Sequence[Mol]) -> Formula:
+    counts: dict[str, int] = {}
+    charge = 0
+    for product in products:
+        formula = product.xf.formula
+        for el, n in (formula.get("counts") or {}).items():
+            counts[el] = counts.get(el, 0) + int(n)
+        charge += int(formula.get("charge", 0))
+    return {"counts": counts, "charge": charge}
+
+
+def _report_formula_delta_mismatch(
+    parent: Mol,
+    info: SiteInfo,
+    products: Sequence[Mol],
+) -> None:
+    """Warn when heavy-atom product Δformula ≠ declared effect delta."""
+
+    if not products:
+        return
+    options = info.get("options") or {}
+    pattern = info.get("pattern") or {}
+    name = pattern.get("name") or _pattern_dedup_token(info) or "?"
+    parent_formula = parent.xf.formula
+    adds = options.get("adds") or ""
+    removes = options.get("removes") or ""
+    leave_formula = options.get("leave_formula") or {}
+    declared = options.get("delta_formula")
+    if not isinstance(declared, dict):
+        declared = compose_delta_formula(adds, removes, leave_formula)
+
+    if len(products) == 1:
+        actual = formula_delta(parent_formula, products[0].xf.formula)
+        expected_heavy = _heavy_formula_counts(declared)
+        actual_heavy = _heavy_formula_counts(actual.get("counts"))
+    else:
+        # Cleavage: leave stays in a fragment — net change is external adds.
+        expected_heavy = _heavy_formula_counts(bag_counts(adds if isinstance(adds, str) else ""))
+        actual = formula_delta(parent_formula, _sum_product_formula(products))
+        actual_heavy = _heavy_formula_counts(actual.get("counts"))
+
+    if expected_heavy == actual_heavy:
+        return
+    if not expected_heavy and not actual_heavy:
+        return
+    warnings.warn(
+        f"Formula delta mismatch for pattern {name}: declared heavy "
+        f"{expected_heavy!r} ≠ observed {actual_heavy!r} "
+        f"(cleaves={bool(options.get('cleaves'))}, adds={adds!r}, "
+        f"removes={removes!r}, leave={leave_formula!r})",
+        FormulaDeltaMismatchWarning,
+        stacklevel=3,
+    )
 
 
 def _rule_dedup_name(rule: object) -> str:

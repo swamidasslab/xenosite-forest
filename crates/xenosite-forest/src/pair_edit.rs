@@ -389,10 +389,20 @@ impl PairCandidate {
     }
 
     pub fn emit(&self, mol: &Molecule) -> Result<Option<PairEmission>, ForestError> {
-        let products = self.materialize(mol)?;
-        if products.is_empty() {
+        let mols = self.materialize_mols(mol)?;
+        if mols.is_empty() {
             return Ok(None);
         }
+        crate::formula_check::check_effect_delta_formula(
+            mol,
+            &self.effect,
+            &mols,
+            &self.pattern_name,
+        );
+        let products = mols
+            .iter()
+            .map(|m| crate::mol::canon_smiles(m))
+            .collect::<Vec<_>>();
         Ok(Some(PairEmission {
             site: self.site,
             pattern_name: self.pattern_name.clone(),

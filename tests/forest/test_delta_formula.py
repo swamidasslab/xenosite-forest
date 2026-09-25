@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-from tests.forest.pattern_info_inventory import (
-    PATTERNLESS_REACTION_RULE_BASES,
-    discover_reaction_rule_classes,
-    instantiate_rule,
-    patterns_on,
-)
 from xenosite.forest.rules import (
+    LEAVE_ME,
+    BenzodioxoleReduction,
+    Dealkylation,
     Hydroxylation,
+    NitroaromaticReduction,
     ReductiveDehalogenation,
     bag_counts,
     bag_delta_formula,
     compose_delta_formula,
     describe,
+)
+
+from .pattern_info_inventory import (
+    PATTERNLESS_REACTION_RULE_BASES,
+    discover_reaction_rule_classes,
+    instantiate_rule,
+    patterns_on,
 )
 
 
@@ -82,8 +87,6 @@ def test_delta_formula_matches_adds_removes_across_catalog():
 
 
 def test_cleavage_methyl_leave_plus_junction_oxygen():
-    from xenosite.forest.rules import Dealkylation, LEAVE_ME
-
     info = next(
         i for _s, i in Dealkylation().smirks if i.get("name") == "methyl_carboxylic"
     )
@@ -93,8 +96,6 @@ def test_cleavage_methyl_leave_plus_junction_oxygen():
 
 
 def test_cleavage_named_leaves_benzodioxole_and_nitro():
-    from xenosite.forest.rules import BenzodioxoleReduction, NitroaromaticReduction
-
     dioxole = next(i for _s, i in BenzodioxoleReduction().smirks)
     assert dioxole["possibilities"][0]["delta_formula"] == {"C": -1, "H": -2}
     nitro = next(
