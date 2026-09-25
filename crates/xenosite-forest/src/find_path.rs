@@ -1463,7 +1463,7 @@ where
                 let novel =
                     hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
                 let (a, b, cname, h_prog, pname) =
-                    crate::atom_diff::candidate_order_key_on(cand, d, Some(mol));
+                    crate::atom_diff::candidate_order_key_on(cand, d, Some(mol), Some(target));
                 // Novel pattern+site before those already in yielded plans.
                 // Higher search_bias first (negated so sort ascending prefers high).
                 // Then site H-progress (already negated in key: applying helps).
@@ -1655,7 +1655,7 @@ where
                 };
                 let want_cleave = d.target_smaller() || d.has_cleavage();
                 let want_dear = !d.loses_aromaticity.is_empty();
-                let want_oxy = !d.needs_oxygen.is_empty();
+                let want_oxy = crate::atom_diff::any_needs_oxygen(self.target, d);
                 (
                     if want_cleave { cleave } else { 0 },
                     if want_dear { dear } else { 0 },

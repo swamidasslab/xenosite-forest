@@ -128,6 +128,8 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   Hard atom/both often **improve** vs full cost once H is in both formula and atom_diff; mid atom/both slightly worse (59→67/74). Soft O/aromatic/bond terms not needed for these bills.
 
+  **Dropped cached `needs_oxygen` / `needs_carbonyl` / `needs_alcohol` sets** on `AtomDiff`. Filters recompute N1 unmapped target-O on the MCS image (`atom_needs_oxygen` / `any_needs_oxygen`); same rule, no stored locus. Status: approved (Rust derisk).
+
   **Previous — `HeapScoreMode::SoftStack` (opt-in `--score soft`).** Lexicographic soft key: `search_bias` → `site_progress` → `cost_gain` → `seq`. Kept for comparison. Status: not decided (superseded as default). Tests: `heap_prefers_higher_search_bias_over_seq` / `heap_lack_of_improvement_counters_dfs` / `hop_cost_gain_is_parent_minus_child` / `heap_pops_best_ord_value_only` / `match_product_prefers_joint_improvement_and_closeness` / `match_combine_and_metric_axes`.
 
   **`delta_formula` is not a heap score** — soft mismatch warn/counter only. **Dropped:** alternate DFS/BFS among equal scores.

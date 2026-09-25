@@ -44,12 +44,13 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_diff::{
-    AtomDiff, added_heavy_atoms, atom_diff, atom_diff_after_cleavage,
+    AtomDiff, added_heavy_atoms, any_needs_oxygen, atom_diff, atom_diff_after_cleavage,
     atom_diff_after_cleavage_tracked, atom_diff_for_child, atom_diff_from_mappings,
-    candidate_could_help, candidate_could_help_on, candidate_order_key, candidate_order_key_on,
-    dh_neighbors_match_any_view, dh_product_ends_match, extend_mapping_for_added,
-    extend_mapping_where_possible, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
-    pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
+    atom_needs_carbonyl, atom_needs_oxygen, candidate_could_help, candidate_could_help_on,
+    candidate_order_key, candidate_order_key_on, dh_neighbors_match_any_view,
+    dh_product_ends_match, extend_mapping_for_added, extend_mapping_where_possible,
+    is_dehydrogenation_effect, keep_against_diff, lift_mappings, pair_could_help,
+    pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
     residual_cost_after_site_cast, site_h_progress, site_h_progress_best_placement,
     try_atom_diff_for_child, try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked,
     try_lift_cleaved_child, try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
