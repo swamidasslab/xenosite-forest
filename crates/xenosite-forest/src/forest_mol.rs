@@ -205,7 +205,8 @@ impl ForestMol {
 
     /// Fail-closed identity for `find_path` / `unique_csmi` (Chematic docs).
     ///
-    /// `None` = do not use SMILES as a dedup key for this molecule. Display
+    /// **Can return `None`.** Do not treat that as empty SMILES or fall back to
+    /// [`Self::csmi`] for dedup — skip CSMI collapse for this molecule. Display
     /// spelling remains [`Self::csmi`].
     pub fn stable_csmi_key(&self) -> Option<Rc<str>> {
         let mut cache = self.structure.borrow_mut();

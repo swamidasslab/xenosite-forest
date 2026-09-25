@@ -68,16 +68,21 @@ pub fn canon_smiles(mol: &CoreMolecule) -> String {
 
 /// Fail-closed identity key for dedup / caches (Chematic docs).
 ///
-/// [`canon_smiles`] is fine for display and for comparing to a known target
-/// spelling. It is **not** always safe as a HashSet / yield key: coupled E/Z
-/// systems can emit a non-idempotent canonical string. This wraps
-/// [`canonical_smiles_stable_key`] — `None` means do not index that molecule
-/// by SMILES identity (explore / yield without CSMI dedup).
+/// **Can return `None`.** That is intentional: Chematic refuses a key when the
+/// canonical spelling is not proven self-stable (e.g. coupled E/Z). Callers must
+/// not unwrap or fall back to [`canon_smiles`] for HashSet / yield identity —
+/// skip CSMI dedup instead (still explore / yield).
+///
+/// [`canon_smiles`] remains fine for display and for comparing to a known target
+/// spelling.
 pub fn stable_csmi_key(mol: &CoreMolecule) -> Option<String> {
     canonical_smiles_stable_key(mol)
 }
 
 /// Fail-closed key from a SMILES string (parse + aromatize, then stable key).
+///
+/// **Can return `None`** — same contract as [`stable_csmi_key`] (also `None` on
+/// parse failure).
 pub fn stable_csmi_key_of(smiles: &str) -> Option<String> {
     stable_csmi_key(&parse_mol(smiles).ok()?)
 }

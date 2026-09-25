@@ -84,6 +84,17 @@ impl PyForestMol {
         interned
     }
 
+    /// Fail-closed dedup key (Chematic `canonical_smiles_stable_key`).
+    ///
+    /// **Can return `None`.** Do not fall back to [`Self::csmi`] for HashSet /
+    /// yield identity — skip CSMI dedup instead.
+    #[getter]
+    fn stable_csmi_key(&self, py: Python<'_>) -> Option<Py<PyString>> {
+        self.inner
+            .stable_csmi_key()
+            .map(|s| PyString::intern(py, s.as_ref()).unbind())
+    }
+
     #[getter]
     fn formula(&mut self, py: Python<'_>) -> PyResult<Py<PyFormula>> {
         if let Some(held) = &self.formula {

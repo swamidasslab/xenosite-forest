@@ -86,7 +86,8 @@ which clears for you).
 
 | Member | Returns | Notes |
 | ------ | ------- | ----- |
-| `csmi` | `str` | Canonical SMILES (display / target compare). **Not** always safe for dedup — see Chematic `canonical_smiles_stable_key`. Rust: `ForestMol::stable_csmi_key` for search / `unique_csmi`. |
+| `csmi` | `str` | Canonical SMILES (display / target compare). **Not** always safe for dedup. |
+| `stable_csmi_key` (Rust) | `str \| None` | Chematic fail-closed identity. **Can be null/`None`** — then skip CSMI dedup; do not fall back to `csmi`. |
 | `formula` | `Formula` | Heavy-atom counts, total H, formal charge. |
 | `topol_equiv` | `dict[int, int]` | Atom index → topological equivalence class. |
 | `rings` | `dict[int, tuple[tuple[int, ...], ...]]` | Per-atom ring membership. |
