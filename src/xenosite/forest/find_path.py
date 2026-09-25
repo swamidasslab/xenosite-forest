@@ -17,7 +17,6 @@ from typing import Any
 from xenosite._archive_forest.step_plan import AtomRef as AddedRef
 from xenosite._archive_forest.step_plan import StepPlan
 from xenosite.forest.canonical_plan import CanonicalStep, as_deps
-from xenosite.forest.records import FormulaDeltaMismatch
 from xenosite.forest.rdkitutil import (
     Atom,
     Mol,
@@ -34,6 +33,7 @@ from xenosite.forest.rdkitutil import (
 from xenosite.forest.records import (
     AtomRef,
     Effect,
+    FormulaDeltaMismatch,
     PatternInfo,
     ProductInfo,
     Site,

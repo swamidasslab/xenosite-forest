@@ -183,9 +183,7 @@ mod tests {
             ..Effect::default()
         }
         .sealed();
-        assert!(
-            check_effect_delta_formula(&parent, &effect, &[product], "h").is_none()
-        );
+        assert!(check_effect_delta_formula(&parent, &effect, &[product], "h").is_none());
     }
 
     #[test]
@@ -197,8 +195,8 @@ mod tests {
             ..Effect::default()
         }
         .sealed();
-        let detail = check_effect_delta_formula(&parent, &effect, &[product], "bad")
-            .expect("mismatch");
+        let detail =
+            check_effect_delta_formula(&parent, &effect, &[product], "bad").expect("mismatch");
         assert_eq!(detail.pattern_name, "bad");
         assert_eq!(detail.declared_heavy.get("O"), Some(&2));
         assert_eq!(detail.observed_heavy.get("O"), Some(&1));
@@ -218,13 +216,8 @@ mod tests {
         }
         .sealed();
         assert!(
-            check_effect_delta_formula(
-                &parent,
-                &effect,
-                &[phenol, formic],
-                "methyl_carboxylic"
-            )
-            .is_none()
+            check_effect_delta_formula(&parent, &effect, &[phenol, formic], "methyl_carboxylic")
+                .is_none()
         );
     }
 }
