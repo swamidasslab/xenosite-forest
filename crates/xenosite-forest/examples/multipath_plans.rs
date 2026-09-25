@@ -125,7 +125,7 @@ fn fmt_plan(hit: &PathOutcome) -> String {
     )
 }
 
-fn dump(name: &str, start: &str, target: &str) {
+fn dump(name: &str, start: &str, target: &str, lazy_closer: bool) {
     println!("=== {name} ===");
     println!("reactant: {start}");
     println!("target:   {target}");
@@ -139,6 +139,7 @@ fn dump(name: &str, start: &str, target: &str) {
         FindPathConfig {
             max_paths: MAX_PATHS,
             max_nodes: MAX_NODES,
+            lazy_closer,
             ..FindPathConfig::default()
         },
         |_| true,
@@ -190,12 +191,13 @@ fn dump(name: &str, start: &str, target: &str) {
 
 fn main() {
     let hard = env::args().any(|a| a == "--hard");
+    let lazy_closer = !env::args().any(|a| a == "--no-lazy");
     let cases = if hard { HARD } else { LARGER };
     println!(
-        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}\n",
+        "multipath plans  max_paths={MAX_PATHS}  max_nodes={MAX_NODES}  set={}  lazy_closer={lazy_closer}\n",
         if hard { "HARD" } else { "LARGER" }
     );
     for (name, start, target) in cases {
-        dump(name, start, target);
+        dump(name, start, target, lazy_closer);
     }
 }

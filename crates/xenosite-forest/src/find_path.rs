@@ -394,8 +394,8 @@ pub struct FindPathConfig {
     pub use_atom_diff: bool,
     /// When true with `use_atom_diff`, defer full cost closer to pop: enqueue
     /// every kept fragment, verify `cost() < parent_cost` before expanding.
-    /// Skips MCS on siblings never popped. Do not HA-gate at enqueue —
-    /// oxidation can raise HA distance while lowering cost. Default on.
+    /// Default **false**: child cost is already resolved at enqueue for heap
+    /// `cost_gain`, so refuse non-closer there (DFS among improvers only).
     pub lazy_closer: bool,
 }
 
@@ -406,7 +406,7 @@ impl Default for FindPathConfig {
             max_nodes: 800,
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
-            lazy_closer: true,
+            lazy_closer: false,
         }
     }
 }
