@@ -115,7 +115,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   **Current — no special H in atom cost or on AtomDiff.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|)`. No cached `h_delta` / `h_loss` / `h_gain` — methods `AtomDiff::atom_h_delta` / `h_loss` / `h_gain` recompute from MCS mapping + mols (same idea as N1 oxygen). `formula_l1` counts H like any element. Soft aromatic / bond-order stay filter-only. Dropped cached `needs_oxygen` / carbonyl / alcohol (recompute N1). Status: approved.
 
-  **Trial — `MoleculeShells` / `AlignedShells` (n0/n1/n2).** Every heavy atom stores `AtomNeighborhood`: `aromatic`, center `h`, heavy-element bags `n0`/`n1`/`n2`. Two molecules + an alignment → same atom shape with **deltas** (target−reactant) on matched atoms, plus `unaligned_reactant` / `unaligned_target` heavy counts. Example: `show_matched_atoms`. Status: not decided.
+  **Trial — `MoleculeShells` / `AlignedShells` (n0/n1/n2).** Every heavy atom stores `aromatic` plus element bags `n0`/`n1`/`n2` that **include H**: center H in `n1`, H on dist-1 heavies in `n2` (ethane C: `n0=C:1`, `n1=C:1 H:3`, `n2=H:3`). Two molecules + alignment → same shape as **deltas**, plus `unaligned_reactant` / `unaligned_target`. Example: `show_matched_atoms`. Status: not decided.
 
   **Tried — HA+H in both atom cost and `formula_l1`.** `field_cost` included `|h_delta≠0|`. Better hard bills (product-both 217). Status: not approved (H as special cost term).
 
