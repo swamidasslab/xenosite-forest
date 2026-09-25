@@ -645,6 +645,64 @@ def _alkyl_bond_raises(mol: Mol, atom_idx: int, diff: AtomDiff) -> bool:
     return False
 
 
+def _is_dehydrogenation_effect(effect: Effect) -> bool:
+    """Dearomatizing removes-H edit (DH / QF path ends) — not cleavage or OH."""
+
+    removes = effect.get("removes") or ""
+    return (
+        isinstance(removes, str)
+        and "H" in removes
+        and bool(effect.get("dearomatizes"))
+        and not effect.get("cleaves")
+        and not _effect_adds_oxygen(effect)
+    )
+
+
+def _heavy_neighbor_idxs(mol: Mol, atom_idx: int) -> frozenset[int]:
+    """Heavy-atom neighbor indexes of ``atom_idx`` (H dropped)."""
+
+    atom = mol.GetAtomWithIdx(atom_idx)
+    return frozenset(
+        n.GetIdx() for n in atom.GetNeighbors() if n.GetAtomicNum() > 1
+    )
+
+
+def _dh_site_neighbors_match_target(
+    mol: Mol, atom_idx: int, mapping: Mapping[int, int], target: Mol
+) -> bool:
+    """Heavy neighbors of ``atom_idx`` map onto exactly the target's heavy neighbors.
+
+    Dehydrogenation keeps heavy connectivity; only H and bond orders change.
+    If the imaged neighbor set ≠ the target atom's heavy neighbors, DH cannot
+    produce what the target needs at that site.
+    """
+
+    t_idx = mapping.get(atom_idx)
+    if t_idx is None:
+        return False
+    imaged: set[int] = set()
+    for n in _heavy_neighbor_idxs(mol, atom_idx):
+        t_n = mapping.get(n)
+        if t_n is None:
+            return False
+        imaged.add(int(t_n))
+    return imaged == set(_heavy_neighbor_idxs(target, int(t_idx)))
+
+
+def _dh_neighbors_match_any_view(
+    mol: Mol, atom_idx: int, diff: AtomDiff
+) -> bool:
+    """True when some MCS view has matching heavy neighbors for this site atom."""
+
+    target = diff.target
+    for mapping in diff.mappings:
+        if atom_idx not in mapping:
+            continue
+        if _dh_site_neighbors_match_target(mol, atom_idx, mapping, target):
+            return True
+    return False
+
+
 def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
     """Heavy-atom sizes of the two sides of a two-atom cleavage site."""
 
@@ -704,6 +762,12 @@ def _site_could_help(
                 mol, atom, diff
             ):
                 return False
+        # Dehydrogenation keeps heavy connectivity. Refuse when a site end's
+        # heavy neighbors do not map exactly onto the target's at that atom.
+        if _is_dehydrogenation_effect(effect):
+            for atom in end_atoms:
+                if not _dh_neighbors_match_any_view(mol, int(atom), diff):
+                    return False
     elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
         oxygen_sites = [atom for atom in atoms if atom in diff.needs_oxygen]
         if not oxygen_sites:

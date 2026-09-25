@@ -142,6 +142,9 @@ struct Walk {
     o_added: Vec<OxygenSite>,
     /// O-removing hops on this walk (dehydration).
     o_removed: Vec<OxygenSite>,
+    /// Dedup keys from root through [`Self::mol`] (inclusive). A child whose
+    /// stable key is already here is a cycle — refuse enqueue.
+    ancestors: HashSet<String>,
     /// Parent's [`crate::atom_diff::AtomDiff::cost`] when this walk was
     /// enqueued. `None` = root (always expand).
     parent_cost: Option<usize>,
@@ -265,6 +268,30 @@ fn remember_seen(seen: &mut HashSet<String>, mol: &ForestMol) -> bool {
 fn already_seen(seen: &HashSet<String>, mol: &ForestMol) -> bool {
     mol.stable_csmi_key()
         .is_some_and(|k| seen.contains(k.as_ref()))
+}
+
+/// True when ``child``'s stable key already appears on the walk (cycle).
+/// Unstable keys do not trigger — fail-closed skip, not a cycle refuse.
+fn repeats_ancestor(ancestors: &HashSet<String>, child: &ForestMol) -> bool {
+    child
+        .stable_csmi_key()
+        .is_some_and(|k| ancestors.contains(k.as_ref()))
+}
+
+fn with_child_ancestor(ancestors: &HashSet<String>, child: &ForestMol) -> HashSet<String> {
+    let mut next = ancestors.clone();
+    if let Some(k) = child.stable_csmi_key() {
+        next.insert(k.as_ref().to_string());
+    }
+    next
+}
+
+fn root_ancestors(start: &ForestMol) -> HashSet<String> {
+    let mut ancestors = HashSet::new();
+    if let Some(k) = start.stable_csmi_key() {
+        ancestors.insert(k.as_ref().to_string());
+    }
+    ancestors
 }
 
 /// Tagged emission: ForestMol products + elementary plan + cleavage site data.
@@ -668,6 +695,7 @@ where
     let mut seq = 0usize;
     let mut seen = HashSet::new();
     remember_seen(&mut seen, &start);
+    let ancestors = root_ancestors(&start);
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
@@ -683,6 +711,7 @@ where
             opens: Vec::new(),
             o_added: Vec::new(),
             o_removed: Vec::new(),
+            ancestors,
             parent_cost: None,
             diff: None,
         },
@@ -896,6 +925,9 @@ where
                     if !allow {
                         continue;
                     }
+                    if repeats_ancestor(&walk.ancestors, &kept) {
+                        continue;
+                    }
                     if already_seen(&self.seen, &kept) && !target_hit {
                         continue;
                     }
@@ -930,6 +962,7 @@ where
                         parent_cost,
                         child_diff.as_ref().map(|d| d.cost()),
                     );
+                    let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
                         target_hit,
                         novel_site,
@@ -945,6 +978,7 @@ where
                             opens: child_opens,
                             o_added,
                             o_removed,
+                            ancestors,
                             parent_cost,
                             diff: child_diff,
                         },
@@ -1456,6 +1490,7 @@ where
     let mut seq = 0usize;
     let mut seen = HashSet::new();
     remember_seen(&mut seen, &start);
+    let ancestors = root_ancestors(&start);
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
@@ -1471,6 +1506,7 @@ where
             opens: Vec::new(),
             o_added: Vec::new(),
             o_removed: Vec::new(),
+            ancestors,
             parent_cost: None,
             diff: None,
         },
@@ -1611,6 +1647,9 @@ where
                     ) {
                         continue;
                     }
+                    if repeats_ancestor(&walk.ancestors, &kept) {
+                        continue;
+                    }
                     if already_seen(&self.seen, &kept) && !target_hit {
                         continue;
                     }
@@ -1642,6 +1681,7 @@ where
                     if !novel_site {
                         self.counters.deprioritized_known_site += 1;
                     }
+                    let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
                         target_hit,
                         novel_site,
@@ -1658,6 +1698,7 @@ where
                             opens: child_opens,
                             o_added: walk.o_added.clone(),
                             o_removed: walk.o_removed.clone(),
+                            ancestors,
                             parent_cost: None,
                             diff: None,
                         },
@@ -1706,6 +1747,7 @@ mod tests {
                 opens: vec![],
                 o_added: vec![],
                 o_removed: vec![],
+                ancestors: HashSet::new(),
                 parent_cost: None,
                 diff: None,
             },
@@ -1736,6 +1778,7 @@ mod tests {
             opens: vec![],
             o_added: vec![],
             o_removed: vec![],
+            ancestors: HashSet::new(),
             parent_cost: None,
             diff: None,
         };
@@ -1778,6 +1821,7 @@ mod tests {
                 opens: vec![],
                 o_added: vec![],
                 o_removed: vec![],
+                ancestors: HashSet::new(),
                 parent_cost: None,
                 diff: None,
             },
@@ -1816,6 +1860,7 @@ mod tests {
                 opens: vec![],
                 o_added: vec![],
                 o_removed: vec![],
+                ancestors: HashSet::new(),
                 parent_cost: None,
                 diff: None,
             },
@@ -1854,6 +1899,7 @@ mod tests {
                 opens: vec![],
                 o_added: vec![],
                 o_removed: vec![],
+                ancestors: HashSet::new(),
                 parent_cost: None,
                 diff: None,
             },
@@ -1893,6 +1939,7 @@ mod tests {
                 opens: vec![],
                 o_added: vec![],
                 o_removed: vec![],
+                ancestors: HashSet::new(),
                 parent_cost: None,
                 diff: None,
             },

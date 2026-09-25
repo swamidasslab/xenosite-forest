@@ -383,6 +383,10 @@ class ReactionRule:
             for p in finished:
                 assert p.xf.tracing.active
 
+            # Cycle kill: product identical to any ancestor by dedup_smi.
+            if any(_repeats_ancestor_dedup_smi(p) for p in finished):
+                continue
+
             _report_formula_delta_mismatch(mol, info, finished)
 
             if unique_csmi and emission_csmi is not None:
@@ -1598,6 +1602,27 @@ class SiteDeduplicationWarning(UserWarning):
 
 class FormulaDeltaMismatchWarning(UserWarning):
     """Observed product formula change disagrees with PatternInfo ``delta_formula``."""
+
+
+def _repeats_ancestor_dedup_smi(product: Mol) -> bool:
+    """True when this product's dedup key equals an ancestor frame.
+
+    ``atom_trace["dedup_smi"][depth]`` is self; ``[:depth]`` are parents.
+    Unstable (``None``) keys do not trigger — fail-closed skip, not a cycle.
+    """
+
+    tracing = product.xf.tracing
+    if not tracing.active:
+        return False
+    key = tracing.dedup_smi
+    if key is None:
+        return False
+    depth = tracing.depth
+    if depth is None or depth <= 0:
+        return False
+    # ``active`` guarantees an initialized atom_trace.
+    frames = list(product._forest["atom_trace"].get("dedup_smi") or ())  # type: ignore[index]
+    return key in frames[:depth]
 
 
 def _heavy_formula_counts(counts: Mapping[str, int] | None) -> dict[str, int]:

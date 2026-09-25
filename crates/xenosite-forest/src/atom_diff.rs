@@ -862,6 +862,56 @@ fn alkyl_bond_raises(mol: &Molecule, atom_idx_u: usize, diff: &AtomDiff) -> bool
     false
 }
 
+fn is_dehydrogenation_effect(effect: &Effect) -> bool {
+    effect_removes_h(effect)
+        && effect.dearomatizes
+        && !effect.cleaves
+        && !effect_adds_oxygen(effect)
+}
+
+fn heavy_neighbor_idxs(mol: &Molecule, atom: usize) -> BTreeSet<usize> {
+    mol.neighbors(atom_idx(atom))
+        .filter(|(n, _)| mol.atom(*n).element.atomic_number() > 1)
+        .map(|(n, _)| atom_usize(n))
+        .collect()
+}
+
+fn dh_site_neighbors_match(
+    mol: &Molecule,
+    target: &Molecule,
+    atom: usize,
+    mapping: &BTreeMap<usize, usize>,
+) -> bool {
+    let Some(&t_idx) = mapping.get(&atom) else {
+        return false;
+    };
+    let mut imaged = BTreeSet::new();
+    for n in heavy_neighbor_idxs(mol, atom) {
+        let Some(&t_n) = mapping.get(&n) else {
+            return false;
+        };
+        imaged.insert(t_n);
+    }
+    imaged == heavy_neighbor_idxs(target, t_idx)
+}
+
+fn dh_neighbors_match_any_view(
+    mol: &Molecule,
+    target: &Molecule,
+    atom: usize,
+    diff: &AtomDiff,
+) -> bool {
+    for mapping in &diff.mappings {
+        if !mapping.contains_key(&atom) {
+            continue;
+        }
+        if dh_site_neighbors_match(mol, target, atom, mapping) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Site-level gate (Python `_site_could_help`) for a deferred candidate.
 pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
     candidate_could_help_on(candidate, diff, None, None)
@@ -1026,6 +1076,15 @@ pub fn pair_could_help(
         }
         if end.partner.as_deref() == Some("C") && !alkyl_bond_raises(mol, atom, diff) {
             return false;
+        }
+    }
+    // Dehydrogenation keeps heavy connectivity — imaged neighbors must equal
+    // the target atom's heavy neighbors (any MCS view).
+    if is_dehydrogenation_effect(effect) {
+        for &atom in &atoms {
+            if !dh_neighbors_match_any_view(mol, target, atom, diff) {
+                return false;
+            }
         }
     }
 
