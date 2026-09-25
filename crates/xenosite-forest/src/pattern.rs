@@ -410,9 +410,11 @@ pub struct SiteInfo {
     /// Always includes `site`. Length > 1 when topology collapses equivalents.
     pub orbit: Vec<usize>,
     pub pattern: PatternInfo,
-    /// Shell delta forecast for this site — **same shape** as
-    /// [`crate::matched_atom::AlignedShells`]. Unchanged atoms omitted;
-    /// `unaligned_*` are projected reductions. `None` until search fills it.
+    /// Site-local shell deltas for filters — **same shape** as
+    /// [`crate::matched_atom::AlignedShells`] scoped to this site
+    /// ([`crate::matched_atom::AlignedShells::at_sites`] or a forecast).
+    /// Site selection reads these shells; product closeness still uses the
+    /// full-molecule align cost. `None` until search fills it.
     pub shell_forecast: Option<crate::matched_atom::AlignedShells>,
 }
 

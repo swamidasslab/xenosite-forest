@@ -1103,8 +1103,10 @@ pub fn projected_unaligned_reductions(
     (red_r, red_t)
 }
 
-/// Site info shell forecast: same [`AlignedShells`] shape, unchanged dropped,
-/// `unaligned_*` = projected unmatched reductions.
+/// Site info shell view for filters: site-scoped deltas ([`crate::matched_atom::AlignedShells::at_sites`]
+/// shape via forecast). Projected `unaligned_*` reductions when the effect
+/// claims them. Site selection reads the shells; closeness still uses the
+/// full-molecule align.
 pub fn site_shell_forecast(
     current: &crate::matched_atom::AlignedShells,
     site_atoms: &[usize],

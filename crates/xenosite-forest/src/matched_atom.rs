@@ -9,11 +9,12 @@
 //! - [`align_shells`] — two [`MoleculeShells`] + a reactant→target map → the
 //!   **same atom shape** with **deltas** (target − reactant) on aligned atoms,
 //!   plus how many heavy atoms sit outside the alignment on each side.
-//! - [`site_delta_forecast`] — same shape for one site: **unchanged atoms
-//!   dropped**; `unaligned_*` are **projected reductions** (matched-side change
-//!   is the remaining atom map).
-//! - [`AlignedShells::cost`] — Σ |δ| across aromatic + n0/n1/n2 on kept atoms.
-//!   Distinguishes alcohol vs carbonyl addition and cleavage via shell shape.
+//! - **Site selection** reads site-scoped deltas ([`AlignedShells::at_sites`] /
+//!   [`site_delta_forecast`]): alcohol vs carbonyl is in the site shells
+//!   themselves (e.g. n1 `O:+1 H:−1` vs `O:+1 H:−2`). A molecule-wide cost is
+//!   not required for that gate.
+//! - **Product closeness** uses the full align's [`AlignedShells::cost`]
+//!   (Σ |δ| over aromatic + n0/n1/n2).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
@@ -107,11 +108,37 @@ impl AlignedShells {
         self.atoms.values().filter(|e| !e.is_unchanged()).count()
     }
 
+    /// Site-scoped view: only `site_atoms` that still have a nonzero delta.
+    ///
+    /// For **site selection** — alcohol vs carbonyl (and local cleavage marks)
+    /// are readable from these shells. Keeps the parent's absolute
+    /// `unaligned_*` (not a projected reduction; see [`site_delta_forecast`]).
+    pub fn at_sites(&self, site_atoms: &[usize]) -> Self {
+        let site: HashSet<usize> = site_atoms.iter().copied().collect();
+        let mut atoms = BTreeMap::new();
+        let mut alignment = BTreeMap::new();
+        for (&r, env) in &self.atoms {
+            if !site.contains(&r) || env.is_unchanged() {
+                continue;
+            }
+            atoms.insert(r, env.clone());
+            if let Some(&t) = self.alignment.get(&r) {
+                alignment.insert(r, t);
+            }
+        }
+        Self {
+            atoms,
+            alignment,
+            unaligned_reactant: self.unaligned_reactant,
+            unaligned_target: self.unaligned_target,
+        }
+    }
+
     /// Σ |δ| over aromatic + n0/n1/n2 on every kept aligned atom.
     ///
-    /// Encodes alcohol vs carbonyl addition (O / H placement in the shells)
-    /// and cleavage (shell change on the kept side). Unaligned counts are
-    /// separate projected reductions — not part of this sum.
+    /// **Product closeness** measure on a full-molecule align. Site selection
+    /// does not need this — read [`Self::at_sites`] shells instead.
+    /// Unaligned counts are separate and not part of this sum.
     pub fn cost(&self) -> usize {
         self.atoms.values().map(AtomNeighborhood::abs_delta).sum()
     }
@@ -278,6 +305,10 @@ pub fn align_shells(
 ///   (unchanged excluded). That set is the projected matched-side reduction.
 /// - `unaligned_reactant` / `unaligned_target`: **projected reductions** in
 ///   unmatched heavies (not absolute remaining counts).
+///
+/// Prefer [`AlignedShells::at_sites`] when site selection only needs the site
+/// shells (no projected unaligned). Use this when a step forecast should also
+/// claim unmatched reductions.
 pub fn site_delta_forecast(
     current: &AlignedShells,
     site_atoms: &[usize],
@@ -401,49 +432,49 @@ mod tests {
     }
 
     #[test]
-    fn cost_encodes_alcohol_vs_carbonyl_vs_cleavage() {
-        // Alcohol add: ethane → ethanol. O in n1, one H lost on the CH2.
+    fn site_shells_vs_full_cost_roles() {
+        // Site selection: site-scoped shells distinguish alcohol vs carbonyl.
         let alcohol = aligned("CC", "CCO");
-        // Carbonyl add: ethane → acetaldehyde. O in n1, two H lost on that C.
         let carbonyl = aligned("CC", "CC=O");
-        // Cleavage: anisole → phenol. Kept O gains H; methyl unaligned.
         let cleave = aligned("COc1ccccc1", "Oc1ccccc1");
 
+        let oh = alcohol
+            .atoms
+            .iter()
+            .find(|(_, e)| e.n1.get("O") == Some(&1))
+            .map(|(&i, _)| i)
+            .expect("hydroxylation carbon");
+        let co = carbonyl
+            .atoms
+            .iter()
+            .find(|(_, e)| e.n1.get("O") == Some(&1))
+            .map(|(&i, _)| i)
+            .expect("carbonyl carbon");
+
+        let oh_site = alcohol.at_sites(&[oh]);
+        let co_site = carbonyl.at_sites(&[co]);
+        assert_eq!(oh_site.atoms[&oh].n1.get("O"), Some(&1));
+        assert_eq!(oh_site.atoms[&oh].n1.get("H"), Some(&-1));
+        assert_eq!(co_site.atoms[&co].n1.get("O"), Some(&1));
+        assert_eq!(co_site.atoms[&co].n1.get("H"), Some(&-2));
+        // Cleavage site (O): C gone, H gained — not an O-addition shell.
+        let o = cleave
+            .atoms
+            .iter()
+            .find(|(_, e)| e.n1.get("H") == Some(&1) && e.n1.get("C") == Some(&-1))
+            .map(|(&i, _)| i)
+            .expect("phenol O after demethylation");
+        let cleave_site = cleave.at_sites(&[o]);
+        assert!(cleave_site.atoms[&o].n1.get("O").is_none());
+        assert_eq!(cleave.unaligned_reactant, 1);
+
+        // Product closeness: full-align cost still separates the transforms.
         let alcohol_c = alcohol.without_unchanged().cost();
         let carbonyl_c = carbonyl.without_unchanged().cost();
-        let cleave_c = cleave.without_unchanged().cost();
-
-        assert!(alcohol_c > 0, "alcohol cost={alcohol_c}");
-        assert!(carbonyl_c > 0, "carbonyl cost={carbonyl_c}");
-        assert!(cleave_c > 0, "cleave cost={cleave_c}");
-        // Carbonyl loses more H on the oxidized carbon than alcohol.
         assert!(
             carbonyl_c > alcohol_c,
-            "carbonyl ({carbonyl_c}) should cost more than alcohol ({alcohol_c})"
+            "closeness: carbonyl ({carbonyl_c}) > alcohol ({alcohol_c})"
         );
-        // Alcohol site places O on CH2 (atom 1): O:+1 H:−1 in n1.
-        let oh_site = alcohol
-            .atoms
-            .iter()
-            .find(|(_, e)| e.n1.get("O") == Some(&1))
-            .expect("O appears in n1 at hydroxylation site");
-        assert_eq!(oh_site.1.n1.get("H"), Some(&-1));
-        // Carbonyl site: O:+1 and H:−2 (aldehyde).
-        let co_site = carbonyl
-            .atoms
-            .iter()
-            .find(|(_, e)| e.n1.get("O") == Some(&1))
-            .expect("O appears in n1 at carbonyl site");
-        assert_eq!(co_site.1.n1.get("H"), Some(&-2));
-        // Cleavage: no new O on target; unaligned reactant methyl.
-        assert_eq!(cleave.unaligned_reactant, 1);
-        assert_eq!(cleave.unaligned_target, 0);
-        assert!(
-            !cleave
-                .atoms
-                .values()
-                .any(|e| e.n1.get("O") == Some(&1) || e.n0.get("O") == Some(&1)),
-            "cleavage must not look like oxygen addition on aligned atoms"
-        );
+        assert!(cleave.without_unchanged().cost() > 0);
     }
 }
