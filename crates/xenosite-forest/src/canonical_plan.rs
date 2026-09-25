@@ -785,6 +785,11 @@ pub fn canonical_dependency_edges(
 }
 
 /// Bind will-add → added-by and collect precedes from those notes.
+///
+/// A [`PlanAtom::WillAdd`] depends only on earlier **prep** steps that supply
+/// that element at the anchor (e.g. Hydroxylation for oxygen) — not on every
+/// prior edit whose site happens to include the same index (that overstates
+/// free dealk ≺ DH).
 pub fn bind_deps(steps: Vec<Step>) -> Deps {
     let mut edges = Vec::new();
     let mut bound = Vec::with_capacity(steps.len());
@@ -792,24 +797,28 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
         let mut site = Vec::with_capacity(step.site.len());
         for item in &step.site {
             match item {
-                PlanAtom::WillAdd { element: _, at } => {
+                PlanAtom::WillAdd { element, at } => {
                     let mut bound_note = PlanAtom::Index(*at);
                     for (earlier, previous) in steps[..later].iter().enumerate() {
-                        if previous.anchors().contains(at) {
-                            edges.push((earlier, later));
-                            let mut anchors: Vec<_> = previous.anchors().into_iter().collect();
-                            anchors.sort_unstable();
-                            bound_note = PlanAtom::AddedBy {
-                                rule: previous.rule.clone(),
-                                anchors,
-                            };
+                        if !previous.anchors().contains(at) {
+                            continue;
                         }
+                        if !step_supplies_will_add(previous, element) {
+                            continue;
+                        }
+                        edges.push((earlier, later));
+                        let mut anchors: Vec<_> = previous.anchors().into_iter().collect();
+                        anchors.sort_unstable();
+                        bound_note = PlanAtom::AddedBy {
+                            rule: previous.rule.clone(),
+                            anchors,
+                        };
                     }
                     site.push(bound_note);
                 }
                 PlanAtom::AddedBy { rule, anchors } => {
                     let wanted: HashSet<_> = anchors.iter().copied().collect();
-                    for (earlier, previous) in steps.iter().enumerate() {
+                    for (earlier, previous) in steps[..later].iter().enumerate() {
                         if previous.rule == *rule && previous.anchors() == wanted {
                             edges.push((earlier, later));
                         }
@@ -827,6 +836,21 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
         bound.push(Step::new(step.rule.clone(), site).with_orbit(step.orbit.iter().copied()));
     }
     Deps::new(bound, edges)
+}
+
+/// Whether `step` is a prep that can supply `element` for a [`PlanAtom::WillAdd`].
+///
+/// Named after the elementary rules quinone / DH plans emit as preps. Matching
+/// any earlier site that merely *touches* the anchor (e.g. Dealkylation) would
+/// invent precedes between free cleaves and later DH.
+fn step_supplies_will_add(step: &Step, element: &str) -> bool {
+    match element {
+        "O" => matches!(
+            step.rule.as_str(),
+            "Hydroxylation" | "OxidativeDehalogenation"
+        ),
+        _ => false,
+    }
 }
 
 /// [`Deps::bind`] alias (Python `as_deps`).
@@ -1104,6 +1128,27 @@ mod tests {
         ];
         let deps = Deps::bind(plan);
         assert_eq!(deps.precedes(), &[(0, 1)]);
+    }
+
+    #[test]
+    fn bind_will_add_ignores_dealk_at_same_carbon() {
+        // Free dealk at the carbon must not invent Dealk ≺ DH; only the OH prep.
+        let plan = vec![
+            Step::new("Dealkylation", [PlanAtom::index(0), PlanAtom::index(1)]),
+            Step::new("Hydroxylation", [PlanAtom::index(1)]),
+            Step::new(
+                "Dehydrogenation",
+                [PlanAtom::index(2), PlanAtom::oxygen_at(1)],
+            ),
+        ];
+        let deps = Deps::bind(plan);
+        let edges: HashSet<_> = deps.precedes().iter().copied().collect();
+        assert!(
+            !edges.contains(&(0, 2)),
+            "Dealkylation must not precede DH: {edges:?}"
+        );
+        assert!(edges.contains(&(1, 2)), "OH must precede DH: {edges:?}");
+        assert_eq!(edges.len(), 1);
     }
 
     #[test]
