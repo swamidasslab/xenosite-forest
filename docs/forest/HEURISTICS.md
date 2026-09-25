@@ -113,6 +113,17 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   Read: **atom beats formula**; formula-only inflates eugenol mid and most hard rows. **Close beats improve** on hard (improve-* and product-* with formula drag). **close-atom** lowest hard bill; product-both still ahead of SoftStack. No misses. Whether to switch default to close-atom: not decided.
 
+  **Tried — slim `AtomDiff::field_cost` to HA alignment only** (`3·(|cleaved|+n_extra+|cleavage_bonds|)`). Dropped from cost: `needs_oxygen`, `loses_aromaticity`, H-delta, bond-order (fields remain for filters / `order_key`; unmapped target O already in `n_extra`; no extra H term — H belongs on formula distance). Status: **not approved** as default — damages atom/both heap scores vs full cost; formula-only cells improve (hard product-formula 849→460) because the closer gate / lift cost-0 bar also slimmed.
+
+  | score | hard Σbill before → after |
+  | --- | ---: |
+  | close-atom | 203 → 241 |
+  | product-both | 228 → 256 |
+  | soft | 300 → 354 |
+  | product-formula | 849 → 460 |
+
+  Mid: atom/both 59→79; formula-only 87–94→59. Slim is live on this branch as a measured trial (status not decided); full-cost numbers above are the prior baseline.
+
   **Previous — `HeapScoreMode::SoftStack` (opt-in `--score soft`).** Lexicographic soft key: `search_bias` → `site_progress` → `cost_gain` → `seq`. Kept for comparison. Status: not decided (superseded as default). Tests: `heap_prefers_higher_search_bias_over_seq` / `heap_lack_of_improvement_counters_dfs` / `hop_cost_gain_is_parent_minus_child` / `heap_pops_best_ord_value_only` / `match_product_prefers_joint_improvement_and_closeness` / `match_combine_and_metric_axes`.
 
   **`delta_formula` is not a heap score** — soft mismatch warn/counter only. **Dropped:** alternate DFS/BFS among equal scores.
