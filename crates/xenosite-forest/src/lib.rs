@@ -22,6 +22,7 @@ pub mod formula_check;
 pub mod hydroxylation;
 pub mod kekule;
 pub mod labels;
+pub mod matched_atom;
 pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
@@ -82,6 +83,10 @@ pub use forest_mol::ForestMol;
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
+pub use matched_atom::{
+    AtomNeighborhood, MatchedAtom, MatchedAtoms, Shell, atom_neighborhood, format_shell,
+    matched_atoms, matched_atoms_from_mapping,
+};
 pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
     stable_csmi_key_of,

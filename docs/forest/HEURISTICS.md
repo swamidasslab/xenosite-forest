@@ -115,6 +115,8 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   **Current — no special H in atom cost or on AtomDiff.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|)`. No cached `h_delta` / `h_loss` / `h_gain` — methods `AtomDiff::atom_h_delta` / `h_loss` / `h_gain` recompute from MCS mapping + mols (same idea as N1 oxygen). `formula_l1` counts H like any element. Soft aromatic / bond-order stay filter-only. Dropped cached `needs_oxygen` / carbonyl / alcohol (recompute N1). Status: approved.
 
+  **Trial — `MatchedAtom` / `MatchedAtoms` (n0/n1/n2 shells).** New schema beside AtomDiff: each MCS-matched atom stores `AtomNeighborhood` on reactant and target image — `aromatic`, center `h`, and heavy-element bags `n0` (self) / `n1` (distance 1) / `n2` (distance 2). Built from the mapping; no loss weights yet. Example: `show_matched_atoms`. Status: not decided.
+
   **Tried — HA+H in both atom cost and `formula_l1`.** `field_cost` included `|h_delta≠0|`. Better hard bills (product-both 217). Status: not approved (H as special cost term).
 
   **Previous — `HeapScoreMode::SoftStack` (opt-in `--score soft`).** Lexicographic soft key: `search_bias` → `site_progress` → `cost_gain` → `seq`. Kept for comparison. Status: not decided (superseded as default). Tests: `heap_prefers_higher_search_bias_over_seq` / `heap_lack_of_improvement_counters_dfs` / `hop_cost_gain_is_parent_minus_child` / `heap_pops_best_ord_value_only` / `match_product_prefers_joint_improvement_and_closeness` / `match_combine_and_metric_axes`.
