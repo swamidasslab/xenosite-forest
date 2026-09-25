@@ -32,11 +32,23 @@ pub struct PathCounters {
     pub nodes: usize,
     pub mol_edits: usize,
     pub expansions: usize,
+    /// Hit not emitted: same linearizations or same rule/Maybe skeleton.
+    pub dropped_duplicate_plan: usize,
+    /// Hit that *would* match [`Deps::dominates_extension_of`] against a yield.
+    /// Counted only — not used to drop or abort (that lever over-collapsed
+    /// multipath; HEURISTICS).
+    pub signal_contained_plan: usize,
 }
 
 impl PathCounters {
     pub fn billed(&self) -> usize {
         self.mol_edits + self.nodes
+    }
+
+    /// Optimization signal: duplicate yield drops + contained-extension matches.
+    /// Do not use to abort walks; more careful heuristics might reduce later.
+    pub fn plan_drops(&self) -> usize {
+        self.dropped_duplicate_plan + self.signal_contained_plan
     }
 }
 
@@ -329,11 +341,23 @@ pub type OpenFindPath<'a, 'b> = FindPath<'a, 'b, fn(&Candidate) -> bool>;
 
 /// HEURISTICS: a later walk that is only a reordering of an already-yielded
 /// [`Deps`] is not a new path. Also drop remapped-index free-step twins
-/// ([`Deps::same_rule_maybe_skeleton`]).
+/// ([`Deps::same_rule_maybe_skeleton`]). Dominated-extension is **not** a
+/// yield drop (over-collapsed multipath); it only bumps
+/// [`PathCounters::signal_contained_plan`].
 fn plan_already_yielded(found: &[PathOutcome], plan: &Deps) -> bool {
     found
         .iter()
         .any(|h| h.plan.same_linearizations(plan) || h.plan.same_rule_maybe_skeleton(plan))
+}
+
+fn record_yield_plan_signals(counters: &mut PathCounters, found: &[PathOutcome], plan: &Deps) {
+    if plan_already_yielded(found, plan) {
+        counters.dropped_duplicate_plan += 1;
+        return;
+    }
+    if found.iter().any(|h| h.plan.dominates_extension_of(plan)) {
+        counters.signal_contained_plan += 1;
+    }
 }
 
 /// Yield walks that turn ``reactant`` into ``target``.
@@ -509,6 +533,7 @@ where
             if here.as_ref() == self.target_csmi.as_str() {
                 self.counters.nodes += 1;
                 let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
+                record_yield_plan_signals(self.counters, &self.yielded, &plan);
                 if plan_already_yielded(&self.yielded, &plan) {
                     continue;
                 }
@@ -1126,6 +1151,7 @@ where
             let here = walk.mol.csmi();
             if here.as_ref() == self.target_csmi.as_str() {
                 let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
+                record_yield_plan_signals(self.counters, &self.yielded, &plan);
                 if plan_already_yielded(&self.yielded, &plan) {
                     continue;
                 }
@@ -1722,6 +1748,35 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn plan_drop_counters_signal_only_no_contained_prune() {
+        // Duplicate → count + drop. Contained-extension → count only, keep yield.
+        use crate::canonical_plan::{PlanAtom, Step};
+        let short = as_deps([Step::new("Dealkylation", [PlanAtom::index(0)])]);
+        let longer = as_deps([
+            Step::new("Dealkylation", [PlanAtom::index(0)]),
+            Step::new("Hydroxylation", [PlanAtom::index(1)]),
+        ]);
+        let twin = short.clone();
+        let found = vec![PathOutcome {
+            steps: vec![],
+            plan: short,
+            smiles: "C".into(),
+        }];
+        let mut counters = PathCounters::default();
+        record_yield_plan_signals(&mut counters, &found, &twin);
+        assert_eq!(counters.dropped_duplicate_plan, 1);
+        assert_eq!(counters.signal_contained_plan, 0);
+        assert!(plan_already_yielded(&found, &twin));
+
+        let mut counters = PathCounters::default();
+        record_yield_plan_signals(&mut counters, &found, &longer);
+        assert_eq!(counters.dropped_duplicate_plan, 0);
+        assert_eq!(counters.signal_contained_plan, 1);
+        assert!(!plan_already_yielded(&found, &longer));
+        assert_eq!(counters.plan_drops(), 1);
     }
 
     #[test]
