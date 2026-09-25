@@ -161,9 +161,10 @@ struct OxygenSite {
 }
 
 /// Heap entry: hits first, then novel sites vs yielded plans, then soft
-/// scores ([`PatternInfo::search_bias`], site H-progress). Known cost
-/// improvement vs parent ranks next — **lack of improvement counters the DFS
-/// boost**. Among equal scores, **DFS** (LIFO `seq`). BinaryHeap is max-heap.
+/// scores ([`PatternInfo::search_bias`], site H-progress), then parent-relative
+/// **cost gain** (higher = larger atom_diff cost drop). Non-positive gain
+/// counters the DFS boost. Among equal scores, **DFS** (LIFO `seq`).
+/// BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
@@ -174,9 +175,8 @@ struct HeapItem {
     search_bias: i8,
     /// Site H-progress vs parent diff (higher preferred). Soft; overrides DFS.
     site_progress: i32,
-    /// `true` when this hop lowered atom_diff cost (or hit). Soft; lack of
-    /// improvement loses to improving peers even if enqueued later (DFS).
-    improved: bool,
+    /// `parent_cost - child_cost` (higher preferred). Soft; ≤0 counters DFS.
+    cost_gain: i32,
     seq: usize,
     walk: Walk,
 }
@@ -187,7 +187,7 @@ impl PartialEq for HeapItem {
             && self.novel_site == other.novel_site
             && self.search_bias == other.search_bias
             && self.site_progress == other.site_progress
-            && self.improved == other.improved
+            && self.cost_gain == other.cost_gain
             && self.seq == other.seq
     }
 }
@@ -207,7 +207,7 @@ impl Ord for HeapItem {
             .then_with(|| self.novel_site.cmp(&other.novel_site))
             .then_with(|| self.search_bias.cmp(&other.search_bias))
             .then_with(|| self.site_progress.cmp(&other.site_progress))
-            .then_with(|| self.improved.cmp(&other.improved))
+            .then_with(|| self.cost_gain.cmp(&other.cost_gain))
             // Higher seq = enqueued later = pop first (DFS among equal scores).
             .then_with(|| self.seq.cmp(&other.seq))
     }
@@ -371,16 +371,16 @@ fn cost_closer(parent_cost: usize, child_cost: usize, target_hit: bool) -> bool 
     target_hit || child_cost < parent_cost
 }
 
-/// Soft heap flag: did this hop improve vs the parent? Lack of improvement
-/// counters DFS (LIFO) among otherwise equal scores. Unknown cost → `true`
-/// (do not invent a demotion when atom_diff was not computed at enqueue).
-fn hop_improved(target_hit: bool, parent_cost: Option<usize>, child_cost: Option<usize>) -> bool {
+/// Parent-relative atom_diff cost drop for the heap. Higher preferred.
+/// Target hit ranks above any finite gain. ≤0 counters DFS vs positive peers.
+/// Requires known costs — callers compute child diff when parent cost is known.
+fn hop_cost_gain(target_hit: bool, parent_cost: Option<usize>, child_cost: Option<usize>) -> i32 {
     if target_hit {
-        return true;
+        return i32::MAX / 4;
     }
     match (parent_cost, child_cost) {
-        (Some(p), Some(c)) => c < p,
-        _ => true,
+        (Some(p), Some(c)) => p as i32 - c as i32,
+        _ => 0,
     }
 }
 
@@ -637,7 +637,7 @@ where
         novel_site: true,
         search_bias: 0,
         site_progress: 0,
-        improved: true,
+        cost_gain: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -834,14 +834,17 @@ where
                         None
                     };
 
+                    // Known child cost for heap cost_gain (lack of improvement
+                    // counters DFS). Reused on walk so pop does not re-MCS.
+                    if use_atom_diff && child_diff.is_none() && parent_cost.is_some() {
+                        child_diff =
+                            Some(crate::atom_diff::atom_diff(kept.mol(), &self.target_mol));
+                    }
+
                     let allow = if use_atom_diff {
                         if lazy_closer {
                             true
                         } else if let Some(pc) = parent_cost {
-                            if child_diff.is_none() {
-                                child_diff =
-                                    Some(crate::atom_diff::atom_diff(kept.mol(), &self.target_mol));
-                            }
                             cost_closer(pc, child_diff.as_ref().unwrap().cost(), target_hit)
                         } else {
                             true
@@ -881,7 +884,7 @@ where
                     if !novel_site {
                         deprio_known += 1;
                     }
-                    let improved = hop_improved(
+                    let cost_gain = hop_cost_gain(
                         target_hit,
                         parent_cost,
                         child_diff.as_ref().map(|d| d.cost()),
@@ -891,7 +894,7 @@ where
                         novel_site,
                         search_bias: emission.search_bias,
                         site_progress: emission.site_progress,
-                        improved,
+                        cost_gain,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1417,7 +1420,7 @@ where
         novel_site: true,
         search_bias: 0,
         site_progress: 0,
-        improved: true,
+        cost_gain: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -1599,7 +1602,7 @@ where
                         search_bias: emission.search_bias,
                         site_progress: 0,
                         // No atom_diff on this path — HA closer already gated.
-                        improved: true,
+                        cost_gain: 0,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1647,7 +1650,7 @@ mod tests {
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
-            improved: true,
+            cost_gain: 1,
             seq: 1,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1666,7 +1669,7 @@ mod tests {
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
-            improved: true,
+            cost_gain: 1,
             seq: 2,
             walk: older.walk.clone(),
         };
@@ -1685,7 +1688,7 @@ mod tests {
             novel_site: true,
             search_bias: -1,
             site_progress: 0,
-            improved: true,
+            cost_gain: 1,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1704,7 +1707,7 @@ mod tests {
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
-            improved: true,
+            cost_gain: 1,
             seq: 1,
             walk: demoted.walk.clone(),
         };
@@ -1723,7 +1726,7 @@ mod tests {
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
-            improved: true,
+            cost_gain: 1,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1742,7 +1745,7 @@ mod tests {
             novel_site: true,
             search_bias: 0,
             site_progress: 2,
-            improved: true,
+            cost_gain: 1,
             seq: 1,
             walk: low.walk.clone(),
         };
@@ -1755,13 +1758,13 @@ mod tests {
 
     #[test]
     fn heap_lack_of_improvement_counters_dfs() {
-        // Known non-improving hop loses to an older improving peer despite LIFO.
-        let unimproved_newer = HeapItem {
+        // Non-positive cost_gain loses to an older positive peer despite LIFO.
+        let flat_newer = HeapItem {
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
-            improved: false,
+            cost_gain: 0,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1775,32 +1778,68 @@ mod tests {
                 diff: None,
             },
         };
-        let improved_older = HeapItem {
+        let gain_older = HeapItem {
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
-            improved: true,
+            cost_gain: 1,
             seq: 1,
-            walk: unimproved_newer.walk.clone(),
+            walk: flat_newer.walk.clone(),
         };
         let mut heap = BinaryHeap::new();
-        heap.push(unimproved_newer);
-        heap.push(improved_older);
+        heap.push(flat_newer);
+        heap.push(gain_older);
         let first = heap.pop().unwrap();
-        assert!(first.improved);
+        assert_eq!(first.cost_gain, 1);
         assert_eq!(first.seq, 1);
-        assert!(!heap.pop().unwrap().improved);
+        assert_eq!(heap.pop().unwrap().cost_gain, 0);
     }
 
     #[test]
-    fn hop_improved_requires_strict_cost_drop() {
-        assert!(hop_improved(true, Some(5), Some(5)));
-        assert!(hop_improved(false, Some(5), Some(4)));
-        assert!(!hop_improved(false, Some(5), Some(5)));
-        assert!(!hop_improved(false, Some(5), Some(6)));
-        // Unknown child cost: do not invent a demotion.
-        assert!(hop_improved(false, Some(5), None));
+    fn heap_prefers_larger_cost_gain_over_seq() {
+        let small_newer = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 1,
+            seq: 99,
+            walk: Walk {
+                mol: ForestMol::parse("CC").unwrap(),
+                steps: vec![],
+                plan: vec![],
+                maybe: vec![],
+                opens: vec![],
+                o_added: vec![],
+                o_removed: vec![],
+                parent_cost: None,
+                diff: None,
+            },
+        };
+        let big_older = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 3,
+            seq: 1,
+            walk: small_newer.walk.clone(),
+        };
+        let mut heap = BinaryHeap::new();
+        heap.push(small_newer);
+        heap.push(big_older);
+        assert_eq!(heap.pop().unwrap().cost_gain, 3);
+        assert_eq!(heap.pop().unwrap().cost_gain, 1);
+    }
+
+    #[test]
+    fn hop_cost_gain_is_parent_minus_child() {
+        assert!(hop_cost_gain(true, Some(5), Some(5)) > hop_cost_gain(false, Some(5), Some(0)));
+        assert_eq!(hop_cost_gain(false, Some(5), Some(4)), 1);
+        assert_eq!(hop_cost_gain(false, Some(5), Some(5)), 0);
+        assert_eq!(hop_cost_gain(false, Some(5), Some(6)), -1);
+        assert_eq!(hop_cost_gain(false, Some(5), None), 0);
     }
 
     #[test]
