@@ -6,7 +6,7 @@
 //! helps any ring is not refused. Filters read [`crate::pattern::Effect`]
 //! on deferred candidates — no filter closures required.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chematic::core::BondOrder;
 use chematic::perception::ring_atom_flags;
@@ -14,7 +14,6 @@ use chematic::smarts::{BondCompare, McsConfig, find_matches, find_mcs_with_confi
 
 use crate::candidate::Candidate;
 use crate::mol::{Molecule, atom_idx, atom_usize, ranks};
-use crate::orbits::AtomBondGenerator;
 use crate::pair_edit::PairCandidate;
 use crate::pattern::Effect;
 
@@ -486,23 +485,6 @@ pub fn lift_mappings(
     }
 }
 
-/// Remap a product→target alignment under a product atom permutation.
-///
-/// `atom_map[i] = image of i`. New map: `m'(g(src)) = m(src)`.
-fn apply_atom_perm_to_mapping(
-    mapping: &BTreeMap<usize, usize>,
-    atom_map: &[usize],
-) -> BTreeMap<usize, usize> {
-    let mut out = BTreeMap::new();
-    for (&src, &tgt) in mapping {
-        if src >= atom_map.len() {
-            continue;
-        }
-        out.insert(atom_map[src], tgt);
-    }
-    out
-}
-
 /// Unmapped heavy atoms on `mol` (candidates to grow the alignment).
 fn unmapped_heavy_atoms(mol: &Molecule, mapping: &BTreeMap<usize, usize>) -> Vec<usize> {
     let mut out: Vec<usize> = (0..mol.atom_count())
@@ -537,14 +519,12 @@ pub fn extend_mapping_where_possible(
     extend_mapping_for_added(child, target, mapping, &pending);
 }
 
-/// Best [`AtomDiff`] from lifted seed maps: **extend**, reorder under product
-/// Aut looking for cost `0`; otherwise **stick with MCS**.
+/// Best [`AtomDiff`] from lifted seeds: **extend**; keep only a **cost-0** lift.
 ///
-/// 1. Extend each seed where the mapping gap is placeable.
-/// 2. Apply product generators (ForestMol-cached); extend after each reorder.
-/// 3. Stop at cost `0` (guaranteed best — skip MCS) or when the Aut orbit closes.
-/// 4. Any non-zero lift is not MCS-complete in general → return a fresh MCS
-///    (caller counts `mcs_lift_rematch`). Do not trust a non-zero lift cost.
+/// 1. Extend each tag-lifted seed where the mapping gap is placeable.
+/// 2. If any extended map has `field_cost == 0`, keep it (guaranteed — skip MCS).
+/// 3. Otherwise do **not** Aut-chase or trust a non-zero lift — return a fresh
+///    MCS (caller counts `mcs_lift_rematch`). No double work.
 fn best_diff_from_lifted_maps(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
@@ -554,61 +534,26 @@ fn best_diff_from_lifted_maps(
         return None;
     }
     let mol = child.mol();
-    let gens: &[AtomBondGenerator] = &child.atom_bond_generators();
-    let mut seen: HashSet<BTreeMap<usize, usize>> = HashSet::new();
-    let mut queue: VecDeque<BTreeMap<usize, usize>> = VecDeque::new();
+    let mut zero_maps: Vec<BTreeMap<usize, usize>> = Vec::new();
+    let mut any_extended = false;
 
     for mut seed in seed_maps {
         extend_mapping_where_possible(mol, target, &mut seed);
         if seed.is_empty() {
             continue;
         }
-        if seen.insert(seed.clone()) {
-            queue.push_back(seed);
+        any_extended = true;
+        if diff_for(mol, target, &seed).field_cost() == 0 {
+            zero_maps.push(seed);
         }
     }
-    if queue.is_empty() {
+    if !any_extended {
         return None;
     }
-
-    let mut best_cost = usize::MAX;
-    let mut best_maps: Vec<BTreeMap<usize, usize>> = Vec::new();
-
-    while let Some(mapping) = queue.pop_front() {
-        let cost = diff_for(mol, target, &mapping).field_cost();
-        if cost < best_cost {
-            best_cost = cost;
-            best_maps.clear();
-            best_maps.push(mapping.clone());
-        } else if cost == best_cost {
-            best_maps.push(mapping.clone());
-        }
-        // Cost 0 cannot improve — skip the rest of the Aut orbit and MCS.
-        if best_cost == 0 {
-            break;
-        }
-        if gens.is_empty() {
-            continue;
-        }
-        for (atom_map, _) in gens {
-            let mut next = apply_atom_perm_to_mapping(&mapping, atom_map);
-            extend_mapping_where_possible(mol, target, &mut next);
-            if next.is_empty() {
-                continue;
-            }
-            if seen.insert(next.clone()) {
-                queue.push_back(next);
-            }
-        }
+    if !zero_maps.is_empty() {
+        return Some((atom_diff_from_mappings(mol, target, zero_maps), false));
     }
-
-    if best_maps.is_empty() {
-        return None;
-    }
-    if best_cost == 0 {
-        return Some((atom_diff_from_mappings(mol, target, best_maps), false));
-    }
-    // Non-zero lift is not guaranteed correct → stick with MCS.
+    // Not sure → MCS only (skip Aut / non-zero lift).
     Some((atom_diff(mol, target), true))
 }
 
@@ -617,8 +562,8 @@ fn best_diff_from_lifted_maps(
 /// Casts the effect onto the parent diff: clear cost contributions the effect
 /// is declared to fix on `site_atoms ∪ path_ends` (oxygen need / n_extra,
 /// cleavage bond + leave heavies, dearomatization, H delta). Same weights as
-/// [`AtomDiff::field_cost`]. Useful for tests / filters — not used to freeze
-/// generator-lift search (lift always extends; MCS rematch covers misses).
+/// [`AtomDiff::field_cost`]. Useful for tests / filters — not used to decide
+/// lift vs MCS (lift keeps only cost-0 after extend; else MCS).
 pub fn residual_cost_after_site_cast(
     parent: &AtomDiff,
     effect: &Effect,
@@ -863,11 +808,11 @@ fn place_added_atom(
     Some(t_cand)
 }
 
-/// Child [`AtomDiff`] via tag-lift + extend + product generators when possible.
+/// Child [`AtomDiff`] via tag-lift + extend when the result is cost `0`.
 ///
-/// Same heavy-tag set (no shrink). Cost-0 lifts are kept; any non-zero lift
-/// sticks with MCS ([`try_atom_diff_for_child_tracked`] counts rematches).
-/// Cleavage shrinks: use [`try_lift_cleaved_child`].
+/// Same heavy-tag set (no shrink). Only a cost-0 extended lift is kept;
+/// otherwise MCS ([`try_atom_diff_for_child_tracked`] counts). Cleavage
+/// shrinks: use [`try_lift_cleaved_child`].
 pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
@@ -957,9 +902,8 @@ fn unmapped_child_diff(child: &Molecule, target: &Molecule) -> AtomDiff {
 
 /// Tag-lift after a cleavage shrink (and optional local adds on a fragment).
 ///
-/// Removed atoms drop out of the parent MCS map via [`lift_mappings`]; product
-/// generators + [`extend_mapping_where_possible`] pick a good reordering;
-/// non-zero lifts stick with MCS.
+/// Removed atoms drop out of the parent MCS map via [`lift_mappings`];
+/// [`extend_mapping_where_possible`] may hit cost `0` (kept); otherwise MCS.
 ///
 /// When the child shares tags but inherits **no** mapped atoms (discarded
 /// cleavage side vs an MCS that lives on the other fragment), returns a
@@ -1026,8 +970,8 @@ pub fn try_lift_cleaved_child_goal_tracked(
     try_lift_cleaved_child_tracked(parent, parent_diff, child, target, mcs_rematch)
 }
 
-/// Child diff after cleavage: prefer generator-lifted maps; full MCS only when
-/// lift is impossible (`mcs_fallback` incremented when provided).
+/// Child diff after cleavage: prefer cost-0 tag-lift+extend; else MCS
+/// (`mcs_fallback` when lift is impossible).
 ///
 /// Callers apply the expand gate (`cost < parent` / target hit) on the result.
 pub fn atom_diff_after_cleavage(
@@ -1042,7 +986,7 @@ pub fn atom_diff_after_cleavage(
 /// Like [`atom_diff_after_cleavage`], with optional counters.
 ///
 /// - `mcs_fallback`: lift impossible (no shared tags).
-/// - `mcs_rematch`: non-zero lift → stuck with MCS (not guaranteed correct).
+/// - `mcs_rematch`: extended lift was not cost 0 → used MCS.
 pub fn atom_diff_after_cleavage_tracked(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,

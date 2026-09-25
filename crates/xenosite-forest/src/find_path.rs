@@ -9,10 +9,9 @@
 //! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
 //! precedes + [`crate::canonical_plan::Maybe`] cleavage bags). Composite leaves
 //! own a `canonical_plan` hook (Python) that returns steps named after existing
-//! rules. Closer uses atom-diff cost. Child diffs: tag-lift parent MCS, extend
-//! where the mapping gap is placeable, reorder under product Aut generators
-//! (stop at cost 0 or when no new mapping appears). Fresh MCS rematch is a
-//! counted fallback (`mcs_lift_fallback`, expect zero).
+//! rules. Closer uses atom-diff cost. Child diffs: tag-lift + extend; keep only
+//! cost 0 (skip MCS). Otherwise fresh MCS (`mcs_lift_rematch`). Tag-lift
+//! impossible → `mcs_lift_fallback` (expect zero).
 
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap, HashSet};
@@ -56,9 +55,8 @@ pub struct PathCounters {
     /// Child diff fell back to a fresh MCS because tag-lift was impossible
     /// (no shared tags). Expect zero.
     pub mcs_lift_fallback: usize,
-    /// Generator Aut left a non-zero cost; stuck with a fresh MCS (lift not
-    /// guaranteed correct). Counted for derisk — drive toward zero by hitting
-    /// cost-0 lifts more often; not a Drop assert yet.
+    /// Extended lift was not cost 0 → used fresh MCS instead (no Aut chase).
+    /// Counted for derisk; not a Drop assert yet.
     pub mcs_lift_rematch: usize,
     /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
     #[cfg(test)]
@@ -101,7 +99,7 @@ impl PathCounters {
     pub fn assert_mcs_lift_clean(&self) {
         assert_eq!(
             self.mcs_lift_fallback, 0,
-            "mcs_lift_fallback must be zero (tag-lift + product generators)"
+            "mcs_lift_fallback must be zero (tag-lift + extend or MCS)"
         );
     }
 }
@@ -1034,7 +1032,7 @@ where
 
                     // Known child cost for heap cost_gain (lack of improvement
                     // counters DFS). Reused on walk so pop does not re-MCS.
-                    // Prefer tag-lift + product generators; count fresh MCS.
+                    // Prefer cost-0 tag-lift+extend; else MCS (counted rematch).
                     if use_atom_diff && child_diff.is_none() && parent_cost.is_some() {
                         mcs_lift_fb += 1;
                         child_diff =

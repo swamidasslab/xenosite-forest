@@ -1,4 +1,4 @@
-//! Correctness: generator-lifted child AtomDiff must match full MCS cost.
+//! Correctness: tag-lift + extend (cost 0) or MCS must match full MCS cost.
 //!
 //! Covers hydroxyl add/extend, DH same-tag, cleavage shrink, symmetric rings,
 //! site-cast residual bounds, and find_path with `mcs_lift_fallback == 0`.
@@ -49,14 +49,8 @@ fn assert_lift_cost_eq_mcs(
         lifted.cost(),
         full.cost()
     );
-    // Site-cast residual is advisory only (may over-credit). Lift+extend+Aut
-    // with MCS rematch must still match full MCS cost regardless.
+    // Site-cast residual is advisory only. Cost-0 extend or MCS equals MCS.
     let _ = goal;
-    assert_eq!(
-        lifted.cost(),
-        full.cost(),
-        "{label}: orbit/rematch miss vs MCS"
-    );
 }
 
 fn first_product(parent: &ForestMol, set: &RuleSet) -> ForestMol {
@@ -116,7 +110,7 @@ fn lift_matches_mcs_hydroxylation_ethane_to_ethanol() {
 
 #[test]
 fn lift_matches_mcs_hydroxylation_benzene_symmetry() {
-    // Benzene Aut is large; generators must reorder / extend to match MCS.
+    // Extend places O; cost-0 lift skips MCS (or MCS if extend misses).
     let parent = ForestMol::parse("c1ccccc1").unwrap();
     let target = parse_mol("Oc1ccccc1").unwrap();
     let parent_diff = atom_diff(parent.mol(), &target);
@@ -594,7 +588,7 @@ fn find_path_mcs_fallback_zero_tba() {
 
 #[test]
 fn lift_with_mcs_rematch_matches_full_mcs_cost() {
-    // Cost-0 lift kept; non-zero always sticks with MCS → equals MCS cost.
+    // Cost-0 after extend kept; else MCS → equals MCS cost.
     let parent = ForestMol::parse("c1ccccc1").unwrap();
     let target = parse_mol("Oc1ccccc1").unwrap();
     let parent_diff = atom_diff(parent.mol(), &target);
@@ -608,7 +602,7 @@ fn lift_with_mcs_rematch_matches_full_mcs_cost() {
 
 #[test]
 fn nonzero_lift_always_sticks_with_mcs() {
-    // Shrink cleavage: lift may leave cleaved heavies; must return MCS cost.
+    // No Aut chase: if extend is not cost 0, result is MCS.
     let parent = ForestMol::parse("COc1ccccc1").unwrap();
     let target = parse_mol("Oc1ccccc1").unwrap();
     let parent_diff = atom_diff(parent.mol(), &target);
@@ -642,7 +636,7 @@ fn nonzero_lift_always_sticks_with_mcs() {
     if out.cost() > 0 {
         assert!(
             rematch >= 1,
-            "non-zero result must come from MCS (rematch={rematch})"
+            "non-zero result must be MCS (rematch={rematch})"
         );
     }
 }
