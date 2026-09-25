@@ -114,6 +114,7 @@ _TRACE_KEYS = (
     "additions",
     "formula",
     "delta_formula",
+    "dedup_smi",
     "depth",
     "last_tag",
     "next_transform",
@@ -135,8 +136,9 @@ class XfTracing:
     parent as :class:`Xf`. Trace state lives on the forest.
 
     Read-only queries (no underscore): ``active``, ``depth``, ``depths``,
-    ``atom_origin``, ``atom_indices``, ``atom_depths``, ``atom_root``,
-    ``atom_added_by``, ``removed_roots``, ``index_at``, ``added_indices``,
+    ``dedup_smi``, ``dedup_smi_at``, ``atom_origin``, ``atom_indices``,
+    ``atom_depths``, ``atom_root``, ``atom_added_by``, ``removed_roots``,
+    ``index_at``, ``added_indices``,
     ``root_map``. These answer questions about the installed atom trace
     without exposing ``forestLabel`` tags or transform ids.
 
@@ -175,6 +177,30 @@ class XfTracing:
         if not is_tracing(self.mol):
             return None
         return int(self.mol._forest["atom_trace"]["depth"])
+
+    @property
+    def dedup_smi(self) -> str | None:
+        """CSMI dedup key for the current depth frame.
+
+        Cached on ``atom_trace["dedup_smi"][depth]`` at stamp / each hop.
+        Survives ``clear_structure``. ``None`` when untraced, missing, or
+        fail-closed unstable (do not fall back to display ``csmi`` for dedup).
+        """
+
+        depth = self.depth
+        if depth is None:
+            return None
+        return self.dedup_smi_at(depth)
+
+    def dedup_smi_at(self, depth: int) -> str | None:
+        """CSMI dedup key cached for ``depth``, or ``None`` if unknown / unstable."""
+
+        if not is_tracing(self.mol):
+            return None
+        frames = self.mol._forest["atom_trace"].get("dedup_smi") or ()
+        if depth < 0 or depth >= len(frames):
+            return None
+        return frames[depth]
 
     def atom_indices(self, idx: int) -> tuple[int, ...] | None:
         """Index frames for atom ``idx`` from origin to now.
@@ -353,6 +379,7 @@ class XfTracing:
                 "additions": {},
                 "formula": molecule_formula(held),
                 "delta_formula": {},
+                "dedup_smi": [_dedup_smi_of(held)],
                 "depth": 0,
                 "last_tag": 0,
                 "next_transform": 1,
@@ -859,6 +886,18 @@ def _topol_equiv(mol: Mol) -> dict[int, int]:
     classes = {atom.GetIdx(): ranks[atom.GetIdx()] for atom in mol.GetAtoms()}
     structure["topol_equiv"] = classes
     return classes
+
+
+def _dedup_smi_of(mol: Mol) -> str | None:
+    """Fail-closed CSMI identity for unique_csmi / emission check.
+
+    Python still uses display CSMI (``MolToSmiles`` without stereo). Rust uses
+    Chematic ``canonical_smiles_stable_key`` (may be ``None``). Return
+    ``None`` only when this mol must not be CSMI-indexed — do not fall back
+    to a different spelling for callers that treat ``None`` as skip-dedup.
+    """
+
+    return MolToSmiles(mol, isomericSmiles=False)
 
 
 def molecule_formula(mol: Mol) -> Formula:
@@ -1669,6 +1708,7 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
             "transforms": list(trace.get("transforms") or []),
             "additions": copy_mutable(trace.get("additions") or {}),
             "delta_formula": copy_mutable(trace.get("delta_formula") or {}),
+            "dedup_smi": list(trace.get("dedup_smi") or []),
             "depth": int(trace["depth"]),
             "last_tag": int(trace["last_tag"]),
             "next_transform": int(trace.get("next_transform") or 1),
@@ -1677,6 +1717,13 @@ def carry_forest(src: Mol, dst: Mol) -> Mol:
         child["atom_trace"] = carried  # type: ignore[typeddict-item]
         held = _place_forest(dst, child)
         carried["formula"] = molecule_formula(held)
+        # Current frame is this fragment's identity (lineage frames stay).
+        depth = int(carried["depth"])
+        frames = list(carried["dedup_smi"])
+        while len(frames) <= depth:
+            frames.append(None)
+        frames[depth] = _dedup_smi_of(held)
+        carried["dedup_smi"] = frames
         child["cache"] = {}
         _restamp_start_labels(held)
         return held

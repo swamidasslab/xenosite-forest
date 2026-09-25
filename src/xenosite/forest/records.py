@@ -341,7 +341,7 @@ class PairSiteInfo(_SiteInfoCore):
 SiteInfo: TypeAlias = SmirksSiteInfo | PairSiteInfo
 
 # metabolize yields SiteInfo unchanged. Product SMILES: ``product.xf.csmi``
-# (emission identity: ``frozenset(p.xf.csmi for p in products)``).
+# (emission identity: ``frozenset`` of ``xf.tracing.dedup_smi`` per fragment).
 ProductInfo: TypeAlias = SiteInfo
 
 
@@ -461,6 +461,9 @@ class AtomTrace(TypedDict):
     ``transforms`` is the id order. ``next_transform`` is the next ``R`` number.
     ``depth`` is how many transforms this molecule is from the root.
     ``last_tag`` is the last tag integer issued.
+    ``dedup_smi`` is the CSMI dedup key at each depth frame (index ``d`` is
+    the molecule at depth ``d``). Survives ``clear_structure``. ``None`` at a
+    frame means fail-closed unstable (do not CSMI-dedup that state).
     """
 
     records: dict[str, AtomRecord]
@@ -469,6 +472,7 @@ class AtomTrace(TypedDict):
     additions: dict[str, TraceAddition]
     formula: Formula
     delta_formula: dict[str, Formula]
+    dedup_smi: list[str | None]
     depth: int
     last_tag: int
     next_transform: int
@@ -486,6 +490,7 @@ class InitializedAtomTrace(TypedDict):
     additions: dict[str, TraceAddition]
     formula: Formula
     delta_formula: dict[str, Formula]
+    dedup_smi: list[str | None]
     depth: int
     last_tag: int
     next_transform: int

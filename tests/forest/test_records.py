@@ -74,6 +74,7 @@ def test_records_are_tuples_and_dicts():
         "additions": {},
         "formula": formula,
         "delta_formula": {},
+        "dedup_smi": ["CC"],
         "depth": 0,
         "last_tag": 0,
         "next_transform": 1,

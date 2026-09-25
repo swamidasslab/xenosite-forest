@@ -49,6 +49,7 @@ from xenosite.forest.rdkitutil import (
     TracingMol,
     _bond_key,
     _current_bond_map,
+    _dedup_smi_of,
     aromatic_parent_atoms,
     copy_mol,
     ensure_kekule_parents,
@@ -245,9 +246,12 @@ class ReactionRule:
           either piece. The change in formula lives under
           ``atom_trace["delta_formula"][id]``.
         - Product SMILES live on each mol via ``product.xf.csmi`` (not on
-          ``info``). Emission identity for **check** / **yield** is
-          ``frozenset(p.xf.csmi for p in products)`` computed at yield from
-          those cached values — no ``csmi`` key on the info bag. **check**
+          ``info``). Emission identity for **check** / **yield** is the
+          ``frozenset`` of ``atom_trace["dedup_smi"][depth]``
+          (``xf.tracing.dedup_smi``) per fragment — cached at stamp / each
+          hop, survives ``clear_structure``. ``None`` on any fragment skips
+          CSMI collapse for that emission (fail-closed). No ``csmi`` key on
+          the info bag. **check**
           (always, while site unique-edit is on) warns
           ``SiteDeduplicationWarning`` when a later emission under the
           same ``(rule, pattern)`` repeats an earlier emission's frozenset
@@ -343,33 +347,45 @@ class ReactionRule:
                     # of_products cleared product cache — lex reps live on parent.
                     restamp_product_forest_last_layer(p, parent=mol)
 
-            # Cached xf.csmi after of_products — one read per fragment.
-            fragment_csmis = [p.xf.csmi for p in finished]
-            emission_csmi = frozenset(fragment_csmis)
+            # Trace-cached dedup_smi (set in _apply_forest_trace before
+            # clear_structure). Skip CSMI collapse when any fragment is None.
+            fragment_csmis: list[str] = []
+            emission_unstable = False
+            for p in finished:
+                key = p.xf.tracing.dedup_smi
+                if key is None:
+                    emission_unstable = True
+                    break
+                fragment_csmis.append(key)
+            if emission_unstable:
+                emission_csmi: frozenset[str] | None = None
+            else:
+                emission_csmi = frozenset(fragment_csmis)
             site_ranks = _site_ranks_for_csmi_warn(info, mol)
             rule_pat = (
                 _rule_dedup_name(_emitting_rule(info)),
                 _pattern_dedup_token(info),
             )
-            prior = seen_emissions.setdefault(rule_pat, [])
-            if any(
-                emission_csmi == kept_s and site_ranks == kept_r
-                for kept_s, kept_r in prior
-            ):
-                # Unique-edit miss: same emission set + ranks as a keeper.
-                _report_csmi_dedup_drop(
-                    mol, info, next(iter(emission_csmi))
-                )
-            else:
-                # Quiet unequal-rank iso / leaving-group / cleavage siblings.
-                prior.append((emission_csmi, site_ranks))
+            if emission_csmi is not None:
+                prior = seen_emissions.setdefault(rule_pat, [])
+                if any(
+                    emission_csmi == kept_s and site_ranks == kept_r
+                    for kept_s, kept_r in prior
+                ):
+                    # Unique-edit miss: same emission set + ranks as a keeper.
+                    _report_csmi_dedup_drop(
+                        mol, info, next(iter(emission_csmi))
+                    )
+                else:
+                    # Quiet unequal-rank iso / leaving-group / cleavage siblings.
+                    prior.append((emission_csmi, site_ranks))
 
             for p in finished:
                 assert p.xf.tracing.active
 
             _report_formula_delta_mismatch(mol, info, finished)
 
-            if unique_csmi:
+            if unique_csmi and emission_csmi is not None:
                 key = _unique_csmi_key(info, emission_csmi)
                 if key in seen_yield:
                     continue
@@ -700,6 +716,15 @@ def _apply_forest_trace(
     after = held.xf.formula
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
+    # Dedup key for this product's depth frame (survives clear_structure).
+    frames = list(trace.get("dedup_smi") or [])
+    while len(frames) < depth:
+        frames.append(None)
+    if len(frames) == depth:
+        frames.append(_dedup_smi_of(held))
+    else:
+        frames[depth] = _dedup_smi_of(held)
+    trace["dedup_smi"] = frames
     # PatternInfo is stored on info as the same dict the rule holds.
     pattern: PatternInfo | None
     if "pattern" in info:
