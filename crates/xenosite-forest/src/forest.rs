@@ -81,3 +81,28 @@ pub fn formula_delta(before: &Formula, after: &Formula) -> Formula {
         charge: after.charge - before.charge,
     }
 }
+
+/// Heavy-atom L1 distance between two formulas (H ignored; charge ignored).
+///
+/// Used by [`crate::find_path::HeapScoreMode::MatchProduct`] closeness /
+/// improvement scoring.
+pub fn formula_heavy_l1(a: &Formula, b: &Formula) -> usize {
+    let mut keys: Vec<&str> = a
+        .counts
+        .keys()
+        .chain(b.counts.keys())
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut dist = 0usize;
+    for key in keys {
+        if key == "H" {
+            continue;
+        }
+        let da = a.counts.get(key).copied().unwrap_or(0);
+        let db = b.counts.get(key).copied().unwrap_or(0);
+        dist += da.abs_diff(db) as usize;
+    }
+    dist
+}

@@ -9,7 +9,7 @@ use crate::atom_diff::{
     added_heavy_atoms, atom_diff, residual_cost_after_site_cast, try_atom_diff_for_child,
     try_atom_diff_for_child_goal, try_lift_cleaved_child, try_lift_cleaved_child_goal,
 };
-use crate::find_path::{FindPathConfig, PathCounters, find_path_with};
+use crate::find_path::{FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
 use crate::forest_mol::ForestMol;
 use crate::mol::parse_mol;
 use crate::rules::{dealkylation, dehydrogenation, hydroxylation, phase_one, quinone_formation};
@@ -488,6 +488,7 @@ fn assert_find_path_no_mcs_fallback(reactant: &str, target: &str, max_nodes: usi
             max_nodes,
             use_atom_diff: true,
             lazy_closer: false,
+            heap_score: HeapScoreMode::SoftStack,
         },
         |_| true,
     )

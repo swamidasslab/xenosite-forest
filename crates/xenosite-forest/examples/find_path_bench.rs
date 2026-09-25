@@ -24,7 +24,9 @@
 
 use std::time::{Duration, Instant};
 
-use xenosite_forest::{FindPathConfig, PathCounters, canon_of, find_path_with, phase_one};
+use xenosite_forest::{
+    FindPathConfig, HeapScoreMode, PathCounters, canon_of, find_path_with, phase_one,
+};
 
 const MAX_NODES: usize = 800;
 const DEFAULT_MAX_PATHS: usize = 1;
@@ -232,6 +234,17 @@ fn parse_paths(args: &[String]) -> usize {
         .max(1)
 }
 
+fn parse_score(args: &[String]) -> HeapScoreMode {
+    args.windows(2)
+        .find(|w| w[0] == "--score")
+        .map(|w| match w[1].as_str() {
+            "match" | "match-product" | "product" => HeapScoreMode::MatchProduct,
+            "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
+            other => panic!("unknown --score {other} (soft|match)"),
+        })
+        .unwrap_or(HeapScoreMode::SoftStack)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let larger = args.iter().any(|a| a == "--larger");
@@ -241,12 +254,13 @@ fn main() {
     let filter_only = !nofilter || args.iter().any(|a| a == "--filter-only");
     let budget = parse_budget(&args, if nofilter { 60 } else { 30 });
     let max_paths = parse_paths(&args);
+    let heap_score = parse_score(&args);
 
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
     );
     println!(
-        "(release; tagged ForestMol; filter-only={filter_only}; budget={}s)",
+        "(release; tagged ForestMol; filter-only={filter_only}; heap_score={heap_score:?}; budget={}s)",
         budget.as_secs()
     );
 
@@ -261,6 +275,7 @@ fn main() {
     let base = FindPathConfig {
         max_paths,
         max_nodes: MAX_NODES,
+        heap_score,
         ..FindPathConfig::default()
     };
     if nofilter && !args.iter().any(|a| a == "--filter-only") {

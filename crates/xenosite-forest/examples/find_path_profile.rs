@@ -19,7 +19,7 @@ use xenosite_forest::forest_mol::ForestMol;
 use xenosite_forest::mol::{Molecule, canon_of, parse_mol};
 use xenosite_forest::rules::phase_one;
 use xenosite_forest::ruleset::RuleSet;
-use xenosite_forest::{Candidate, FindPathConfig, PathCounters, find_path_with};
+use xenosite_forest::{Candidate, FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
 
 const HARD: &[(&str, &str, &str)] = &[
     (
@@ -491,6 +491,7 @@ fn main() {
                 max_nodes: 800,
                 use_atom_diff: true,
                 lazy_closer: lazy,
+                heap_score: HeapScoreMode::SoftStack,
             };
             let mut best = f64::MAX;
             let mut bill = 0usize;

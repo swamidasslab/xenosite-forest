@@ -221,34 +221,83 @@ struct OxygenSite {
     atoms: BTreeSet<usize>,
 }
 
-/// Heap entry: hits first, then novel sites vs yielded plans, then soft
-/// scores ([`PatternInfo::search_bias`], site H-progress), then parent-relative
-/// **cost gain**. Among equal scores, [`pop_frontier`] alternates DFS (max
-/// `seq`) and BFS (min `seq`). BinaryHeap Ord uses DFS seq so equal-score
-/// items stay contiguous at the top for band drain. BinaryHeap is max-heap.
+/// How the find_path frontier ranks walks (after `target_hit` / `novel_site`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HeapScoreMode {
+    /// Current soft stack: `search_bias`, then site H-progress, then
+    /// `cost_gain` (= parent atom_diff cost − child), then DFS/BFS `seq`.
+    #[default]
+    SoftStack,
+    /// Simpler product score across **formula** (heavy L1) and **atom_diff**
+    /// cost: `(formula_improvement × atom_improvement) × (formula_closeness ×
+    /// atom_closeness)`. Improvement is max(0, parent_dist − child_dist) + 1;
+    /// closeness is `SCALE / (1 + child_dist)`.
+    MatchProduct,
+}
+
+/// Parent→child match-product heap score (formula L1 × atom_diff cost).
+///
+/// `improvement = (max(0, f_imp)+1) * (max(0, a_imp)+1)`  
+/// `closeness = (SCALE/(1+f_child)) * (SCALE/(1+a_child))`  
+/// `score = improvement * closeness` (higher better). Target hit uses a
+/// sentinel above any finite product.
+pub fn hop_match_product_score(
+    target_hit: bool,
+    parent_formula_dist: usize,
+    child_formula_dist: usize,
+    parent_atom_cost: Option<usize>,
+    child_atom_cost: Option<usize>,
+) -> i64 {
+    if target_hit {
+        return i64::MAX / 4;
+    }
+    const SCALE: i64 = 1_000_000;
+    let f_imp = parent_formula_dist as i64 - child_formula_dist as i64;
+    let a_imp = match (parent_atom_cost, child_atom_cost) {
+        (Some(p), Some(c)) => p as i64 - c as i64,
+        _ => 0,
+    };
+    let improvement = (f_imp.max(0) + 1) * (a_imp.max(0) + 1);
+    let formula_close = SCALE / (1 + child_formula_dist as i64);
+    let atom_close = match child_atom_cost {
+        Some(c) => SCALE / (1 + c as i64),
+        None => 1,
+    };
+    let closeness = formula_close.saturating_mul(atom_close);
+    improvement.saturating_mul(closeness)
+}
+
+/// Heap entry: hits first, then novel sites vs yielded plans, then the mode's
+/// soft score(s). Among equal scores, [`pop_frontier`] alternates DFS/BFS.
+/// BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
+    mode: HeapScoreMode,
     target_hit: bool,
     /// `false` when this hop's pattern+site already appears in a yielded path.
     /// Deprioritize only — never drop or abort (HEURISTICS).
     novel_site: bool,
-    /// From [`PatternInfo::search_bias`] (higher preferred). Soft demotion.
+    /// SoftStack: from [`PatternInfo::search_bias`] (higher preferred).
     search_bias: i8,
-    /// Site H-progress vs parent diff (higher preferred). Soft; overrides DFS.
+    /// SoftStack: site H-progress vs parent diff (higher preferred).
     site_progress: i32,
-    /// `parent_cost - child_cost` (higher preferred). Soft; ≤0 counters DFS.
+    /// SoftStack: `parent_cost - child_cost` (higher preferred).
     cost_gain: i32,
+    /// MatchProduct: formula × atom_diff improvement × closeness.
+    match_score: i64,
     seq: usize,
     walk: Walk,
 }
 
 impl PartialEq for HeapItem {
     fn eq(&self, other: &Self) -> bool {
-        self.target_hit == other.target_hit
+        self.mode == other.mode
+            && self.target_hit == other.target_hit
             && self.novel_site == other.novel_site
             && self.search_bias == other.search_bias
             && self.site_progress == other.site_progress
             && self.cost_gain == other.cost_gain
+            && self.match_score == other.match_score
             && self.seq == other.seq
     }
 }
@@ -266,20 +315,31 @@ impl Ord for HeapItem {
         self.target_hit
             .cmp(&other.target_hit)
             .then_with(|| self.novel_site.cmp(&other.novel_site))
-            .then_with(|| self.search_bias.cmp(&other.search_bias))
-            .then_with(|| self.site_progress.cmp(&other.site_progress))
-            .then_with(|| self.cost_gain.cmp(&other.cost_gain))
+            .then_with(|| match self.mode {
+                HeapScoreMode::SoftStack => self
+                    .search_bias
+                    .cmp(&other.search_bias)
+                    .then_with(|| self.site_progress.cmp(&other.site_progress))
+                    .then_with(|| self.cost_gain.cmp(&other.cost_gain)),
+                HeapScoreMode::MatchProduct => self.match_score.cmp(&other.match_score),
+            })
             // DFS seq keeps equal-score band contiguous for [`pop_frontier`].
             .then_with(|| self.seq.cmp(&other.seq))
     }
 }
 
 fn same_heap_score(a: &HeapItem, b: &HeapItem) -> bool {
-    a.target_hit == b.target_hit
+    a.mode == b.mode
+        && a.target_hit == b.target_hit
         && a.novel_site == b.novel_site
-        && a.search_bias == b.search_bias
-        && a.site_progress == b.site_progress
-        && a.cost_gain == b.cost_gain
+        && match a.mode {
+            HeapScoreMode::SoftStack => {
+                a.search_bias == b.search_bias
+                    && a.site_progress == b.site_progress
+                    && a.cost_gain == b.cost_gain
+            }
+            HeapScoreMode::MatchProduct => a.match_score == b.match_score,
+        }
 }
 
 /// Pop one frontier walk: among the top equal-score band, take max `seq` (DFS)
@@ -578,6 +638,8 @@ pub struct FindPathConfig {
     /// Default **false**: child cost is already resolved at enqueue for heap
     /// `cost_gain`, so refuse non-closer there (DFS among improvers only).
     pub lazy_closer: bool,
+    /// Frontier ranking after hit / novel-site tiers.
+    pub heap_score: HeapScoreMode,
 }
 
 impl Default for FindPathConfig {
@@ -588,6 +650,7 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: false,
+            heap_score: HeapScoreMode::SoftStack,
         }
     }
 }
@@ -814,12 +877,22 @@ where
     let mut seen = HashSet::new();
     remember_seen(&mut seen, &start);
     let ancestors = root_ancestors(&start);
+    let target_formula = crate::forest::molecule_formula(&target_mol);
+    let start_formula_dist = crate::forest::formula_heavy_l1(&start.formula(), &target_formula);
     heap.push(HeapItem {
+        mode: config.heap_score,
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
         search_bias: 0,
         site_progress: 0,
         cost_gain: 0,
+        match_score: hop_match_product_score(
+            start_csmi.as_ref() == target_csmi.as_str(),
+            start_formula_dist,
+            start_formula_dist,
+            None,
+            None,
+        ),
         seq,
         walk: Walk {
             mol: start,
@@ -843,6 +916,7 @@ where
         config,
         target_csmi,
         target_mol,
+        target_formula,
         target_ha,
         heap,
         seq,
@@ -864,6 +938,7 @@ pub struct FindPath<'a, 'b, K> {
     config: FindPathConfig,
     target_csmi: String,
     target_mol: crate::Molecule,
+    target_formula: crate::forest::Formula,
     target_ha: usize,
     heap: BinaryHeap<HeapItem>,
     seq: usize,
@@ -900,6 +975,7 @@ where
             max_nodes,
             use_atom_diff,
             lazy_closer,
+            heap_score,
         } = self.config;
 
         while let Some(item) = pop_frontier(&mut self.heap, self.prefer_dfs) {
@@ -1097,13 +1173,26 @@ where
                         parent_cost,
                         child_diff.as_ref().map(|d| d.cost()),
                     );
+                    let parent_f =
+                        crate::forest::formula_heavy_l1(&walk.mol.formula(), &self.target_formula);
+                    let child_f =
+                        crate::forest::formula_heavy_l1(&kept.formula(), &self.target_formula);
+                    let match_score = hop_match_product_score(
+                        target_hit,
+                        parent_f,
+                        child_f,
+                        parent_cost,
+                        child_diff.as_ref().map(|d| d.cost()),
+                    );
                     let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
+                        mode: heap_score,
                         target_hit,
                         novel_site,
                         search_bias: emission.search_bias,
                         site_progress: emission.site_progress,
                         cost_gain,
+                        match_score,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1646,11 +1735,13 @@ where
     remember_seen(&mut seen, &start);
     let ancestors = root_ancestors(&start);
     heap.push(HeapItem {
+        mode: config.heap_score,
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
         search_bias: 0,
         site_progress: 0,
         cost_gain: 0,
+        match_score: 0,
         seq,
         walk: Walk {
             mol: start,
@@ -1841,12 +1932,14 @@ where
                     }
                     let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
+                        mode: self.config.heap_score,
                         target_hit,
                         novel_site,
                         search_bias: emission.search_bias,
                         site_progress: 0,
                         // No atom_diff on this path — HA closer already gated.
                         cost_gain: 0,
+                        match_score: 0,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -1891,11 +1984,13 @@ mod tests {
     fn heap_prefers_most_recently_queued_among_peers() {
         // Ord keeps DFS seq so equal-score band is contiguous for pop_frontier.
         let older = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 1,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1911,11 +2006,13 @@ mod tests {
             },
         };
         let newer = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 2,
             walk: older.walk.clone(),
         };
@@ -1941,11 +2038,13 @@ mod tests {
             diff: None,
         };
         let mk = |seq| HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq,
             walk: walk.clone(),
         };
@@ -1965,11 +2064,13 @@ mod tests {
     fn heap_prefers_higher_search_bias_over_seq() {
         // Good scores override DFS: demoted bias loses even if enqueued later.
         let demoted = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: -1,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -1985,11 +2086,13 @@ mod tests {
             },
         };
         let preferred = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 1,
             walk: demoted.walk.clone(),
         };
@@ -2004,11 +2107,13 @@ mod tests {
     fn heap_prefers_higher_site_progress_over_seq() {
         // Site H-progress overrides DFS among equal search_bias.
         let low = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2024,11 +2129,13 @@ mod tests {
             },
         };
         let high = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 2,
             cost_gain: 1,
+            match_score: 0,
             seq: 1,
             walk: low.walk.clone(),
         };
@@ -2043,11 +2150,13 @@ mod tests {
     fn heap_lack_of_improvement_counters_dfs() {
         // Non-positive cost_gain loses to an older positive peer despite LIFO.
         let flat_newer = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 0,
+            match_score: 0,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2063,11 +2172,13 @@ mod tests {
             },
         };
         let gain_older = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 1,
             walk: flat_newer.walk.clone(),
         };
@@ -2083,11 +2194,13 @@ mod tests {
     #[test]
     fn heap_prefers_larger_cost_gain_over_seq() {
         let small_newer = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
+            match_score: 0,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2103,11 +2216,13 @@ mod tests {
             },
         };
         let big_older = HeapItem {
+            mode: HeapScoreMode::SoftStack,
             target_hit: false,
             novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 3,
+            match_score: 0,
             seq: 1,
             walk: small_newer.walk.clone(),
         };
@@ -2125,6 +2240,20 @@ mod tests {
         assert_eq!(hop_cost_gain(false, Some(5), Some(5)), 0);
         assert_eq!(hop_cost_gain(false, Some(5), Some(6)), -1);
         assert_eq!(hop_cost_gain(false, Some(5), None), 0);
+    }
+
+    #[test]
+    fn match_product_prefers_joint_improvement_and_closeness() {
+        // Better atom+formula improvement at same closeness → higher score.
+        let flat = hop_match_product_score(false, 4, 4, Some(10), Some(10));
+        let better = hop_match_product_score(false, 4, 2, Some(10), Some(5));
+        assert!(better > flat, "better={better} flat={flat}");
+        // Closer child beats farther at equal improvement.
+        let close = hop_match_product_score(false, 6, 4, Some(12), Some(10));
+        let far = hop_match_product_score(false, 8, 6, Some(14), Some(12));
+        // Both improve by 2 formula + 2 atom; closer residual wins.
+        assert!(close > far, "close={close} far={far}");
+        assert!(hop_match_product_score(true, 9, 9, Some(9), Some(9)) > better);
     }
 
     #[test]
