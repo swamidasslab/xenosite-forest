@@ -97,14 +97,11 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        let h_off = self.h_delta.values().filter(|&&d| d != 0).count();
-        3 * self.cleaved.len()
-            + 3 * self.n_extra
-            + 2 * self.needs_oxygen.len()
-            + self.loses_aromaticity.len()
-            + h_off
-            + 3 * self.cleavage_bonds.len()
-            + self.bond_order_mismatches
+        // HA alignment only: unmapped reactant / target heavies and cut bonds.
+        // Soft chemistry (`needs_oxygen`, aromatic, H-delta, bond-order) stays on
+        // the struct for filters / order_key but is not double-counted here —
+        // unmapped target O is already in `n_extra`.
+        3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len()
     }
 
     /// True when ``atoms`` is the bond that separates kept from gone.
@@ -559,11 +556,12 @@ fn best_diff_from_lifted_maps(
 
 /// Lower bound sketch on child [`AtomDiff::cost`] after this effect at `site`.
 ///
-/// Casts the effect onto the parent diff: clear cost contributions the effect
-/// is declared to fix on `site_atoms ∪ path_ends` (oxygen need / n_extra,
-/// cleavage bond + leave heavies, dearomatization, H delta). Same weights as
-/// [`AtomDiff::field_cost`]. Useful for tests / filters — not used to decide
-/// lift vs MCS (lift keeps only cost-0 after extend; else MCS).
+/// Casts the effect onto the parent HA-alignment cost: clear `n_extra` /
+/// cleavage bond + leave heavies the effect is declared to fix on
+/// `site_atoms ∪ path_ends`. Same weights as [`AtomDiff::field_cost`]. Soft
+/// chemistry on the parent is ignored for this sketch. Useful for tests /
+/// filters — not used to decide lift vs MCS (lift keeps only cost-0 after
+/// extend; else MCS).
 pub fn residual_cost_after_site_cast(
     parent: &AtomDiff,
     effect: &Effect,
@@ -572,21 +570,15 @@ pub fn residual_cost_after_site_cast(
 ) -> usize {
     let scope: HashSet<usize> = site_atoms.iter().chain(path_ends.iter()).copied().collect();
 
-    let mut needs_oxygen = parent.needs_oxygen.clone();
-    let mut loses_aromaticity = parent.loses_aromaticity.clone();
-    let mut h_delta = parent.h_delta.clone();
     let mut cleaved = parent.cleaved.clone();
     let mut cleavage_bonds = parent.cleavage_bonds.clone();
     let mut n_extra = parent.n_extra;
-    let bond_order_mismatches = parent.bond_order_mismatches;
 
     if effect_adds_oxygen(effect) {
-        let mut cleared = 0usize;
-        for &a in &scope {
-            if needs_oxygen.remove(&a) {
-                cleared += 1;
-            }
-        }
+        let cleared = scope
+            .iter()
+            .filter(|a| parent.needs_oxygen.contains(a))
+            .count();
         let o_delta = effect.delta_formula.get("O").copied().unwrap_or(0).max(0) as usize;
         let o_place = o_delta.max(cleared).max(1);
         n_extra = n_extra.saturating_sub(o_place);
@@ -618,34 +610,8 @@ pub fn residual_cost_after_site_cast(
             });
         }
     }
-    if effect.dearomatizes {
-        for &a in &scope {
-            loses_aromaticity.remove(&a);
-        }
-    }
-    if effect_removes_h(effect) {
-        for &a in &scope {
-            if h_delta.get(&a).copied().unwrap_or(0) < 0 {
-                h_delta.insert(a, 0);
-            }
-        }
-    }
-    if effect_adds_h(effect) {
-        for &a in &scope {
-            if h_delta.get(&a).copied().unwrap_or(0) > 0 {
-                h_delta.insert(a, 0);
-            }
-        }
-    }
 
-    let h_off = h_delta.values().filter(|&&d| d != 0).count();
-    3 * cleaved.len()
-        + 3 * n_extra
-        + 2 * needs_oxygen.len()
-        + loses_aromaticity.len()
-        + h_off
-        + 3 * cleavage_bonds.len()
-        + bond_order_mismatches
+    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len()
 }
 
 /// Heavy child atoms whose tags are not on `parent` (local additions).
