@@ -909,14 +909,15 @@ pub fn dehydration() -> RuleSet {
 
 /// `Hydrogenation` from Python `xenosite.forest.rules`.
 ///
-/// Patterns carry `search_bias = -1`: real pathway, but less common and
-/// opposite the usual oxidative direction (prone to undo prior edits). Soft
-/// demotion on the `find_path` heap only — never dropped (HEURISTICS: not decided).
+/// Patterns carry `search_bias = -1` via [`demote_reductive`]: real pathway, but
+/// less common and opposite the usual oxidative direction (prone to undo prior
+/// edits). Soft demotion on the `find_path` heap only — never dropped
+/// (HEURISTICS: not decided).
 pub fn hydrogenation() -> RuleSet {
     RuleSet::new(
         Some("Hydrogenation".into()),
         [
-            smirks_row(
+            demote_reductive(smirks_row(
                 "alkyne",
                 "[#6:1]#[#6:2]>>[*:1]=[*:2]",
                 SiteKind::AtomPair,
@@ -930,9 +931,8 @@ pub fn hydrogenation() -> RuleSet {
                     leave_count: None,
                     partner: None,
                 },
-            )
-            .with_search_bias(-1),
-            smirks_row(
+            )),
+            demote_reductive(smirks_row(
                 "alkene",
                 "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
                 SiteKind::AtomPair,
@@ -946,9 +946,8 @@ pub fn hydrogenation() -> RuleSet {
                     leave_count: None,
                     partner: None,
                 },
-            )
-            .with_search_bias(-1),
-            endpoint_row(
+            )),
+            demote_reductive(endpoint_row(
                 "path_end",
                 "[*:1]",
                 vec![1],
@@ -962,8 +961,7 @@ pub fn hydrogenation() -> RuleSet {
                     partner: None,
                 },
                 "keep",
-            )
-            .with_search_bias(-1),
+            )),
         ],
     )
 }
@@ -1097,12 +1095,21 @@ pub fn nitrogen_reduction() -> RuleSet {
     )
 }
 
+/// Soft-demote reductive / counter-oxidative patterns on the find_path heap.
+/// Same rationale as Hydrogenation: real but less common toward typical Phase I
+/// oxidative targets; prone to undo prior edits (HEURISTICS: not decided).
+fn demote_reductive(pattern: PatternInfo) -> PatternInfo {
+    pattern.with_search_bias(-1)
+}
+
 /// `OxygenReduction` from Python `xenosite.forest.rules`.
+///
+/// Patterns carry `search_bias = -1` (see [`demote_reductive`]).
 pub fn oxygen_reduction() -> RuleSet {
     RuleSet::new(
         Some("OxygenReduction".into()),
         [
-            smirks_row(
+            demote_reductive(smirks_row(
                 "carbonyl",
                 "[#8:1]=[#6,#7:2]>>[*:1]-[*:2]",
                 SiteKind::Atom,
@@ -1116,8 +1123,8 @@ pub fn oxygen_reduction() -> RuleSet {
                     leave_count: None,
                     partner: None,
                 },
-            ),
-            smirks_row(
+            )),
+            demote_reductive(smirks_row(
                 "peroxide",
                 "[#8:1]-[#8:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
@@ -1131,7 +1138,7 @@ pub fn oxygen_reduction() -> RuleSet {
                     leave_count: None,
                     partner: None,
                 },
-            ),
+            )),
         ],
     )
 }
@@ -1921,18 +1928,20 @@ mod tests {
     }
 
     #[test]
-    fn hydrogenation_patterns_carry_negative_search_bias() {
-        let set = hydrogenation();
-        let patterns = set.patterns();
-        assert!(!patterns.is_empty());
-        assert!(
-            patterns.iter().all(|p| p.search_bias == -1),
-            "Hydrogenation soft-demotes on the find_path heap; got {:?}",
-            patterns
-                .iter()
-                .map(|p| (p.name.as_str(), p.search_bias))
-                .collect::<Vec<_>>()
-        );
+    fn reductive_patterns_carry_negative_search_bias() {
+        for set in [hydrogenation(), oxygen_reduction()] {
+            let patterns = set.patterns();
+            assert!(!patterns.is_empty(), "{:?}", set.name);
+            assert!(
+                patterns.iter().all(|p| p.search_bias == -1),
+                "{:?} soft-demotes on the find_path heap; got {:?}",
+                set.name,
+                patterns
+                    .iter()
+                    .map(|p| (p.name.as_str(), p.search_bias))
+                    .collect::<Vec<_>>()
+            );
+        }
         assert_eq!(hydroxylation().patterns()[0].search_bias, 0);
     }
 
