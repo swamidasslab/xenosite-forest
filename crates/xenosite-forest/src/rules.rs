@@ -909,8 +909,9 @@ pub fn dehydration() -> RuleSet {
 
 /// `Hydrogenation` from Python `xenosite.forest.rules`.
 ///
-/// Patterns carry `search_bias = -1` so `find_path` soft-demotes H₂ hops on the
-/// heap (HEURISTICS: not decided).
+/// Patterns carry `search_bias = -1`: real pathway, but less common and
+/// opposite the usual oxidative direction (prone to undo prior edits). Soft
+/// demotion on the `find_path` heap only — never dropped (HEURISTICS: not decided).
 pub fn hydrogenation() -> RuleSet {
     RuleSet::new(
         Some("Hydrogenation".into()),
