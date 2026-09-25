@@ -238,7 +238,7 @@ pub enum MatchCombine {
 pub enum MatchMetric {
     /// Atom-diff cost only.
     Atom,
-    /// Formula heavy-L1 vs target only.
+    /// Formula L1 vs target (includes H) only.
     Formula,
     /// Formula × atom_diff factors (default).
     #[default]
@@ -989,7 +989,7 @@ where
     remember_seen(&mut seen, &start);
     let ancestors = root_ancestors(&start);
     let target_formula = crate::forest::molecule_formula(&target_mol);
-    let start_formula_dist = crate::forest::formula_heavy_l1(&start.formula(), &target_formula);
+    let start_formula_dist = crate::forest::formula_l1(&start.formula(), &target_formula);
     heap.push(HeapItem {
         mode: config.heap_score,
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
@@ -1281,9 +1281,8 @@ where
                         child_diff.as_ref().map(|d| d.cost()),
                     );
                     let parent_f =
-                        crate::forest::formula_heavy_l1(&walk.mol.formula(), &self.target_formula);
-                    let child_f =
-                        crate::forest::formula_heavy_l1(&kept.formula(), &self.target_formula);
+                        crate::forest::formula_l1(&walk.mol.formula(), &self.target_formula);
+                    let child_f = crate::forest::formula_l1(&kept.formula(), &self.target_formula);
                     let match_score = match_score_for(
                         heap_score,
                         target_hit,

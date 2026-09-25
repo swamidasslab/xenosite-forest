@@ -74,7 +74,9 @@ pub use find_path::{
     find_path_default, find_path_diff, find_path_with, find_path_with_filters,
     hop_match_product_score, hop_match_score,
 };
-pub use forest::{Formula, Structure, formula_delta, formula_heavy_l1, molecule_formula};
+pub use forest::{
+    Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
+};
 pub use forest_mol::ForestMol;
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};

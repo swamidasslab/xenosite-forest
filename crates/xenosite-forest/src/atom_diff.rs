@@ -97,12 +97,12 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // HA alignment only: unmapped reactant / target heavies and cut bonds.
-        // Soft chemistry (`needs_oxygen`, aromatic, H-delta, bond-order) stays on
-        // the struct for filters / order_key but is not scored here — unmapped
-        // target O is already in `n_extra`; H belongs on formula distance, not
-        // a second atom_diff term.
-        3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len()
+        // MCS heavy-atom alignment + per-atom H counts. Soft chemistry
+        // (`needs_oxygen`, aromatic, bond-order) stays on the struct for filters
+        // / order_key but is not scored here — unmapped target O is already in
+        // `n_extra`. Formula heap distance also includes H via `formula_l1`.
+        let h_off = self.h_delta.values().filter(|&&d| d != 0).count();
+        3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len() + h_off
     }
 
     /// True when ``atoms`` is the bond that separates kept from gone.
@@ -557,13 +557,12 @@ fn best_diff_from_lifted_maps(
 
 /// Lower bound sketch on child [`AtomDiff::cost`] after this effect at `site`.
 ///
-/// Casts the effect onto the parent HA-alignment cost: clear `n_extra` /
-/// cleavage bond + leave heavies the effect is declared to fix on
-/// `site_atoms ∪ path_ends`. Same weights as [`AtomDiff::field_cost`]. Soft
-/// chemistry (`needs_oxygen` locus, aromatic, H-delta) is ignored for this
-/// sketch except oxygen still credits `n_extra`. Useful for tests / filters —
-/// not used to decide lift vs MCS (lift keeps only cost-0 after extend; else
-/// MCS).
+/// Casts the effect onto the parent HA+H cost: clear `n_extra`, cleavage bond +
+/// leave heavies, and H-delta the effect is declared to fix on
+/// `site_atoms ∪ path_ends`. Same weights as [`AtomDiff::field_cost`].
+/// Soft chemistry (`needs_oxygen` locus, aromatic) is ignored for this sketch
+/// except oxygen still credits `n_extra`. Useful for tests / filters.
+/// Not used to decide lift vs MCS (lift keeps only cost-0 after extend; else MCS).
 pub fn residual_cost_after_site_cast(
     parent: &AtomDiff,
     effect: &Effect,
@@ -575,6 +574,7 @@ pub fn residual_cost_after_site_cast(
     let mut cleaved = parent.cleaved.clone();
     let mut cleavage_bonds = parent.cleavage_bonds.clone();
     let mut n_extra = parent.n_extra;
+    let mut h_delta = parent.h_delta.clone();
 
     if effect_adds_oxygen(effect) {
         let cleared = scope
@@ -612,8 +612,23 @@ pub fn residual_cost_after_site_cast(
             });
         }
     }
+    if effect_removes_h(effect) {
+        for &a in &scope {
+            if h_delta.get(&a).copied().unwrap_or(0) < 0 {
+                h_delta.insert(a, 0);
+            }
+        }
+    }
+    if effect_adds_h(effect) {
+        for &a in &scope {
+            if h_delta.get(&a).copied().unwrap_or(0) > 0 {
+                h_delta.insert(a, 0);
+            }
+        }
+    }
 
-    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len()
+    let h_off = h_delta.values().filter(|&&d| d != 0).count();
+    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len() + h_off
 }
 
 /// Heavy child atoms whose tags are not on `parent` (local additions).

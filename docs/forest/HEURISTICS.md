@@ -94,7 +94,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 - `find_path` and `ReactionRule.metabolize` / `RuleSet.metabolize` raise `ValueError` on `None` input (invalid parse must not soft-pass as any-path).
 - Lazy heap / stale-priority handling on the find_path frontier. Status: approved (shape).
 
-  **Current default — `HeapScoreMode::Match(MatchScoreSpec::product_both())`.** After hard tiers `target_hit` then `novel_site`, match-family score from data `combine × metric` (not a SoftStack lex key). Default recipe is **product × both**: `improvement × closeness` with formula heavy-L1 and atom_diff cost. Improvement = max(0, parent − child) + 1; closeness = `SCALE / (1 + child)`; both-metrics multiply factors. Plain [`BinaryHeap::pop`]. Bench: `find_path_bench --score product-both` (aliases `match` / `product`); `--matrix` runs all 9 + soft. Status: approved (Rust derisk) as default pending matrix follow-up.
+  **Current default — `HeapScoreMode::Match(MatchScoreSpec::product_both())`.** After hard tiers `target_hit` then `novel_site`, match-family score from data `combine × metric` (not a SoftStack lex key). Default recipe is **product × both**: `improvement × closeness` with `formula_l1` (includes H) and atom_diff cost. Improvement = max(0, parent − child) + 1; closeness = `SCALE / (1 + child)`; both-metrics multiply factors. Plain [`BinaryHeap::pop`]. Bench: `find_path_bench --score product-both` (aliases `match` / `product`); `--matrix` runs all 9 + soft. Status: approved (Rust derisk) as default pending matrix follow-up.
 
   **Match-score matrix (filter-only, plain pop; mid + hard).** Axes: combine = close | improve | product; metric = atom | formula | both. SoftStack included as baseline.
 
@@ -113,16 +113,9 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
   Read: **atom beats formula**; formula-only inflates eugenol mid and most hard rows. **Close beats improve** on hard (improve-* and product-* with formula drag). **close-atom** lowest hard bill; product-both still ahead of SoftStack. No misses. Whether to switch default to close-atom: not decided.
 
-  **Tried — slim `AtomDiff::field_cost` to HA alignment only** (`3·(|cleaved|+n_extra+|cleavage_bonds|)`). Dropped from cost: `needs_oxygen`, `loses_aromaticity`, H-delta, bond-order (fields remain for filters / `order_key`; unmapped target O already in `n_extra`; no extra H term — H belongs on formula distance). Status: **not approved** as default — damages atom/both heap scores vs full cost; formula-only cells improve (hard product-formula 849→460) because the closer gate / lift cost-0 bar also slimmed.
+  **Tried — slim `AtomDiff::field_cost` to HA alignment only** (`3·(|cleaved|+n_extra+|cleavage_bonds|)`), no H. Damaged atom/both bills. Status: not approved.
 
-  | score | hard Σbill before → after |
-  | --- | ---: |
-  | close-atom | 203 → 241 |
-  | product-both | 228 → 256 |
-  | soft | 300 → 354 |
-  | product-formula | 849 → 460 |
-
-  Mid: atom/both 59→79; formula-only 87–94→59. Slim is live on this branch as a measured trial (status not decided); full-cost numbers above are the prior baseline.
+  **Current trial — HA alignment + H counts, no soft O/aromatic/bond in cost.** `field_cost = 3·(|cleaved|+n_extra+|cleavage_bonds|) + |h_delta≠0|`. Match formula distance is `formula_l1` (**includes H**); `formula_heavy_l1` kept for heavy-only callers. Soft `needs_oxygen` / aromatic / bond-order remain filter-only. Status: not decided (measuring).
 
   **Previous — `HeapScoreMode::SoftStack` (opt-in `--score soft`).** Lexicographic soft key: `search_bias` → `site_progress` → `cost_gain` → `seq`. Kept for comparison. Status: not decided (superseded as default). Tests: `heap_prefers_higher_search_bias_over_seq` / `heap_lack_of_improvement_counters_dfs` / `hop_cost_gain_is_parent_minus_child` / `heap_pops_best_ord_value_only` / `match_product_prefers_joint_improvement_and_closeness` / `match_combine_and_metric_axes`.
 

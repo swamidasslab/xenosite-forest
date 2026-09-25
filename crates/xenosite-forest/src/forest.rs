@@ -82,9 +82,28 @@ pub fn formula_delta(before: &Formula, after: &Formula) -> Formula {
     }
 }
 
-/// Heavy-atom L1 distance between two formulas (H ignored; charge ignored).
+/// Element-count L1 distance between two formulas (**includes H**; charge ignored).
 ///
 /// Used by [`crate::find_path::MatchScoreSpec`] closeness / improvement scoring.
+pub fn formula_l1(a: &Formula, b: &Formula) -> usize {
+    let mut keys: Vec<&str> = a
+        .counts
+        .keys()
+        .chain(b.counts.keys())
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut dist = 0usize;
+    for key in keys {
+        let da = a.counts.get(key).copied().unwrap_or(0);
+        let db = b.counts.get(key).copied().unwrap_or(0);
+        dist += da.abs_diff(db) as usize;
+    }
+    dist
+}
+
+/// Heavy-atom L1 distance between two formulas (H ignored; charge ignored).
 pub fn formula_heavy_l1(a: &Formula, b: &Formula) -> usize {
     let mut keys: Vec<&str> = a
         .counts
@@ -104,4 +123,19 @@ pub fn formula_heavy_l1(a: &Formula, b: &Formula) -> usize {
         dist += da.abs_diff(db) as usize;
     }
     dist
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mol::parse_mol;
+
+    #[test]
+    fn formula_l1_counts_hydrogen_heavy_skips_it() {
+        let ethane = molecule_formula(&parse_mol("CC").unwrap());
+        let ethene = molecule_formula(&parse_mol("C=C").unwrap());
+        // Same heavy (C2); H differs 6 vs 4.
+        assert_eq!(formula_heavy_l1(&ethane, &ethene), 0);
+        assert_eq!(formula_l1(&ethane, &ethene), 2);
+    }
 }
