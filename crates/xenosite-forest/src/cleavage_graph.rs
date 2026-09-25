@@ -1,9 +1,11 @@
-//! Cleavage product graph: Or of arms that share the same fragment multiset.
+//! Cleavage product graph: Or of arms that share a fold key.
 //!
 //! Both sides of a bifurcation are first-class products (nodes). Arms that
-//! produce the same sorted fragment CSMI multiset fold into one [`CleavageOr`].
-//! Choosing an arm **and** a continuation fragment builds the linked
-//! [`Maybe`] from the other side(s).
+//! share the same [`CleaveFoldKey`] (side-group signature + sorted fragment
+//! CSMI multiset) fold into one [`CleavageOr`]. Distinct rules can land in the
+//! same Or when their resolved [`crate::pattern::PatternInfo::cleave_side_group`]
+//! and fragments match. Choosing an arm **and** a continuation fragment builds
+//! the linked [`Maybe`] from the other side(s).
 //!
 //! MCS / [`crate::atom_diff`] gates which fragments stay expandable — the graph
 //! does not bypass diff.
@@ -19,6 +21,7 @@ use crate::canonical_plan::{CleavageSide, Maybe};
 use crate::forest_mol::ForestMol;
 use crate::mol::{Molecule, canon_of};
 use crate::pair_edit::PairCandidate;
+use crate::pattern::{CleaveFoldKey, CleaveSideSig};
 use crate::ruleset::RuleSet;
 
 /// One way to produce a fragment multiset: rule/site on the parent.
@@ -31,9 +34,15 @@ pub struct CleavageArm {
     pub site_atoms: Vec<usize>,
     /// Both (all) bifurcation fragments, sorted CSMIs.
     pub products: Vec<String>,
+    /// Cross-rule fold signature from [`PatternInfo::cleave_side_group`].
+    pub side_sig: CleaveSideSig,
 }
 
 impl CleavageArm {
+    pub fn fold_key(&self) -> CleaveFoldKey {
+        self.side_sig.fold_key(&self.products)
+    }
+
     /// Linked Maybe when continuing the walk on `continue_csmi`.
     ///
     /// The other product CSMIs become [`CleavageSide`] entries for this arm.
@@ -57,17 +66,22 @@ impl CleavageArm {
     }
 }
 
-/// Or over arms that share the same sorted fragment multiset.
+/// Or over arms that share the same fold key (side signature + fragment multiset).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CleavageOr {
     /// Canonical key: sorted fragment CSMIs (both sides kept).
     pub fragments: Vec<String>,
+    pub side_sig: CleaveSideSig,
     pub arms: Vec<CleavageArm>,
 }
 
 impl CleavageOr {
     pub fn n_arms(&self) -> usize {
         self.arms.len()
+    }
+
+    pub fn fold_key(&self) -> CleaveFoldKey {
+        self.side_sig.fold_key(&self.fragments)
     }
 
     /// Choose an arm and which fragment to continue on; Maybe = the other side(s).
@@ -192,16 +206,25 @@ fn sorted_fragments(products: &[String]) -> Vec<String> {
 }
 
 fn fold_layer(arms: Vec<CleavageArm>) -> CleavageLayer {
-    let mut buckets: BTreeMap<Vec<String>, Vec<CleavageArm>> = BTreeMap::new();
+    let mut buckets: BTreeMap<CleaveFoldKey, Vec<CleavageArm>> = BTreeMap::new();
     for arm in arms {
-        let key = arm.products.clone();
+        let key = arm.fold_key();
         buckets.entry(key).or_default().push(arm);
     }
     let products = buckets
         .into_iter()
-        .map(|(fragments, arms)| CleavageOr { fragments, arms })
+        .map(|(key, arms)| CleavageOr {
+            fragments: key.fragments,
+            side_sig: key.side,
+            arms,
+        })
         .collect();
     CleavageLayer { products }
+}
+
+/// Fold cleavage arms by [`CleaveFoldKey`] (cross-rule Or bags).
+pub fn fold_cleavage_arms(arms: Vec<CleavageArm>) -> CleavageLayer {
+    fold_layer(arms)
 }
 
 /// Whether this fragment should be BFS-expanded toward the target.
@@ -317,6 +340,7 @@ pub fn cleavage_layer(
             site_orbit: emission.site_orbit,
             site_atoms: emission.site_atoms,
             products,
+            side_sig: c.pattern.cleave_side_sig(),
         });
     }
 
@@ -372,8 +396,19 @@ fn push_pair_arm(
         site_orbit: vec![emission.site],
         site_atoms: pair.plan_site_atoms(),
         products,
+        side_sig: pair_cleave_side_sig(pair),
     });
     Ok(())
+}
+
+fn pair_cleave_side_sig(pair: &PairCandidate) -> CleaveSideSig {
+    let left = pair.left.cleave_side_sig();
+    let right = pair.right.cleave_side_sig();
+    if left == right {
+        left
+    } else {
+        CleaveSideSig::Ungrouped
+    }
 }
 
 /// BFS cleavage product graph from `start`.
@@ -626,6 +661,7 @@ pub fn cleavage_first_seeds(
                     atoms
                 },
                 products,
+                side_sig: c.pattern.cleave_side_sig(),
             };
             for (child, child_diff) in child_rows {
                 expandable.push((child, child_diff, arm.clone()));
@@ -685,6 +721,7 @@ pub fn cleavage_first_seeds(
                 site_orbit: vec![pair.site],
                 site_atoms: pair.plan_site_atoms(),
                 products,
+                side_sig: pair_cleave_side_sig(&pair),
             };
             for (child, child_diff) in child_rows {
                 expandable.push((child, child_diff, arm.clone()));
@@ -897,6 +934,83 @@ mod tests {
         )
         .unwrap();
         assert!(layer.products.is_empty());
+    }
+
+    #[test]
+    fn methyl_dealk_patterns_share_me_hetero_side_group() {
+        let dealk = crate::rules::dealkylation();
+        let n_dealk = crate::rules::n_dealkylation();
+        let azo_set = crate::rules::azo_splitting();
+        let o = dealk
+            .patterns()
+            .into_iter()
+            .find(|p| p.name == "methyl_alcohol")
+            .unwrap();
+        let n = n_dealk
+            .patterns()
+            .into_iter()
+            .find(|p| p.name == "methyl_alcohol")
+            .unwrap();
+        assert_eq!(
+            o.cleave_side_sig(),
+            CleaveSideSig::Directed("Me".into(), "hetero".into())
+        );
+        assert_eq!(o.cleave_side_sig(), n.cleave_side_sig());
+        let azo = azo_set.patterns().into_iter().next().unwrap();
+        assert_eq!(azo.cleave_side_sig(), CleaveSideSig::Swap("azo".into()));
+    }
+
+    #[test]
+    fn fold_pools_distinct_rules_on_same_side_sig_and_fragments() {
+        let fragments = vec!["C=O".into(), "Oc1ccccc1".into()];
+        let sig = CleaveSideSig::Directed("Me".into(), "hetero".into());
+        let arm = |rule: &str, site: usize| CleavageArm {
+            rule: rule.into(),
+            pattern_name: "methyl_alcohol".into(),
+            site,
+            site_orbit: vec![site],
+            site_atoms: vec![site, site + 1],
+            products: fragments.clone(),
+            side_sig: sig.clone(),
+        };
+        let layer = fold_cleavage_arms(vec![arm("Dealkylation", 0), arm("NDealkylation", 3)]);
+        assert_eq!(layer.n_products(), 1);
+        assert_eq!(layer.products[0].n_arms(), 2);
+        assert_eq!(layer.products[0].side_sig, sig);
+        let rules: BTreeSet<_> = layer.products[0]
+            .arms
+            .iter()
+            .map(|a| a.rule.as_str())
+            .collect();
+        assert_eq!(
+            rules,
+            ["Dealkylation", "NDealkylation"].into_iter().collect()
+        );
+    }
+
+    #[test]
+    fn directed_side_sig_does_not_fold_with_ungrouped() {
+        let fragments = vec!["C=O".into(), "Oc1ccccc1".into()];
+        let labeled = CleavageArm {
+            rule: "Dealkylation".into(),
+            pattern_name: "methyl_alcohol".into(),
+            site: 0,
+            site_orbit: vec![0],
+            site_atoms: vec![0, 1],
+            products: fragments.clone(),
+            side_sig: CleaveSideSig::Directed("Me".into(), "hetero".into()),
+        };
+        let bare = CleavageArm {
+            rule: "Other".into(),
+            pattern_name: "x".into(),
+            site: 2,
+            site_orbit: vec![2],
+            site_atoms: vec![2, 3],
+            products: fragments,
+            side_sig: CleaveSideSig::Ungrouped,
+        };
+        let layer = fold_cleavage_arms(vec![labeled, bare]);
+        assert_eq!(layer.n_products(), 2);
     }
 
     #[test]

@@ -582,6 +582,7 @@ pub fn dehydrogenate_hydroquinone(mol: &Molecule) -> Result<Vec<String>, ForestE
             ..Default::default()
         },
         skip_same_rings: false,
+        cleave_side_group: None,
     };
     Ok(pair_metabolize(mol, &[phenol_end])?
         .into_iter()

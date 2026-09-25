@@ -24,6 +24,7 @@ fn smirks_row(
         edit: Edit::Smirks(smirks.into()),
         effect,
         skip_same_rings: false,
+        cleave_side_group: None,
     }
 }
 
@@ -43,6 +44,7 @@ fn endpoint_row(
         edit: Edit::PairEndpoint(pair_edit.into()),
         effect,
         skip_same_rings,
+        cleave_side_group: None,
     }
 }
 
@@ -291,7 +293,8 @@ pub fn dealkylation() -> RuleSet {
                     leave_count: Some(1),
                     partner: None,
                 },
-            ),
+            )
+            .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methyl_carbonyl",
                 "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
@@ -306,7 +309,8 @@ pub fn dealkylation() -> RuleSet {
                     leave_count: Some(1),
                     partner: None,
                 },
-            ),
+            )
+            .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methyl_alcohol",
                 "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
@@ -321,7 +325,8 @@ pub fn dealkylation() -> RuleSet {
                     leave_count: Some(1),
                     partner: None,
                 },
-            ),
+            )
+            .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methylene_carboxylic",
                 "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
@@ -495,7 +500,8 @@ pub fn n_dealkylation() -> RuleSet {
                     leave_count: Some(1),
                     partner: None,
                 },
-            ),
+            )
+            .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methyl_carbonyl",
                 "[#6H3:1][#7:2]>>([*:2].[*:1]=O)",
@@ -510,7 +516,8 @@ pub fn n_dealkylation() -> RuleSet {
                     leave_count: Some(1),
                     partner: None,
                 },
-            ),
+            )
+            .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methyl_alcohol",
                 "[#6H3:1][#7:2]>>([*:2].[*:1]-O)",
@@ -525,7 +532,8 @@ pub fn n_dealkylation() -> RuleSet {
                     leave_count: Some(1),
                     partner: None,
                 },
-            ),
+            )
+            .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methylene_carboxylic",
                 "[#6H2:1][#7:2]>>([*:2].[*:1](=O)O)",
@@ -653,7 +661,8 @@ pub fn azo_splitting() -> RuleSet {
                 leave_count: None,
                 partner: None,
             },
-        )],
+        )
+        .with_cleave_side_group("azo", "azo")],
     )
 }
 

@@ -51,6 +51,14 @@ pub struct PatternInfo {
     pub effect: Effect,
     /// Refuse single-to-double when maps 1 and 2 share the same ring set.
     pub skip_same_rings: bool,
+    /// Cleavage side groups `(leave, keep)` aligned to [`Self::site_map`] order.
+    ///
+    /// Cleavage analogue of pair ``swap_group``, but pooled **across rules** at
+    /// expand (not within one ResonancePair). `None` = ungrouped: fold key is
+    /// fragment CSMI multiset only. Equal non-empty strings = swappable sides
+    /// (normalize order in the key). Shared leave labels (e.g. `"Me"` on O- and
+    /// N-methyl dealks) let distinct rules fold when fragments match.
+    pub cleave_side_group: Option<(String, String)>,
 }
 
 impl PatternInfo {
@@ -68,6 +76,7 @@ impl PatternInfo {
             edit,
             effect,
             skip_same_rings: false,
+            cleave_side_group: None,
         }
     }
 
@@ -88,10 +97,63 @@ impl PatternInfo {
         )
     }
 
+    /// Set cleavage side groups (leave, keep). Equal labels ⇒ swappable.
+    pub fn with_cleave_side_group(
+        mut self,
+        leave: impl Into<String>,
+        keep: impl Into<String>,
+    ) -> Self {
+        self.cleave_side_group = Some((leave.into(), keep.into()));
+        self
+    }
+
     /// First map in [`Self::site_map`], or 1.
     pub fn primary_map(&self) -> u16 {
         self.site_map.first().copied().unwrap_or(1)
     }
+
+    /// Resolved side-group signature for cross-rule cleavage fold.
+    pub fn cleave_side_sig(&self) -> CleaveSideSig {
+        CleaveSideSig::resolve(self.cleave_side_group.as_ref())
+    }
+}
+
+/// How cleavage sides participate in cross-rule Or fold keys.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CleaveSideSig {
+    /// No side-group data — fold by fragment multiset only.
+    Ungrouped,
+    /// Directed leave vs keep (unequal labels).
+    Directed(String, String),
+    /// Swappable sides (equal non-empty labels).
+    Swap(String),
+}
+
+impl CleaveSideSig {
+    pub fn resolve(groups: Option<&(String, String)>) -> Self {
+        match groups {
+            None => Self::Ungrouped,
+            Some((a, b)) if a == b && !a.is_empty() => Self::Swap(a.clone()),
+            Some((a, b)) => Self::Directed(a.clone(), b.clone()),
+        }
+    }
+
+    /// Fold key with sorted fragment CSMIs (both sides first-class).
+    pub fn fold_key(&self, fragments: &[String]) -> CleaveFoldKey {
+        let mut fragments = fragments.to_vec();
+        fragments.sort();
+        CleaveFoldKey {
+            side: self.clone(),
+            fragments,
+        }
+    }
+}
+
+/// Cross-rule cleavage Or bucket: side signature + fragment CSMI multiset.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CleaveFoldKey {
+    pub side: CleaveSideSig,
+    pub fragments: Vec<String>,
 }
 
 /// Bag `filter_sites` sees after unique-edit, before the edit.

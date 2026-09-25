@@ -22,7 +22,7 @@ use crate::candidate::Candidate;
 use crate::canonical_plan::{CanonicalStep, CleavageSide, Deps, Maybe, as_deps};
 use crate::forest_mol::ForestMol;
 use crate::mol::{canon_of, parse_mol};
-use crate::pattern::{PatternInfo, SiteInfo};
+use crate::pattern::{CleaveFoldKey, CleaveSideSig, PatternInfo, SiteInfo};
 use crate::rules::default_ruleset;
 use crate::ruleset::RuleSet;
 
@@ -168,10 +168,25 @@ struct ForestEmission {
     /// Discovery site atoms (Python frozenset site for CleavageSide).
     site_atoms: BTreeSet<usize>,
     cleaves: bool,
+    /// Cross-rule Or fold signature (from [`PatternInfo::cleave_side_group`]).
+    cleave_side_sig: CleaveSideSig,
     pattern_name: String,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
     plan: Vec<CanonicalStep>,
+}
+
+impl ForestEmission {
+    fn product_csmis(&self) -> Vec<String> {
+        self.products
+            .iter()
+            .map(|p| p.csmi().as_ref().to_string())
+            .collect()
+    }
+
+    fn cleave_fold_key(&self) -> CleaveFoldKey {
+        self.cleave_side_sig.fold_key(&self.product_csmis())
+    }
 }
 
 /// Keep fragments that are worth continuing toward ``target``.
@@ -527,6 +542,8 @@ where
             let parent_cost = diff.as_ref().map(|d| d.cost());
             let parent_ha = walk.mol.heavy_atom_count();
             let mut hits_from_here = 0usize;
+            // Cross-rule cleave Or: enqueue each (fold_key, continue_csmi) once.
+            let mut seen_cleave_continues: HashSet<(CleaveFoldKey, String)> = HashSet::new();
 
             let expand = match Expand::new(
                 self.ruleset,
@@ -559,8 +576,20 @@ where
                     diff.as_ref(),
                     Some(&self.target_mol),
                 );
+                let cleave_key = if emission.cleaves && emission.products.len() >= 2 {
+                    Some(emission.cleave_fold_key())
+                } else {
+                    None
+                };
                 for (kept, sides, lifted_diff) in keeps {
                     let kept_csmi = kept.csmi().as_ref().to_string();
+                    if let Some(key) = &cleave_key {
+                        if !seen_cleave_continues.insert((key.clone(), kept_csmi.clone())) {
+                            // Another arm (possibly another rule) already queued
+                            // this continuation for the same Or bag.
+                            continue;
+                        }
+                    }
                     let child_ha = kept.heavy_atom_count();
                     let target_hit = kept_csmi == self.target_csmi;
 
@@ -780,6 +809,7 @@ where
             site_orbit: candidate.orbit.clone(),
             site_atoms: candidate_site_atoms(candidate),
             cleaves: candidate.pattern.effect.cleaves,
+            cleave_side_sig: candidate.pattern.cleave_side_sig(),
             pattern_name: candidate.pattern.name.clone(),
             rule_path: candidate.rule_path.clone(),
             products,
@@ -814,6 +844,15 @@ where
             site_orbit: vec![pair.site],
             site_atoms: pair.plan_site_atoms().into_iter().collect(),
             cleaves: pair.effect.cleaves,
+            cleave_side_sig: {
+                let left = pair.left.cleave_side_sig();
+                let right = pair.right.cleave_side_sig();
+                if left == right {
+                    left
+                } else {
+                    CleaveSideSig::Ungrouped
+                }
+            },
             pattern_name: pair.pattern_name.clone(),
             rule_path: pending.rule_path.clone(),
             products,

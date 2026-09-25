@@ -57,6 +57,7 @@ pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
     CleavageNode, CleavageOr, CleavageSeed, CleavageSeedHop, cleavage_first_seeds,
     cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
+    fold_cleavage_arms,
 };
 pub use find_path::{
     FindPath, FindPathConfig, FindPathFilters, OpenFindPath, PathCounters, PathOutcome, PathStep,
@@ -73,7 +74,9 @@ pub use orbits::{
     unordered_atom_pair_orbit_sizes,
 };
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
-pub use pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
+pub use pattern::{
+    CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind,
+};
 pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,

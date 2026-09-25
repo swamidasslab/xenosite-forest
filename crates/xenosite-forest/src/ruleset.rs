@@ -341,7 +341,8 @@ pub fn o_dealkylation() -> RuleSet {
                 leave_count: None,
                 partner: None,
             },
-        )],
+        )
+        .with_cleave_side_group("Me", "hetero")],
     )
 }
 
