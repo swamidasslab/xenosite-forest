@@ -1,38 +1,56 @@
-//! Print matched-atom n0/n1/n2 shells for small reactant→target cases.
-use xenosite_forest::{format_shell, matched_atoms, parse_mol};
+//! Print molecule shells and alignment deltas (n0/n1/n2) for small cases.
+use xenosite_forest::{
+    AlignedShells, MoleculeShells, aligned_shells, format_shell, molecule_shells, parse_mol,
+};
 
-fn dump(label: &str, reactant_smi: &str, target_smi: &str) {
-    let reactant = parse_mol(reactant_smi).unwrap();
-    let target = parse_mol(target_smi).unwrap();
-    let matched = matched_atoms(&reactant, &target);
-    println!("=== {label}  ({reactant_smi} → {target_smi}) ===");
-    for a in &matched.atoms {
-        let ar = if a.from.aromatic { "ar" } else { "al" };
-        let at = if a.to.aromatic { "ar" } else { "al" };
+fn dump_mol(label: &str, smi: &str, shells: &MoleculeShells) {
+    println!("-- {label} ({smi}) all heavy atoms --");
+    for (&i, env) in &shells.atoms {
+        let ar = if env.aromatic != 0 { "ar" } else { "al" };
         println!(
-            "  r{} → t{}  [{ar}→{at}]  H {}→{}",
-            a.reactant, a.target, a.from.h, a.to.h
+            "  a{i} [{ar}] H={}  n0={}  n1={}  n2={}",
+            env.h,
+            format_shell(&env.n0),
+            format_shell(&env.n1),
+            format_shell(&env.n2)
         );
+    }
+}
+
+fn dump_aligned(label: &str, reactant_smi: &str, target_smi: &str, d: &AlignedShells) {
+    println!(
+        "=== {label}  ({reactant_smi} → {target_smi})  unaligned R={} T={} ===",
+        d.unaligned_reactant, d.unaligned_target
+    );
+    for (&r, env) in &d.atoms {
+        let t = d.alignment[&r];
         println!(
-            "    from  n0={}  n1={}  n2={}",
-            format_shell(&a.from.n0),
-            format_shell(&a.from.n1),
-            format_shell(&a.from.n2)
-        );
-        println!(
-            "    to    n0={}  n1={}  n2={}",
-            format_shell(&a.to.n0),
-            format_shell(&a.to.n1),
-            format_shell(&a.to.n2)
+            "  r{r}→t{t}  aromaticΔ={}  HΔ={:+}  n0={}  n1={}  n2={}",
+            env.aromatic,
+            env.h,
+            format_shell(&env.n0),
+            format_shell(&env.n1),
+            format_shell(&env.n2)
         );
     }
     println!();
 }
 
+fn case(label: &str, reactant_smi: &str, target_smi: &str) {
+    let reactant = parse_mol(reactant_smi).unwrap();
+    let target = parse_mol(target_smi).unwrap();
+    dump_mol("reactant", reactant_smi, &molecule_shells(&reactant));
+    dump_mol("target", target_smi, &molecule_shells(&target));
+    dump_aligned(
+        label,
+        reactant_smi,
+        target_smi,
+        &aligned_shells(&reactant, &target),
+    );
+}
+
 fn main() {
-    dump("ethane→ethene", "CC", "C=C");
-    dump("ethene→ethane", "C=C", "CC");
-    dump("ethane→ethanol", "CC", "CCO");
-    dump("anisole→phenol", "COc1ccccc1", "Oc1ccccc1");
-    dump("hydroquinone→quinone", "Oc1ccc(O)cc1", "O=C1C=CC(=O)C=C1");
+    case("ethane→ethene", "CC", "C=C");
+    case("ethane→ethanol", "CC", "CCO");
+    case("anisole→phenol", "COc1ccccc1", "Oc1ccccc1");
 }

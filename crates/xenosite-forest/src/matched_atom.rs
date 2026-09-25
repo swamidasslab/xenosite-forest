@@ -1,25 +1,32 @@
-//! Per-matched-atom neighborhoods (n0 / n1 / n2) for MCS pairs.
+//! Per-atom neighborhoods (n0 / n1 / n2) for a whole molecule, and the
+//! alignment diff of two such records.
 //!
-//! Schema (not a filter branch): each MCS-matched reactant atom carries its
-//! local heavy-atom bags at graph distance 0, 1, and 2, plus aromaticity and
-//! the center's H count — on **both** the reactant atom and its target image.
-//! No cached loss terms; readers compare `from` vs `to`.
+//! Schema:
+//! - [`MoleculeShells`] — every heavy atom: `aromatic`, center `h`, heavy-element
+//!   bags at distance 0 / 1 / 2 (`n0` / `n1` / `n2`). Counts are non-negative.
+//! - [`align_shells`] — two [`MoleculeShells`] + a reactant→target map → the
+//!   **same atom shape** with **deltas** (target − reactant) on aligned atoms,
+//!   plus how many heavy atoms sit outside the alignment on each side.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::atom_diff::atom_diff;
 use crate::mol::{Molecule, atom_idx, atom_usize};
 
-/// Heavy-atom element → count at one graph distance from a center.
-pub type Shell = BTreeMap<String, usize>;
+/// Element → count (absolute ≥ 0) or signed delta.
+pub type Shell = BTreeMap<String, i32>;
 
-/// Local environment of one atom: aromatic + H + shells n0/n1/n2.
+/// Local environment of one heavy atom: aromatic + H + shells n0/n1/n2.
+///
+/// Absolute shells use `aromatic` ∈ {0,1} and non-negative bag counts.
+/// Aligned deltas use `aromatic` = target−reactant ∈ {−1,0,1} and signed bags.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AtomNeighborhood {
-    pub aromatic: bool,
-    /// Hydrogens on this atom (implicit_hydrogen_count).
+    /// 0/1 on a molecule; target−reactant (−1/0/1) after alignment.
+    pub aromatic: i8,
+    /// Hydrogens on this atom (absolute) or target−reactant after alignment.
     pub h: i32,
-    /// Distance 0 — the center element (count 1).
+    /// Distance 0 — the center element.
     pub n0: Shell,
     /// Distance 1 — heavy neighbors.
     pub n1: Shell,
@@ -27,19 +34,23 @@ pub struct AtomNeighborhood {
     pub n2: Shell,
 }
 
-/// One MCS-matched atom: reactant index, target image, both neighborhoods.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MatchedAtom {
-    pub reactant: usize,
-    pub target: usize,
-    pub from: AtomNeighborhood,
-    pub to: AtomNeighborhood,
+/// Neighborhoods for **all** heavy atoms in one molecule (keyed by atom index).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MoleculeShells {
+    pub atoms: BTreeMap<usize, AtomNeighborhood>,
 }
 
-/// All matched atoms under one (or the primary) MCS placement.
+/// Same atom records as deltas under an alignment, plus unaligned heavy counts.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct MatchedAtoms {
-    pub atoms: Vec<MatchedAtom>,
+pub struct AlignedShells {
+    /// Target − reactant neighborhood for each aligned reactant atom.
+    pub atoms: BTreeMap<usize, AtomNeighborhood>,
+    /// Reactant → target atom index.
+    pub alignment: BTreeMap<usize, usize>,
+    /// Heavy atoms in the reactant with no image.
+    pub unaligned_reactant: usize,
+    /// Heavy atoms in the target with no preimage.
+    pub unaligned_target: usize,
 }
 
 fn hydrogens(mol: &Molecule, idx: usize) -> i32 {
@@ -61,7 +72,6 @@ pub fn atom_neighborhood(mol: &Molecule, center: usize) -> AtomNeighborhood {
     let mut n0 = Shell::new();
     shell_insert(&mut n0, mol, center);
 
-    // BFS distances among heavy atoms only (H not a graph node here).
     let mut dist: HashMap<usize, u8> = HashMap::new();
     let mut q = VecDeque::new();
     dist.insert(center, 0);
@@ -98,7 +108,7 @@ pub fn atom_neighborhood(mol: &Molecule, center: usize) -> AtomNeighborhood {
     }
 
     AtomNeighborhood {
-        aromatic: atom.aromatic,
+        aromatic: i8::from(atom.aromatic),
         h: hydrogens(mol, center),
         n0,
         n1,
@@ -106,44 +116,104 @@ pub fn atom_neighborhood(mol: &Molecule, center: usize) -> AtomNeighborhood {
     }
 }
 
-/// Build [`MatchedAtoms`] from an explicit reactant→target mapping.
-pub fn matched_atoms_from_mapping(
-    reactant: &Molecule,
-    target: &Molecule,
-    mapping: &BTreeMap<usize, usize>,
-) -> MatchedAtoms {
-    let mut atoms: Vec<MatchedAtom> = mapping
-        .iter()
-        .map(|(&r, &t)| MatchedAtom {
-            reactant: r,
-            target: t,
-            from: atom_neighborhood(reactant, r),
-            to: atom_neighborhood(target, t),
-        })
-        .collect();
-    atoms.sort_by_key(|a| a.reactant);
-    MatchedAtoms { atoms }
+fn heavy_indices(mol: &Molecule) -> Vec<usize> {
+    mol.atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .map(|(idx, _)| atom_usize(idx))
+        .collect()
 }
 
-/// MCS then [`matched_atoms_from_mapping`] on the primary placement.
-pub fn matched_atoms(reactant: &Molecule, target: &Molecule) -> MatchedAtoms {
+/// [`AtomNeighborhood`] for every heavy atom in `mol`.
+pub fn molecule_shells(mol: &Molecule) -> MoleculeShells {
+    let mut atoms = BTreeMap::new();
+    for idx in heavy_indices(mol) {
+        atoms.insert(idx, atom_neighborhood(mol, idx));
+    }
+    MoleculeShells { atoms }
+}
+
+fn shell_sub(to: &Shell, from: &Shell) -> Shell {
+    let mut keys: BTreeSet<&str> = to.keys().map(String::as_str).collect();
+    keys.extend(from.keys().map(String::as_str));
+    let mut out = Shell::new();
+    for key in keys {
+        let d = to.get(key).copied().unwrap_or(0) - from.get(key).copied().unwrap_or(0);
+        if d != 0 {
+            out.insert(key.to_string(), d);
+        }
+    }
+    out
+}
+
+fn neighborhood_delta(to: &AtomNeighborhood, from: &AtomNeighborhood) -> AtomNeighborhood {
+    AtomNeighborhood {
+        aromatic: to.aromatic - from.aromatic,
+        h: to.h - from.h,
+        n0: shell_sub(&to.n0, &from.n0),
+        n1: shell_sub(&to.n1, &from.n1),
+        n2: shell_sub(&to.n2, &from.n2),
+    }
+}
+
+/// Align two molecule shells: same per-atom shape, values are deltas, plus
+/// unaligned heavy-atom counts on each side.
+pub fn align_shells(
+    reactant: &MoleculeShells,
+    target: &MoleculeShells,
+    alignment: &BTreeMap<usize, usize>,
+) -> AlignedShells {
+    let mut atoms = BTreeMap::new();
+    for (&r, &t) in alignment {
+        let Some(from) = reactant.atoms.get(&r) else {
+            continue;
+        };
+        let Some(to) = target.atoms.get(&t) else {
+            continue;
+        };
+        atoms.insert(r, neighborhood_delta(to, from));
+    }
+    let mapped_r: HashSet<usize> = alignment.keys().copied().collect();
+    let mapped_t: HashSet<usize> = alignment.values().copied().collect();
+    let unaligned_reactant = reactant
+        .atoms
+        .keys()
+        .filter(|i| !mapped_r.contains(i))
+        .count();
+    let unaligned_target = target
+        .atoms
+        .keys()
+        .filter(|i| !mapped_t.contains(i))
+        .count();
+    AlignedShells {
+        atoms,
+        alignment: alignment.clone(),
+        unaligned_reactant,
+        unaligned_target,
+    }
+}
+
+/// MCS primary map, then [`align_shells`] on full-molecule shells.
+pub fn aligned_shells(reactant: &Molecule, target: &Molecule) -> AlignedShells {
     let diff = atom_diff(reactant, target);
-    matched_atoms_from_mapping(reactant, target, &diff.mapping)
+    align_shells(
+        &molecule_shells(reactant),
+        &molecule_shells(target),
+        &diff.mapping,
+    )
 }
 
-/// Compact shell for display: `C` or `C2,O`.
+/// Compact shell for display: `C`, `C2,O`, or signed `C-1,O+1`.
 pub fn format_shell(shell: &Shell) -> String {
     if shell.is_empty() {
         return "∅".into();
     }
     shell
         .iter()
-        .map(|(el, n)| {
-            if *n == 1 {
-                el.clone()
-            } else {
-                format!("{el}{n}")
-            }
+        .map(|(el, n)| match *n {
+            1 => el.clone(),
+            -1 => format!("{el}-1"),
+            n if n > 1 => format!("{el}{n}"),
+            n => format!("{el}{n:+}"),
         })
         .collect::<Vec<_>>()
         .join(",")
@@ -155,37 +225,54 @@ mod tests {
     use crate::mol::parse_mol;
 
     #[test]
-    fn ethane_to_ethene_shells() {
+    fn molecule_shells_covers_all_heavy_atoms() {
+        let ethanol = parse_mol("CCO").unwrap();
+        let shells = molecule_shells(&ethanol);
+        assert_eq!(shells.atoms.len(), 3);
+        assert!(shells.atoms.contains_key(&0));
+        assert!(shells.atoms.contains_key(&1));
+        assert!(shells.atoms.contains_key(&2));
+    }
+
+    #[test]
+    fn ethane_to_ethene_align_is_h_delta_only() {
         let a = parse_mol("CC").unwrap();
         let b = parse_mol("C=C").unwrap();
-        let m = matched_atoms(&a, &b);
-        assert_eq!(m.atoms.len(), 2);
-        for atom in &m.atoms {
-            assert_eq!(format_shell(&atom.from.n0), "C");
-            assert_eq!(format_shell(&atom.from.n1), "C");
-            assert_eq!(format_shell(&atom.from.n2), "∅");
-            assert_eq!(atom.from.h, 3);
-            assert_eq!(atom.to.h, 2);
-            assert!(!atom.from.aromatic);
-            assert!(!atom.to.aromatic);
+        let d = aligned_shells(&a, &b);
+        assert_eq!(d.unaligned_reactant, 0);
+        assert_eq!(d.unaligned_target, 0);
+        assert_eq!(d.atoms.len(), 2);
+        for env in d.atoms.values() {
+            assert_eq!(env.h, -1);
+            assert_eq!(env.aromatic, 0);
+            assert!(env.n0.is_empty());
+            assert!(env.n1.is_empty());
+            assert!(env.n2.is_empty());
         }
     }
 
     #[test]
-    fn anisole_methyl_cleaved_not_in_matched() {
+    fn ethane_to_ethanol_one_unaligned_oxygen() {
+        let a = parse_mol("CC").unwrap();
+        let b = parse_mol("CCO").unwrap();
+        let d = aligned_shells(&a, &b);
+        assert_eq!(d.unaligned_reactant, 0);
+        assert_eq!(d.unaligned_target, 1);
+        assert_eq!(d.atoms.len(), 2);
+    }
+
+    #[test]
+    fn anisole_to_phenol_unaligned_methyl() {
         let a = parse_mol("COc1ccccc1").unwrap();
         let b = parse_mol("Oc1ccccc1").unwrap();
-        let m = matched_atoms(&a, &b);
-        // Methyl carbon is unmapped (cleaved); matched set is O + ring.
-        assert!(
-            m.atoms
-                .iter()
-                .all(|x| x.from.n0.contains_key("C") || x.from.n0.contains_key("O"))
-        );
-        assert!(
-            m.atoms
-                .iter()
-                .any(|x| x.from.n0.contains_key("O") && x.from.h == 0 && x.to.h == 1)
-        );
+        let d = aligned_shells(&a, &b);
+        assert_eq!(d.unaligned_reactant, 1);
+        assert_eq!(d.unaligned_target, 0);
+        let o = d
+            .atoms
+            .values()
+            .find(|e| e.h == 1)
+            .expect("phenol O gains H");
+        assert_eq!(o.h, 1);
     }
 }

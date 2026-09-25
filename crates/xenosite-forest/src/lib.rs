@@ -84,8 +84,8 @@ pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use matched_atom::{
-    AtomNeighborhood, MatchedAtom, MatchedAtoms, Shell, atom_neighborhood, format_shell,
-    matched_atoms, matched_atoms_from_mapping,
+    AlignedShells, AtomNeighborhood, MoleculeShells, Shell, align_shells, aligned_shells,
+    atom_neighborhood, format_shell, molecule_shells,
 };
 pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
