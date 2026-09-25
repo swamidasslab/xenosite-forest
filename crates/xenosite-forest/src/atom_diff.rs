@@ -537,27 +537,19 @@ pub fn extend_mapping_where_possible(
     extend_mapping_for_added(child, target, mapping, &pending);
 }
 
-/// Best [`AtomDiff`] from lifted seed maps under product automorphism.
+/// Best [`AtomDiff`] from lifted seed maps: **extend**, reorder under product
+/// Aut, then **MCS rematch** when the lift is still worse than a fresh MCS.
 ///
 /// 1. Extend each seed where the mapping gap is placeable.
-/// 2. Apply product generators (ForestMol-cached) to reorder the alignment.
-/// 3. Extend again after each reordering.
-/// 4. Keep minimum-cost maps.
-///
-/// **Stop (guarantees a best map among seeds' Aut-orbit):**
-/// - `field_cost <= goal_cost` when `goal_cost` is set — typically
-///   [`residual_cost_after_site_cast`] (effect cast onto the parent diff at
-///   the site). A lower bound on achievable cost if the edit succeeds; hitting
-///   it means a best-for-this-hop map is in hand (no need for the rest of the
-///   Aut-orbit). `goal_cost == 0` is the global lower bound.
-/// - Otherwise when no new mapping appears under any generator (orbit of
-///   the seeds closed). Seen-set prevents infinite loops.
+/// 2. Apply product generators (ForestMol-cached); extend after each reorder.
+/// 3. Keep minimum-cost maps. Stop at cost `0` or when the Aut orbit closes.
+/// 4. If the best lift still costs more than a fresh MCS, return the MCS
+///    (caller counts `mcs_lift_rematch`). Cost-0 lifts skip MCS entirely.
 fn best_diff_from_lifted_maps(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
     seed_maps: Vec<BTreeMap<usize, usize>>,
-    goal_cost: Option<usize>,
-) -> Option<AtomDiff> {
+) -> Option<(AtomDiff, bool)> {
     if seed_maps.is_empty() {
         return None;
     }
@@ -579,7 +571,6 @@ fn best_diff_from_lifted_maps(
         return None;
     }
 
-    let goal = goal_cost.unwrap_or(0);
     let mut best_cost = usize::MAX;
     let mut best_maps: Vec<BTreeMap<usize, usize>> = Vec::new();
 
@@ -592,8 +583,8 @@ fn best_diff_from_lifted_maps(
         } else if cost == best_cost {
             best_maps.push(mapping.clone());
         }
-        // Hit the site-cast residual (or 0) → a best map for this hop.
-        if best_cost <= goal {
+        // Cost 0 cannot improve — skip the rest of the Aut orbit and MCS.
+        if best_cost == 0 {
             break;
         }
         if gens.is_empty() {
@@ -609,28 +600,30 @@ fn best_diff_from_lifted_maps(
                 queue.push_back(next);
             }
         }
-        // Loop ends when the queue drains: no new orbits / mappings.
     }
 
     if best_maps.is_empty() {
-        None
-    } else {
-        Some(atom_diff_from_mappings(mol, target, best_maps))
+        return None;
     }
+    let lifted = atom_diff_from_mappings(mol, target, best_maps);
+    if lifted.cost() == 0 {
+        return Some((lifted, false));
+    }
+    // Lift+extend+Aut is not always MCS-complete; rematch for correctness.
+    let mcs = atom_diff(mol, target);
+    if mcs.cost() < lifted.cost() {
+        return Some((mcs, true));
+    }
+    Some((lifted, false))
 }
 
-/// Lower bound on child [`AtomDiff::cost`] after this effect succeeds at `site`.
+/// Lower bound sketch on child [`AtomDiff::cost`] after this effect at `site`.
 ///
 /// Casts the effect onto the parent diff: clear cost contributions the effect
 /// is declared to fix on `site_atoms ∪ path_ends` (oxygen need / n_extra,
 /// cleavage bond + leave heavies, dearomatization, H delta). Same weights as
-/// [`AtomDiff::field_cost`].
-///
-/// **Safe for early stop when under-bound (over-credit):** residual ≤ true
-/// best ⇒ hitting it guarantees a best-for-this-hop map. Over-clearing site
-/// fields is preferred; under-clearing would inflate the residual and risk
-/// stopping on a suboptimal Aut member. When the cast cannot prove a bound,
-/// callers may pass `None` and fall back to cost `0` / orbit closure.
+/// [`AtomDiff::field_cost`]. Useful for tests / filters — not used to freeze
+/// generator-lift search (lift always extends; MCS rematch covers misses).
 pub fn residual_cost_after_site_cast(
     parent: &AtomDiff,
     effect: &Effect,
@@ -675,17 +668,14 @@ pub fn residual_cost_after_site_cast(
             .unwrap_or(0);
         if leave_heavies > 0 {
             let mut drop = leave_heavies;
-            cleaved = cleaved
-                .into_iter()
-                .filter(|_| {
-                    if drop > 0 {
-                        drop -= 1;
-                        false
-                    } else {
-                        true
-                    }
-                })
-                .collect();
+            cleaved.retain(|_| {
+                if drop > 0 {
+                    drop -= 1;
+                    false
+                } else {
+                    true
+                }
+            });
         }
     }
     if effect.dearomatizes {
@@ -878,32 +868,27 @@ fn place_added_atom(
     Some(t_cand)
 }
 
-/// Child [`AtomDiff`] via tag-lift + product generators when possible.
+/// Child [`AtomDiff`] via tag-lift + extend + product generators when possible.
 ///
-/// Same heavy-tag set (no shrink): lift parent MCS, extend where the mapping
-/// gap is placeable, reorder under product Aut generators, pick best cost.
-/// Add/remove heavies are allowed — generators + extend replace full MCS.
-///
-/// `goal_cost`: early-stop bound from [`residual_cost_after_site_cast`] (or
-/// `0`). Cleavage shrinks: use [`try_lift_cleaved_child`].
-///
-/// Never runs MCS itself.
+/// Same heavy-tag set (no shrink). Rematches MCS when the lift is still
+/// worse than a fresh MCS (counted via [`try_atom_diff_for_child_tracked`]).
+/// Cleavage shrinks: use [`try_lift_cleaved_child`].
 pub fn try_atom_diff_for_child(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
 ) -> Option<AtomDiff> {
-    try_atom_diff_for_child_goal(parent, parent_diff, child, target, None)
+    try_atom_diff_for_child_tracked(parent, parent_diff, child, target, None)
 }
 
-/// Like [`try_atom_diff_for_child`], with a site-cast residual early-stop goal.
-pub fn try_atom_diff_for_child_goal(
+/// Like [`try_atom_diff_for_child`], optionally counting MCS rematches.
+pub fn try_atom_diff_for_child_tracked(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
-    goal_cost: Option<usize>,
+    mut mcs_rematch: Option<&mut usize>,
 ) -> Option<AtomDiff> {
     // Any heavy parent atom missing on the child → shrink; closer cost from a
     // non-cleavage lift is unreliable. Cleavage expand uses
@@ -923,7 +908,36 @@ pub fn try_atom_diff_for_child_goal(
         parent_diff.mappings.clone()
     };
     let lifted = lift_mappings(parent, child, &parent_maps)?;
-    best_diff_from_lifted_maps(child, target, lifted, goal_cost)
+    let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
+    if used_mcs {
+        if let Some(c) = mcs_rematch.as_mut() {
+            **c += 1;
+        }
+    }
+    Some(diff)
+}
+
+/// Deprecated alias: `goal_cost` is ignored (MCS rematch covers correctness).
+pub fn try_atom_diff_for_child_goal(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+    _goal_cost: Option<usize>,
+) -> Option<AtomDiff> {
+    try_atom_diff_for_child(parent, parent_diff, child, target)
+}
+
+/// Deprecated alias for [`try_atom_diff_for_child_tracked`].
+pub fn try_atom_diff_for_child_goal_tracked(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+    _goal_cost: Option<usize>,
+    mcs_rematch: Option<&mut usize>,
+) -> Option<AtomDiff> {
+    try_atom_diff_for_child_tracked(parent, parent_diff, child, target, mcs_rematch)
 }
 
 /// Diff when a child shares tags but carries none of the parent MCS image
@@ -949,30 +963,28 @@ fn unmapped_child_diff(child: &Molecule, target: &Molecule) -> AtomDiff {
 /// Tag-lift after a cleavage shrink (and optional local adds on a fragment).
 ///
 /// Removed atoms drop out of the parent MCS map via [`lift_mappings`]; product
-/// generators + [`extend_mapping_where_possible`] pick the best reordering
-/// (same stop rules as [`best_diff_from_lifted_maps`]).
+/// generators + [`extend_mapping_where_possible`] pick a good reordering;
+/// MCS rematch covers cases Aut missed.
 ///
 /// When the child shares tags but inherits **no** mapped atoms (discarded
 /// cleavage side vs an MCS that lives on the other fragment), returns a
-/// high-cost unmapped diff — not `None` — so callers do not rematch MCS.
-///
-/// `None` only when tags are not shared (true MCS fallback).
+/// high-cost unmapped shell (no MCS). `None` only when tags are not shared.
 pub fn try_lift_cleaved_child(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
 ) -> Option<AtomDiff> {
-    try_lift_cleaved_child_goal(parent, parent_diff, child, target, None)
+    try_lift_cleaved_child_tracked(parent, parent_diff, child, target, None)
 }
 
-/// Like [`try_lift_cleaved_child`], with a site-cast residual early-stop goal.
-pub fn try_lift_cleaved_child_goal(
+/// Like [`try_lift_cleaved_child`], optionally counting MCS rematches.
+pub fn try_lift_cleaved_child_tracked(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
-    goal_cost: Option<usize>,
+    mut mcs_rematch: Option<&mut usize>,
 ) -> Option<AtomDiff> {
     if !parent.shares_tag_gen(child) {
         return None;
@@ -983,18 +995,46 @@ pub fn try_lift_cleaved_child_goal(
         parent_diff.mappings.clone()
     };
     match lift_mappings(parent, child, &parent_maps) {
-        Some(lifted) => best_diff_from_lifted_maps(child, target, lifted, goal_cost),
+        Some(lifted) => {
+            let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
+            if used_mcs {
+                if let Some(c) = mcs_rematch.as_mut() {
+                    **c += 1;
+                }
+            }
+            Some(diff)
+        }
         None => Some(unmapped_child_diff(child.mol(), target)),
     }
+}
+
+/// Deprecated alias: `goal_cost` is ignored.
+pub fn try_lift_cleaved_child_goal(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+    _goal_cost: Option<usize>,
+) -> Option<AtomDiff> {
+    try_lift_cleaved_child(parent, parent_diff, child, target)
+}
+
+/// Deprecated alias for [`try_lift_cleaved_child_tracked`].
+pub fn try_lift_cleaved_child_goal_tracked(
+    parent: &crate::forest_mol::ForestMol,
+    parent_diff: &AtomDiff,
+    child: &crate::forest_mol::ForestMol,
+    target: &Molecule,
+    _goal_cost: Option<usize>,
+    mcs_rematch: Option<&mut usize>,
+) -> Option<AtomDiff> {
+    try_lift_cleaved_child_tracked(parent, parent_diff, child, target, mcs_rematch)
 }
 
 /// Child diff after cleavage: prefer generator-lifted maps; full MCS only when
 /// lift is impossible (`mcs_fallback` incremented when provided).
 ///
 /// Callers apply the expand gate (`cost < parent` / target hit) on the result.
-/// Do not rematch MCS merely because the lifted cost is not yet cheaper — that
-/// was the old expensive fallback; generators + extend should already pick the
-/// best Aut-reordering of the tag-lifted map.
 pub fn atom_diff_after_cleavage(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
@@ -1004,17 +1044,20 @@ pub fn atom_diff_after_cleavage(
     atom_diff_after_cleavage_tracked(parent, parent_diff, child, target, None, None)
 }
 
-/// Like [`atom_diff_after_cleavage`], with optional MCS-fallback counter and
-/// site-cast early-stop goal.
+/// Like [`atom_diff_after_cleavage`], with optional counters.
+///
+/// - `mcs_fallback`: lift impossible (no shared tags).
+/// - `mcs_rematch`: lift left cleaved heavies; cheaper MCS replaced it.
 pub fn atom_diff_after_cleavage_tracked(
     parent: &crate::forest_mol::ForestMol,
     parent_diff: &AtomDiff,
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
     mut mcs_fallback: Option<&mut usize>,
-    goal_cost: Option<usize>,
+    mcs_rematch: Option<&mut usize>,
 ) -> AtomDiff {
-    if let Some(lifted) = try_lift_cleaved_child_goal(parent, parent_diff, child, target, goal_cost)
+    if let Some(lifted) =
+        try_lift_cleaved_child_tracked(parent, parent_diff, child, target, mcs_rematch)
     {
         return lifted;
     }

@@ -53,10 +53,13 @@ pub struct PathCounters {
     pub formula_delta_mismatch: usize,
     /// Structured mismatch details (Python ``formula_delta_mismatches``).
     pub formula_delta_mismatches: Vec<crate::formula_check::FormulaDeltaMismatch>,
-    /// Child diff fell back to a fresh MCS rematch instead of tag-lift +
-    /// product generators. Expect zero once generator lift covers add/remove
-    /// / cleavage reorderings.
+    /// Child diff fell back to a fresh MCS because tag-lift was impossible
+    /// (no shared tags). Expect zero.
     pub mcs_lift_fallback: usize,
+    /// Generator Aut orbit left cleaved heavies; a cheaper full MCS replaced
+    /// the lift. Counted for derisk — drive toward zero by improving extend /
+    /// seeds; not a Drop assert yet.
+    pub mcs_lift_rematch: usize,
     /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
     #[cfg(test)]
     pub allow_formula_delta_mismatch: bool,
@@ -399,10 +402,6 @@ struct ForestEmission {
     site_progress: i32,
     /// Parent end atoms for post-application DH neighbor match (None if not DH).
     dh_ends: Option<(usize, usize)>,
-    /// Residual AtomDiff cost after casting this hop's effect onto the parent
-    /// diff at the site ([`crate::atom_diff::residual_cost_after_site_cast`]).
-    /// Generator-lift early-stop goal.
-    lift_goal_cost: Option<usize>,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
     plan: Vec<CanonicalStep>,
@@ -434,8 +433,7 @@ fn keep_fragments(
     target_ha: usize,
     parent_diff: Option<&crate::atom_diff::AtomDiff>,
     target_mol: Option<&crate::Molecule>,
-    mcs_lift_fallback: &mut usize,
-    lift_goal_cost: Option<usize>,
+    mcs: &mut LiftMcsCounters<'_>,
 ) -> Vec<(ForestMol, Vec<String>, Option<crate::atom_diff::AtomDiff>)> {
     if products.is_empty() {
         return Vec::new();
@@ -454,8 +452,8 @@ fn keep_fragments(
                     pdiff,
                     child,
                     tmol,
-                    Some(mcs_lift_fallback),
-                    lift_goal_cost,
+                    Some(&mut mcs.fallback),
+                    Some(&mut mcs.rematch),
                 );
                 if is_hit || child_diff.cost() < pdiff.cost() {
                     let mut sides = Vec::new();
@@ -484,8 +482,8 @@ fn keep_fragments(
                         pdiff,
                         &mol,
                         tmol,
-                        Some(mcs_lift_fallback),
-                        lift_goal_cost,
+                        Some(&mut mcs.fallback),
+                        Some(&mut mcs.rematch),
                     ))
                 }
                 _ => None,
@@ -493,6 +491,12 @@ fn keep_fragments(
             (mol, sides, child_diff)
         })
         .collect()
+}
+
+/// Counters for tag-lift vs MCS on cleavage / child diffs.
+struct LiftMcsCounters<'a> {
+    fallback: &'a mut usize,
+    rematch: &'a mut usize,
 }
 
 /// Keep the fragment closest to ``target``. Prefer exact CSMI hit.
@@ -952,6 +956,7 @@ where
             let mut unstable_csmi = 0usize;
             // Local: Expand already borrows `self.counters` for the loop.
             let mut mcs_lift_fb = 0usize;
+            let mut mcs_lift_rm = 0usize;
 
             let expand = match Expand::new(
                 self.counters,
@@ -989,8 +994,10 @@ where
                     self.target_ha,
                     diff.as_ref(),
                     Some(&self.target_mol),
-                    &mut mcs_lift_fb,
-                    emission.lift_goal_cost,
+                    &mut LiftMcsCounters {
+                        fallback: &mut mcs_lift_fb,
+                        rematch: &mut mcs_lift_rm,
+                    },
                 );
                 let cleave_key = if emission.cleaves && emission.products.len() >= 2 {
                     Some(emission.cleave_fold_key())
@@ -1012,12 +1019,12 @@ where
                     let mut child_diff = if use_atom_diff {
                         lifted_diff.or_else(|| {
                             diff.as_ref().and_then(|parent_d| {
-                                crate::atom_diff::try_atom_diff_for_child_goal(
+                                crate::atom_diff::try_atom_diff_for_child_tracked(
                                     &walk.mol,
                                     parent_d,
                                     &kept,
                                     &self.target_mol,
-                                    emission.lift_goal_cost,
+                                    Some(&mut mcs_lift_rm),
                                 )
                             })
                         })
@@ -1128,6 +1135,7 @@ where
             self.counters.deprioritized_known_site += deprio_known;
             self.counters.unstable_csmi_key += unstable_csmi;
             self.counters.mcs_lift_fallback += mcs_lift_fb;
+            self.counters.mcs_lift_rematch += mcs_lift_rm;
         }
 
         self.done = true;
@@ -1339,14 +1347,6 @@ where
                 )
             })
             .unwrap_or(0);
-        let lift_goal_cost = self.diff.map(|d| {
-            crate::atom_diff::residual_cost_after_site_cast(
-                d,
-                &candidate.pattern.effect,
-                &atoms,
-                &[],
-            )
-        });
         Ok(Some(ForestEmission {
             site: candidate.site,
             site_orbit: candidate.orbit.clone(),
@@ -1360,7 +1360,6 @@ where
             search_bias: candidate.pattern.search_bias,
             site_progress,
             dh_ends: None,
-            lift_goal_cost,
             rule_path: candidate.rule_path.clone(),
             products,
             plan: candidate.identity_plan_with_gens(
@@ -1402,10 +1401,6 @@ where
             .diff
             .map(|d| crate::atom_diff::pair_site_h_progress(pair, d, mol, self.target))
             .unwrap_or(0);
-        let (p0, p1) = pair.path_ends();
-        let lift_goal_cost = self.diff.map(|d| {
-            crate::atom_diff::residual_cost_after_site_cast(d, &pair.effect, &site_atoms, &[p0, p1])
-        });
         let dh_ends = if crate::atom_diff::is_dehydrogenation_effect(&pair.effect) {
             pair.end_atoms()
         } else {
@@ -1432,7 +1427,6 @@ where
             search_bias: pair.left.search_bias.min(pair.right.search_bias),
             site_progress,
             dh_ends,
-            lift_goal_cost,
             rule_path: pending.rule_path.clone(),
             products,
             plan,
@@ -1796,8 +1790,10 @@ where
                     self.target_ha,
                     None,
                     None,
-                    &mut self.counters.mcs_lift_fallback,
-                    None,
+                    &mut LiftMcsCounters {
+                        fallback: &mut self.counters.mcs_lift_fallback,
+                        rematch: &mut self.counters.mcs_lift_rematch,
+                    },
                 );
                 for (kept, sides, _) in keeps {
                     let kept_csmi = kept.csmi().as_ref().to_string();
