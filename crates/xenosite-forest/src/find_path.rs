@@ -161,7 +161,7 @@ struct OxygenSite {
 }
 
 /// Heap entry: hits first, then novel sites vs yielded plans, then pattern
-/// [`PatternInfo::search_bias`], then LIFO (most recently queued first — DFS).
+/// [`PatternInfo::search_bias`], then **FIFO** enqueue order (reduced DFS bias).
 /// BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
@@ -198,8 +198,8 @@ impl Ord for HeapItem {
             .cmp(&other.target_hit)
             .then_with(|| self.novel_site.cmp(&other.novel_site))
             .then_with(|| self.search_bias.cmp(&other.search_bias))
-            // Higher seq = enqueued later = pop first (DFS / stack bias).
-            .then_with(|| self.seq.cmp(&other.seq))
+            // Lower seq = enqueued earlier = pop first (FIFO; DFS LIFO reduced).
+            .then_with(|| other.seq.cmp(&self.seq))
     }
 }
 
@@ -1017,10 +1017,20 @@ where
             deferred.sort_by_key(|cand| {
                 let novel =
                     hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
-                let (a, b, cname, pname) = crate::atom_diff::candidate_order_key(cand, d);
+                let (a, b, cname, h_prog, pname) =
+                    crate::atom_diff::candidate_order_key_on(cand, d, Some(mol));
                 // Novel pattern+site before those already in yielded plans.
                 // Higher search_bias first (negated so sort ascending prefers high).
-                (a, b, cname, !novel as u8, -cand.pattern.search_bias, pname)
+                // Then site H-progress (already negated in key: applying helps).
+                (
+                    a,
+                    b,
+                    cname,
+                    !novel as u8,
+                    -cand.pattern.search_bias,
+                    h_prog,
+                    pname,
+                )
             });
         } else if !known_sites.is_empty() {
             deferred.sort_by_key(|cand| {
@@ -1565,8 +1575,8 @@ mod tests {
     use crate::ruleset::o_dealkylation;
 
     #[test]
-    fn heap_prefers_most_recently_queued_among_peers() {
-        // DFS bias: larger seq pops before smaller seq (same hit/novel/bias tier).
+    fn heap_prefers_earlier_queued_among_peers() {
+        // FIFO (DFS bias reduced): smaller seq pops before larger seq.
         let older = HeapItem {
             target_hit: false,
             novel_site: true,
@@ -1594,8 +1604,8 @@ mod tests {
         let mut heap = BinaryHeap::new();
         heap.push(older);
         heap.push(newer);
-        assert_eq!(heap.pop().unwrap().seq, 2);
         assert_eq!(heap.pop().unwrap().seq, 1);
+        assert_eq!(heap.pop().unwrap().seq, 2);
     }
 
     #[test]

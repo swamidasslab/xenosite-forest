@@ -872,9 +872,16 @@ fn scope_could_help(
     atoms: &[usize],
     path_ends: &[usize],
     diff: &AtomDiff,
+    mol: Option<&Molecule>,
 ) -> bool {
     let mut scope: HashSet<usize> = atoms.iter().copied().collect();
     scope.extend(path_ends.iter().copied());
+    // Carbonyl / imine reduction sites the heteroatom; H change is on the
+    // partner heavy atom. Include double-bond neighbors so adds-H sees whether
+    // applying helps (undo would not).
+    if let Some(m) = mol {
+        extend_h_edit_partners(m, &mut scope);
+    }
     if effect.dearomatizes && !scope.iter().any(|a| diff.loses_aromaticity.contains(a)) {
         return false;
     }
@@ -887,6 +894,8 @@ fn scope_could_help(
             return false;
         }
     }
+    // Adding H helps only where the target needs more H. Then undoing (remove H)
+    // would move away from the target — so it would not help.
     if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
         let gains = scope
             .iter()
@@ -896,6 +905,26 @@ fn scope_could_help(
         }
     }
     true
+}
+
+/// Double-bond partners of O/N in `scope` (carbonyl / imine reduction).
+fn extend_h_edit_partners(mol: &Molecule, scope: &mut HashSet<usize>) {
+    let seeds: Vec<usize> = scope.iter().copied().collect();
+    for a in seeds {
+        let z = mol.atom(atom_idx(a)).element.atomic_number();
+        if z != 7 && z != 8 {
+            continue;
+        }
+        for (nbr, bidx) in mol.neighbors(atom_idx(a)) {
+            let order = mol.bond(bidx).order;
+            if matches!(
+                order,
+                chematic::core::BondOrder::Double | chematic::core::BondOrder::Aromatic
+            ) {
+                scope.insert(atom_usize(nbr));
+            }
+        }
+    }
 }
 
 /// Full site gate with live mol (leave_count / methide partner).
@@ -955,7 +984,7 @@ pub fn candidate_could_help_on(
         }
     }
 
-    scope_could_help(effect, &atoms, &[], diff)
+    scope_could_help(effect, &atoms, &[], diff, mol)
 }
 
 /// Pair-site gate (Python `_site_could_help` when ``"ends"`` is on the info).
@@ -1001,11 +1030,26 @@ pub fn pair_could_help(
     }
 
     let (p0, p1) = pair.path_ends();
-    scope_could_help(effect, &atoms, &[p0, p1], diff)
+    scope_could_help(effect, &atoms, &[p0, p1], diff, Some(mol))
 }
 
 /// Sort key for expand: cleavage / dearom / oxygen first (Python `order_key`).
+///
+/// Fourth field is negated site H-progress (higher progress sorts earlier): adds-H
+/// at atoms that need H, removes-H where the target loses H. Carbonyl / imine
+/// reduction partners are included when `mol` is given so OxygenReduction's
+/// O-only site still scores the carbon that gains H.
 pub fn candidate_order_key(candidate: &Candidate, diff: &AtomDiff) -> (u8, u8, u8, String) {
+    let (a, b, c, _progress, name) = candidate_order_key_on(candidate, diff, None);
+    (a, b, c, name)
+}
+
+/// Same as [`candidate_order_key`], with live mol for H-edit partners / progress.
+pub fn candidate_order_key_on(
+    candidate: &Candidate,
+    diff: &AtomDiff,
+    mol: Option<&Molecule>,
+) -> (u8, u8, u8, i32, String) {
     let effect = &candidate.pattern.effect;
     let want_cleave = diff.target_smaller() || diff.has_cleavage();
     let want_dear = !diff.loses_aromaticity.is_empty();
@@ -1016,7 +1060,53 @@ pub fn candidate_order_key(candidate: &Candidate, diff: &AtomDiff) -> (u8, u8, u
     let primary = if want_cleave { cleave } else { 0 };
     let secondary = if want_dear { dear } else { 0 };
     let tertiary = if want_oxy { oxy } else { 0 };
-    (primary, secondary, tertiary, candidate.pattern.name.clone())
+    let atoms = site_atoms(candidate);
+    let progress = site_h_progress(effect, &atoms, &[], diff, mol);
+    // Negate so ascending sort prefers higher progress (apply helps more).
+    (
+        primary,
+        secondary,
+        tertiary,
+        -progress,
+        candidate.pattern.name.clone(),
+    )
+}
+
+/// How much applying this H-direction effect helps at `atoms` ∪ path ends
+/// (plus carbonyl partners). Positive ⇒ applying moves toward the target;
+/// undo would move away (and would not pass [`scope_could_help`]).
+fn site_h_progress(
+    effect: &Effect,
+    atoms: &[usize],
+    path_ends: &[usize],
+    diff: &AtomDiff,
+    mol: Option<&Molecule>,
+) -> i32 {
+    if effect.cleaves || effect_adds_oxygen(effect) {
+        return 0;
+    }
+    let mut scope: HashSet<usize> = atoms.iter().copied().collect();
+    scope.extend(path_ends.iter().copied());
+    if let Some(m) = mol {
+        extend_h_edit_partners(m, &mut scope);
+    }
+    let mut progress = 0i32;
+    if effect_adds_h(effect) {
+        for a in &scope {
+            let d = diff.h_delta.get(a).copied().unwrap_or(0);
+            if d > 0 {
+                progress += d;
+            }
+        }
+    } else if effect_removes_h(effect) {
+        for a in &scope {
+            let d = diff.h_delta.get(a).copied().unwrap_or(0);
+            if d < 0 {
+                progress += -d;
+            }
+        }
+    }
+    progress
 }
 
 /// Keep predicate for [`crate::find_path::find_path_with`] from an [`AtomDiff`].
@@ -1185,6 +1275,91 @@ mod tests {
             ..Effect::default()
         };
         assert!(pattern_could_help(&cleave, &diff));
+    }
+
+    #[test]
+    fn oxygen_reduction_carbonyl_partners_allow_toward_alcohol() {
+        // OR sites the heteroatom (map 1); H change is also on the partner
+        // carbon. Partners must be in scope so adds-H / progress see the full
+        // helpful delta (apply helps; undo toward the carbonyl would not).
+        use crate::rules::oxygen_reduction;
+        let reactant = parse_mol("CC=O").unwrap();
+        let target = parse_mol("CCO").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        assert!(diff.h_gain(), "{diff:?}");
+        let set = oxygen_reduction();
+        let cands = set
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let carbonyl: Vec<_> = cands
+            .iter()
+            .filter(|c| c.pattern.name == "carbonyl")
+            .collect();
+        assert!(!carbonyl.is_empty(), "expected carbonyl OR candidates");
+        assert!(
+            carbonyl.iter().any(|c| candidate_could_help_on(
+                c,
+                &diff,
+                Some(&reactant),
+                Some(&target)
+            )),
+            "OR carbonyl should help CC=O→CCO when partners expand scope"
+        );
+    }
+
+    #[test]
+    fn oxygen_reduction_refused_when_undoing_toward_carbonyl() {
+        // Still a carbonyl match, but the target wants fewer H on that carbon
+        // (oxidation to acid) — adding H would undo progress.
+        use crate::rules::oxygen_reduction;
+        let reactant = parse_mol("CC=O").unwrap();
+        let target = parse_mol("CC(=O)O").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        assert!(diff.h_loss() || !diff.h_gain(), "{diff:?}");
+        let set = oxygen_reduction();
+        let cands = set
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let carbonyl: Vec<_> = cands
+            .iter()
+            .filter(|c| c.pattern.name == "carbonyl")
+            .collect();
+        assert!(
+            !carbonyl.is_empty(),
+            "need a carbonyl that OR can still match while undoing"
+        );
+        for c in &carbonyl {
+            assert!(
+                !candidate_could_help_on(c, &diff, Some(&reactant), Some(&target)),
+                "OR toward acid (H loss at carbonyl C) must not help"
+            );
+        }
+    }
+
+    #[test]
+    fn order_key_h_progress_prefers_adds_h_toward_alcohol() {
+        use crate::rules::oxygen_reduction;
+        let reactant = parse_mol("CC=O").unwrap();
+        let target = parse_mol("CCO").unwrap();
+        let diff = atom_diff(&reactant, &target);
+        let set = oxygen_reduction();
+        let cands = set
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let c = cands
+            .iter()
+            .find(|c| c.pattern.name == "carbonyl")
+            .expect("carbonyl");
+        let (_a, _b, _c, prog_no_mol, _) = candidate_order_key_on(c, &diff, None);
+        let (_a, _b, _c, prog_with, _) = candidate_order_key_on(c, &diff, Some(&reactant));
+        // Negated progress: with partners, progress > 0 ⇒ key more negative.
+        assert!(
+            prog_with < prog_no_mol,
+            "partners should raise H-progress (lower negated key); with={prog_with} without={prog_no_mol}"
+        );
     }
 
     #[test]
