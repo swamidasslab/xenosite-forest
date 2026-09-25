@@ -67,7 +67,10 @@ pub use forest::{Formula, Structure, molecule_formula};
 pub use forest_mol::ForestMol;
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
-pub use mol::{ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks};
+pub use mol::{
+    ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
+    stable_csmi_key_of,
+};
 pub use orbits::{
     AtomBondGenerator, atom_bond_generators, atom_orbit, atom_orbit_with_gens, atom_pair_orbit_id,
     atom_pair_orbit_id_with_gens, atoms_orbit_with_gens, unordered_atom_pair_groups_with_gens,

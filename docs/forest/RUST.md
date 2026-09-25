@@ -26,13 +26,14 @@ Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Ru
 
 - Owns a chematic `Molecule`.
 - Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Rc<RefCell<Structure>>`, filled on first read.
+- **Dedup key ≠ display CSMI.** Chematic docs: canonical SMILES is not always a safe identity key. [`stable_csmi_key`](../../crates/xenosite-forest/src/mol.rs) / `ForestMol::stable_csmi_key` wrap fail-closed `canonical_smiles_stable_key()` (`None` = coupled E/Z etc.). `find_path` `seen` and metabolize `unique_csmi` index only stable keys; unstable products are still explored/yielded without CSMI collapse. Display / target compare still use `csmi` / `canon_of`.
 - Kekulé assignments live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
 - Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them when a correspondence is supplied. Chematic's public apply/write do not return that map (see [Atom identity](#atom-identity-chematic-has-no-public-correspondence)).
 - `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
 - Structure bag also caches **atom+bond automorphism generators** (`atom_bond_generators`) for site / higher-order (plan) orbits. Same share/invalidate rules as `csmi` / ranks.
 - Unique-edit still emits one representative site. The collapsed primary-map **orbit** is passed on `SiteInfo` / `Candidate` / `Emission` / `PathStep` (`orbit` / `site_orbit`) so multiplicity is visible and plans can compare site classes (`same_site_orbit`) without re-emitting equivalents.
 - Each elementary [`Step`](../../crates/xenosite-forest/src/canonical_plan.rs) can carry the **automorphism orbit** of its site (`Step.orbit`), filled from atom+bond generators (ForestMol cache when available). Unique-edit orbits and generator orbits are related but not the same record: unique-edit is SMARTS-class collapse; `Step.orbit` is group action on atoms. Site-pair unique-edit in `pair_edit` reuses one generator run per `pair_candidates` call.
-- `clear_structure` drops `csmi`/formula/SMARTS/generators, not the kekulé `Rc`.
+- `clear_structure` drops `csmi`/stable_csmi/formula/SMARTS/generators, not the kekulé `Rc`.
 
 There is no `has_forest`, no `wipe_forest`, and no `xf()` facade.
 

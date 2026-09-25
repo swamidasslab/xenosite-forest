@@ -12,7 +12,9 @@ use crate::atom_tracker::AtomTracker;
 use crate::forest::{Formula, Structure, molecule_formula};
 use crate::kekule::{KekuleCache, ensure_kekule_parents};
 use crate::labels::{self, Tag};
-use crate::mol::{ForestError, Molecule, atom_idx, canon_smiles, parse_mol, ranks};
+use crate::mol::{
+    ForestError, Molecule, atom_idx, canon_smiles, parse_mol, ranks, stable_csmi_key,
+};
 use crate::smarts::smarts_matches;
 use chematic::smiles::canonical_smiles_with_order;
 
@@ -199,6 +201,23 @@ impl ForestMol {
             cache.csmi = Some(Rc::from(canon_smiles(&self.mol)));
         }
         Rc::clone(cache.csmi.as_ref().expect("csmi filled"))
+    }
+
+    /// Fail-closed identity for `find_path` / `unique_csmi` (Chematic docs).
+    ///
+    /// `None` = do not use SMILES as a dedup key for this molecule. Display
+    /// spelling remains [`Self::csmi`].
+    pub fn stable_csmi_key(&self) -> Option<Rc<str>> {
+        let mut cache = self.structure.borrow_mut();
+        if cache.stable_csmi.is_none() {
+            cache.stable_csmi = Some(stable_csmi_key(&self.mol).map(Rc::from));
+        }
+        cache
+            .stable_csmi
+            .as_ref()
+            .expect("stable_csmi filled")
+            .as_ref()
+            .map(Rc::clone)
     }
 
     pub fn formula(&self) -> Rc<Formula> {

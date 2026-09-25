@@ -2,7 +2,9 @@
 
 use chematic::core::{AtomIdx, Molecule as CoreMolecule};
 use chematic::perception::apply_aromaticity_rdkit_parity_experimental;
-use chematic::smiles::{canonical_smiles, parse, topological_equivalence_classes};
+use chematic::smiles::{
+    canonical_smiles, canonical_smiles_stable_key, parse, topological_equivalence_classes,
+};
 
 pub use chematic::core::Molecule;
 
@@ -64,6 +66,22 @@ pub fn canon_smiles(mol: &CoreMolecule) -> String {
     }
 }
 
+/// Fail-closed identity key for dedup / caches (Chematic docs).
+///
+/// [`canon_smiles`] is fine for display and for comparing to a known target
+/// spelling. It is **not** always safe as a HashSet / yield key: coupled E/Z
+/// systems can emit a non-idempotent canonical string. This wraps
+/// [`canonical_smiles_stable_key`] — `None` means do not index that molecule
+/// by SMILES identity (explore / yield without CSMI dedup).
+pub fn stable_csmi_key(mol: &CoreMolecule) -> Option<String> {
+    canonical_smiles_stable_key(mol)
+}
+
+/// Fail-closed key from a SMILES string (parse + aromatize, then stable key).
+pub fn stable_csmi_key_of(smiles: &str) -> Option<String> {
+    stable_csmi_key(&parse_mol(smiles).ok()?)
+}
+
 /// Canonical SMILES of any parseable writing of a structure.
 ///
 /// Tests compare this, not a chematic spelling. `CCO` and `C(C)O` are the
@@ -101,6 +119,24 @@ mod tests {
             canon_of("Oc1ccccc1").unwrap(),
             canon_of("c1(O)ccccc1").unwrap()
         );
+    }
+
+    #[test]
+    fn stable_csmi_key_accepts_simple_molecules() {
+        let ethanol = parse_mol("CCO").unwrap();
+        let key = stable_csmi_key(&ethanol).expect("ethanol has a stable key");
+        assert_eq!(key, canon_smiles(&ethanol));
+        assert_eq!(stable_csmi_key_of("C(C)O").as_deref(), Some(key.as_str()));
+    }
+
+    #[test]
+    fn stable_csmi_key_fails_closed_on_coupled_ez() {
+        // Chematic canonical_ez_residual fixture: coupled E/Z → None.
+        let smiles = r"CC1CNC(/C=C\C=C/C=C\C2(C)C(=C(O)C(C2)=O)C(/C=C\C=C/C=C\C=C/C=C1)=O)=O";
+        let mol = parse_mol(smiles).unwrap();
+        assert_eq!(stable_csmi_key(&mol), None);
+        // Display CSMI may still exist — just not a safe dedup key.
+        assert!(!canon_smiles(&mol).is_empty());
     }
 
     #[test]

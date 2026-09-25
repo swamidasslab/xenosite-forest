@@ -86,7 +86,7 @@ which clears for you).
 
 | Member | Returns | Notes |
 | ------ | ------- | ----- |
-| `csmi` | `str` | Canonical SMILES (`isomericSmiles=False`). Identity for dedup / search. |
+| `csmi` | `str` | Canonical SMILES (display / target compare). **Not** always safe for dedup — see Chematic `canonical_smiles_stable_key`. Rust: `ForestMol::stable_csmi_key` for search / `unique_csmi`. |
 | `formula` | `Formula` | Heavy-atom counts, total H, formal charge. |
 | `topol_equiv` | `dict[int, int]` | Atom index → topological equivalence class. |
 | `rings` | `dict[int, tuple[tuple[int, ...], ...]]` | Per-atom ring membership. |
@@ -105,10 +105,10 @@ hits = mol.xf.smarts_matches(Smarts("[#8:1]-[#6:2]"))
 # e.g. ({1: oxygen_idx, 2: carbon_idx}, ...)
 ```
 
-Emission identity in `metabolize` is `frozenset(p.xf.csmi for p in products)`
-(computed for unique-edit check / `unique_csmi` yield). There is no
-`info["csmi"]` — read each finished mol's `product.xf.csmi` (cached after
-first read).
+Emission identity in `metabolize` is the frozenset of **stable** product keys
+when Chematic admits them (`canonical_smiles_stable_key`); if any fragment is
+unstable, that emission is not CSMI-deduped (fail-closed). Display spelling
+remains `product.xf.csmi` / Rust `csmi`. There is no `info["csmi"]`.
 
 ## Atom tracing (`mol.xf.tracing`)
 

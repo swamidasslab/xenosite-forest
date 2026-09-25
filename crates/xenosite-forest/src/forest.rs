@@ -19,6 +19,9 @@ pub struct Formula {
 #[derive(Clone, Debug, Default)]
 pub struct Structure {
     pub csmi: Option<Rc<str>>,
+    /// Fail-closed dedup key ([`crate::mol::stable_csmi_key`]).
+    /// Outer `None` = not filled; inner `None` = proven unstable (do not index).
+    pub stable_csmi: Option<Option<Rc<str>>>,
     pub formula: Option<Rc<Formula>>,
     pub topol_equiv: Option<Rc<Vec<usize>>>,
     /// Atom+bond automorphism generators (canonaut). Needed for site and

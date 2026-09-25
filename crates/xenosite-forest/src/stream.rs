@@ -12,7 +12,7 @@ use std::rc::Rc;
 use crate::ForestError;
 use crate::candidate::{Candidate, ParentRef};
 use crate::kekule::kekule_forms;
-use crate::mol::Molecule;
+use crate::mol::{Molecule, stable_csmi_key_of};
 use crate::pair_edit::{PairCandidate, pair_candidates as discover_pairs};
 use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::ruleset::{RuleMember, RuleSet, site_bond_is_exclusive_double};
@@ -263,31 +263,44 @@ where
         if let Some(parent_name) = &self.parent_link {
             emission.rule_path.push(parent_name.clone());
         }
+        // Fail-closed: only dedup when every product has a stable Chematic key.
+        let emission_key = emission_stable_product_key(&emission.products);
         if from_nested_child {
             // Parent unique_csmi is the cross-child CSMI layer.
             if self.unique_csmi {
-                let emission_key: BTreeSet<String> = emission.products.iter().cloned().collect();
-                let leaf_name = emission.leaf_rule().unwrap_or("").to_string();
-                if let Some(kept) = self.seen_csmi.get(&emission_key) {
-                    if kept != &leaf_name {
-                        return None;
+                if let Some(key) = &emission_key {
+                    let leaf_name = emission.leaf_rule().unwrap_or("").to_string();
+                    if let Some(kept) = self.seen_csmi.get(key) {
+                        if kept != &leaf_name {
+                            return None;
+                        }
+                    } else {
+                        self.seen_csmi.insert(key.clone(), leaf_name);
                     }
-                } else {
-                    self.seen_csmi.insert(emission_key, leaf_name);
                 }
             }
             return Some(emission);
         }
         // Leaf pattern / pair on this set: within-leaf unique_csmi yield.
         if self.unique_csmi {
-            let emission_key: BTreeSet<String> = emission.products.iter().cloned().collect();
-            let leaf_key = (emission.pattern_name.clone(), emission_key);
-            if !self.seen_leaf.insert(leaf_key) {
-                return None;
+            if let Some(key) = emission_key {
+                let leaf_key = (emission.pattern_name.clone(), key);
+                if !self.seen_leaf.insert(leaf_key) {
+                    return None;
+                }
             }
         }
         Some(emission)
     }
+}
+
+/// Product multiset for yield dedup — `None` if any fragment lacks a stable key.
+fn emission_stable_product_key(products: &[String]) -> Option<BTreeSet<String>> {
+    let mut key = BTreeSet::new();
+    for p in products {
+        key.insert(stable_csmi_key_of(p)?);
+    }
+    Some(key)
 }
 
 impl<'a, R, S> Iterator for Metabolize<'a, R, S>

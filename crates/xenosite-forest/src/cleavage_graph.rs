@@ -578,7 +578,6 @@ pub fn cleavage_first_seeds(
         .filter(|(_, a)| a.element.atomic_number() > 1)
         .count();
     let root_diff = atom_diff(start.mol(), target_mol);
-    let root_csmi = start.csmi().as_ref().to_string();
 
     let mut seeds = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -591,7 +590,9 @@ pub fn cleavage_first_seeds(
         hops: Vec::new(),
         depth: 0,
     });
-    seen.insert(root_csmi);
+    if let Some(k) = start.stable_csmi_key() {
+        seen.insert(k.as_ref().to_string());
+    }
 
     while let Some(parent) = queue.pop_front() {
         seeds.push(parent.clone());
@@ -732,8 +733,10 @@ pub fn cleavage_first_seeds(
 
         for (child_mol, child_diff, arm) in expandable {
             let frag = child_mol.csmi().as_ref().to_string();
-            if !seen.insert(frag.clone()) {
-                continue;
+            // Fail-closed: only skip when a stable Chematic key is already seen.
+            match child_mol.stable_csmi_key() {
+                Some(k) if !seen.insert(k.as_ref().to_string()) => continue,
+                Some(_) | None => {}
             }
             let Some(maybe_bag) = arm.maybe_for(&frag) else {
                 continue;

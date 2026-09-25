@@ -44,6 +44,9 @@ pub struct PathCounters {
     /// Expand skipped: O-add then O-remove (or reverse) with **equal** site
     /// sets (orbit-aware for singletons). Allowed when sites differ.
     pub blocked_circular_oxygen: usize,
+    /// Product lacked a Chematic `canonical_smiles_stable_key` — CSMI dedup
+    /// skipped for that child (fail-closed; may re-explore).
+    pub unstable_csmi_key: usize,
 }
 
 impl PathCounters {
@@ -202,6 +205,20 @@ impl Ord for HeapItem {
 
 fn ha_distance(ha: usize, target_ha: usize) -> usize {
     ha.abs_diff(target_ha)
+}
+
+/// Insert into `seen` only when Chematic proves a stable key (fail-closed).
+fn remember_seen(seen: &mut HashSet<String>, mol: &ForestMol) -> bool {
+    match mol.stable_csmi_key() {
+        Some(k) => seen.insert(k.as_ref().to_string()),
+        None => false,
+    }
+}
+
+/// True when `mol` has a stable key already in `seen`. Unstable → never "seen".
+fn already_seen(seen: &HashSet<String>, mol: &ForestMol) -> bool {
+    mol.stable_csmi_key()
+        .is_some_and(|k| seen.contains(k.as_ref()))
 }
 
 /// Tagged emission: ForestMol products + elementary plan + cleavage site data.
@@ -588,6 +605,8 @@ where
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
+    let mut seen = HashSet::new();
+    remember_seen(&mut seen, &start);
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
@@ -606,9 +625,6 @@ where
         },
     });
     seq += 1;
-
-    let mut seen = HashSet::new();
-    seen.insert(start_csmi.as_ref().to_string());
 
     Ok(FindPath {
         ruleset,
@@ -720,6 +736,7 @@ where
             let mut seen_cleave_continues: HashSet<(CleaveFoldKey, String)> = HashSet::new();
             let known_sites = yielded_plan_sites(&self.yielded);
             let mut deprio_known = 0usize;
+            let mut unstable_csmi = 0usize;
 
             let expand = match Expand::new(
                 self.counters,
@@ -808,10 +825,13 @@ where
                     if !allow {
                         continue;
                     }
-                    if self.seen.contains(&kept_csmi) && !target_hit {
+                    if already_seen(&self.seen, &kept) && !target_hit {
                         continue;
                     }
-                    self.seen.insert(kept_csmi.clone());
+                    if kept.stable_csmi_key().is_none() {
+                        unstable_csmi += 1;
+                    }
+                    remember_seen(&mut self.seen, &kept);
 
                     let (child_maybe, child_opens) = accumulate_maybe(
                         &walk.maybe,
@@ -864,6 +884,7 @@ where
                 }
             }
             self.counters.deprioritized_known_site += deprio_known;
+            self.counters.unstable_csmi_key += unstable_csmi;
         }
 
         self.done = true;
@@ -1319,6 +1340,8 @@ where
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
+    let mut seen = HashSet::new();
+    remember_seen(&mut seen, &start);
     heap.push(HeapItem {
         target_hit: start_csmi.as_ref() == target_csmi.as_str(),
         novel_site: true,
@@ -1337,9 +1360,6 @@ where
         },
     });
     seq += 1;
-
-    let mut seen = HashSet::new();
-    seen.insert(start_csmi.as_ref().to_string());
 
     Ok(FindPathFilters {
         ruleset,
@@ -1470,10 +1490,13 @@ where
                     ) {
                         continue;
                     }
-                    if self.seen.contains(&kept_csmi) && !target_hit {
+                    if already_seen(&self.seen, &kept) && !target_hit {
                         continue;
                     }
-                    self.seen.insert(kept_csmi.clone());
+                    if kept.stable_csmi_key().is_none() {
+                        self.counters.unstable_csmi_key += 1;
+                    }
+                    remember_seen(&mut self.seen, &kept);
 
                     let site_atoms: BTreeSet<usize> = emission.site_atoms.iter().copied().collect();
                     let (child_maybe, child_opens) = accumulate_maybe(
