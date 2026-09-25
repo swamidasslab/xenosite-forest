@@ -141,8 +141,8 @@ struct Walk {
     diff: Option<crate::atom_diff::AtomDiff>,
 }
 
-/// Heap entry: hits first, then novel sites vs yielded plans, then FIFO.
-/// Lower Ord value is popped later (BinaryHeap is max-heap).
+/// Heap entry: hits first, then novel sites vs yielded plans, then LIFO
+/// (most recently queued first — DFS bias). BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
@@ -174,7 +174,8 @@ impl Ord for HeapItem {
         self.target_hit
             .cmp(&other.target_hit)
             .then_with(|| self.novel_site.cmp(&other.novel_site))
-            .then_with(|| other.seq.cmp(&self.seq))
+            // Higher seq = enqueued later = pop first (DFS / stack bias).
+            .then_with(|| self.seq.cmp(&other.seq))
     }
 }
 
@@ -1378,6 +1379,36 @@ mod tests {
     use crate::hydroxylation::hydroxylation;
     use crate::mol::canon_of;
     use crate::ruleset::o_dealkylation;
+
+    #[test]
+    fn heap_prefers_most_recently_queued_among_peers() {
+        // DFS bias: larger seq pops before smaller seq (same hit/novel tier).
+        let older = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            seq: 1,
+            walk: Walk {
+                mol: ForestMol::parse("CC").unwrap(),
+                steps: vec![],
+                plan: vec![],
+                maybe: vec![],
+                opens: vec![],
+                parent_cost: None,
+                diff: None,
+            },
+        };
+        let newer = HeapItem {
+            target_hit: false,
+            novel_site: true,
+            seq: 2,
+            walk: older.walk.clone(),
+        };
+        let mut heap = BinaryHeap::new();
+        heap.push(older);
+        heap.push(newer);
+        assert_eq!(heap.pop().unwrap().seq, 2);
+        assert_eq!(heap.pop().unwrap().seq, 1);
+    }
 
     #[test]
     fn ethane_to_ethanol_is_one_hydroxylation() {
