@@ -1,61 +1,14 @@
 //! Site selection with **n0, n1, and n2** read separately (not summed).
 //!
-//! O lands in n1 at the attachment atom and in n2 at its neighbor. H for
-//! alcohol vs carbonyl is the H delta **in the same shell as the O**.
+//! Uses [`AtomNeighborhood::oxy_shape`]: O and H must agree in the same shell.
 use xenosite_forest::rules::{dealkylation, hydroxylation, oxygen_reduction};
 use xenosite_forest::{
-    AtomNeighborhood, Shell, aligned_shells, atom_diff, candidate_could_help_on, format_shell,
-    parse_mol,
+    AtomNeighborhood, OxyShellShape, aligned_shells, atom_diff, candidate_could_help_on,
+    format_shell, parse_mol,
 };
 
-fn get(shell: &Shell, el: &str) -> i32 {
-    shell.get(el).copied().unwrap_or(0)
-}
-
-fn shells(env: &AtomNeighborhood) -> [(&str, &Shell); 3] {
-    [("n0", &env.n0), ("n1", &env.n1), ("n2", &env.n2)]
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum OxyShape {
-    /// Some shell has O:+1 and H:−1 in that same shell.
-    Alcohol,
-    /// Some shell has O:+1 and H:≤−2 in that same shell.
-    Carbonyl,
-    /// O:+ in a shell without a clean H signature.
-    OtherO,
-    None,
-}
-
-/// Classify from n0/n1/n2: O and H must agree **within one shell**.
-fn oxy_shape(env: &AtomNeighborhood) -> OxyShape {
-    let mut best = OxyShape::None;
-    for (_, sh) in shells(env) {
-        let o = get(sh, "O");
-        if o <= 0 {
-            continue;
-        }
-        let h = get(sh, "H");
-        let shape = if h == -1 {
-            OxyShape::Alcohol
-        } else if h <= -2 {
-            OxyShape::Carbonyl
-        } else {
-            OxyShape::OtherO
-        };
-        // Prefer a clean alcohol/carbonyl over OtherO.
-        best = match (best, shape) {
-            (OxyShape::None, s) => s,
-            (OxyShape::OtherO, s) if s != OxyShape::OtherO => s,
-            (b, _) => b,
-        };
-    }
-    best
-}
-
-/// Cleavage leave mark: C lost in **n1** (not only n2 bleed to neighbors).
 fn lose_c_n1(env: &AtomNeighborhood) -> bool {
-    get(&env.n1, "C") < 0
+    env.shell_get("n1", "C") < 0
 }
 
 fn site_atoms_of(c: &xenosite_forest::Candidate) -> Vec<usize> {
@@ -83,7 +36,7 @@ fn line(env: &AtomNeighborhood) -> String {
         format_shell(&env.n1),
         format_shell(&env.n2),
         env.abs_delta(),
-        oxy_shape(env)
+        env.oxy_shape()
     )
 }
 
@@ -100,7 +53,7 @@ fn main() {
         let attach: Vec<_> = d
             .atoms
             .iter()
-            .filter(|(_, e)| shells(e).iter().any(|(_, sh)| get(sh, "O") > 0))
+            .filter(|(_, e)| e.oxy_shape() != OxyShellShape::None)
             .map(|(&i, e)| format!("r{i} {}", line(e)))
             .collect();
         println!("  {a}→{b} want={want}\n    {}", attach.join("\n    "));
@@ -142,15 +95,13 @@ fn main() {
             let site = d.at_sites(&atoms);
             let cost = site.cost();
             let shell_keep = match kind {
-                // O-add: some site/orbit atom has O in any of n0/n1/n2 with
-                // a same-shell H signature (alcohol or carbonyl).
-                "oh" => site
-                    .atoms
-                    .values()
-                    .any(|e| matches!(oxy_shape(e), OxyShape::Alcohol | OxyShape::Carbonyl)),
-                // Cleave: n1 loses C (leave bond atom), not n2-only bleed.
+                "oh" => site.atoms.values().any(|e| {
+                    matches!(
+                        e.oxy_shape(),
+                        OxyShellShape::Alcohol | OxyShellShape::Carbonyl
+                    )
+                }),
                 "cleave" => d.unaligned_reactant > 0 && site.atoms.values().any(lose_c_n1),
-                // Reduction: any shell change on the site.
                 "or" => cost > 0,
                 _ => false,
             };

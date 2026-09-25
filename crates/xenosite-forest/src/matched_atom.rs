@@ -10,8 +10,8 @@
 //!   **same atom shape** with **deltas** (target − reactant) on aligned atoms,
 //!   plus how many heavy atoms sit outside the alignment on each side.
 //! - **Site selection** reads site-scoped deltas ([`AlignedShells::at_sites`] /
-//!   [`site_delta_forecast`]): alcohol vs carbonyl is in the site shells
-//!   themselves (e.g. n1 `O:+1 H:−1` vs `O:+1 H:−2`). A molecule-wide cost is
+//!   [`site_delta_forecast`]): alcohol vs carbonyl via [`AtomNeighborhood::oxy_shape`]
+//!   — n0/n1/n2 read **separately** (same-shell O+H). A molecule-wide cost is
 //!   not required for that gate.
 //! - **Product closeness** uses the full align's [`AlignedShells::cost`]
 //!   (Σ |δ| over aromatic + n0/n1/n2).
@@ -22,6 +22,22 @@ use crate::mol::{Molecule, atom_idx, atom_usize};
 
 /// Element → count (absolute ≥ 0) or signed delta. Includes `"H"`.
 pub type Shell = BTreeMap<String, i32>;
+
+/// Oxygen-addition shape from one atom's shells, read **separately**.
+///
+/// O and H must agree in the **same** shell (`n0` / `n1` / `n2`). Summing
+/// across shells cancels alcohol H (attachment n1 `H:−1` + n2 `H:+1` → 0).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OxyShellShape {
+    /// Some shell has `O:+` and `H:−1`.
+    Alcohol,
+    /// Some shell has `O:+` and `H:≤−2`.
+    Carbonyl,
+    /// Some shell has `O:+` without a clean H signature.
+    Other,
+    /// No shell carries an oxygen delta.
+    None,
+}
 
 /// Local environment of one heavy atom: aromatic + shells n0/n1/n2.
 ///
@@ -56,7 +72,7 @@ impl AtomNeighborhood {
         c
     }
 
-    /// Walk n0, n1, n2 (in that order).
+    /// Walk n0, n1, n2 (in that order) — read each separately.
     pub fn shells(&self) -> [(&str, &Shell); 3] {
         [("n0", &self.n0), ("n1", &self.n1), ("n2", &self.n2)]
     }
@@ -70,6 +86,34 @@ impl AtomNeighborhood {
             _ => return 0,
         };
         shell.get(el).copied().unwrap_or(0)
+    }
+
+    /// Alcohol vs carbonyl from n0/n1/n2 **separately** (same-shell O+H).
+    ///
+    /// Attachment usually shows in `n1`; the neighbor shows the same O/H in
+    /// `n2`. Prefer a clean Alcohol/Carbonyl over [`OxyShellShape::Other`].
+    pub fn oxy_shape(&self) -> OxyShellShape {
+        let mut best = OxyShellShape::None;
+        for (_, sh) in self.shells() {
+            let o = sh.get("O").copied().unwrap_or(0);
+            if o <= 0 {
+                continue;
+            }
+            let h = sh.get("H").copied().unwrap_or(0);
+            let shape = if h == -1 {
+                OxyShellShape::Alcohol
+            } else if h <= -2 {
+                OxyShellShape::Carbonyl
+            } else {
+                OxyShellShape::Other
+            };
+            best = match (best, shape) {
+                (OxyShellShape::None, s) => s,
+                (OxyShellShape::Other, s) if s != OxyShellShape::Other => s,
+                (b, _) => b,
+            };
+        }
+        best
     }
 }
 
@@ -506,6 +550,7 @@ mod tests {
             0,
             "summed H cancels on alcohol attachment"
         );
+        assert_eq!(attach.oxy_shape(), OxyShellShape::Alcohol);
         let carbonyl = aligned("CC", "CC=O");
         let co = carbonyl
             .atoms
@@ -513,6 +558,7 @@ mod tests {
             .find(|e| e.shell_get("n1", "O") == 1)
             .expect("carbonyl C has O in n1");
         assert_eq!(co.shell_get("n1", "H"), -2);
+        assert_eq!(co.oxy_shape(), OxyShellShape::Carbonyl);
         // Neighbor of alcohol addition: O appears in n2, not n1.
         let nbr = alcohol
             .atoms
@@ -520,5 +566,6 @@ mod tests {
             .find(|e| e.shell_get("n2", "O") == 1 && e.shell_get("n1", "O") == 0)
             .expect("neighbor sees O in n2");
         assert_eq!(nbr.shell_get("n2", "H"), -1);
+        assert_eq!(nbr.oxy_shape(), OxyShellShape::Alcohol);
     }
 }
