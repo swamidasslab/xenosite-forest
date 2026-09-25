@@ -9,9 +9,10 @@
 //! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
 //! precedes + [`crate::canonical_plan::Maybe`] cleavage bags). Composite leaves
 //! own a `canonical_plan` hook (Python) that returns steps named after existing
-//! rules. Closer uses atom-diff cost. Lazy: try tag-lift at enqueue (same-heavy-
-//! tag edits only); full MCS on pop when lift is `None`. Eager:
-//! [`crate::atom_diff::atom_diff_for_child`] (lift else MCS) at enqueue.
+//! rules. Closer uses atom-diff cost. Child diffs: tag-lift parent MCS, extend
+//! where the mapping gap is placeable, reorder under product Aut generators
+//! (stop at cost 0 or when no new mapping appears). Fresh MCS rematch is a
+//! counted fallback (`mcs_lift_fallback`, expect zero).
 
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap, HashSet};
@@ -52,9 +53,16 @@ pub struct PathCounters {
     pub formula_delta_mismatch: usize,
     /// Structured mismatch details (Python ``formula_delta_mismatches``).
     pub formula_delta_mismatches: Vec<crate::formula_check::FormulaDeltaMismatch>,
+    /// Child diff fell back to a fresh MCS rematch instead of tag-lift +
+    /// product generators. Expect zero once generator lift covers add/remove
+    /// / cleavage reorderings.
+    pub mcs_lift_fallback: usize,
     /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
     #[cfg(test)]
     pub allow_formula_delta_mismatch: bool,
+    /// When true, [`Drop`] does not assert zero MCS-lift fallbacks.
+    #[cfg(test)]
+    pub allow_mcs_lift_fallback: bool,
 }
 
 impl PathCounters {
@@ -85,15 +93,28 @@ impl PathCounters {
             self.formula_delta_mismatches
         );
     }
+
+    /// Fundamental check: child diffs must lift via tags + generators.
+    pub fn assert_mcs_lift_clean(&self) {
+        assert_eq!(
+            self.mcs_lift_fallback, 0,
+            "mcs_lift_fallback must be zero (tag-lift + product generators)"
+        );
+    }
 }
 
 #[cfg(test)]
 impl Drop for PathCounters {
     fn drop(&mut self) {
-        if std::thread::panicking() || self.allow_formula_delta_mismatch {
+        if std::thread::panicking() {
             return;
         }
-        self.assert_formula_delta_clean();
+        if !self.allow_formula_delta_mismatch {
+            self.assert_formula_delta_clean();
+        }
+        if !self.allow_mcs_lift_fallback {
+            self.assert_mcs_lift_clean();
+        }
     }
 }
 
@@ -409,6 +430,7 @@ fn keep_fragments(
     target_ha: usize,
     parent_diff: Option<&crate::atom_diff::AtomDiff>,
     target_mol: Option<&crate::Molecule>,
+    mcs_lift_fallback: &mut usize,
 ) -> Vec<(ForestMol, Vec<String>, Option<crate::atom_diff::AtomDiff>)> {
     if products.is_empty() {
         return Vec::new();
@@ -422,8 +444,13 @@ fn keep_fragments(
                 if !is_hit && child.heavy_atom_count() < target_ha {
                     continue;
                 }
-                let child_diff =
-                    crate::atom_diff::atom_diff_after_cleavage(parent, pdiff, child, tmol);
+                let child_diff = crate::atom_diff::atom_diff_after_cleavage_tracked(
+                    parent,
+                    pdiff,
+                    child,
+                    tmol,
+                    Some(mcs_lift_fallback),
+                );
                 if is_hit || child_diff.cost() < pdiff.cost() {
                     let mut sides = Vec::new();
                     for (j, other) in products.iter().enumerate() {
@@ -439,9 +466,25 @@ fn keep_fragments(
             }
         }
     }
+    // Closest fragment by HA/CSMI; still attach a lifted diff when possible so
+    // enqueue does not rematch MCS.
     keep_fragment(products, target_csmi, target_ha)
         .into_iter()
-        .map(|(mol, sides)| (mol, sides, None))
+        .map(|(mol, sides)| {
+            let child_diff = match (parent_diff, target_mol) {
+                (Some(pdiff), Some(tmol)) => {
+                    Some(crate::atom_diff::atom_diff_after_cleavage_tracked(
+                        parent,
+                        pdiff,
+                        &mol,
+                        tmol,
+                        Some(mcs_lift_fallback),
+                    ))
+                }
+                _ => None,
+            };
+            (mol, sides, child_diff)
+        })
         .collect()
 }
 
@@ -900,6 +943,8 @@ where
             let known_sites = yielded_plan_sites(&self.yielded);
             let mut deprio_known = 0usize;
             let mut unstable_csmi = 0usize;
+            // Local: Expand already borrows `self.counters` for the loop.
+            let mut mcs_lift_fb = 0usize;
 
             let expand = match Expand::new(
                 self.counters,
@@ -937,6 +982,7 @@ where
                     self.target_ha,
                     diff.as_ref(),
                     Some(&self.target_mol),
+                    &mut mcs_lift_fb,
                 );
                 let cleave_key = if emission.cleaves && emission.products.len() >= 2 {
                     Some(emission.cleave_fold_key())
@@ -972,7 +1018,9 @@ where
 
                     // Known child cost for heap cost_gain (lack of improvement
                     // counters DFS). Reused on walk so pop does not re-MCS.
+                    // Prefer tag-lift + product generators; count fresh MCS.
                     if use_atom_diff && child_diff.is_none() && parent_cost.is_some() {
+                        mcs_lift_fb += 1;
                         child_diff =
                             Some(crate::atom_diff::atom_diff(kept.mol(), &self.target_mol));
                     }
@@ -1070,6 +1118,7 @@ where
             }
             self.counters.deprioritized_known_site += deprio_known;
             self.counters.unstable_csmi_key += unstable_csmi;
+            self.counters.mcs_lift_fallback += mcs_lift_fb;
         }
 
         self.done = true;
@@ -1331,7 +1380,6 @@ where
         let site_atoms_set: BTreeSet<usize> = site_atoms.iter().copied().collect();
         let ends = [&pair.left.effect, &pair.right.effect];
         let plan = pending.set.canonical_plan(mol, &site_atoms, Some(&ends));
-        let (p0, p1) = pair.path_ends();
         let site_progress = self
             .diff
             .map(|d| crate::atom_diff::pair_site_h_progress(pair, d, mol, self.target))
@@ -1725,6 +1773,7 @@ where
                     self.target_ha,
                     None,
                     None,
+                    &mut self.counters.mcs_lift_fallback,
                 );
                 for (kept, sides, _) in keeps {
                     let kept_csmi = kept.csmi().as_ref().to_string();
