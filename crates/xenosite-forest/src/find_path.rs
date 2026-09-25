@@ -41,6 +41,9 @@ pub struct PathCounters {
     /// Child walks enqueued with lower heap priority because the hop's
     /// pattern+site already appears in a yielded path.
     pub deprioritized_known_site: usize,
+    /// Expand skipped: O-add then O-remove (or reverse) with **equal** site
+    /// sets (orbit-aware for singletons). Allowed when sites differ.
+    pub blocked_circular_oxygen: usize,
 }
 
 impl PathCounters {
@@ -132,6 +135,10 @@ struct Walk {
     maybe: Vec<CleavageSide>,
     /// Uncleared ring-open sites (Python `_Walk.opens`).
     opens: Vec<BTreeSet<usize>>,
+    /// O-adding hops on this walk (hydroxylation / hydrate / …).
+    o_added: Vec<OxygenSite>,
+    /// O-removing hops on this walk (dehydration).
+    o_removed: Vec<OxygenSite>,
     /// Parent's [`crate::atom_diff::AtomDiff::cost`] when this walk was
     /// enqueued. `None` = root (always expand).
     parent_cost: Option<usize>,
@@ -139,6 +146,15 @@ struct Walk {
     /// [`try_atom_diff_for_child`] / cleavage lift when safe; else `None`
     /// and pop runs full MCS.
     diff: Option<crate::atom_diff::AtomDiff>,
+}
+
+/// Site of an oxygen add/remove hop. Multi-atom `atoms` (from `site_map`)
+/// compare by set equality; singletons use unique-edit / top orbits.
+#[derive(Clone, Debug)]
+struct OxygenSite {
+    site: usize,
+    orbit: Vec<usize>,
+    atoms: BTreeSet<usize>,
 }
 
 /// Heap entry: hits first, then novel sites vs yielded plans, then LIFO
@@ -193,6 +209,9 @@ struct ForestEmission {
     cleaves: bool,
     /// Cross-rule Or fold signature (from [`PatternInfo::cleave_side_group`]).
     cleave_side_sig: CleaveSideSig,
+    adds_oxygen: bool,
+    removes_oxygen: bool,
+    oxygen_site: OxygenSite,
     pattern_name: String,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
@@ -426,6 +445,59 @@ fn emission_site_is_novel(
     )
 }
 
+fn oxygen_site_from_parts(site: usize, orbit: &[usize], atoms: BTreeSet<usize>) -> OxygenSite {
+    OxygenSite {
+        site,
+        orbit: orbit.to_vec(),
+        atoms,
+    }
+}
+
+/// Hydration↔dehydration is circular only when site sets match. Multi-atom
+/// sites (e.g. beta-elim with adjacent C) compare by set equality — any atom
+/// difference is allowed. Singletons use top / unique-edit orbits
+/// ([`same_site_orbit`]).
+fn oxygen_sites_equal(a: &OxygenSite, b: &OxygenSite) -> bool {
+    if a.atoms.len() > 1 || b.atoms.len() > 1 {
+        return a.atoms == b.atoms;
+    }
+    crate::same_site_orbit(a.site, &a.orbit, b.site, &b.orbit)
+}
+
+fn undoes_oxygen_edit(
+    effect: &crate::pattern::Effect,
+    site: &OxygenSite,
+    o_added: &[OxygenSite],
+    o_removed: &[OxygenSite],
+) -> bool {
+    if crate::atom_diff::effect_removes_oxygen(effect) {
+        return o_added.iter().any(|prior| oxygen_sites_equal(prior, site));
+    }
+    if crate::atom_diff::effect_adds_oxygen(effect) {
+        return o_removed
+            .iter()
+            .any(|prior| oxygen_sites_equal(prior, site));
+    }
+    false
+}
+
+fn child_oxygen_lists(
+    parent: &Walk,
+    site: &OxygenSite,
+    adds_oxygen: bool,
+    removes_oxygen: bool,
+) -> (Vec<OxygenSite>, Vec<OxygenSite>) {
+    let mut o_added = parent.o_added.clone();
+    let mut o_removed = parent.o_removed.clone();
+    if adds_oxygen {
+        o_added.push(site.clone());
+    }
+    if removes_oxygen {
+        o_removed.push(site.clone());
+    }
+    (o_added, o_removed)
+}
+
 /// Yield walks that turn ``reactant`` into ``target``.
 ///
 /// Pull iterator (Python generator parity): each [`Iterator::next`] resumes the
@@ -519,6 +591,8 @@ where
             plan: Vec::new(),
             maybe: Vec::new(),
             opens: Vec::new(),
+            o_added: Vec::new(),
+            o_removed: Vec::new(),
             parent_cost: None,
             diff: None,
         },
@@ -615,7 +689,7 @@ where
 
             let diff = if use_atom_diff {
                 let d = match walk.diff {
-                    Some(d) => d,
+                    Some(ref d) => d.clone(),
                     None => crate::atom_diff::atom_diff(walk.mol.mol(), &self.target_mol),
                 };
                 if lazy_closer {
@@ -647,6 +721,8 @@ where
                 &self.keep,
                 diff.as_ref(),
                 &known_sites,
+                &walk.o_added,
+                &walk.o_removed,
             ) {
                 Ok(e) => e,
                 Err(e) => {
@@ -735,6 +811,12 @@ where
                         emission.products.len(),
                         &sides,
                     );
+                    let (o_added, o_removed) = child_oxygen_lists(
+                        &walk,
+                        &emission.oxygen_site,
+                        emission.adds_oxygen,
+                        emission.removes_oxygen,
+                    );
                     let mut steps = walk.steps.clone();
                     steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
                     let mut plan = walk.plan.clone();
@@ -752,6 +834,8 @@ where
                             plan,
                             maybe: child_maybe,
                             opens: child_opens,
+                            o_added,
+                            o_removed,
                             parent_cost,
                             diff: child_diff,
                         },
@@ -841,6 +925,8 @@ struct Expand<'a, K> {
     counters: &'a mut PathCounters,
     keep: &'a K,
     diff: Option<&'a crate::atom_diff::AtomDiff>,
+    o_added: &'a [OxygenSite],
+    o_removed: &'a [OxygenSite],
     deferred: std::vec::IntoIter<Candidate>,
     pair_stack: Vec<PairFrame<'a>>,
     pair_pending: std::vec::IntoIter<PendingPair<'a>>,
@@ -859,12 +945,20 @@ where
         keep: &'a K,
         diff: Option<&'a crate::atom_diff::AtomDiff>,
         known_sites: &'a std::collections::HashMap<String, HashSet<usize>>,
+        o_added: &'a [OxygenSite],
+        o_removed: &'a [OxygenSite],
     ) -> Result<Self, ForestError> {
         let mol = parent.mol();
         // Pull candidates; buffer only survivors for order_key sort.
         let mut deferred = Vec::new();
         for c in ruleset.candidates(mol) {
             let c = c?;
+            let atoms = candidate_site_atoms(&c);
+            let oxy = oxygen_site_from_parts(c.site, &c.orbit, atoms);
+            if undoes_oxygen_edit(&c.pattern.effect, &oxy, o_added, o_removed) {
+                counters.blocked_circular_oxygen += 1;
+                continue;
+            }
             let ok = if let Some(d) = diff {
                 keep(&c)
                     && crate::atom_diff::candidate_could_help_on(&c, d, Some(mol), Some(target))
@@ -896,6 +990,8 @@ where
             counters,
             keep,
             diff,
+            o_added,
+            o_removed,
             deferred: deferred.into_iter(),
             pair_stack: vec![PairFrame {
                 set: ruleset,
@@ -918,12 +1014,16 @@ where
             .into_iter()
             .map(|piece| self.parent.adopt_product(piece))
             .collect();
+        let site_atoms = candidate_site_atoms(candidate);
         Ok(Some(ForestEmission {
             site: candidate.site,
             site_orbit: candidate.orbit.clone(),
-            site_atoms: candidate_site_atoms(candidate),
+            site_atoms: site_atoms.clone(),
             cleaves: candidate.pattern.effect.cleaves,
             cleave_side_sig: candidate.pattern.cleave_side_sig(),
+            adds_oxygen: crate::atom_diff::effect_adds_oxygen(&candidate.pattern.effect),
+            removes_oxygen: crate::atom_diff::effect_removes_oxygen(&candidate.pattern.effect),
+            oxygen_site: oxygen_site_from_parts(candidate.site, &candidate.orbit, site_atoms),
             pattern_name: candidate.pattern.name.clone(),
             rule_path: candidate.rule_path.clone(),
             products,
@@ -951,12 +1051,13 @@ where
             .map(|piece| self.parent.adopt_product(piece))
             .collect();
         let site_atoms = pair.plan_site_atoms();
+        let site_atoms_set: BTreeSet<usize> = site_atoms.iter().copied().collect();
         let ends = [&pair.left.effect, &pair.right.effect];
         let plan = pending.set.canonical_plan(mol, &site_atoms, Some(&ends));
         Ok(Some(ForestEmission {
             site: pair.site,
             site_orbit: vec![pair.site],
-            site_atoms: pair.plan_site_atoms().into_iter().collect(),
+            site_atoms: site_atoms_set.clone(),
             cleaves: pair.effect.cleaves,
             cleave_side_sig: {
                 let left = pair.left.cleave_side_sig();
@@ -967,6 +1068,9 @@ where
                     CleaveSideSig::Ungrouped
                 }
             },
+            adds_oxygen: crate::atom_diff::effect_adds_oxygen(&pair.effect),
+            removes_oxygen: crate::atom_diff::effect_removes_oxygen(&pair.effect),
+            oxygen_site: oxygen_site_from_parts(pair.site, &[pair.site], site_atoms_set),
             pattern_name: pair.pattern_name.clone(),
             rule_path: pending.rule_path.clone(),
             products,
@@ -978,12 +1082,20 @@ where
         let mol = self.parent.mol();
         let mut pairs = set.pair_candidates_leaf(mol)?;
         if let Some(d) = self.diff {
+            let mut blocked = 0usize;
             pairs.retain(|pair| {
                 if !keep_pair(pair, self.keep) {
                     return false;
                 }
+                let atoms: BTreeSet<usize> = pair.plan_site_atoms().into_iter().collect();
+                let oxy = oxygen_site_from_parts(pair.site, &[pair.site], atoms);
+                if undoes_oxygen_edit(&pair.effect, &oxy, self.o_added, self.o_removed) {
+                    blocked += 1;
+                    return false;
+                }
                 crate::atom_diff::pair_could_help(pair, d, mol, self.target)
             });
+            self.counters.blocked_circular_oxygen += blocked;
             pairs.sort_by_key(|p| {
                 let cleave = if p.effect.cleaves { 0u8 } else { 1 };
                 let dear = if p.effect.dearomatizes { 0u8 } else { 1 };
@@ -1003,7 +1115,20 @@ where
                 )
             });
         } else {
-            pairs.retain(|p| keep_pair(p, self.keep));
+            let mut blocked = 0usize;
+            pairs.retain(|p| {
+                if !keep_pair(p, self.keep) {
+                    return false;
+                }
+                let atoms: BTreeSet<usize> = p.plan_site_atoms().into_iter().collect();
+                let oxy = oxygen_site_from_parts(p.site, &[p.site], atoms);
+                if undoes_oxygen_edit(&p.effect, &oxy, self.o_added, self.o_removed) {
+                    blocked += 1;
+                    return false;
+                }
+                true
+            });
+            self.counters.blocked_circular_oxygen += blocked;
         }
         // Leaf-first path: this set, then ancestors still on the stack (root last).
         let mut rule_path = vec![set.name.clone()];
@@ -1174,6 +1299,8 @@ where
             plan: Vec::new(),
             maybe: Vec::new(),
             opens: Vec::new(),
+            o_added: Vec::new(),
+            o_removed: Vec::new(),
             parent_cost: None,
             diff: None,
         },
@@ -1350,6 +1477,8 @@ where
                             plan,
                             maybe: child_maybe,
                             opens: child_opens,
+                            o_added: walk.o_added.clone(),
+                            o_removed: walk.o_removed.clone(),
                             parent_cost: None,
                             diff: None,
                         },
@@ -1393,6 +1522,8 @@ mod tests {
                 plan: vec![],
                 maybe: vec![],
                 opens: vec![],
+                o_added: vec![],
+                o_removed: vec![],
                 parent_cost: None,
                 diff: None,
             },
@@ -1983,10 +2114,10 @@ mod tests {
     }
 
     /// Ethane → ethanol → ethene with **only** Hydroxylation + Dehydration.
-    /// The OH carbon is the dehydration site — productive beta-elim, not a
-    /// circular undo. A blanket “O-add blocks O-remove at overlapping site”
-    /// would refuse this. (`find_path` closer also refuses the HA bump toward
-    /// ethene; this test walks metabolize so the chemistry is visible.)
+    /// Beta-elim site includes the adjacent carbon (`site_map` [1,3]), so the
+    /// site set differs from hydroxylation — allowed. Alcohol dehydration at
+    /// the lone OH carbon would be equal-site circular (see
+    /// `oxygen_site_equal_uses_orbits_and_allows_site_diff`).
     #[test]
     fn hydroxylation_then_dehydration_same_site_yields_ethene() {
         use crate::rules::dehydration;
@@ -2044,5 +2175,24 @@ mod tests {
             saw_ethene,
             "hydroxylation then dehydration at that carbon yields ethene (productive)"
         );
+    }
+
+    #[test]
+    fn oxygen_site_equal_uses_orbits_and_allows_site_diff() {
+        // Singletons: top orbit membership.
+        let oh = oxygen_site_from_parts(0, &[0, 1], BTreeSet::from([0]));
+        let alcohol_same = oxygen_site_from_parts(0, &[0], BTreeSet::from([0]));
+        let alcohol_peer = oxygen_site_from_parts(1, &[1], BTreeSet::from([1]));
+        assert!(oxygen_sites_equal(&oh, &alcohol_same));
+        assert!(oxygen_sites_equal(&oh, &alcohol_peer)); // peer in OH orbit
+        // Multi-atom beta-elim differs by adjacent C → not circular.
+        let beta = oxygen_site_from_parts(0, &[0], BTreeSet::from([0, 1]));
+        assert!(!oxygen_sites_equal(&oh, &beta));
+        let rem = crate::pattern::Effect {
+            removes: Some("OH".into()),
+            ..Default::default()
+        };
+        assert!(undoes_oxygen_edit(&rem, &alcohol_same, &[oh.clone()], &[]));
+        assert!(!undoes_oxygen_edit(&rem, &beta, &[oh], &[]));
     }
 }

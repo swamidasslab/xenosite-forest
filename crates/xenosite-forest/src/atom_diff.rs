@@ -734,8 +734,13 @@ pub fn atom_diff_for_child(
         .unwrap_or_else(|| atom_diff(child.mol(), target))
 }
 
-fn effect_adds_oxygen(effect: &Effect) -> bool {
+pub fn effect_adds_oxygen(effect: &Effect) -> bool {
     effect.adds.as_deref().is_some_and(|a| a.contains('O'))
+}
+
+/// Dehydration-style: effect removes O / OH (inverse of hydration).
+pub fn effect_removes_oxygen(effect: &Effect) -> bool {
+    effect.removes.as_deref().is_some_and(|r| r.contains('O'))
 }
 
 fn effect_adds_h(effect: &Effect) -> bool {

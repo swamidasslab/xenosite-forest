@@ -873,7 +873,9 @@ pub fn dehydration() -> RuleSet {
                 "beta_elimination",
                 "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
                 SiteKind::Atom,
-                vec![1],
+                // Alcohol carbon + adjacent carbon — site set differs from a
+                // lone hydroxylation site, so OH→beta-elim is not circular.
+                vec![1, 3],
                 Effect {
                     adds: None,
                     removes: Some("OH".into()),
