@@ -1,15 +1,9 @@
-//! Site selection with **n0, n1, and n2** read separately (not summed).
-//!
-//! Uses [`AtomNeighborhood::oxy_shape`]: O and H must agree in the same shell.
+//! Site vs full align: cost = Σ|δ| over aromatic + n0/n1/n2 (missing = 0).
 use xenosite_forest::rules::{dealkylation, hydroxylation, oxygen_reduction};
 use xenosite_forest::{
-    AtomNeighborhood, OxyShellShape, aligned_shells, atom_diff, candidate_could_help_on,
-    format_shell, parse_mol,
+    AtomNeighborhood, aligned_shells, atom_diff, candidate_could_help_on, format_shell, parse_mol,
+    shell_l1,
 };
-
-fn lose_c_n1(env: &AtomNeighborhood) -> bool {
-    env.shell_get("n1", "C") < 0
-}
 
 fn site_atoms_of(c: &xenosite_forest::Candidate) -> Vec<usize> {
     let mut atoms: Vec<usize> = c
@@ -30,36 +24,40 @@ fn site_atoms_of(c: &xenosite_forest::Candidate) -> Vec<usize> {
 }
 
 fn line(env: &AtomNeighborhood) -> String {
+    let (n0, n1, n2) = (
+        shell_l1(&env.n0, &Default::default()),
+        shell_l1(&env.n1, &Default::default()),
+        shell_l1(&env.n2, &Default::default()),
+    );
     format!(
-        "n0{{{}}} n1{{{}}} n2{{{}}} |δ|={} shape={:?}",
+        "n0{{{}}}={n0} n1{{{}}}={n1} n2{{{}}}={n2} Σ={}",
         format_shell(&env.n0),
         format_shell(&env.n1),
         format_shell(&env.n2),
-        env.abs_delta(),
-        env.oxy_shape()
+        env.abs_delta()
     )
 }
 
 fn main() {
-    println!("## Per-shell O+H (n0 / n1 / n2) — alcohol vs carbonyl\n");
-    for (a, b, want) in [
-        ("CC", "CCO", "Alcohol"),
-        ("CC", "CC=O", "Carbonyl"),
-        ("CCC", "CC(O)C", "Alcohol"),
-        ("CCC", "CCC=O", "Carbonyl"),
-        ("c1ccccc1", "Oc1ccccc1", "Alcohol"),
+    println!("## Attachment atoms: per-shell |δ| (missing=0)\n");
+    for (a, b) in [
+        ("CC", "CCO"),
+        ("CC", "CC=O"),
+        ("CCC", "CC(O)C"),
+        ("CCC", "CCC=O"),
+        ("COc1ccccc1", "Oc1ccccc1"),
     ] {
         let d = aligned_shells(&parse_mol(a).unwrap(), &parse_mol(b).unwrap());
-        let attach: Vec<_> = d
-            .atoms
-            .iter()
-            .filter(|(_, e)| e.oxy_shape() != OxyShellShape::None)
-            .map(|(&i, e)| format!("r{i} {}", line(e)))
-            .collect();
-        println!("  {a}→{b} want={want}\n    {}", attach.join("\n    "));
+        println!("  {a}→{b}  full_cost={}", d.without_unchanged().cost());
+        for (&i, env) in &d.atoms {
+            if env.is_unchanged() {
+                continue;
+            }
+            println!("    r{i}  {}", line(env));
+        }
     }
 
-    println!("\n## at_sites keep vs candidate_could_help\n");
+    println!("\n## at_sites(orbit).cost() vs candidate_could_help\n");
     let mut tp = 0usize;
     let mut tn = 0usize;
     let mut fp = 0usize;
@@ -94,17 +92,8 @@ fn main() {
             let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
             let site = d.at_sites(&atoms);
             let cost = site.cost();
-            let shell_keep = match kind {
-                "oh" => site.atoms.values().any(|e| {
-                    matches!(
-                        e.oxy_shape(),
-                        OxyShellShape::Alcohol | OxyShellShape::Carbonyl
-                    )
-                }),
-                "cleave" => d.unaligned_reactant > 0 && site.atoms.values().any(lose_c_n1),
-                "or" => cost > 0,
-                _ => false,
-            };
+            // Simplified keep: any nonzero site |δ|.
+            let shell_keep = cost > 0;
             n += 1;
             let tag = match (gate, shell_keep) {
                 (true, true) => {
@@ -131,7 +120,7 @@ fn main() {
                     .map(|(&i, e)| format!("r{i}:{}", line(e)))
                     .collect();
                 println!(
-                    "  {tag} cost={cost} {a}→{b} {}/{:?}\n       {}",
+                    "  {tag} site_cost={cost} {a}→{b} {}/{:?}\n       {}",
                     c.pattern.name,
                     atoms,
                     detail.join(" | ")
@@ -141,7 +130,7 @@ fn main() {
     }
 
     println!(
-        "\n## Scorecard (per-shell n0/n1/n2)\n  n={n} TP={tp} TN={tn} FP={fp} FN={fn_}\n  precision={:.2} recall={:.2} agree={:.2}",
+        "\n## Scorecard (site cost = Σ|δ|, missing=0)\n  n={n} TP={tp} TN={tn} FP={fp} FN={fn_}\n  precision={:.2} recall={:.2} agree={:.2}",
         if tp + fp == 0 {
             0.0
         } else {
