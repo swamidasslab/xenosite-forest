@@ -162,9 +162,9 @@ struct OxygenSite {
 
 /// Heap entry: hits first, then novel sites vs yielded plans, then soft
 /// scores ([`PatternInfo::search_bias`], site H-progress), then parent-relative
-/// **cost gain** (higher = larger atom_diff cost drop). Non-positive gain
-/// counters the DFS boost. Among equal scores, **DFS** (LIFO `seq`).
-/// BinaryHeap is max-heap.
+/// **cost gain**. Among equal scores, [`pop_frontier`] alternates DFS (max
+/// `seq`) and BFS (min `seq`). BinaryHeap Ord uses DFS seq so equal-score
+/// items stay contiguous at the top for band drain. BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
     target_hit: bool,
@@ -208,9 +208,45 @@ impl Ord for HeapItem {
             .then_with(|| self.search_bias.cmp(&other.search_bias))
             .then_with(|| self.site_progress.cmp(&other.site_progress))
             .then_with(|| self.cost_gain.cmp(&other.cost_gain))
-            // Higher seq = enqueued later = pop first (DFS among equal scores).
+            // DFS seq keeps equal-score band contiguous for [`pop_frontier`].
             .then_with(|| self.seq.cmp(&other.seq))
     }
+}
+
+fn same_heap_score(a: &HeapItem, b: &HeapItem) -> bool {
+    a.target_hit == b.target_hit
+        && a.novel_site == b.novel_site
+        && a.search_bias == b.search_bias
+        && a.site_progress == b.site_progress
+        && a.cost_gain == b.cost_gain
+}
+
+/// Pop one frontier walk: among the top equal-score band, take max `seq` (DFS)
+/// or min `seq` (BFS). Caller flips `prefer_dfs` after a real expand / yield.
+fn pop_frontier(heap: &mut BinaryHeap<HeapItem>, prefer_dfs: bool) -> Option<HeapItem> {
+    let first = heap.pop()?;
+    let mut band = vec![first];
+    while heap.peek().is_some_and(|p| same_heap_score(p, &band[0])) {
+        band.push(heap.pop().unwrap());
+    }
+    let idx = if prefer_dfs {
+        band.iter()
+            .enumerate()
+            .max_by_key(|(_, it)| it.seq)
+            .map(|(i, _)| i)
+            .unwrap()
+    } else {
+        band.iter()
+            .enumerate()
+            .min_by_key(|(_, it)| it.seq)
+            .map(|(i, _)| i)
+            .unwrap()
+    };
+    let chosen = band.swap_remove(idx);
+    for item in band {
+        heap.push(item);
+    }
+    Some(chosen)
 }
 
 fn ha_distance(ha: usize, target_ha: usize) -> usize {
@@ -663,6 +699,7 @@ where
         target_ha,
         heap,
         seq,
+        prefer_dfs: true,
         seen,
         yielded: Vec::new(),
         done: false,
@@ -683,6 +720,8 @@ pub struct FindPath<'a, 'b, K> {
     target_ha: usize,
     heap: BinaryHeap<HeapItem>,
     seq: usize,
+    /// Alternating frontier pop: true → DFS (max seq), false → BFS (min seq).
+    prefer_dfs: bool,
     seen: HashSet<String>,
     /// Already-yielded hits (for [`plan_already_yielded`] only).
     yielded: Vec<PathOutcome>,
@@ -716,7 +755,7 @@ where
             lazy_closer,
         } = self.config;
 
-        while let Some(item) = self.heap.pop() {
+        while let Some(item) = pop_frontier(&mut self.heap, self.prefer_dfs) {
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
@@ -735,6 +774,7 @@ where
                     smiles: here.as_ref().to_string(),
                 };
                 self.yielded.push(outcome.clone());
+                self.prefer_dfs = !self.prefer_dfs;
                 return Some(Ok(outcome));
             }
 
@@ -756,6 +796,7 @@ where
             };
             self.counters.nodes += 1;
             self.counters.expansions += 1;
+            self.prefer_dfs = !self.prefer_dfs;
             let parent_cost = diff.as_ref().map(|d| d.cost());
             let parent_ha = walk.mol.heavy_atom_count();
             let mut hits_from_here = 0usize;
@@ -1446,6 +1487,7 @@ where
         target_ha,
         heap,
         seq,
+        prefer_dfs: true,
         seen,
         yielded: Vec::new(),
         done: false,
@@ -1463,6 +1505,8 @@ pub struct FindPathFilters<'a, 'b, R, S> {
     target_ha: usize,
     heap: BinaryHeap<HeapItem>,
     seq: usize,
+    /// Alternating frontier pop: true → DFS (max seq), false → BFS (min seq).
+    prefer_dfs: bool,
     seen: HashSet<String>,
     yielded: Vec<PathOutcome>,
     done: bool,
@@ -1485,7 +1529,7 @@ where
             ..
         } = self.config;
 
-        while let Some(item) = self.heap.pop() {
+        while let Some(item) = pop_frontier(&mut self.heap, self.prefer_dfs) {
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
@@ -1504,11 +1548,13 @@ where
                     smiles: here.as_ref().to_string(),
                 };
                 self.yielded.push(outcome.clone());
+                self.prefer_dfs = !self.prefer_dfs;
                 return Some(Ok(outcome));
             }
 
             let mol = walk.mol.mol();
             self.counters.expansions += 1;
+            self.prefer_dfs = !self.prefer_dfs;
             let mut hits_from_here = 0usize;
             let known_sites = yielded_plan_sites(&self.yielded);
 
@@ -1644,7 +1690,7 @@ mod tests {
 
     #[test]
     fn heap_prefers_most_recently_queued_among_peers() {
-        // DFS among equal scores: larger seq pops before smaller seq.
+        // Ord keeps DFS seq so equal-score band is contiguous for pop_frontier.
         let older = HeapItem {
             target_hit: false,
             novel_site: true,
@@ -1678,6 +1724,40 @@ mod tests {
         heap.push(newer);
         assert_eq!(heap.pop().unwrap().seq, 2);
         assert_eq!(heap.pop().unwrap().seq, 1);
+    }
+
+    #[test]
+    fn pop_frontier_alternates_dfs_and_bfs() {
+        let walk = Walk {
+            mol: ForestMol::parse("CC").unwrap(),
+            steps: vec![],
+            plan: vec![],
+            maybe: vec![],
+            opens: vec![],
+            o_added: vec![],
+            o_removed: vec![],
+            parent_cost: None,
+            diff: None,
+        };
+        let mk = |seq| HeapItem {
+            target_hit: false,
+            novel_site: true,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 1,
+            seq,
+            walk: walk.clone(),
+        };
+        let mut heap = BinaryHeap::new();
+        heap.push(mk(1));
+        heap.push(mk(2));
+        heap.push(mk(3));
+        // DFS first: max seq
+        assert_eq!(pop_frontier(&mut heap, true).unwrap().seq, 3);
+        // BFS next among remaining: min seq
+        assert_eq!(pop_frontier(&mut heap, false).unwrap().seq, 1);
+        assert_eq!(pop_frontier(&mut heap, true).unwrap().seq, 2);
+        assert!(pop_frontier(&mut heap, false).is_none());
     }
 
     #[test]
