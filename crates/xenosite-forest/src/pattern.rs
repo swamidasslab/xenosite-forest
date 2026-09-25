@@ -125,9 +125,14 @@ pub fn leave_ch2() -> BTreeMap<String, i32> {
     BTreeMap::from([("C".into(), 1), ("H".into(), 2)])
 }
 
-/// Named oxygen leave (nitroaromatic N–O cleavage).
+/// Named oxygen leave (nitroaromatic N–O cleavage / dehydration O leave).
 pub fn leave_o() -> BTreeMap<String, i32> {
     BTreeMap::from([("O".into(), 1)])
+}
+
+/// Two-oxygen leave (nitro → amine style double O cleavage).
+pub fn leave_oo() -> BTreeMap<String, i32> {
+    BTreeMap::from([("O".into(), 2)])
 }
 
 /// Resolve a ``cleave_side_group`` leave label into a formula bag, if known.

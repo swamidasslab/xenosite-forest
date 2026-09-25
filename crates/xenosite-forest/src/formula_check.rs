@@ -1,15 +1,29 @@
 //! Check declared [`Effect::delta_formula`] against observed product formulas.
 //!
 //! Mismatches emit [`log::warn!`] (Python analogue: ``warnings.warn`` /
-//! ``FormulaDeltaMismatchWarning``) and return ``false`` so callers can
-//! increment [`crate::find_path::PathCounters::formula_delta_mismatch`].
-//! Soft only — never drops chemistry.
+//! ``FormulaDeltaMismatchWarning``) and return a structured
+//! [`FormulaDeltaMismatch`] so callers can append to
+//! [`crate::find_path::PathCounters::formula_delta_mismatches`] and bump
+//! [`crate::find_path::PathCounters::formula_delta_mismatch`]. Soft only —
+//! never drops chemistry.
 
 use std::collections::BTreeMap;
 
 use crate::forest::{Formula, formula_delta, molecule_formula};
 use crate::mol::Molecule;
 use crate::pattern::{Effect, bag_delta_formula};
+
+/// One soft formula-delta disagreement (declared vs observed heavy).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormulaDeltaMismatch {
+    pub pattern_name: String,
+    pub declared_heavy: BTreeMap<String, i32>,
+    pub observed_heavy: BTreeMap<String, i32>,
+    pub cleaves: bool,
+    pub adds: Option<String>,
+    pub removes: Option<String>,
+    pub leave: BTreeMap<String, i32>,
+}
 
 /// Drop hydrogens — edit bags and sanitized mols disagree on H for hydroxyl.
 fn heavy(counts: &BTreeMap<String, i32>) -> BTreeMap<String, i32> {
@@ -70,8 +84,8 @@ fn format_map(map: &BTreeMap<String, i32>) -> String {
 
 /// Compare observed product formula change to declared delta.
 ///
-/// Returns ``true`` when they match (or the check was skipped). On mismatch
-/// logs a warning and returns ``false``.
+/// Returns ``None`` when they match (or the check was skipped). On mismatch
+/// logs a warning and returns the structured record.
 ///
 /// Single product: heavy ``product − parent`` vs heavy ``delta_formula``.
 /// Cleavage (2+ products): heavy ``sum(products) − parent`` vs ``adds − removes``.
@@ -80,9 +94,9 @@ pub fn check_effect_delta_formula(
     effect: &Effect,
     products: &[Molecule],
     pattern_name: &str,
-) -> bool {
+) -> Option<FormulaDeltaMismatch> {
     if products.is_empty() {
-        return true;
+        return None;
     }
     let parent_f = molecule_formula(parent);
 
@@ -100,7 +114,7 @@ pub fn check_effect_delta_formula(
 
     // Star conjugates use dummy ``*`` atoms — bag stoichiometry ≠ mol formula.
     if expected.contains_key("*") || actual.contains_key("*") {
-        return true;
+        return None;
     }
     // Open leave (cleaves, empty leave_formula) with unexplained heavy loss:
     // annotation incomplete, not a sealed-delta bug.
@@ -109,11 +123,11 @@ pub fn check_effect_delta_formula(
         && expected.is_empty()
         && actual.values().any(|&n| n < 0)
     {
-        return true;
+        return None;
     }
 
     if expected == actual {
-        return true;
+        return None;
     }
     log::warn!(
         "Formula delta mismatch for pattern {pattern_name}: declared heavy \
@@ -125,7 +139,15 @@ pub fn check_effect_delta_formula(
         effect.removes,
         effect.leave_formula,
     );
-    false
+    Some(FormulaDeltaMismatch {
+        pattern_name: pattern_name.to_string(),
+        declared_heavy: expected,
+        observed_heavy: actual,
+        cleaves: effect.cleaves,
+        adds: effect.adds.clone(),
+        removes: effect.removes.clone(),
+        leave: effect.leave_formula.clone(),
+    })
 }
 
 #[cfg(test)]
@@ -144,12 +166,9 @@ mod tests {
             ..Effect::default()
         }
         .sealed();
-        assert!(check_effect_delta_formula(
-            &parent,
-            &effect,
-            &[product],
-            "h"
-        ));
+        assert!(
+            check_effect_delta_formula(&parent, &effect, &[product], "h").is_none()
+        );
     }
 
     #[test]
@@ -161,12 +180,11 @@ mod tests {
             ..Effect::default()
         }
         .sealed();
-        assert!(!check_effect_delta_formula(
-            &parent,
-            &effect,
-            &[product],
-            "bad"
-        ));
+        let detail = check_effect_delta_formula(&parent, &effect, &[product], "bad")
+            .expect("mismatch");
+        assert_eq!(detail.pattern_name, "bad");
+        assert_eq!(detail.declared_heavy.get("O"), Some(&2));
+        assert_eq!(detail.observed_heavy.get("O"), Some(&1));
     }
 
     #[test]
@@ -182,11 +200,14 @@ mod tests {
             ..Effect::default()
         }
         .sealed();
-        assert!(check_effect_delta_formula(
-            &parent,
-            &effect,
-            &[phenol, formic],
-            "methyl_carboxylic"
-        ));
+        assert!(
+            check_effect_delta_formula(
+                &parent,
+                &effect,
+                &[phenol, formic],
+                "methyl_carboxylic"
+            )
+            .is_none()
+        );
     }
 }

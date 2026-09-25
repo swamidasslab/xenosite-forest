@@ -17,6 +17,7 @@ from typing import Any
 from xenosite._archive_forest.step_plan import AtomRef as AddedRef
 from xenosite._archive_forest.step_plan import StepPlan
 from xenosite.forest.canonical_plan import CanonicalStep, as_deps
+from xenosite.forest.records import FormulaDeltaMismatch
 from xenosite.forest.rdkitutil import (
     Atom,
     Mol,
@@ -76,6 +77,7 @@ class PathCounters:
         self.mol_edits = 0
         self.sanitize_dropped = 0
         self.formula_delta_mismatch = 0
+        self.formula_delta_mismatches: list[FormulaDeltaMismatch] = []
         self.nodes = 0
 
     @property

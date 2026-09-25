@@ -378,6 +378,23 @@ RuleSiteKind: TypeAlias = Literal["atom", "bond", "directed_bond", "atom_pair"]
 EffectField: TypeAlias = str | bool | int | When | dict[str, int] | None
 
 
+class FormulaDeltaMismatch(NamedTuple):
+    """One soft formula-delta disagreement (declared vs observed heavy).
+
+    Appended to :class:`~xenosite.forest.find_path.PathCounters` /
+    ``EditCounters`` lists and to the suite collector — recover details
+    without catching warnings or parsing message strings.
+    """
+
+    pattern: str
+    declared_heavy: dict[str, int]
+    observed_heavy: dict[str, int]
+    cleaves: bool
+    adds: str
+    removes: str
+    leave: dict[str, int]
+
+
 class EditCounters(Protocol):
     """Duck-typed int fields :func:`_bump` may increment during edits."""
 
@@ -387,6 +404,7 @@ class EditCounters(Protocol):
     sites_skipped: int
     sanitize_dropped: int
     formula_delta_mismatch: int
+    formula_delta_mismatches: list[FormulaDeltaMismatch]
 
 
 class Addition(NamedTuple):

@@ -50,6 +50,11 @@ pub struct PathCounters {
     /// Declared [`crate::pattern::Effect::delta_formula`] ≠ observed product
     /// Δformula (heavy). Soft — warn only; never drops.
     pub formula_delta_mismatch: usize,
+    /// Structured mismatch details (Python ``formula_delta_mismatches``).
+    pub formula_delta_mismatches: Vec<crate::formula_check::FormulaDeltaMismatch>,
+    /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
+    #[cfg(test)]
+    pub allow_formula_delta_mismatch: bool,
 }
 
 impl PathCounters {
@@ -61,6 +66,34 @@ impl PathCounters {
     /// Do not use to abort walks; more careful heuristics might reduce later.
     pub fn plan_drops(&self) -> usize {
         self.dropped_duplicate_plan + self.signal_contained_plan
+    }
+
+    /// Record a soft formula-delta mismatch (count + detail list).
+    pub fn record_formula_delta_mismatch(
+        &mut self,
+        detail: crate::formula_check::FormulaDeltaMismatch,
+    ) {
+        self.formula_delta_mismatch += 1;
+        self.formula_delta_mismatches.push(detail);
+    }
+
+    /// Fundamental check: no soft formula-delta mismatches on this search.
+    pub fn assert_formula_delta_clean(&self) {
+        assert_eq!(
+            self.formula_delta_mismatch, 0,
+            "formula_delta_mismatch must be zero; recorded {:?}",
+            self.formula_delta_mismatches
+        );
+    }
+}
+
+#[cfg(test)]
+impl Drop for PathCounters {
+    fn drop(&mut self) {
+        if std::thread::panicking() || self.allow_formula_delta_mismatch {
+            return;
+        }
+        self.assert_formula_delta_clean();
     }
 }
 
@@ -1221,13 +1254,13 @@ where
         if pieces.is_empty() {
             return Ok(None);
         }
-        if !crate::formula_check::check_effect_delta_formula(
+        if let Some(detail) = crate::formula_check::check_effect_delta_formula(
             self.parent.mol(),
             &candidate.pattern.effect,
             &pieces,
             &candidate.pattern.name,
         ) {
-            self.counters.formula_delta_mismatch += 1;
+            self.counters.record_formula_delta_mismatch(detail);
         }
         let products: Vec<ForestMol> = pieces
             .into_iter()
@@ -1281,13 +1314,13 @@ where
             return Ok(None);
         }
         self.counters.mol_edits += 1;
-        if !crate::formula_check::check_effect_delta_formula(
+        if let Some(detail) = crate::formula_check::check_effect_delta_formula(
             mol,
             &pair.effect,
             &pieces,
             &pair.pattern_name,
         ) {
-            self.counters.formula_delta_mismatch += 1;
+            self.counters.record_formula_delta_mismatch(detail);
         }
         let products: Vec<ForestMol> = pieces
             .into_iter()

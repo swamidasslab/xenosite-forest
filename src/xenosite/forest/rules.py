@@ -9,6 +9,7 @@ import re
 import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
+from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
@@ -68,6 +69,7 @@ from xenosite.forest.records import (
     Effect,
     EffectField,
     Formula,
+    FormulaDeltaMismatch,
     InitializedAtomTrace,
     KekuleParents,
     PairSiteInfo,
@@ -538,6 +540,7 @@ def compose_delta_formula(
 LEAVE_ME: dict[str, int] = {"C": 1, "H": 3}
 LEAVE_CH2: dict[str, int] = {"C": 1, "H": 2}
 LEAVE_O: dict[str, int] = {"O": 1}
+LEAVE_OO: dict[str, int] = {"O": 2}
 
 
 def named_leave_formula(leave: str) -> dict[str, int] | None:
@@ -860,7 +863,10 @@ def branches(
             if symbol:
                 item["partner"] = symbol
                 if removes_partner:
-                    item["removes"] = symbol
+                    # Cleaved-off partner stays in a product fragment — leave,
+                    # not junction ``removes`` (eliminated atoms).
+                    item["leave_formula"] = {symbol: 1}
+                    item["leave_count"] = 1
                     item["delta_formula"] = compose_delta_formula(
                         item.get("adds") or "",
                         item.get("removes") or "",
@@ -1606,6 +1612,50 @@ class FormulaDeltaMismatchWarning(UserWarning):
     """Observed product formula change disagrees with PatternInfo ``delta_formula``."""
 
 
+# Suite / callers install a shared list; metabolize and find_path append
+# structured :class:`FormulaDeltaMismatch` records (no warning-string parse).
+_formula_delta_mismatch_bag: ContextVar[list[FormulaDeltaMismatch] | None] = ContextVar(
+    "formula_delta_mismatch_bag", default=None
+)
+
+
+def begin_formula_delta_mismatch_collector(
+    bag: list[FormulaDeltaMismatch] | None = None,
+) -> tuple[list[FormulaDeltaMismatch], Token]:
+    """Install a shared mismatch list for this context; return ``(bag, token)``."""
+
+    installed = bag if bag is not None else []
+    return installed, _formula_delta_mismatch_bag.set(installed)
+
+
+def end_formula_delta_mismatch_collector(token: Token) -> None:
+    """Restore the previous collector (pass the token from :func:`begin_...`)."""
+
+    _formula_delta_mismatch_bag.reset(token)
+
+
+def formula_delta_mismatch_collector() -> list[FormulaDeltaMismatch] | None:
+    """Active suite/call collector, if any."""
+
+    return _formula_delta_mismatch_bag.get()
+
+
+def _record_formula_delta_mismatch(
+    detail: FormulaDeltaMismatch,
+    counters: EditCounters | None,
+) -> None:
+    """Append ``detail`` to counters and/or the context collector; bump count."""
+
+    bag = _formula_delta_mismatch_bag.get()
+    if bag is not None:
+        bag.append(detail)
+    if counters is not None:
+        mismatches = getattr(counters, "formula_delta_mismatches", None)
+        if isinstance(mismatches, list) and mismatches is not bag:
+            mismatches.append(detail)
+        _bump(counters, "formula_delta_mismatch")
+
+
 def _repeats_ancestor_dedup_smi(product: Mol) -> bool:
     """True when this product's dedup key equals an ancestor frame.
 
@@ -1654,11 +1704,12 @@ def _report_formula_delta_mismatch(
     products: Sequence[Mol],
     counters: EditCounters | None = None,
 ) -> bool:
-    """Warn + count when heavy-atom product Δformula ≠ declared effect delta.
+    """Warn + record when heavy-atom product Δformula ≠ declared effect delta.
 
     Returns ``True`` when the check matches or is skipped; ``False`` on a
-    mismatch (warning issued, ``formula_delta_mismatch`` bumped when counters
-    are given). Soft only — never drops chemistry.
+    mismatch (warning issued, ``FormulaDeltaMismatch`` appended / counter
+    bumped when collectors or counters are given). Soft only — never drops
+    chemistry.
     """
 
     if not products:
@@ -1705,15 +1756,24 @@ def _report_formula_delta_mismatch(
 
     if expected_heavy == actual_heavy:
         return True
+    detail = FormulaDeltaMismatch(
+        pattern=str(name),
+        declared_heavy=dict(expected_heavy),
+        observed_heavy=dict(actual_heavy),
+        cleaves=cleaves,
+        adds=adds,
+        removes=removes,
+        leave={str(k): int(v) for k, v in leave_formula.items()},
+    )
     warnings.warn(
-        f"Formula delta mismatch for pattern {name}: declared heavy "
-        f"{expected_heavy!r} ≠ observed {actual_heavy!r} "
-        f"(cleaves={cleaves}, adds={adds!r}, "
-        f"removes={removes!r}, leave={leave_formula!r})",
+        f"Formula delta mismatch for pattern {detail.pattern}: declared heavy "
+        f"{detail.declared_heavy!r} ≠ observed {detail.observed_heavy!r} "
+        f"(cleaves={detail.cleaves}, adds={detail.adds!r}, "
+        f"removes={detail.removes!r}, leave={detail.leave!r})",
         FormulaDeltaMismatchWarning,
         stacklevel=3,
     )
-    _bump(counters, "formula_delta_mismatch")
+    _record_formula_delta_mismatch(detail, counters)
     return False
 
 
@@ -3275,25 +3335,33 @@ class Dehydration(SmirksReactionRule):
             describe(
                 *branches(
                     ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
-                    removes="OH",
                     cleaves=True,
                     partner="O",
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_O),
                 ),
                 name="alcohol",
             ),
         ),
         (
             Smirks("[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]"),
-            describe(removes="OH", cleaves=True, partner="O", name="beta_elimination"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="beta_elimination",
+            ),
         ),
         (
             Smirks("[#6,#7:1]=[#8:2]>>[*:1].[*:2]"),
             describe(
                 *branches(
                     ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
-                    removes="O",
                     cleaves=True,
                     partner="O",
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_O),
                 ),
                 name="carbonyl",
             ),
@@ -3408,35 +3476,83 @@ class NitrogenReduction(ResonanceRule):
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
             Smirks("[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitro_charged"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitro_charged",
+            ),
         ),
         (
             Smirks("[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitro_anion"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitro_anion",
+            ),
         ),
         (
             Smirks("[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitro_neutral"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitro_neutral",
+            ),
         ),
         (
             Smirks("[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])"),
-            describe(removes="OO", cleaves=True, partner="O", name="nitro_to_amine"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=2,
+                leave_formula=dict(LEAVE_OO),
+                name="nitro_to_amine",
+            ),
         ),
         (
             Smirks("[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])"),
-            describe(removes="OO", cleaves=True, partner="O", name="nitro_both"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=2,
+                leave_formula=dict(LEAVE_OO),
+                name="nitro_both",
+            ),
         ),
         (
             Smirks("[#7:1]-,:[#8:2]>>([*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="hydroxylamine"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="hydroxylamine",
+            ),
         ),
         (
             Smirks("[#7D2:1]=[#8:2]>>([*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitroso"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitroso",
+            ),
         ),
         (
             Smirks("[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])"),
-            describe(removes="OO", cleaves=True, partner="O", name="nitro_both_any"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=2,
+                leave_formula=dict(LEAVE_OO),
+                name="nitro_both_any",
+            ),
         ),
     )
 
@@ -3514,7 +3630,13 @@ class SulfurReduction(SmirksReactionRule):
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
             Smirks("[#16:1]=[#8:2]>>[*:1].[*:2]"),
-            describe(removes="O", cleaves=True, partner="O", name="sulfoxide"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="sulfoxide",
+            ),
         ),
         (
             Smirks("[#16:1]-[#16:2]>>[*:1].[*:2]"),
@@ -3524,7 +3646,12 @@ class SulfurReduction(SmirksReactionRule):
             Smirks("[#16:1]-[#6,#8:2]>>[*:1].[*:2]"),
             describe(
                 *branches(({"map": 2, "z": 6},), cleaves=True),
-                *branches(({"map": 2, "z": 8},), cleaves=True, removes="O"),
+                *branches(
+                    ({"map": 2, "z": 8},),
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_O),
+                ),
                 name="thioether",
             ),
         ),

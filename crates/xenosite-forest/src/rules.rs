@@ -5,6 +5,8 @@
 //! [`SiteKind::AtomPair`] + [`Edit::PairEndpoint`]; atom/bond SMIRKS metabolize
 //! through the generic door.
 
+use std::collections::BTreeMap;
+
 use crate::pattern::{Edit, Effect, PatternInfo, SiteKind};
 use crate::ruleset::RuleSet;
 
@@ -61,7 +63,10 @@ fn halide_remove_branches(map: u16, base: Effect) -> Vec<Effect> {
         .map(|&(z, sym)| {
             Effect {
                 when: Some(crate::pattern::When::atomic(map, z)),
-                removes: Some(sym.into()),
+                // Cleaved-off halide stays in a product fragment — leave, not
+                // junction ``removes``.
+                leave_formula: BTreeMap::from([(sym.to_string(), 1)]),
+                leave_count: Some(1),
                 partner: Some(sym.into()),
                 ..base.clone()
             }
@@ -918,6 +923,13 @@ pub fn hydrolysis() -> RuleSet {
 
 /// `Dehydration` from Python `xenosite.forest.rules`.
 pub fn dehydration() -> RuleSet {
+    let o_leave = Effect {
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
     RuleSet::new(
         Some("Dehydration".into()),
         [
@@ -926,16 +938,7 @@ pub fn dehydration() -> RuleSet {
                 "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("OH".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "beta_elimination",
@@ -944,32 +947,14 @@ pub fn dehydration() -> RuleSet {
                 // Alcohol carbon + adjacent carbon — site set differs from a
                 // lone hydroxylation site, so OH→beta-elim is not circular.
                 vec![1, 3],
-                Effect {
-                    adds: None,
-                    removes: Some("OH".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "carbonyl",
                 "[#6,#7:1]=[#8:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("O".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave,
             ),
         ],
     )
@@ -1039,6 +1024,20 @@ pub fn hydrogenation() -> RuleSet {
 
 /// `NitrogenReduction` from Python `xenosite.forest.rules`.
 pub fn nitrogen_reduction() -> RuleSet {
+    let o_leave = Effect {
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
+    let oo_leave = Effect {
+        cleaves: true,
+        leave_count: Some(2),
+        leave_formula: crate::pattern::leave_oo(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
     RuleSet::new(
         Some("NitrogenReduction".into()),
         [
@@ -1047,128 +1046,56 @@ pub fn nitrogen_reduction() -> RuleSet {
                 "[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("O".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "nitro_anion",
                 "[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("O".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "nitro_neutral",
                 "[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("O".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "nitro_to_amine",
                 "[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("OO".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                oo_leave.clone(),
             ),
             smirks_row(
                 "nitro_both",
                 "[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("OO".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                oo_leave.clone(),
             ),
             smirks_row(
                 "hydroxylamine",
                 "[#7:1]-,:[#8:2]>>([*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("O".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "nitroso",
                 "[#7D2:1]=[#8:2]>>([*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("O".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                o_leave,
             ),
             smirks_row(
                 "nitro_both_any",
                 "[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    adds: None,
-                    removes: Some("OO".into()),
-                    cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
-                    ..Default::default()
-                },
+                oo_leave,
             ),
         ],
     )
@@ -1264,13 +1191,10 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: None,
-                    removes: Some("O".into()),
                     cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("O".into()),
                     ..Default::default()
                 },
             ),
@@ -1280,13 +1204,8 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: None,
-                    removes: None,
                     cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
+                    partner: Some("S".into()),
                     ..Default::default()
                 },
             ),
@@ -1296,16 +1215,26 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: None,
-                    removes: Some("O".into()),
                     cleaves: true,
-                    methide: false,
-                    dearomatizes: false,
-                    leave_count: None,
-                    partner: None,
                     ..Default::default()
                 },
-            ),
+            )
+            .with_possibilities(vec![
+                Effect {
+                    when: Some(crate::pattern::When::atomic(2, 6)),
+                    cleaves: true,
+                    ..Default::default()
+                }
+                .sealed(),
+                Effect {
+                    when: Some(crate::pattern::When::atomic(2, 8)),
+                    cleaves: true,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    ..Default::default()
+                }
+                .sealed(),
+            ]),
         ],
     )
 }

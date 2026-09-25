@@ -68,7 +68,7 @@ pub use find_path::{
 };
 pub use forest::{Formula, Structure, formula_delta, molecule_formula};
 pub use forest_mol::ForestMol;
-pub use formula_check::check_effect_delta_formula;
+pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use mol::{
@@ -83,7 +83,7 @@ pub use orbits::{
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
-    bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o,
+    bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o, leave_oo,
     merge_delta_formula, named_leave_formula,
 };
 pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};
