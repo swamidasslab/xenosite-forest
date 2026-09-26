@@ -337,7 +337,7 @@ fn main() {
 
     let mut variants = vec![
         Variant {
-            label: "baseline",
+            label: "add-both",
             rules: RulesKind::PhaseOne,
             config: base_cfg,
         },
