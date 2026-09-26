@@ -492,6 +492,7 @@ fn main() {
                 use_atom_diff: true,
                 lazy_closer: lazy,
                 heap_score: HeapScoreMode::match_product(),
+                ..FindPathConfig::default()
             };
             let mut best = f64::MAX;
             let mut bill = 0usize;

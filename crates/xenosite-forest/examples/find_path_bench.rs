@@ -414,6 +414,7 @@ fn main() {
                 use_atom_diff: true,
                 lazy_closer: true,
                 heap_score: mode,
+                ..FindPathConfig::default()
             };
             let summary = run_suite(cases, config, REPEATS, budget);
             print_suite_detail(title, &summary, &config);

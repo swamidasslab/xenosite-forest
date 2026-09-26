@@ -493,6 +493,7 @@ fn assert_find_path_no_mcs_fallback(reactant: &str, target: &str, max_nodes: usi
             use_atom_diff: true,
             lazy_closer: false,
             heap_score: HeapScoreMode::match_product(),
+            ..FindPathConfig::default()
         },
         |_| true,
     )
