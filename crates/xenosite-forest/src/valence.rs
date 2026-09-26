@@ -42,6 +42,9 @@ pub fn accept_product(mol: &Molecule) -> bool {
     if oxygen_oxonium(mol) {
         return false;
     }
+    if nitrogen_iminium(mol) {
+        return false;
+    }
     closed_shell(mol)
 }
 
@@ -50,6 +53,28 @@ pub fn accept_product(mol: &Molecule) -> bool {
 fn oxygen_oxonium(mol: &Molecule) -> bool {
     for (_idx, atom) in mol.atoms() {
         if atom.element.atomic_number() == 8 && atom.charge > 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Protonated iminium (`[NH+]=`): path-end rematch junk from neutral amides
+/// (APAP H → `CC(=O)[NH+]=C1…`). Nitro `N+` (no H) and pyridinium stay.
+/// Same closed-shell prefer as [`oxygen_oxonium`].
+fn nitrogen_iminium(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() != 7 || atom.charge <= 0 {
+            continue;
+        }
+        let has_double = mol.neighbors(idx).any(|(_nbr, bidx)| {
+            matches!(mol.bond(bidx).order, BondOrder::Double)
+        });
+        if !has_double {
+            continue;
+        }
+        let h = atom.hydrogen_count.unwrap_or_else(|| mol.implicit_hydrogen_count(idx));
+        if h > 0 {
             return true;
         }
     }

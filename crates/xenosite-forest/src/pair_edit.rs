@@ -375,38 +375,60 @@ impl PairCandidate {
         // Emit-path closed-shell settle + charge baseline (perception of
         // neighbor / bond-sum change — not edit-token names). Kekulé matcher
         // stays generic; config is the behavior contract.
-        let settle = charge_baseline_atoms(mol, &rw);
+        let mut settle = charge_baseline_atoms(mol, &rw);
         for &a in &settle {
             fill_closed_shell_h(&mut rw, a);
         }
         let residual = residual_pi_graph(mol, &self.system, &saturate);
+        // Two saturate ends sharing a π bond (aldehyde C=O, ethene C=C, amide
+        // C=O on a larger conjugated system): drop that bond. The one-edge
+        // special case below covers empty residual; non-empty residual must
+        // still saturate the shared edge before Kekulé rematch (APAP amide →
+        // hemiaminal) — residual never contains the saturate–saturate bond.
+        let mut shared_edge_saturated = false;
+        if saturate.len() == 2 {
+            let mut ends = saturate.iter().copied();
+            let a = ends.next().unwrap();
+            let b = ends.next().unwrap();
+            if let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) {
+                if matches!(
+                    bond.order,
+                    BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic
+                ) {
+                    rw.set_bond_order(
+                        bond_idx,
+                        if bond.order == BondOrder::Triple {
+                            BondOrder::Double
+                        } else {
+                            BondOrder::Single
+                        },
+                    );
+                    for &atom in &saturate {
+                        fill_closed_shell_h(&mut rw, atom);
+                    }
+                    shared_edge_saturated = true;
+                }
+            }
+        }
+        // Shared-edge saturate changes valence vs parent — include those atoms
+        // in the charge/H baseline for move_charge_with_bonds.
+        if shared_edge_saturated {
+            settle.extend(saturate.iter().copied());
+        }
         let forced = residual.perceive_forced_doubles(&rw);
-        // Two saturate ends sharing a bond (aldehyde C=O, ethene C=C): residual
-        // is empty, but the π bond between them must drop to single — path-end
-        // hydrogenation of a one-edge system. Vacuous keep+keep with *no* such
-        // edge still refuses (identity rebuild).
+        // Empty residual after the shared-edge drop: done (one-edge path_end).
+        // Vacuous keep+keep with no such edge still refuses (identity rebuild).
         if forced.is_empty() && residual.bonds.is_empty() {
             if saturate.len() == 2 {
                 let mut ends = saturate.iter().copied();
                 let a = ends.next().unwrap();
                 let b = ends.next().unwrap();
-                if let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) {
-                    if matches!(bond.order, BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic)
-                    {
-                        let mut product = rw.clone();
-                        product.set_bond_order(
-                            bond_idx,
-                            if bond.order == BondOrder::Triple {
-                                BondOrder::Double
-                            } else {
-                                BondOrder::Single
-                            },
-                        );
-                        for &atom in &saturate {
-                            fill_closed_shell_h(&mut product, atom);
-                        }
-                        let parent_csmi = canon_smiles(mol);
-                        let checked = aromatize(&product);
+                // Shared edge already saturated above — emit if the mol changed.
+                if rw.bond_between(atom_idx(a), atom_idx(b)).is_some() {
+                    let parent_csmi = canon_smiles(mol);
+                    let product_csmi = canon_smiles(&rw);
+                    if product_csmi != parent_csmi {
+                        let checked = aromatize(&rw);
                         let mut products = Vec::new();
                         let mut local_csmi = BTreeSet::new();
                         for frag in checked.fragments() {
@@ -1219,6 +1241,30 @@ mod tests {
         assert!(
             products.iter().any(|p| canon_of(p).unwrap() == want),
             "acetaldehyde path_end should emit ethanol; got {products:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_apap_amide_path_end_emits_hemiaminal() {
+        // Amide C=O sits on a conjugated system that includes the ring.
+        // Saturate–saturate edge must drop even when residual π is non-empty.
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("CC(=O)Nc1ccc(O)cc1").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let want = canon_of("CC(O)Nc1ccc(O)cc1").unwrap();
+        let products: Vec<String> = cands
+            .iter()
+            .flat_map(|c| c.materialize(&mol).unwrap_or_default())
+            .collect();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == want),
+            "APAP amide path_end should emit hemiaminal; got {products:?}"
         );
     }
 }
