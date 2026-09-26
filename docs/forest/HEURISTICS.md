@@ -374,15 +374,16 @@ Surviving non-cumulated doubles on the edited mol (other quinone C=O, etc.)
 **exclusive-seed** so rematch does not rewrite them into charge junk. Only
 **hetero** parent doubles (C=O / C=N / …) seed — pure C=C parent doubles
 rematch freely (locking them blocks benzoquinone→hydroquinone). Before
-rematch, **blank residual π** (demote residual doubles to single): otherwise
-`atom_must_be_matched` treats surviving C=C carbons as already paired and the
-demoted carbonyl carbons cannot complete a matching. Forced constraints
-re-assert edit-new / hetero leaves. Saturate demotes path π first (styrene
-vinyl), so those edges are gone before perceive and rematch freely. Status:
-approved. Tests:
+rematch, **blank surviving parent C=C** in the residual (not edit-new /
+hetero leaves): otherwise `atom_must_be_matched` treats those carbons as
+already paired and demoted carbonyl carbons cannot complete a matching.
+Forced constraints re-assert edit-new / hetero leaves. Saturate demotes path
+π first (styrene vinyl), so those edges are gone before perceive and rematch
+freely. Status: approved. Tests:
 `quinone_formation_add_carbonyl_on_phnco_keeps_nco` /
 `hydrogenation_styrene_vinyl_ring_path_emits_exocyclic` /
-`hydrogenation_benzoquinone_para_o_emits_hydroquinone`.
+`hydrogenation_benzoquinone_para_o_emits_hydroquinone` /
+`quinone_formation_dealkylates_phenyl_ncx_ahead_of_python`.
 
 **Saturate→residual π:** when a saturate site still has a double/triple into the
 residual (styrene vinyl CH2 end), demote that edge before rematch — same

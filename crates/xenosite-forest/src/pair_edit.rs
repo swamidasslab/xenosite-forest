@@ -477,12 +477,23 @@ impl PairCandidate {
             }
         }
         let residual_match = residual.after_forced_doubles(&framework_forced);
-        // Blank residual π so atom_must_be_matched does not treat surviving
-        // parent C=C as already-paired (those carbons drop out of must-match,
-        // leaving only demoted carbonyl carbons — para on benzoquinone cannot
-        // pair). Forced constraints re-assert edit-new / hetero leaves.
+        // Blank surviving parent C=C in the residual so atom_must_be_matched
+        // does not treat those carbons as already-paired (else demoted carbonyl
+        // carbons are the only must-match — para on benzoquinone cannot pair).
+        // Skip edit-forced / hetero leaves; forced constraints re-assert them.
         for &(a, b) in &residual_match.bonds {
-            let _ = demote_pi(&mut rw, a, b);
+            let edge = bond_key(a, b);
+            if edit_forced.contains(&edge) {
+                continue;
+            }
+            if !parent_doubles.contains(&edge) {
+                continue;
+            }
+            let z_a = rw.atom(atom_idx(a)).element.atomic_number();
+            let z_b = rw.atom(atom_idx(b)).element.atomic_number();
+            if z_a == 6 && z_b == 6 {
+                let _ = demote_pi(&mut rw, a, b);
+            }
         }
         // Empty residual: one-edge path_end (shared π saturated) may emit.
         // Vacuous keep+keep, or two carbonyl carbons that only demoted
