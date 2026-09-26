@@ -315,10 +315,12 @@ concepts:
   preferred_label: ortho-hydroxylation
   parents:
   - xrm:0000101
+  definition: 'ortho-hydroxylation: xenobiotic-metabolism term under aromatic hydroxylation.'
 - id: xrm:0000105
   preferred_label: meta-hydroxylation
   parents:
   - xrm:0000101
+  definition: 'meta-hydroxylation: xenobiotic-metabolism term under aromatic hydroxylation.'
 - id: xrm:0000106
   preferred_label: benzylic hydroxylation
   definition: Hydroxylation at a carbon adjacent to an aromatic ring.
@@ -339,6 +341,7 @@ concepts:
   - terminal methyl hydroxylation
   parents:
   - xrm:0000102
+  definition: 'ω-hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.'
 - id: xrm:0000109
   preferred_label: ω-1 hydroxylation
   synonyms:
@@ -346,6 +349,7 @@ concepts:
   - penultimate carbon hydroxylation
   parents:
   - xrm:0000102
+  definition: 'ω-1 hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.'
 - id: xrm:0000110
   preferred_label: epoxidation
   definition: Formation of a three-membered epoxide ring.
@@ -370,6 +374,7 @@ concepts:
   preferred_label: alkene epoxidation
   parents:
   - xrm:0000110
+  definition: 'alkene epoxidation: xenobiotic-metabolism term under epoxidation.'
 - id: xrm:0000112
   preferred_label: arene oxide formation
   synonyms:
@@ -389,6 +394,8 @@ concepts:
   related_match:
   - xrm:0004001
   - xrm:8000006
+  definition: 'thiophene epoxidation: xenobiotic-metabolism term under epoxidation, heteroaromatic oxidation
+    impact.'
 - id: xrm:0000120
   preferred_label: nitrogen oxidation
   synonyms:
@@ -398,12 +405,14 @@ concepts:
   - xrm:0000010
   related_match:
   - xrm:9100120
+  definition: 'nitrogen oxidation: xenobiotic-metabolism term under heteroatom oxidation, stable oxygenation.'
 - id: xrm:0000121
   preferred_label: N-oxide formation
   synonyms:
   - tertiary amine N-oxidation
   parents:
   - xrm:0000120
+  definition: 'N-oxide formation: xenobiotic-metabolism term under nitrogen oxidation.'
 - id: xrm:0000122
   preferred_label: hydroxylamine formation
   synonyms:
@@ -412,20 +421,24 @@ concepts:
   - xrm:0000120
   related_match:
   - xrm:1500018
+  definition: 'hydroxylamine formation: xenobiotic-metabolism term under nitrogen oxidation.'
 - id: xrm:0000123
   preferred_label: nitroso formation
   parents:
   - xrm:0000120
   related_match:
   - xrm:1500017
+  definition: 'nitroso formation: xenobiotic-metabolism term under nitrogen oxidation.'
 - id: xrm:0000124
   preferred_label: primary amine N-oxidation
   parents:
   - xrm:0000120
+  definition: 'primary amine N-oxidation: xenobiotic-metabolism term under nitrogen oxidation.'
 - id: xrm:0000125
   preferred_label: aromatic amine N-oxidation
   parents:
   - xrm:0000120
+  definition: 'aromatic amine N-oxidation: xenobiotic-metabolism term under nitrogen oxidation.'
 - id: xrm:0000130
   preferred_label: sulfur oxidation
   synonyms:
@@ -435,16 +448,19 @@ concepts:
   - xrm:0000010
   related_match:
   - xrm:9100130
+  definition: 'sulfur oxidation: xenobiotic-metabolism term under heteroatom oxidation, stable oxygenation.'
 - id: xrm:0000131
   preferred_label: sulfoxidation
   synonyms:
   - sulfoxide formation
   parents:
   - xrm:0000130
+  definition: 'sulfoxidation: xenobiotic-metabolism term under sulfur oxidation.'
 - id: xrm:0000132
   preferred_label: sulfone formation
   parents:
   - xrm:0000130
+  definition: 'sulfone formation: xenobiotic-metabolism term under sulfur oxidation.'
 - id: xrm:0000133
   preferred_label: thiophene S-oxidation
   definition: S-oxidation of a thiophene ring; a dearomatizing path to S-oxides.
@@ -458,22 +474,27 @@ concepts:
   preferred_label: thiol oxidation
   parents:
   - xrm:0000130
+  definition: 'thiol oxidation: xenobiotic-metabolism term under sulfur oxidation.'
 - id: xrm:0000135
   preferred_label: disulfide formation
   parents:
   - xrm:0000130
+  definition: 'disulfide formation: xenobiotic-metabolism term under sulfur oxidation.'
 - id: xrm:0000140
   preferred_label: primary carbon hydroxylation
   parents:
   - xrm:0000102
+  definition: 'primary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.'
 - id: xrm:0000141
   preferred_label: secondary carbon hydroxylation
   parents:
   - xrm:0000102
+  definition: 'secondary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.'
 - id: xrm:0000142
   preferred_label: tertiary carbon hydroxylation
   parents:
   - xrm:0000102
+  definition: 'tertiary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.'
 - id: xrm:0000143
   preferred_label: alicyclic hydroxylation
   definition: Hydroxylation of a saturated ring carbon.
@@ -510,6 +531,7 @@ concepts:
   synonyms:
   - oxidative N-dealkylation
   - N-dealkylative cleavage
+  definition: 'N-dealkylation: xenobiotic-metabolism term under dealkylation.'
 - id: xrm:0000202
   preferred_label: O-dealkylation
   parents:
@@ -519,6 +541,7 @@ concepts:
   - xrm:7100007
   synonyms:
   - oxidative O-dealkylation
+  definition: 'O-dealkylation: xenobiotic-metabolism term under dealkylation.'
 - id: xrm:0000203
   preferred_label: S-dealkylation
   parents:
@@ -526,12 +549,14 @@ concepts:
   related_match:
   - xrm:7100004
   - xrm:7100007
+  definition: 'S-dealkylation: xenobiotic-metabolism term under dealkylation.'
 - id: xrm:0000204
   preferred_label: C-dealkylation
   synonyms:
   - carbon–carbon dealkylation
   parents:
   - xrm:0000200
+  definition: 'C-dealkylation: xenobiotic-metabolism term under dealkylation.'
 - id: xrm:0000205
   preferred_label: N-demethylation
   synonyms:
@@ -550,10 +575,12 @@ concepts:
   - xrm:0000201
   related_match:
   - xrm:2200011
+  definition: 'N-deethylation: xenobiotic-metabolism term under N-dealkylation.'
 - id: xrm:0000207
   preferred_label: N-depropylation
   parents:
   - xrm:0000201
+  definition: 'N-depropylation: xenobiotic-metabolism term under N-dealkylation.'
 - id: xrm:0000208
   preferred_label: oxidative deamination
   synonyms:
@@ -575,6 +602,7 @@ concepts:
   - oxidative O-demethylation
   related_match:
   - xrm:2200010
+  definition: 'O-demethylation: xenobiotic-metabolism term under O-dealkylation.'
 - id: xrm:0000210
   preferred_label: oxidative dehalogenation
   synonyms:
@@ -596,6 +624,7 @@ concepts:
   - xrm:0000202
   related_match:
   - xrm:2200011
+  definition: 'O-deethylation: xenobiotic-metabolism term under O-dealkylation.'
 - id: xrm:0000212
   preferred_label: aromatic O-dealkylation
   definition: Cleavage of an aryl–O–alkyl ether (e.g. anisole → phenol).
@@ -605,18 +634,22 @@ concepts:
   preferred_label: aliphatic O-dealkylation
   parents:
   - xrm:0000202
+  definition: 'aliphatic O-dealkylation: xenobiotic-metabolism term under O-dealkylation.'
 - id: xrm:0000214
   preferred_label: oxidative defluorination
   parents:
   - xrm:0000210
+  definition: 'oxidative defluorination: xenobiotic-metabolism term under oxidative dehalogenation.'
 - id: xrm:0000215
   preferred_label: oxidative dechlorination
   parents:
   - xrm:0000210
+  definition: 'oxidative dechlorination: xenobiotic-metabolism term under oxidative dehalogenation.'
 - id: xrm:0000216
   preferred_label: oxidative debromination
   parents:
   - xrm:0000210
+  definition: 'oxidative debromination: xenobiotic-metabolism term under oxidative dehalogenation.'
 - id: xrm:0000300
   preferred_label: quinone formation
   synonyms:
@@ -646,10 +679,12 @@ concepts:
   preferred_label: ortho-quinone formation
   parents:
   - xrm:0000300
+  definition: 'ortho-quinone formation: xenobiotic-metabolism term under quinone formation.'
 - id: xrm:0000302
   preferred_label: para-quinone formation
   parents:
   - xrm:0000300
+  definition: 'para-quinone formation: xenobiotic-metabolism term under quinone formation.'
 - id: xrm:0000303
   preferred_label: quinone-imine formation
   synonyms:
@@ -662,6 +697,7 @@ concepts:
   - xrm:1500011
   - xrm:0000101
   - xrm:1500019
+  definition: 'quinone-imine formation: xenobiotic-metabolism term under quinone formation.'
 - id: xrm:0000304
   preferred_label: quinone-methide formation
   synonyms:
@@ -670,6 +706,7 @@ concepts:
   - xrm:0000300
   related_match:
   - xrm:8000005
+  definition: 'quinone-methide formation: xenobiotic-metabolism term under quinone formation.'
 - id: xrm:0000305
   preferred_label: iminium ion formation
   synonyms:
@@ -679,6 +716,7 @@ concepts:
   related_match:
   - xrm:0003000
   - xrm:1500014
+  definition: 'iminium ion formation: xenobiotic-metabolism term under dehydrogenation.'
 - id: xrm:0000306
   preferred_label: imine-methide formation
   synonyms:
@@ -718,6 +756,7 @@ concepts:
   related_match:
   - xrm:1500013
   - xrm:1400022
+  definition: 'alcohol oxidation: xenobiotic-metabolism term under dehydrogenation, carbon oxidation.'
 - id: xrm:0000311
   preferred_label: primary alcohol oxidation
   definition: Oxidation of a primary alcohol toward aldehyde (and often further to acid).
@@ -737,12 +776,14 @@ concepts:
   - aldehyde to carboxylic acid
   parents:
   - xrm:0000021
+  definition: 'aldehyde oxidation: xenobiotic-metabolism term under carbon oxidation.'
 - id: xrm:0000314
   preferred_label: alkene formation
   synonyms:
   - desaturation to alkene
   parents:
   - xrm:0000012
+  definition: 'alkene formation: xenobiotic-metabolism term under dehydrogenation.'
 - id: xrm:0000315
   preferred_label: aromatization
   definition: Formation or restoration of an aromatic system.
@@ -775,34 +816,41 @@ concepts:
   - xrm:0000013
   related_match:
   - xrm:9100401
+  definition: 'epoxide opening: xenobiotic-metabolism term under hydrolysis.'
 - id: xrm:0000401
   preferred_label: ester hydrolysis
   parents:
   - xrm:0000013
   related_match:
   - xrm:2200025
+  definition: 'ester hydrolysis: xenobiotic-metabolism term under hydrolysis.'
 - id: xrm:0000402
   preferred_label: amide hydrolysis
   parents:
   - xrm:0000013
   related_match:
   - xrm:2200022
+  definition: 'amide hydrolysis: xenobiotic-metabolism term under hydrolysis.'
 - id: xrm:0000403
   preferred_label: lactone hydrolysis
   parents:
   - xrm:0000401
+  definition: 'lactone hydrolysis: xenobiotic-metabolism term under ester hydrolysis.'
 - id: xrm:0000404
   preferred_label: lactam hydrolysis
   parents:
   - xrm:0000402
+  definition: 'lactam hydrolysis: xenobiotic-metabolism term under amide hydrolysis.'
 - id: xrm:0000405
   preferred_label: carbamate hydrolysis
   parents:
   - xrm:0000013
+  definition: 'carbamate hydrolysis: xenobiotic-metabolism term under hydrolysis.'
 - id: xrm:0000406
   preferred_label: urea hydrolysis
   parents:
   - xrm:0000013
+  definition: 'urea hydrolysis: xenobiotic-metabolism term under hydrolysis.'
 - id: xrm:0000407
   preferred_label: ether cleavage
   synonyms:
@@ -836,6 +884,7 @@ concepts:
   - xrm:0000013
   related_match:
   - xrm:9100402
+  definition: 'dephosphorylation: xenobiotic-metabolism term under hydrolysis.'
 - id: xrm:0000411
   preferred_label: nitrile hydrolysis
   synonyms:
@@ -853,6 +902,7 @@ concepts:
   - xrm:0000014
   related_match:
   - xrm:9100403
+  definition: 'azo cleavage: xenobiotic-metabolism term under hydrolysis, reduction.'
 - id: xrm:0000500
   preferred_label: hydrogenation
   synonyms:
@@ -865,20 +915,24 @@ concepts:
   - xrm:7000002
   - xrm:7200003
   - xrm:7700003
+  definition: 'hydrogenation: xenobiotic-metabolism term under reduction.'
 - id: xrm:0000501
   preferred_label: alkene hydrogenation
   parents:
   - xrm:0000500
+  definition: 'alkene hydrogenation: xenobiotic-metabolism term under hydrogenation.'
 - id: xrm:0000502
   preferred_label: alkyne hydrogenation
   parents:
   - xrm:0000500
+  definition: 'alkyne hydrogenation: xenobiotic-metabolism term under hydrogenation.'
 - id: xrm:0000510
   preferred_label: nitrogen reduction
   parents:
   - xrm:0000014
   related_match:
   - xrm:9100510
+  definition: 'nitrogen reduction: xenobiotic-metabolism term under reduction.'
 - id: xrm:0000511
   preferred_label: nitro reduction
   definition: Reduction of a nitro group toward nitroso, hydroxylamine, and/or amine.
@@ -888,24 +942,29 @@ concepts:
   preferred_label: nitro to amine reduction
   parents:
   - xrm:0000511
+  definition: 'nitro to amine reduction: xenobiotic-metabolism term under nitro reduction.'
 - id: xrm:0000513
   preferred_label: nitroaromatic reduction
   parents:
   - xrm:0000511
   related_match:
   - xrm:0003000
+  definition: 'nitroaromatic reduction: xenobiotic-metabolism term under nitro reduction.'
 - id: xrm:0000514
   preferred_label: azo reduction
   parents:
   - xrm:0000510
+  definition: 'azo reduction: xenobiotic-metabolism term under nitrogen reduction.'
 - id: xrm:0000515
   preferred_label: N-oxide reduction
   parents:
   - xrm:0000510
+  definition: 'N-oxide reduction: xenobiotic-metabolism term under nitrogen reduction.'
 - id: xrm:0000516
   preferred_label: oxime reduction
   parents:
   - xrm:0000510
+  definition: 'oxime reduction: xenobiotic-metabolism term under nitrogen reduction.'
 - id: xrm:0000520
   preferred_label: oxygen reduction
   synonyms:
@@ -915,14 +974,17 @@ concepts:
   - xrm:0000014
   related_match:
   - xrm:9100520
+  definition: 'oxygen reduction: xenobiotic-metabolism term under reduction.'
 - id: xrm:0000521
   preferred_label: ketone reduction
   parents:
   - xrm:0000520
+  definition: 'ketone reduction: xenobiotic-metabolism term under oxygen reduction.'
 - id: xrm:0000522
   preferred_label: aldehyde reduction
   parents:
   - xrm:0000520
+  definition: 'aldehyde reduction: xenobiotic-metabolism term under oxygen reduction.'
 - id: xrm:0000523
   preferred_label: quinone reduction
   parents:
@@ -930,6 +992,7 @@ concepts:
   - xrm:0000014
   related_match:
   - xrm:0004002
+  definition: 'quinone reduction: xenobiotic-metabolism term under oxygen reduction, reduction.'
 - id: xrm:0000524
   preferred_label: carbonyl reduction
   definition: Reduction of a carbonyl to an alcohol (Rainbow Table 1 reduction type).
@@ -944,16 +1007,19 @@ concepts:
   - xrm:0000014
   related_match:
   - xrm:9100530
+  definition: 'sulfur reduction: xenobiotic-metabolism term under reduction.'
 - id: xrm:0000531
   preferred_label: sulfoxide reduction
   parents:
   - xrm:0000530
   related_match:
   - xrm:0000533
+  definition: 'sulfoxide reduction: xenobiotic-metabolism term under sulfur reduction.'
 - id: xrm:0000532
   preferred_label: disulfide reduction
   parents:
   - xrm:0000530
+  definition: 'disulfide reduction: xenobiotic-metabolism term under sulfur reduction.'
 - id: xrm:0000533
   preferred_label: sulfo reduction
   synonyms:
@@ -970,14 +1036,17 @@ concepts:
   - xrm:0000014
   related_match:
   - xrm:9100540
+  definition: 'reductive dehalogenation: xenobiotic-metabolism term under reduction.'
 - id: xrm:0000541
   preferred_label: reductive defluorination
   parents:
   - xrm:0000540
+  definition: 'reductive defluorination: xenobiotic-metabolism term under reductive dehalogenation.'
 - id: xrm:0000542
   preferred_label: reductive dechlorination
   parents:
   - xrm:0000540
+  definition: 'reductive dechlorination: xenobiotic-metabolism term under reductive dehalogenation.'
 - id: xrm:0000550
   preferred_label: dehydration
   definition: Loss of water (often accompanying reductive or elimination paths).
@@ -1005,18 +1074,21 @@ concepts:
   - xrm:7500003
   - xrm:7700008
   - xrm:1500116
+  definition: 'glucuronidation: xenobiotic-metabolism term under phase II, phase II conjugation family.'
 - id: xrm:0001001
   preferred_label: O-glucuronidation
   parents:
   - xrm:0001000
   related_match:
   - xrm:1600135
+  definition: 'O-glucuronidation: xenobiotic-metabolism term under glucuronidation.'
 - id: xrm:0001002
   preferred_label: phenolic glucuronidation
   parents:
   - xrm:0001001
   related_match:
   - xrm:1600135
+  definition: 'phenolic glucuronidation: xenobiotic-metabolism term under O-glucuronidation.'
 - id: xrm:0001003
   preferred_label: alcoholic glucuronidation
   synonyms:
@@ -1025,6 +1097,7 @@ concepts:
   - xrm:0001001
   related_match:
   - xrm:1600135
+  definition: 'alcoholic glucuronidation: xenobiotic-metabolism term under O-glucuronidation.'
 - id: xrm:0001004
   preferred_label: acyl glucuronidation
   synonyms:
@@ -1044,6 +1117,7 @@ concepts:
   - xrm:0001000
   related_match:
   - xrm:1600136
+  definition: 'N-glucuronidation: xenobiotic-metabolism term under glucuronidation.'
 - id: xrm:0001006
   preferred_label: quaternary N-glucuronidation
   synonyms:
@@ -1052,24 +1126,28 @@ concepts:
   - xrm:0001005
   related_match:
   - xrm:1600136
+  definition: 'quaternary N-glucuronidation: xenobiotic-metabolism term under N-glucuronidation.'
 - id: xrm:0001007
   preferred_label: S-glucuronidation
   parents:
   - xrm:0001000
   related_match:
   - xrm:1600137
+  definition: 'S-glucuronidation: xenobiotic-metabolism term under glucuronidation.'
 - id: xrm:0001008
   preferred_label: C-glucuronidation
   parents:
   - xrm:0001000
   related_match:
   - xrm:1600138
+  definition: 'C-glucuronidation: xenobiotic-metabolism term under glucuronidation.'
 - id: xrm:0001009
   preferred_label: carbamoyl glucuronidation
   synonyms:
   - N-carbamoyl glucuronidation
   parents:
   - xrm:0001000
+  definition: 'carbamoyl glucuronidation: xenobiotic-metabolism term under glucuronidation.'
 - id: xrm:0001010
   preferred_label: sulfation
   synonyms:
@@ -1082,24 +1160,29 @@ concepts:
   related_match:
   - xrm:9101010
   - xrm:1500117
+  definition: 'sulfation: xenobiotic-metabolism term under phase II, phase II conjugation family.'
 - id: xrm:0001011
   preferred_label: O-sulfation
   parents:
   - xrm:0001010
   related_match:
   - xrm:1600135
+  definition: 'O-sulfation: xenobiotic-metabolism term under sulfation.'
 - id: xrm:0001012
   preferred_label: phenolic sulfation
   parents:
   - xrm:0001011
+  definition: 'phenolic sulfation: xenobiotic-metabolism term under O-sulfation.'
 - id: xrm:0001013
   preferred_label: alcoholic sulfation
   parents:
   - xrm:0001011
+  definition: 'alcoholic sulfation: xenobiotic-metabolism term under O-sulfation.'
 - id: xrm:0001014
   preferred_label: N-sulfation
   parents:
   - xrm:0001010
+  definition: 'N-sulfation: xenobiotic-metabolism term under sulfation.'
 - id: xrm:0001020
   preferred_label: acetylation
   synonyms:
@@ -1110,14 +1193,17 @@ concepts:
   - xrm:1300000
   related_match:
   - xrm:9101020
+  definition: 'acetylation: xenobiotic-metabolism term under phase II, phase II conjugation family.'
 - id: xrm:0001021
   preferred_label: N-acetylation
   parents:
   - xrm:0001020
+  definition: 'N-acetylation: xenobiotic-metabolism term under acetylation.'
 - id: xrm:0001022
   preferred_label: O-acetylation
   parents:
   - xrm:0001020
+  definition: 'O-acetylation: xenobiotic-metabolism term under acetylation.'
 - id: xrm:0001023
   preferred_label: deacetylation
   definition: Hydrolytic removal of an acetyl group (often esterase/amidase).
@@ -1140,6 +1226,7 @@ concepts:
   - xrm:7000003
   - xrm:1500114
   - xrm:1500019
+  definition: 'glutathionation: xenobiotic-metabolism term under phase II, phase II conjugation family.'
 - id: xrm:0001031
   preferred_label: Michael glutathionation
   synonyms:
@@ -1157,20 +1244,24 @@ concepts:
   - GSH epoxide conjugation
   parents:
   - xrm:0001030
+  definition: 'epoxide glutathionation: xenobiotic-metabolism term under glutathionation.'
 - id: xrm:0001033
   preferred_label: halide displacement glutathionation
   synonyms:
   - GSH nucleophilic aromatic/aliphatic substitution
   parents:
   - xrm:0001030
+  definition: 'halide displacement glutathionation: xenobiotic-metabolism term under glutathionation.'
 - id: xrm:0001034
   preferred_label: isocyanate glutathionation
   parents:
   - xrm:0001030
+  definition: 'isocyanate glutathionation: xenobiotic-metabolism term under glutathionation.'
 - id: xrm:0001035
   preferred_label: aziridine glutathionation
   parents:
   - xrm:0001030
+  definition: 'aziridine glutathionation: xenobiotic-metabolism term under glutathionation.'
 - id: xrm:0001036
   preferred_label: quinone glutathionation
   parents:
@@ -1178,6 +1269,7 @@ concepts:
   related_match:
   - xrm:0000300
   - xrm:8000008
+  definition: 'quinone glutathionation: xenobiotic-metabolism term under glutathionation.'
 - id: xrm:0001037
   preferred_label: mercapturic acid formation
   definition: Downstream processing of GSH conjugates to N-acetylcysteine (mercapturate) adducts.
@@ -1194,6 +1286,7 @@ concepts:
   parents:
   - xrm:0000002
   - xrm:1300000
+  definition: 'methylation: xenobiotic-metabolism term under phase II, phase II conjugation family.'
 - id: xrm:0001041
   preferred_label: O-methylation
   synonyms:
@@ -1202,12 +1295,14 @@ concepts:
   - xrm:0001040
   related_match:
   - xrm:1600135
+  definition: 'O-methylation: xenobiotic-metabolism term under methylation.'
 - id: xrm:0001042
   preferred_label: N-methylation
   parents:
   - xrm:0001040
   related_match:
   - xrm:1600136
+  definition: 'N-methylation: xenobiotic-metabolism term under methylation.'
 - id: xrm:0001043
   preferred_label: S-methylation
   synonyms:
@@ -1216,6 +1311,7 @@ concepts:
   - xrm:0001040
   related_match:
   - xrm:1600137
+  definition: 'S-methylation: xenobiotic-metabolism term under methylation.'
 - id: xrm:0001050
   preferred_label: amino acid conjugation
   parents:
@@ -1223,6 +1319,8 @@ concepts:
   - xrm:1300000
   synonyms:
   - amino_acid_conjugation
+  definition: 'amino acid conjugation: xenobiotic-metabolism term under phase II, phase II conjugation
+    family.'
 - id: xrm:0001051
   preferred_label: glycine conjugation
   synonyms:
@@ -1233,10 +1331,13 @@ concepts:
   - xrm:0001050
   - xrm:1300000
   - xrm:0000002
+  definition: 'glycine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II
+    conjugation family, phase II.'
 - id: xrm:0001052
   preferred_label: glutamine conjugation
   parents:
   - xrm:0001050
+  definition: 'glutamine conjugation: xenobiotic-metabolism term under amino acid conjugation.'
 - id: xrm:0001053
   preferred_label: taurine conjugation
   parents:
@@ -1245,10 +1346,13 @@ concepts:
   - xrm:0000002
   synonyms:
   - taurine_conjugation
+  definition: 'taurine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II
+    conjugation family, phase II.'
 - id: xrm:0001054
   preferred_label: serine conjugation
   parents:
   - xrm:0001050
+  definition: 'serine conjugation: xenobiotic-metabolism term under amino acid conjugation.'
 - id: xrm:0001060
   preferred_label: glycosylation
   synonyms:
@@ -1281,10 +1385,12 @@ concepts:
   preferred_label: keto–enol tautomerization
   parents:
   - xrm:0002000
+  definition: 'keto–enol tautomerization: xenobiotic-metabolism term under tautomerization.'
 - id: xrm:0002002
   preferred_label: imine–enamine tautomerization
   parents:
   - xrm:0002000
+  definition: 'imine–enamine tautomerization: xenobiotic-metabolism term under tautomerization.'
 - id: xrm:0002003
   preferred_label: isomerization
   definition: Isomeric rearrangement without net redox (Rainbow excluded phase I remainder; Metabolic
@@ -1353,6 +1459,7 @@ concepts:
   - xrm:0000304
   - xrm:0001004
   - xrm:7500001
+  definition: 'reactive metabolite formation: xenobiotic-metabolism term under bioactivation.'
 - id: xrm:0004000
   preferred_label: process facet
   definition: Cross-cutting process-mechanism facets (NIH shift, ipso, carbinolamine cleavage, acyl migration,
@@ -1415,6 +1522,8 @@ concepts:
   - xrm:0000101
   - xrm:0004003
   - xrm:8000007
+  definition: 'arene oxide rearrangement: xenobiotic-metabolism term under process facet, arene oxide
+    pathway.'
 - id: xrm:0004006
   preferred_label: carbinolamine cleavage
   definition: Spontaneous collapse of an α-hydroxy amine to amine + carbonyl; mechanism shared by N-dealkylation
@@ -1430,6 +1539,7 @@ concepts:
   - xrm:0004000
   related_match:
   - xrm:0000202
+  definition: 'hemiacetal cleavage: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004008
   preferred_label: ring opening
   parents:
@@ -1438,14 +1548,17 @@ concepts:
   related_match:
   - xrm:0000400
   - xrm:0000412
+  definition: 'ring opening: xenobiotic-metabolism term under process facet, chemical transformation.'
 - id: xrm:0004009
   preferred_label: ring expansion
   parents:
   - xrm:0004000
+  definition: 'ring expansion: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004010
   preferred_label: ring contraction
   parents:
   - xrm:0004000
+  definition: 'ring contraction: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004011
   preferred_label: cis-dihydroxylation
   synonyms:
@@ -1464,10 +1577,12 @@ concepts:
   - xrm:1100000
   related_match:
   - xrm:0000400
+  definition: 'hydration: xenobiotic-metabolism term under process facet, hydrolysis, chemical transformation.'
 - id: xrm:0004013
   preferred_label: hydration of carbonyl
   parents:
   - xrm:0004012
+  definition: 'hydration of carbonyl: xenobiotic-metabolism term under hydration.'
 - id: xrm:0004014
   preferred_label: conjugate addition
   synonyms:
@@ -1479,16 +1594,19 @@ concepts:
   - xrm:0001036
   - xrm:8000004
   - xrm:8000008
+  definition: 'conjugate addition: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004015
   preferred_label: nucleophilic aromatic substitution
   parents:
   - xrm:0004000
   related_match:
   - xrm:0001033
+  definition: 'nucleophilic aromatic substitution: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004016
   preferred_label: radical recombination metabolite
   parents:
   - xrm:0004000
+  definition: 'radical recombination metabolite: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004017
   preferred_label: acyl migration
   definition: Intramolecular migration of an acyl group (notable for acyl glucuronides).
@@ -1503,6 +1621,7 @@ concepts:
   related_match:
   - xrm:0001004
   - xrm:0001061
+  definition: 'transacylation: xenobiotic-metabolism term under process facet.'
 - id: xrm:0004019
   preferred_label: radical formation
   definition: Formation of a radical metabolite intermediate (Rainbow excluded phase I remainder).

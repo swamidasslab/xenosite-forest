@@ -9,3 +9,8 @@ GOLD-0007	C	C	chem:acyl-glucuronidation|chem:forms-reactive-conjugate	acyl glucu
 GOLD-0008	[CH3:1]c1ccc([CH3:2])cc1	O[CH2:1]c1ccc([CH3:2])cc1	chem:benzylic-hydroxylation@1	benzylic hydroxylation	phase I		benzylic site	metabolic soft spot	
 GOLD-0009	C	C	forest.rule:Glutathionation	glutathionation	phase II	GSH-trappable metabolite		forms reactive conjugate	
 GOLD-0010	CCO	CC=O		alcohol oxidation	phase I	aldehyde		aldehyde forming	
+GOLD-0011	C	C	forest.rule:Sulfation	sulfation	phase II	sulfate conjugate			
+GOLD-0012	C	C	chem:N-glucuronidation	N-glucuronidation	phase II	glucuronide conjugate			
+GOLD-0013	C	C	chem:epoxidation@1,2	epoxidation	phase I	epoxide			
+GOLD-0014	C	C	chem:inactive-metabolite|chem:about-product					pharmacologically inactive metabolite	
+GOLD-0015	C	C	chem:prodrug|chem:about-parent					prodrug	

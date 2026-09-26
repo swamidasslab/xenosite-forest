@@ -1,6 +1,6 @@
 # Competency evaluation plan (executable questions)
 
-Status: **implemented** (executable CQs in CI).
+Status: **executed** (executable CQs in CI; gold set scored; SHACL definitions complete).
 
 Store of the design note (metabolism-specific XRM adaptation). Every competency
 question is a regression test: if the ontology cannot answer it, add terms/links

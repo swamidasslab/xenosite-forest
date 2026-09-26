@@ -325,6 +325,7 @@
       "type": "skos:Concept",
       "prefLabel": "ortho-hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "ortho-hydroxylation: xenobiotic-metabolism term under aromatic hydroxylation.",
       "broader": "xrm:0000101"
     },
     {
@@ -332,6 +333,7 @@
       "type": "skos:Concept",
       "prefLabel": "meta-hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "meta-hydroxylation: xenobiotic-metabolism term under aromatic hydroxylation.",
       "broader": "xrm:0000101"
     },
     {
@@ -361,6 +363,7 @@
       "type": "skos:Concept",
       "prefLabel": "ω-hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "ω-hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.",
       "altLabel": [
         "omega-hydroxylation",
         "terminal methyl hydroxylation"
@@ -372,6 +375,7 @@
       "type": "skos:Concept",
       "prefLabel": "ω-1 hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "ω-1 hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.",
       "altLabel": [
         "omega-1 hydroxylation",
         "penultimate carbon hydroxylation"
@@ -410,6 +414,7 @@
       "type": "skos:Concept",
       "prefLabel": "alkene epoxidation",
       "inScheme": "xrm:scheme",
+      "definition": "alkene epoxidation: xenobiotic-metabolism term under epoxidation.",
       "broader": "xrm:0000110"
     },
     {
@@ -433,6 +438,7 @@
       "type": "skos:Concept",
       "prefLabel": "thiophene epoxidation",
       "inScheme": "xrm:scheme",
+      "definition": "thiophene epoxidation: xenobiotic-metabolism term under epoxidation, heteroaromatic oxidation impact.",
       "broader": [
         "xrm:0000110",
         "xrm:8000006"
@@ -447,6 +453,7 @@
       "type": "skos:Concept",
       "prefLabel": "nitrogen oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "nitrogen oxidation: xenobiotic-metabolism term under heteroatom oxidation, stable oxygenation.",
       "altLabel": [
         "N-oxidation"
       ],
@@ -461,6 +468,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-oxide formation",
       "inScheme": "xrm:scheme",
+      "definition": "N-oxide formation: xenobiotic-metabolism term under nitrogen oxidation.",
       "altLabel": [
         "tertiary amine N-oxidation"
       ],
@@ -471,6 +479,7 @@
       "type": "skos:Concept",
       "prefLabel": "hydroxylamine formation",
       "inScheme": "xrm:scheme",
+      "definition": "hydroxylamine formation: xenobiotic-metabolism term under nitrogen oxidation.",
       "altLabel": [
         "N-hydroxylation"
       ],
@@ -482,6 +491,7 @@
       "type": "skos:Concept",
       "prefLabel": "nitroso formation",
       "inScheme": "xrm:scheme",
+      "definition": "nitroso formation: xenobiotic-metabolism term under nitrogen oxidation.",
       "broader": "xrm:0000120",
       "relatedMatch": "xrm:1500017"
     },
@@ -490,6 +500,7 @@
       "type": "skos:Concept",
       "prefLabel": "primary amine N-oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "primary amine N-oxidation: xenobiotic-metabolism term under nitrogen oxidation.",
       "broader": "xrm:0000120"
     },
     {
@@ -497,6 +508,7 @@
       "type": "skos:Concept",
       "prefLabel": "aromatic amine N-oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "aromatic amine N-oxidation: xenobiotic-metabolism term under nitrogen oxidation.",
       "broader": "xrm:0000120"
     },
     {
@@ -504,6 +516,7 @@
       "type": "skos:Concept",
       "prefLabel": "sulfur oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "sulfur oxidation: xenobiotic-metabolism term under heteroatom oxidation, stable oxygenation.",
       "altLabel": [
         "S-oxidation"
       ],
@@ -518,6 +531,7 @@
       "type": "skos:Concept",
       "prefLabel": "sulfoxidation",
       "inScheme": "xrm:scheme",
+      "definition": "sulfoxidation: xenobiotic-metabolism term under sulfur oxidation.",
       "altLabel": [
         "sulfoxide formation"
       ],
@@ -528,6 +542,7 @@
       "type": "skos:Concept",
       "prefLabel": "sulfone formation",
       "inScheme": "xrm:scheme",
+      "definition": "sulfone formation: xenobiotic-metabolism term under sulfur oxidation.",
       "broader": "xrm:0000130"
     },
     {
@@ -548,6 +563,7 @@
       "type": "skos:Concept",
       "prefLabel": "thiol oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "thiol oxidation: xenobiotic-metabolism term under sulfur oxidation.",
       "broader": "xrm:0000130"
     },
     {
@@ -555,6 +571,7 @@
       "type": "skos:Concept",
       "prefLabel": "disulfide formation",
       "inScheme": "xrm:scheme",
+      "definition": "disulfide formation: xenobiotic-metabolism term under sulfur oxidation.",
       "broader": "xrm:0000130"
     },
     {
@@ -562,6 +579,7 @@
       "type": "skos:Concept",
       "prefLabel": "primary carbon hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "primary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.",
       "broader": "xrm:0000102"
     },
     {
@@ -569,6 +587,7 @@
       "type": "skos:Concept",
       "prefLabel": "secondary carbon hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "secondary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.",
       "broader": "xrm:0000102"
     },
     {
@@ -576,6 +595,7 @@
       "type": "skos:Concept",
       "prefLabel": "tertiary carbon hydroxylation",
       "inScheme": "xrm:scheme",
+      "definition": "tertiary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.",
       "broader": "xrm:0000102"
     },
     {
@@ -615,6 +635,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-dealkylation",
       "inScheme": "xrm:scheme",
+      "definition": "N-dealkylation: xenobiotic-metabolism term under dealkylation.",
       "altLabel": [
         "oxidative N-dealkylation",
         "N-dealkylative cleavage"
@@ -634,6 +655,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-dealkylation",
       "inScheme": "xrm:scheme",
+      "definition": "O-dealkylation: xenobiotic-metabolism term under dealkylation.",
       "altLabel": [
         "oxidative O-dealkylation"
       ],
@@ -648,6 +670,7 @@
       "type": "skos:Concept",
       "prefLabel": "S-dealkylation",
       "inScheme": "xrm:scheme",
+      "definition": "S-dealkylation: xenobiotic-metabolism term under dealkylation.",
       "broader": "xrm:0000200",
       "relatedMatch": [
         "xrm:7100004",
@@ -659,6 +682,7 @@
       "type": "skos:Concept",
       "prefLabel": "C-dealkylation",
       "inScheme": "xrm:scheme",
+      "definition": "C-dealkylation: xenobiotic-metabolism term under dealkylation.",
       "altLabel": [
         "carbon–carbon dealkylation"
       ],
@@ -686,6 +710,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-deethylation",
       "inScheme": "xrm:scheme",
+      "definition": "N-deethylation: xenobiotic-metabolism term under N-dealkylation.",
       "broader": "xrm:0000201",
       "relatedMatch": "xrm:2200011"
     },
@@ -694,6 +719,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-depropylation",
       "inScheme": "xrm:scheme",
+      "definition": "N-depropylation: xenobiotic-metabolism term under N-dealkylation.",
       "broader": "xrm:0000201"
     },
     {
@@ -720,6 +746,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-demethylation",
       "inScheme": "xrm:scheme",
+      "definition": "O-demethylation: xenobiotic-metabolism term under O-dealkylation.",
       "altLabel": [
         "aryl methyl ether cleavage",
         "oxidative O-demethylation"
@@ -754,6 +781,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-deethylation",
       "inScheme": "xrm:scheme",
+      "definition": "O-deethylation: xenobiotic-metabolism term under O-dealkylation.",
       "broader": "xrm:0000202",
       "relatedMatch": "xrm:2200011"
     },
@@ -770,6 +798,7 @@
       "type": "skos:Concept",
       "prefLabel": "aliphatic O-dealkylation",
       "inScheme": "xrm:scheme",
+      "definition": "aliphatic O-dealkylation: xenobiotic-metabolism term under O-dealkylation.",
       "broader": "xrm:0000202"
     },
     {
@@ -777,6 +806,7 @@
       "type": "skos:Concept",
       "prefLabel": "oxidative defluorination",
       "inScheme": "xrm:scheme",
+      "definition": "oxidative defluorination: xenobiotic-metabolism term under oxidative dehalogenation.",
       "broader": "xrm:0000210"
     },
     {
@@ -784,6 +814,7 @@
       "type": "skos:Concept",
       "prefLabel": "oxidative dechlorination",
       "inScheme": "xrm:scheme",
+      "definition": "oxidative dechlorination: xenobiotic-metabolism term under oxidative dehalogenation.",
       "broader": "xrm:0000210"
     },
     {
@@ -791,6 +822,7 @@
       "type": "skos:Concept",
       "prefLabel": "oxidative debromination",
       "inScheme": "xrm:scheme",
+      "definition": "oxidative debromination: xenobiotic-metabolism term under oxidative dehalogenation.",
       "broader": "xrm:0000210"
     },
     {
@@ -826,6 +858,7 @@
       "type": "skos:Concept",
       "prefLabel": "ortho-quinone formation",
       "inScheme": "xrm:scheme",
+      "definition": "ortho-quinone formation: xenobiotic-metabolism term under quinone formation.",
       "broader": "xrm:0000300"
     },
     {
@@ -833,6 +866,7 @@
       "type": "skos:Concept",
       "prefLabel": "para-quinone formation",
       "inScheme": "xrm:scheme",
+      "definition": "para-quinone formation: xenobiotic-metabolism term under quinone formation.",
       "broader": "xrm:0000300"
     },
     {
@@ -840,6 +874,7 @@
       "type": "skos:Concept",
       "prefLabel": "quinone-imine formation",
       "inScheme": "xrm:scheme",
+      "definition": "quinone-imine formation: xenobiotic-metabolism term under quinone formation.",
       "altLabel": [
         "quinone imine formation",
         "NAPQI-type formation"
@@ -857,6 +892,7 @@
       "type": "skos:Concept",
       "prefLabel": "quinone-methide formation",
       "inScheme": "xrm:scheme",
+      "definition": "quinone-methide formation: xenobiotic-metabolism term under quinone formation.",
       "altLabel": [
         "quinone methide formation"
       ],
@@ -868,6 +904,7 @@
       "type": "skos:Concept",
       "prefLabel": "iminium ion formation",
       "inScheme": "xrm:scheme",
+      "definition": "iminium ion formation: xenobiotic-metabolism term under dehydrogenation.",
       "altLabel": [
         "iminium formation"
       ],
@@ -916,6 +953,7 @@
       "type": "skos:Concept",
       "prefLabel": "alcohol oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "alcohol oxidation: xenobiotic-metabolism term under dehydrogenation, carbon oxidation.",
       "altLabel": [
         "alcohol dehydrogenation",
         "alcohol to aldehyde"
@@ -954,6 +992,7 @@
       "type": "skos:Concept",
       "prefLabel": "aldehyde oxidation",
       "inScheme": "xrm:scheme",
+      "definition": "aldehyde oxidation: xenobiotic-metabolism term under carbon oxidation.",
       "altLabel": [
         "aldehyde to carboxylic acid"
       ],
@@ -964,6 +1003,7 @@
       "type": "skos:Concept",
       "prefLabel": "alkene formation",
       "inScheme": "xrm:scheme",
+      "definition": "alkene formation: xenobiotic-metabolism term under dehydrogenation.",
       "altLabel": [
         "desaturation to alkene"
       ],
@@ -1009,6 +1049,7 @@
       "type": "skos:Concept",
       "prefLabel": "epoxide opening",
       "inScheme": "xrm:scheme",
+      "definition": "epoxide opening: xenobiotic-metabolism term under hydrolysis.",
       "altLabel": [
         "epoxide hydration",
         "epoxide hydrolysis"
@@ -1021,6 +1062,7 @@
       "type": "skos:Concept",
       "prefLabel": "ester hydrolysis",
       "inScheme": "xrm:scheme",
+      "definition": "ester hydrolysis: xenobiotic-metabolism term under hydrolysis.",
       "broader": "xrm:0000013",
       "relatedMatch": "xrm:2200025"
     },
@@ -1029,6 +1071,7 @@
       "type": "skos:Concept",
       "prefLabel": "amide hydrolysis",
       "inScheme": "xrm:scheme",
+      "definition": "amide hydrolysis: xenobiotic-metabolism term under hydrolysis.",
       "broader": "xrm:0000013",
       "relatedMatch": "xrm:2200022"
     },
@@ -1037,6 +1080,7 @@
       "type": "skos:Concept",
       "prefLabel": "lactone hydrolysis",
       "inScheme": "xrm:scheme",
+      "definition": "lactone hydrolysis: xenobiotic-metabolism term under ester hydrolysis.",
       "broader": "xrm:0000401"
     },
     {
@@ -1044,6 +1088,7 @@
       "type": "skos:Concept",
       "prefLabel": "lactam hydrolysis",
       "inScheme": "xrm:scheme",
+      "definition": "lactam hydrolysis: xenobiotic-metabolism term under amide hydrolysis.",
       "broader": "xrm:0000402"
     },
     {
@@ -1051,6 +1096,7 @@
       "type": "skos:Concept",
       "prefLabel": "carbamate hydrolysis",
       "inScheme": "xrm:scheme",
+      "definition": "carbamate hydrolysis: xenobiotic-metabolism term under hydrolysis.",
       "broader": "xrm:0000013"
     },
     {
@@ -1058,6 +1104,7 @@
       "type": "skos:Concept",
       "prefLabel": "urea hydrolysis",
       "inScheme": "xrm:scheme",
+      "definition": "urea hydrolysis: xenobiotic-metabolism term under hydrolysis.",
       "broader": "xrm:0000013"
     },
     {
@@ -1098,6 +1145,7 @@
       "type": "skos:Concept",
       "prefLabel": "dephosphorylation",
       "inScheme": "xrm:scheme",
+      "definition": "dephosphorylation: xenobiotic-metabolism term under hydrolysis.",
       "altLabel": [
         "phosphate ester hydrolysis"
       ],
@@ -1120,6 +1168,7 @@
       "type": "skos:Concept",
       "prefLabel": "azo cleavage",
       "inScheme": "xrm:scheme",
+      "definition": "azo cleavage: xenobiotic-metabolism term under hydrolysis, reduction.",
       "altLabel": [
         "azo splitting",
         "azo reduction/cleavage"
@@ -1135,6 +1184,7 @@
       "type": "skos:Concept",
       "prefLabel": "hydrogenation",
       "inScheme": "xrm:scheme",
+      "definition": "hydrogenation: xenobiotic-metabolism term under reduction.",
       "altLabel": [
         "alkene hydrogenation",
         "reductive saturation"
@@ -1152,6 +1202,7 @@
       "type": "skos:Concept",
       "prefLabel": "alkene hydrogenation",
       "inScheme": "xrm:scheme",
+      "definition": "alkene hydrogenation: xenobiotic-metabolism term under hydrogenation.",
       "broader": "xrm:0000500"
     },
     {
@@ -1159,6 +1210,7 @@
       "type": "skos:Concept",
       "prefLabel": "alkyne hydrogenation",
       "inScheme": "xrm:scheme",
+      "definition": "alkyne hydrogenation: xenobiotic-metabolism term under hydrogenation.",
       "broader": "xrm:0000500"
     },
     {
@@ -1166,6 +1218,7 @@
       "type": "skos:Concept",
       "prefLabel": "nitrogen reduction",
       "inScheme": "xrm:scheme",
+      "definition": "nitrogen reduction: xenobiotic-metabolism term under reduction.",
       "broader": "xrm:0000014",
       "relatedMatch": "xrm:9100510"
     },
@@ -1182,6 +1235,7 @@
       "type": "skos:Concept",
       "prefLabel": "nitro to amine reduction",
       "inScheme": "xrm:scheme",
+      "definition": "nitro to amine reduction: xenobiotic-metabolism term under nitro reduction.",
       "broader": "xrm:0000511"
     },
     {
@@ -1189,6 +1243,7 @@
       "type": "skos:Concept",
       "prefLabel": "nitroaromatic reduction",
       "inScheme": "xrm:scheme",
+      "definition": "nitroaromatic reduction: xenobiotic-metabolism term under nitro reduction.",
       "broader": "xrm:0000511",
       "relatedMatch": "xrm:0003000"
     },
@@ -1197,6 +1252,7 @@
       "type": "skos:Concept",
       "prefLabel": "azo reduction",
       "inScheme": "xrm:scheme",
+      "definition": "azo reduction: xenobiotic-metabolism term under nitrogen reduction.",
       "broader": "xrm:0000510"
     },
     {
@@ -1204,6 +1260,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-oxide reduction",
       "inScheme": "xrm:scheme",
+      "definition": "N-oxide reduction: xenobiotic-metabolism term under nitrogen reduction.",
       "broader": "xrm:0000510"
     },
     {
@@ -1211,6 +1268,7 @@
       "type": "skos:Concept",
       "prefLabel": "oxime reduction",
       "inScheme": "xrm:scheme",
+      "definition": "oxime reduction: xenobiotic-metabolism term under nitrogen reduction.",
       "broader": "xrm:0000510"
     },
     {
@@ -1218,6 +1276,7 @@
       "type": "skos:Concept",
       "prefLabel": "oxygen reduction",
       "inScheme": "xrm:scheme",
+      "definition": "oxygen reduction: xenobiotic-metabolism term under reduction.",
       "altLabel": [
         "carbonyl reduction",
         "ketone/aldehyde reduction"
@@ -1230,6 +1289,7 @@
       "type": "skos:Concept",
       "prefLabel": "ketone reduction",
       "inScheme": "xrm:scheme",
+      "definition": "ketone reduction: xenobiotic-metabolism term under oxygen reduction.",
       "broader": "xrm:0000520"
     },
     {
@@ -1237,6 +1297,7 @@
       "type": "skos:Concept",
       "prefLabel": "aldehyde reduction",
       "inScheme": "xrm:scheme",
+      "definition": "aldehyde reduction: xenobiotic-metabolism term under oxygen reduction.",
       "broader": "xrm:0000520"
     },
     {
@@ -1244,6 +1305,7 @@
       "type": "skos:Concept",
       "prefLabel": "quinone reduction",
       "inScheme": "xrm:scheme",
+      "definition": "quinone reduction: xenobiotic-metabolism term under oxygen reduction, reduction.",
       "broader": [
         "xrm:0000520",
         "xrm:0000014"
@@ -1267,6 +1329,7 @@
       "type": "skos:Concept",
       "prefLabel": "sulfur reduction",
       "inScheme": "xrm:scheme",
+      "definition": "sulfur reduction: xenobiotic-metabolism term under reduction.",
       "broader": "xrm:0000014",
       "relatedMatch": "xrm:9100530"
     },
@@ -1275,6 +1338,7 @@
       "type": "skos:Concept",
       "prefLabel": "sulfoxide reduction",
       "inScheme": "xrm:scheme",
+      "definition": "sulfoxide reduction: xenobiotic-metabolism term under sulfur reduction.",
       "broader": "xrm:0000530",
       "relatedMatch": "xrm:0000533"
     },
@@ -1283,6 +1347,7 @@
       "type": "skos:Concept",
       "prefLabel": "disulfide reduction",
       "inScheme": "xrm:scheme",
+      "definition": "disulfide reduction: xenobiotic-metabolism term under sulfur reduction.",
       "broader": "xrm:0000530"
     },
     {
@@ -1303,6 +1368,7 @@
       "type": "skos:Concept",
       "prefLabel": "reductive dehalogenation",
       "inScheme": "xrm:scheme",
+      "definition": "reductive dehalogenation: xenobiotic-metabolism term under reduction.",
       "broader": "xrm:0000014",
       "relatedMatch": "xrm:9100540"
     },
@@ -1311,6 +1377,7 @@
       "type": "skos:Concept",
       "prefLabel": "reductive defluorination",
       "inScheme": "xrm:scheme",
+      "definition": "reductive defluorination: xenobiotic-metabolism term under reductive dehalogenation.",
       "broader": "xrm:0000540"
     },
     {
@@ -1318,6 +1385,7 @@
       "type": "skos:Concept",
       "prefLabel": "reductive dechlorination",
       "inScheme": "xrm:scheme",
+      "definition": "reductive dechlorination: xenobiotic-metabolism term under reductive dehalogenation.",
       "broader": "xrm:0000540"
     },
     {
@@ -1338,6 +1406,7 @@
       "type": "skos:Concept",
       "prefLabel": "glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "glucuronidation: xenobiotic-metabolism term under phase II, phase II conjugation family.",
       "altLabel": [
         "glucuronosylation",
         "glucuronic acid conjugation",
@@ -1363,6 +1432,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "O-glucuronidation: xenobiotic-metabolism term under glucuronidation.",
       "broader": "xrm:0001000",
       "relatedMatch": "xrm:1600135"
     },
@@ -1371,6 +1441,7 @@
       "type": "skos:Concept",
       "prefLabel": "phenolic glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "phenolic glucuronidation: xenobiotic-metabolism term under O-glucuronidation.",
       "broader": "xrm:0001001",
       "relatedMatch": "xrm:1600135"
     },
@@ -1379,6 +1450,7 @@
       "type": "skos:Concept",
       "prefLabel": "alcoholic glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "alcoholic glucuronidation: xenobiotic-metabolism term under O-glucuronidation.",
       "altLabel": [
         "aliphatic O-glucuronidation"
       ],
@@ -1408,6 +1480,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "N-glucuronidation: xenobiotic-metabolism term under glucuronidation.",
       "broader": "xrm:0001000",
       "relatedMatch": "xrm:1600136"
     },
@@ -1416,6 +1489,7 @@
       "type": "skos:Concept",
       "prefLabel": "quaternary N-glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "quaternary N-glucuronidation: xenobiotic-metabolism term under N-glucuronidation.",
       "altLabel": [
         "N+-glucuronidation"
       ],
@@ -1427,6 +1501,7 @@
       "type": "skos:Concept",
       "prefLabel": "S-glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "S-glucuronidation: xenobiotic-metabolism term under glucuronidation.",
       "broader": "xrm:0001000",
       "relatedMatch": "xrm:1600137"
     },
@@ -1435,6 +1510,7 @@
       "type": "skos:Concept",
       "prefLabel": "C-glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "C-glucuronidation: xenobiotic-metabolism term under glucuronidation.",
       "broader": "xrm:0001000",
       "relatedMatch": "xrm:1600138"
     },
@@ -1443,6 +1519,7 @@
       "type": "skos:Concept",
       "prefLabel": "carbamoyl glucuronidation",
       "inScheme": "xrm:scheme",
+      "definition": "carbamoyl glucuronidation: xenobiotic-metabolism term under glucuronidation.",
       "altLabel": [
         "N-carbamoyl glucuronidation"
       ],
@@ -1453,6 +1530,7 @@
       "type": "skos:Concept",
       "prefLabel": "sulfation",
       "inScheme": "xrm:scheme",
+      "definition": "sulfation: xenobiotic-metabolism term under phase II, phase II conjugation family.",
       "altLabel": [
         "sulfonation",
         "sulfate conjugation",
@@ -1472,6 +1550,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-sulfation",
       "inScheme": "xrm:scheme",
+      "definition": "O-sulfation: xenobiotic-metabolism term under sulfation.",
       "broader": "xrm:0001010",
       "relatedMatch": "xrm:1600135"
     },
@@ -1480,6 +1559,7 @@
       "type": "skos:Concept",
       "prefLabel": "phenolic sulfation",
       "inScheme": "xrm:scheme",
+      "definition": "phenolic sulfation: xenobiotic-metabolism term under O-sulfation.",
       "broader": "xrm:0001011"
     },
     {
@@ -1487,6 +1567,7 @@
       "type": "skos:Concept",
       "prefLabel": "alcoholic sulfation",
       "inScheme": "xrm:scheme",
+      "definition": "alcoholic sulfation: xenobiotic-metabolism term under O-sulfation.",
       "broader": "xrm:0001011"
     },
     {
@@ -1494,6 +1575,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-sulfation",
       "inScheme": "xrm:scheme",
+      "definition": "N-sulfation: xenobiotic-metabolism term under sulfation.",
       "broader": "xrm:0001010"
     },
     {
@@ -1501,6 +1583,7 @@
       "type": "skos:Concept",
       "prefLabel": "acetylation",
       "inScheme": "xrm:scheme",
+      "definition": "acetylation: xenobiotic-metabolism term under phase II, phase II conjugation family.",
       "altLabel": [
         "N-acetylation",
         "acylation"
@@ -1516,6 +1599,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-acetylation",
       "inScheme": "xrm:scheme",
+      "definition": "N-acetylation: xenobiotic-metabolism term under acetylation.",
       "broader": "xrm:0001020"
     },
     {
@@ -1523,6 +1607,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-acetylation",
       "inScheme": "xrm:scheme",
+      "definition": "O-acetylation: xenobiotic-metabolism term under acetylation.",
       "broader": "xrm:0001020"
     },
     {
@@ -1541,6 +1626,7 @@
       "type": "skos:Concept",
       "prefLabel": "glutathionation",
       "inScheme": "xrm:scheme",
+      "definition": "glutathionation: xenobiotic-metabolism term under phase II, phase II conjugation family.",
       "altLabel": [
         "glutathione conjugation",
         "GSH conjugation",
@@ -1580,6 +1666,7 @@
       "type": "skos:Concept",
       "prefLabel": "epoxide glutathionation",
       "inScheme": "xrm:scheme",
+      "definition": "epoxide glutathionation: xenobiotic-metabolism term under glutathionation.",
       "altLabel": [
         "GSH epoxide conjugation"
       ],
@@ -1590,6 +1677,7 @@
       "type": "skos:Concept",
       "prefLabel": "halide displacement glutathionation",
       "inScheme": "xrm:scheme",
+      "definition": "halide displacement glutathionation: xenobiotic-metabolism term under glutathionation.",
       "altLabel": [
         "GSH nucleophilic aromatic/aliphatic substitution"
       ],
@@ -1600,6 +1688,7 @@
       "type": "skos:Concept",
       "prefLabel": "isocyanate glutathionation",
       "inScheme": "xrm:scheme",
+      "definition": "isocyanate glutathionation: xenobiotic-metabolism term under glutathionation.",
       "broader": "xrm:0001030"
     },
     {
@@ -1607,6 +1696,7 @@
       "type": "skos:Concept",
       "prefLabel": "aziridine glutathionation",
       "inScheme": "xrm:scheme",
+      "definition": "aziridine glutathionation: xenobiotic-metabolism term under glutathionation.",
       "broader": "xrm:0001030"
     },
     {
@@ -1614,6 +1704,7 @@
       "type": "skos:Concept",
       "prefLabel": "quinone glutathionation",
       "inScheme": "xrm:scheme",
+      "definition": "quinone glutathionation: xenobiotic-metabolism term under glutathionation.",
       "broader": "xrm:0001030",
       "relatedMatch": [
         "xrm:0000300",
@@ -1640,6 +1731,7 @@
       "type": "skos:Concept",
       "prefLabel": "methylation",
       "inScheme": "xrm:scheme",
+      "definition": "methylation: xenobiotic-metabolism term under phase II, phase II conjugation family.",
       "altLabel": [
         "methyl conjugation"
       ],
@@ -1653,6 +1745,7 @@
       "type": "skos:Concept",
       "prefLabel": "O-methylation",
       "inScheme": "xrm:scheme",
+      "definition": "O-methylation: xenobiotic-metabolism term under methylation.",
       "altLabel": [
         "catechol O-methylation"
       ],
@@ -1664,6 +1757,7 @@
       "type": "skos:Concept",
       "prefLabel": "N-methylation",
       "inScheme": "xrm:scheme",
+      "definition": "N-methylation: xenobiotic-metabolism term under methylation.",
       "broader": "xrm:0001040",
       "relatedMatch": "xrm:1600136"
     },
@@ -1672,6 +1766,7 @@
       "type": "skos:Concept",
       "prefLabel": "S-methylation",
       "inScheme": "xrm:scheme",
+      "definition": "S-methylation: xenobiotic-metabolism term under methylation.",
       "altLabel": [
         "thiol methylation"
       ],
@@ -1683,6 +1778,7 @@
       "type": "skos:Concept",
       "prefLabel": "amino acid conjugation",
       "inScheme": "xrm:scheme",
+      "definition": "amino acid conjugation: xenobiotic-metabolism term under phase II, phase II conjugation family.",
       "altLabel": [
         "amino_acid_conjugation"
       ],
@@ -1696,6 +1792,7 @@
       "type": "skos:Concept",
       "prefLabel": "glycine conjugation",
       "inScheme": "xrm:scheme",
+      "definition": "glycine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II conjugation family, phase II.",
       "altLabel": [
         "hippurate formation",
         "benzoyl glycine conjugation",
@@ -1712,6 +1809,7 @@
       "type": "skos:Concept",
       "prefLabel": "glutamine conjugation",
       "inScheme": "xrm:scheme",
+      "definition": "glutamine conjugation: xenobiotic-metabolism term under amino acid conjugation.",
       "broader": "xrm:0001050"
     },
     {
@@ -1719,6 +1817,7 @@
       "type": "skos:Concept",
       "prefLabel": "taurine conjugation",
       "inScheme": "xrm:scheme",
+      "definition": "taurine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II conjugation family, phase II.",
       "altLabel": [
         "taurine_conjugation"
       ],
@@ -1733,6 +1832,7 @@
       "type": "skos:Concept",
       "prefLabel": "serine conjugation",
       "inScheme": "xrm:scheme",
+      "definition": "serine conjugation: xenobiotic-metabolism term under amino acid conjugation.",
       "broader": "xrm:0001050"
     },
     {
@@ -1784,6 +1884,7 @@
       "type": "skos:Concept",
       "prefLabel": "keto–enol tautomerization",
       "inScheme": "xrm:scheme",
+      "definition": "keto–enol tautomerization: xenobiotic-metabolism term under tautomerization.",
       "broader": "xrm:0002000"
     },
     {
@@ -1791,6 +1892,7 @@
       "type": "skos:Concept",
       "prefLabel": "imine–enamine tautomerization",
       "inScheme": "xrm:scheme",
+      "definition": "imine–enamine tautomerization: xenobiotic-metabolism term under tautomerization.",
       "broader": "xrm:0002000"
     },
     {
@@ -1885,6 +1987,7 @@
       "type": "skos:Concept",
       "prefLabel": "reactive metabolite formation",
       "inScheme": "xrm:scheme",
+      "definition": "reactive metabolite formation: xenobiotic-metabolism term under bioactivation.",
       "broader": "xrm:0003000",
       "relatedMatch": [
         "xrm:0000112",
@@ -1975,6 +2078,7 @@
       "type": "skos:Concept",
       "prefLabel": "arene oxide rearrangement",
       "inScheme": "xrm:scheme",
+      "definition": "arene oxide rearrangement: xenobiotic-metabolism term under process facet, arene oxide pathway.",
       "broader": [
         "xrm:0004000",
         "xrm:8000007"
@@ -2003,6 +2107,7 @@
       "type": "skos:Concept",
       "prefLabel": "hemiacetal cleavage",
       "inScheme": "xrm:scheme",
+      "definition": "hemiacetal cleavage: xenobiotic-metabolism term under process facet.",
       "broader": "xrm:0004000",
       "relatedMatch": "xrm:0000202"
     },
@@ -2011,6 +2116,7 @@
       "type": "skos:Concept",
       "prefLabel": "ring opening",
       "inScheme": "xrm:scheme",
+      "definition": "ring opening: xenobiotic-metabolism term under process facet, chemical transformation.",
       "broader": [
         "xrm:0004000",
         "xrm:1100000"
@@ -2025,6 +2131,7 @@
       "type": "skos:Concept",
       "prefLabel": "ring expansion",
       "inScheme": "xrm:scheme",
+      "definition": "ring expansion: xenobiotic-metabolism term under process facet.",
       "broader": "xrm:0004000"
     },
     {
@@ -2032,6 +2139,7 @@
       "type": "skos:Concept",
       "prefLabel": "ring contraction",
       "inScheme": "xrm:scheme",
+      "definition": "ring contraction: xenobiotic-metabolism term under process facet.",
       "broader": "xrm:0004000"
     },
     {
@@ -2054,6 +2162,7 @@
       "type": "skos:Concept",
       "prefLabel": "hydration",
       "inScheme": "xrm:scheme",
+      "definition": "hydration: xenobiotic-metabolism term under process facet, hydrolysis, chemical transformation.",
       "broader": [
         "xrm:0004000",
         "xrm:0000013",
@@ -2066,6 +2175,7 @@
       "type": "skos:Concept",
       "prefLabel": "hydration of carbonyl",
       "inScheme": "xrm:scheme",
+      "definition": "hydration of carbonyl: xenobiotic-metabolism term under hydration.",
       "broader": "xrm:0004012"
     },
     {
@@ -2073,6 +2183,7 @@
       "type": "skos:Concept",
       "prefLabel": "conjugate addition",
       "inScheme": "xrm:scheme",
+      "definition": "conjugate addition: xenobiotic-metabolism term under process facet.",
       "altLabel": [
         "Michael addition"
       ],
@@ -2089,6 +2200,7 @@
       "type": "skos:Concept",
       "prefLabel": "nucleophilic aromatic substitution",
       "inScheme": "xrm:scheme",
+      "definition": "nucleophilic aromatic substitution: xenobiotic-metabolism term under process facet.",
       "broader": "xrm:0004000",
       "relatedMatch": "xrm:0001033"
     },
@@ -2097,6 +2209,7 @@
       "type": "skos:Concept",
       "prefLabel": "radical recombination metabolite",
       "inScheme": "xrm:scheme",
+      "definition": "radical recombination metabolite: xenobiotic-metabolism term under process facet.",
       "broader": "xrm:0004000"
     },
     {
@@ -2113,6 +2226,7 @@
       "type": "skos:Concept",
       "prefLabel": "transacylation",
       "inScheme": "xrm:scheme",
+      "definition": "transacylation: xenobiotic-metabolism term under process facet.",
       "broader": "xrm:0004000",
       "relatedMatch": [
         "xrm:0001004",

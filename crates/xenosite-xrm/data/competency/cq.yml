@@ -404,17 +404,17 @@ questions:
 
   - id: CQ-EV-002
     layer: ontology
-    question: "Definition coverage meets publishable floor."
+    question: "Definition coverage is complete for all concepts."
     type: definition_coverage
-    min_fraction: 0.80
+    min_fraction: 1.0
 
   - id: CQ-PROV-002
     layer: ontology
-    question: "SHACL core concept shape (prefLabel + inScheme) holds for all concepts."
+    question: "SHACL core concept shape (prefLabel + definition + inScheme) holds for all concepts."
     type: shacl
     shapes: ../ontology/xrm.shacl.ttl
     data: ../ontology/xrm.skos.ttl
-    allow_warnings: true
+    allow_warnings: false
 
   # ========== Leaving group / pharma / about (supporting) ==========
   - id: CQ-LG-001

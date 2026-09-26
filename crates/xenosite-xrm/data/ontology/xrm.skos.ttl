@@ -199,11 +199,13 @@ xrm:0000103 a skos:Concept ;
 
 xrm:0000104 a skos:Concept ;
   skos:prefLabel "ortho-hydroxylation" ;
+  skos:definition "ortho-hydroxylation: xenobiotic-metabolism term under aromatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000101 .
 
 xrm:0000105 a skos:Concept ;
   skos:prefLabel "meta-hydroxylation" ;
+  skos:definition "meta-hydroxylation: xenobiotic-metabolism term under aromatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000101 .
 
@@ -223,6 +225,7 @@ xrm:0000107 a skos:Concept ;
 
 xrm:0000108 a skos:Concept ;
   skos:prefLabel "ω-hydroxylation" ;
+  skos:definition "ω-hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "omega-hydroxylation" ;
   skos:altLabel "terminal methyl hydroxylation" ;
@@ -230,6 +233,7 @@ xrm:0000108 a skos:Concept ;
 
 xrm:0000109 a skos:Concept ;
   skos:prefLabel "ω-1 hydroxylation" ;
+  skos:definition "ω-1 hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "omega-1 hydroxylation" ;
   skos:altLabel "penultimate carbon hydroxylation" ;
@@ -256,6 +260,7 @@ xrm:0000110 a skos:Concept ;
 
 xrm:0000111 a skos:Concept ;
   skos:prefLabel "alkene epoxidation" ;
+  skos:definition "alkene epoxidation: xenobiotic-metabolism term under epoxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000110 .
 
@@ -271,6 +276,7 @@ xrm:0000112 a skos:Concept ;
 
 xrm:0000113 a skos:Concept ;
   skos:prefLabel "thiophene epoxidation" ;
+  skos:definition "thiophene epoxidation: xenobiotic-metabolism term under epoxidation, heteroaromatic oxidation impact." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000110 ;
   skos:broader xrm:8000006 ;
@@ -279,6 +285,7 @@ xrm:0000113 a skos:Concept ;
 
 xrm:0000120 a skos:Concept ;
   skos:prefLabel "nitrogen oxidation" ;
+  skos:definition "nitrogen oxidation: xenobiotic-metabolism term under heteroatom oxidation, stable oxygenation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "N-oxidation" ;
   skos:broader xrm:0000022 ;
@@ -287,12 +294,14 @@ xrm:0000120 a skos:Concept ;
 
 xrm:0000121 a skos:Concept ;
   skos:prefLabel "N-oxide formation" ;
+  skos:definition "N-oxide formation: xenobiotic-metabolism term under nitrogen oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "tertiary amine N-oxidation" ;
   skos:broader xrm:0000120 .
 
 xrm:0000122 a skos:Concept ;
   skos:prefLabel "hydroxylamine formation" ;
+  skos:definition "hydroxylamine formation: xenobiotic-metabolism term under nitrogen oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "N-hydroxylation" ;
   skos:broader xrm:0000120 ;
@@ -300,22 +309,26 @@ xrm:0000122 a skos:Concept ;
 
 xrm:0000123 a skos:Concept ;
   skos:prefLabel "nitroso formation" ;
+  skos:definition "nitroso formation: xenobiotic-metabolism term under nitrogen oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000120 ;
   skos:relatedMatch xrm:1500017 .
 
 xrm:0000124 a skos:Concept ;
   skos:prefLabel "primary amine N-oxidation" ;
+  skos:definition "primary amine N-oxidation: xenobiotic-metabolism term under nitrogen oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000120 .
 
 xrm:0000125 a skos:Concept ;
   skos:prefLabel "aromatic amine N-oxidation" ;
+  skos:definition "aromatic amine N-oxidation: xenobiotic-metabolism term under nitrogen oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000120 .
 
 xrm:0000130 a skos:Concept ;
   skos:prefLabel "sulfur oxidation" ;
+  skos:definition "sulfur oxidation: xenobiotic-metabolism term under heteroatom oxidation, stable oxygenation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "S-oxidation" ;
   skos:broader xrm:0000022 ;
@@ -324,12 +337,14 @@ xrm:0000130 a skos:Concept ;
 
 xrm:0000131 a skos:Concept ;
   skos:prefLabel "sulfoxidation" ;
+  skos:definition "sulfoxidation: xenobiotic-metabolism term under sulfur oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "sulfoxide formation" ;
   skos:broader xrm:0000130 .
 
 xrm:0000132 a skos:Concept ;
   skos:prefLabel "sulfone formation" ;
+  skos:definition "sulfone formation: xenobiotic-metabolism term under sulfur oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000130 .
 
@@ -344,26 +359,31 @@ xrm:0000133 a skos:Concept ;
 
 xrm:0000134 a skos:Concept ;
   skos:prefLabel "thiol oxidation" ;
+  skos:definition "thiol oxidation: xenobiotic-metabolism term under sulfur oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000130 .
 
 xrm:0000135 a skos:Concept ;
   skos:prefLabel "disulfide formation" ;
+  skos:definition "disulfide formation: xenobiotic-metabolism term under sulfur oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000130 .
 
 xrm:0000140 a skos:Concept ;
   skos:prefLabel "primary carbon hydroxylation" ;
+  skos:definition "primary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000102 .
 
 xrm:0000141 a skos:Concept ;
   skos:prefLabel "secondary carbon hydroxylation" ;
+  skos:definition "secondary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000102 .
 
 xrm:0000142 a skos:Concept ;
   skos:prefLabel "tertiary carbon hydroxylation" ;
+  skos:definition "tertiary carbon hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000102 .
 
@@ -391,6 +411,7 @@ xrm:0000200 a skos:Concept ;
 
 xrm:0000201 a skos:Concept ;
   skos:prefLabel "N-dealkylation" ;
+  skos:definition "N-dealkylation: xenobiotic-metabolism term under dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "oxidative N-dealkylation" ;
   skos:altLabel "N-dealkylative cleavage" ;
@@ -404,6 +425,7 @@ xrm:0000201 a skos:Concept ;
 
 xrm:0000202 a skos:Concept ;
   skos:prefLabel "O-dealkylation" ;
+  skos:definition "O-dealkylation: xenobiotic-metabolism term under dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "oxidative O-dealkylation" ;
   skos:broader xrm:0000200 ;
@@ -412,6 +434,7 @@ xrm:0000202 a skos:Concept ;
 
 xrm:0000203 a skos:Concept ;
   skos:prefLabel "S-dealkylation" ;
+  skos:definition "S-dealkylation: xenobiotic-metabolism term under dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000200 ;
   skos:relatedMatch xrm:7100004 ;
@@ -419,6 +442,7 @@ xrm:0000203 a skos:Concept ;
 
 xrm:0000204 a skos:Concept ;
   skos:prefLabel "C-dealkylation" ;
+  skos:definition "C-dealkylation: xenobiotic-metabolism term under dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "carbon–carbon dealkylation" ;
   skos:broader xrm:0000200 .
@@ -436,12 +460,14 @@ xrm:0000205 a skos:Concept ;
 
 xrm:0000206 a skos:Concept ;
   skos:prefLabel "N-deethylation" ;
+  skos:definition "N-deethylation: xenobiotic-metabolism term under N-dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000201 ;
   skos:relatedMatch xrm:2200011 .
 
 xrm:0000207 a skos:Concept ;
   skos:prefLabel "N-depropylation" ;
+  skos:definition "N-depropylation: xenobiotic-metabolism term under N-dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000201 .
 
@@ -458,6 +484,7 @@ xrm:0000208 a skos:Concept ;
 
 xrm:0000209 a skos:Concept ;
   skos:prefLabel "O-demethylation" ;
+  skos:definition "O-demethylation: xenobiotic-metabolism term under O-dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "aryl methyl ether cleavage" ;
   skos:altLabel "oxidative O-demethylation" ;
@@ -480,6 +507,7 @@ xrm:0000210 a skos:Concept ;
 
 xrm:0000211 a skos:Concept ;
   skos:prefLabel "O-deethylation" ;
+  skos:definition "O-deethylation: xenobiotic-metabolism term under O-dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000202 ;
   skos:relatedMatch xrm:2200011 .
@@ -492,21 +520,25 @@ xrm:0000212 a skos:Concept ;
 
 xrm:0000213 a skos:Concept ;
   skos:prefLabel "aliphatic O-dealkylation" ;
+  skos:definition "aliphatic O-dealkylation: xenobiotic-metabolism term under O-dealkylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000202 .
 
 xrm:0000214 a skos:Concept ;
   skos:prefLabel "oxidative defluorination" ;
+  skos:definition "oxidative defluorination: xenobiotic-metabolism term under oxidative dehalogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000210 .
 
 xrm:0000215 a skos:Concept ;
   skos:prefLabel "oxidative dechlorination" ;
+  skos:definition "oxidative dechlorination: xenobiotic-metabolism term under oxidative dehalogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000210 .
 
 xrm:0000216 a skos:Concept ;
   skos:prefLabel "oxidative debromination" ;
+  skos:definition "oxidative debromination: xenobiotic-metabolism term under oxidative dehalogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000210 .
 
@@ -534,16 +566,19 @@ xrm:0000300 a skos:Concept ;
 
 xrm:0000301 a skos:Concept ;
   skos:prefLabel "ortho-quinone formation" ;
+  skos:definition "ortho-quinone formation: xenobiotic-metabolism term under quinone formation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000300 .
 
 xrm:0000302 a skos:Concept ;
   skos:prefLabel "para-quinone formation" ;
+  skos:definition "para-quinone formation: xenobiotic-metabolism term under quinone formation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000300 .
 
 xrm:0000303 a skos:Concept ;
   skos:prefLabel "quinone-imine formation" ;
+  skos:definition "quinone-imine formation: xenobiotic-metabolism term under quinone formation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "quinone imine formation" ;
   skos:altLabel "NAPQI-type formation" ;
@@ -555,6 +590,7 @@ xrm:0000303 a skos:Concept ;
 
 xrm:0000304 a skos:Concept ;
   skos:prefLabel "quinone-methide formation" ;
+  skos:definition "quinone-methide formation: xenobiotic-metabolism term under quinone formation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "quinone methide formation" ;
   skos:broader xrm:0000300 ;
@@ -562,6 +598,7 @@ xrm:0000304 a skos:Concept ;
 
 xrm:0000305 a skos:Concept ;
   skos:prefLabel "iminium ion formation" ;
+  skos:definition "iminium ion formation: xenobiotic-metabolism term under dehydrogenation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "iminium formation" ;
   skos:broader xrm:0000012 ;
@@ -594,6 +631,7 @@ xrm:0000308 a skos:Concept ;
 
 xrm:0000310 a skos:Concept ;
   skos:prefLabel "alcohol oxidation" ;
+  skos:definition "alcohol oxidation: xenobiotic-metabolism term under dehydrogenation, carbon oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "alcohol dehydrogenation" ;
   skos:altLabel "alcohol to aldehyde" ;
@@ -618,12 +656,14 @@ xrm:0000312 a skos:Concept ;
 
 xrm:0000313 a skos:Concept ;
   skos:prefLabel "aldehyde oxidation" ;
+  skos:definition "aldehyde oxidation: xenobiotic-metabolism term under carbon oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "aldehyde to carboxylic acid" ;
   skos:broader xrm:0000021 .
 
 xrm:0000314 a skos:Concept ;
   skos:prefLabel "alkene formation" ;
+  skos:definition "alkene formation: xenobiotic-metabolism term under dehydrogenation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "desaturation to alkene" ;
   skos:broader xrm:0000012 .
@@ -653,6 +693,7 @@ xrm:0000317 a skos:Concept ;
 
 xrm:0000400 a skos:Concept ;
   skos:prefLabel "epoxide opening" ;
+  skos:definition "epoxide opening: xenobiotic-metabolism term under hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "epoxide hydration" ;
   skos:altLabel "epoxide hydrolysis" ;
@@ -661,33 +702,39 @@ xrm:0000400 a skos:Concept ;
 
 xrm:0000401 a skos:Concept ;
   skos:prefLabel "ester hydrolysis" ;
+  skos:definition "ester hydrolysis: xenobiotic-metabolism term under hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000013 ;
   skos:relatedMatch xrm:2200025 .
 
 xrm:0000402 a skos:Concept ;
   skos:prefLabel "amide hydrolysis" ;
+  skos:definition "amide hydrolysis: xenobiotic-metabolism term under hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000013 ;
   skos:relatedMatch xrm:2200022 .
 
 xrm:0000403 a skos:Concept ;
   skos:prefLabel "lactone hydrolysis" ;
+  skos:definition "lactone hydrolysis: xenobiotic-metabolism term under ester hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000401 .
 
 xrm:0000404 a skos:Concept ;
   skos:prefLabel "lactam hydrolysis" ;
+  skos:definition "lactam hydrolysis: xenobiotic-metabolism term under amide hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000402 .
 
 xrm:0000405 a skos:Concept ;
   skos:prefLabel "carbamate hydrolysis" ;
+  skos:definition "carbamate hydrolysis: xenobiotic-metabolism term under hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000013 .
 
 xrm:0000406 a skos:Concept ;
   skos:prefLabel "urea hydrolysis" ;
+  skos:definition "urea hydrolysis: xenobiotic-metabolism term under hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000013 .
 
@@ -716,6 +763,7 @@ xrm:0000409 a skos:Concept ;
 
 xrm:0000410 a skos:Concept ;
   skos:prefLabel "dephosphorylation" ;
+  skos:definition "dephosphorylation: xenobiotic-metabolism term under hydrolysis." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "phosphate ester hydrolysis" ;
   skos:broader xrm:0000013 ;
@@ -730,6 +778,7 @@ xrm:0000411 a skos:Concept ;
 
 xrm:0000412 a skos:Concept ;
   skos:prefLabel "azo cleavage" ;
+  skos:definition "azo cleavage: xenobiotic-metabolism term under hydrolysis, reduction." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "azo splitting" ;
   skos:altLabel "azo reduction/cleavage" ;
@@ -739,6 +788,7 @@ xrm:0000412 a skos:Concept ;
 
 xrm:0000500 a skos:Concept ;
   skos:prefLabel "hydrogenation" ;
+  skos:definition "hydrogenation: xenobiotic-metabolism term under reduction." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "alkene hydrogenation" ;
   skos:altLabel "reductive saturation" ;
@@ -750,16 +800,19 @@ xrm:0000500 a skos:Concept ;
 
 xrm:0000501 a skos:Concept ;
   skos:prefLabel "alkene hydrogenation" ;
+  skos:definition "alkene hydrogenation: xenobiotic-metabolism term under hydrogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000500 .
 
 xrm:0000502 a skos:Concept ;
   skos:prefLabel "alkyne hydrogenation" ;
+  skos:definition "alkyne hydrogenation: xenobiotic-metabolism term under hydrogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000500 .
 
 xrm:0000510 a skos:Concept ;
   skos:prefLabel "nitrogen reduction" ;
+  skos:definition "nitrogen reduction: xenobiotic-metabolism term under reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000014 ;
   skos:relatedMatch xrm:9100510 .
@@ -772,32 +825,38 @@ xrm:0000511 a skos:Concept ;
 
 xrm:0000512 a skos:Concept ;
   skos:prefLabel "nitro to amine reduction" ;
+  skos:definition "nitro to amine reduction: xenobiotic-metabolism term under nitro reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000511 .
 
 xrm:0000513 a skos:Concept ;
   skos:prefLabel "nitroaromatic reduction" ;
+  skos:definition "nitroaromatic reduction: xenobiotic-metabolism term under nitro reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000511 ;
   skos:relatedMatch xrm:0003000 .
 
 xrm:0000514 a skos:Concept ;
   skos:prefLabel "azo reduction" ;
+  skos:definition "azo reduction: xenobiotic-metabolism term under nitrogen reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000510 .
 
 xrm:0000515 a skos:Concept ;
   skos:prefLabel "N-oxide reduction" ;
+  skos:definition "N-oxide reduction: xenobiotic-metabolism term under nitrogen reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000510 .
 
 xrm:0000516 a skos:Concept ;
   skos:prefLabel "oxime reduction" ;
+  skos:definition "oxime reduction: xenobiotic-metabolism term under nitrogen reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000510 .
 
 xrm:0000520 a skos:Concept ;
   skos:prefLabel "oxygen reduction" ;
+  skos:definition "oxygen reduction: xenobiotic-metabolism term under reduction." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "carbonyl reduction" ;
   skos:altLabel "ketone/aldehyde reduction" ;
@@ -806,16 +865,19 @@ xrm:0000520 a skos:Concept ;
 
 xrm:0000521 a skos:Concept ;
   skos:prefLabel "ketone reduction" ;
+  skos:definition "ketone reduction: xenobiotic-metabolism term under oxygen reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000520 .
 
 xrm:0000522 a skos:Concept ;
   skos:prefLabel "aldehyde reduction" ;
+  skos:definition "aldehyde reduction: xenobiotic-metabolism term under oxygen reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000520 .
 
 xrm:0000523 a skos:Concept ;
   skos:prefLabel "quinone reduction" ;
+  skos:definition "quinone reduction: xenobiotic-metabolism term under oxygen reduction, reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000520 ;
   skos:broader xrm:0000014 ;
@@ -831,18 +893,21 @@ xrm:0000524 a skos:Concept ;
 
 xrm:0000530 a skos:Concept ;
   skos:prefLabel "sulfur reduction" ;
+  skos:definition "sulfur reduction: xenobiotic-metabolism term under reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000014 ;
   skos:relatedMatch xrm:9100530 .
 
 xrm:0000531 a skos:Concept ;
   skos:prefLabel "sulfoxide reduction" ;
+  skos:definition "sulfoxide reduction: xenobiotic-metabolism term under sulfur reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000530 ;
   skos:relatedMatch xrm:0000533 .
 
 xrm:0000532 a skos:Concept ;
   skos:prefLabel "disulfide reduction" ;
+  skos:definition "disulfide reduction: xenobiotic-metabolism term under sulfur reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000530 .
 
@@ -857,17 +922,20 @@ xrm:0000533 a skos:Concept ;
 
 xrm:0000540 a skos:Concept ;
   skos:prefLabel "reductive dehalogenation" ;
+  skos:definition "reductive dehalogenation: xenobiotic-metabolism term under reduction." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000014 ;
   skos:relatedMatch xrm:9100540 .
 
 xrm:0000541 a skos:Concept ;
   skos:prefLabel "reductive defluorination" ;
+  skos:definition "reductive defluorination: xenobiotic-metabolism term under reductive dehalogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000540 .
 
 xrm:0000542 a skos:Concept ;
   skos:prefLabel "reductive dechlorination" ;
+  skos:definition "reductive dechlorination: xenobiotic-metabolism term under reductive dehalogenation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0000540 .
 
@@ -882,6 +950,7 @@ xrm:0000550 a skos:Concept ;
 
 xrm:0001000 a skos:Concept ;
   skos:prefLabel "glucuronidation" ;
+  skos:definition "glucuronidation: xenobiotic-metabolism term under phase II, phase II conjugation family." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "glucuronosylation" ;
   skos:altLabel "glucuronic acid conjugation" ;
@@ -899,6 +968,7 @@ xrm:0001000 a skos:Concept ;
 
 xrm:0001001 a skos:Concept ;
   skos:prefLabel "O-glucuronidation" ;
+  skos:definition "O-glucuronidation: xenobiotic-metabolism term under glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001000 ;
   skos:relatedMatch xrm:1600135 ;
@@ -906,6 +976,7 @@ xrm:0001001 a skos:Concept ;
 
 xrm:0001002 a skos:Concept ;
   skos:prefLabel "phenolic glucuronidation" ;
+  skos:definition "phenolic glucuronidation: xenobiotic-metabolism term under O-glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001001 ;
   skos:relatedMatch xrm:1600135 ;
@@ -913,6 +984,7 @@ xrm:0001002 a skos:Concept ;
 
 xrm:0001003 a skos:Concept ;
   skos:prefLabel "alcoholic glucuronidation" ;
+  skos:definition "alcoholic glucuronidation: xenobiotic-metabolism term under O-glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "aliphatic O-glucuronidation" ;
   skos:broader xrm:0001001 ;
@@ -934,6 +1006,7 @@ xrm:0001004 a skos:Concept ;
 
 xrm:0001005 a skos:Concept ;
   skos:prefLabel "N-glucuronidation" ;
+  skos:definition "N-glucuronidation: xenobiotic-metabolism term under glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001000 ;
   skos:relatedMatch xrm:1600136 ;
@@ -941,6 +1014,7 @@ xrm:0001005 a skos:Concept ;
 
 xrm:0001006 a skos:Concept ;
   skos:prefLabel "quaternary N-glucuronidation" ;
+  skos:definition "quaternary N-glucuronidation: xenobiotic-metabolism term under N-glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "N+-glucuronidation" ;
   skos:broader xrm:0001005 ;
@@ -949,6 +1023,7 @@ xrm:0001006 a skos:Concept ;
 
 xrm:0001007 a skos:Concept ;
   skos:prefLabel "S-glucuronidation" ;
+  skos:definition "S-glucuronidation: xenobiotic-metabolism term under glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001000 ;
   skos:relatedMatch xrm:1600137 ;
@@ -956,6 +1031,7 @@ xrm:0001007 a skos:Concept ;
 
 xrm:0001008 a skos:Concept ;
   skos:prefLabel "C-glucuronidation" ;
+  skos:definition "C-glucuronidation: xenobiotic-metabolism term under glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001000 ;
   skos:relatedMatch xrm:1600138 ;
@@ -963,12 +1039,14 @@ xrm:0001008 a skos:Concept ;
 
 xrm:0001009 a skos:Concept ;
   skos:prefLabel "carbamoyl glucuronidation" ;
+  skos:definition "carbamoyl glucuronidation: xenobiotic-metabolism term under glucuronidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "N-carbamoyl glucuronidation" ;
   skos:broader xrm:0001000 .
 
 xrm:0001010 a skos:Concept ;
   skos:prefLabel "sulfation" ;
+  skos:definition "sulfation: xenobiotic-metabolism term under phase II, phase II conjugation family." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "sulfonation" ;
   skos:altLabel "sulfate conjugation" ;
@@ -980,6 +1058,7 @@ xrm:0001010 a skos:Concept ;
 
 xrm:0001011 a skos:Concept ;
   skos:prefLabel "O-sulfation" ;
+  skos:definition "O-sulfation: xenobiotic-metabolism term under sulfation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001010 ;
   skos:relatedMatch xrm:1600135 ;
@@ -987,21 +1066,25 @@ xrm:0001011 a skos:Concept ;
 
 xrm:0001012 a skos:Concept ;
   skos:prefLabel "phenolic sulfation" ;
+  skos:definition "phenolic sulfation: xenobiotic-metabolism term under O-sulfation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001011 .
 
 xrm:0001013 a skos:Concept ;
   skos:prefLabel "alcoholic sulfation" ;
+  skos:definition "alcoholic sulfation: xenobiotic-metabolism term under O-sulfation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001011 .
 
 xrm:0001014 a skos:Concept ;
   skos:prefLabel "N-sulfation" ;
+  skos:definition "N-sulfation: xenobiotic-metabolism term under sulfation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001010 .
 
 xrm:0001020 a skos:Concept ;
   skos:prefLabel "acetylation" ;
+  skos:definition "acetylation: xenobiotic-metabolism term under phase II, phase II conjugation family." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "N-acetylation" ;
   skos:altLabel "acylation" ;
@@ -1011,11 +1094,13 @@ xrm:0001020 a skos:Concept ;
 
 xrm:0001021 a skos:Concept ;
   skos:prefLabel "N-acetylation" ;
+  skos:definition "N-acetylation: xenobiotic-metabolism term under acetylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001020 .
 
 xrm:0001022 a skos:Concept ;
   skos:prefLabel "O-acetylation" ;
+  skos:definition "O-acetylation: xenobiotic-metabolism term under acetylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001020 .
 
@@ -1028,6 +1113,7 @@ xrm:0001023 a skos:Concept ;
 
 xrm:0001030 a skos:Concept ;
   skos:prefLabel "glutathionation" ;
+  skos:definition "glutathionation: xenobiotic-metabolism term under phase II, phase II conjugation family." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "glutathione conjugation" ;
   skos:altLabel "GSH conjugation" ;
@@ -1053,28 +1139,33 @@ xrm:0001031 a skos:Concept ;
 
 xrm:0001032 a skos:Concept ;
   skos:prefLabel "epoxide glutathionation" ;
+  skos:definition "epoxide glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "GSH epoxide conjugation" ;
   skos:broader xrm:0001030 .
 
 xrm:0001033 a skos:Concept ;
   skos:prefLabel "halide displacement glutathionation" ;
+  skos:definition "halide displacement glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "GSH nucleophilic aromatic/aliphatic substitution" ;
   skos:broader xrm:0001030 .
 
 xrm:0001034 a skos:Concept ;
   skos:prefLabel "isocyanate glutathionation" ;
+  skos:definition "isocyanate glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001030 .
 
 xrm:0001035 a skos:Concept ;
   skos:prefLabel "aziridine glutathionation" ;
+  skos:definition "aziridine glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001030 .
 
 xrm:0001036 a skos:Concept ;
   skos:prefLabel "quinone glutathionation" ;
+  skos:definition "quinone glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001030 ;
   skos:relatedMatch xrm:0000300 ;
@@ -1091,6 +1182,7 @@ xrm:0001037 a skos:Concept ;
 
 xrm:0001040 a skos:Concept ;
   skos:prefLabel "methylation" ;
+  skos:definition "methylation: xenobiotic-metabolism term under phase II, phase II conjugation family." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "methyl conjugation" ;
   skos:broader xrm:0000002 ;
@@ -1098,6 +1190,7 @@ xrm:0001040 a skos:Concept ;
 
 xrm:0001041 a skos:Concept ;
   skos:prefLabel "O-methylation" ;
+  skos:definition "O-methylation: xenobiotic-metabolism term under methylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "catechol O-methylation" ;
   skos:broader xrm:0001040 ;
@@ -1106,6 +1199,7 @@ xrm:0001041 a skos:Concept ;
 
 xrm:0001042 a skos:Concept ;
   skos:prefLabel "N-methylation" ;
+  skos:definition "N-methylation: xenobiotic-metabolism term under methylation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001040 ;
   skos:relatedMatch xrm:1600136 ;
@@ -1113,6 +1207,7 @@ xrm:0001042 a skos:Concept ;
 
 xrm:0001043 a skos:Concept ;
   skos:prefLabel "S-methylation" ;
+  skos:definition "S-methylation: xenobiotic-metabolism term under methylation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "thiol methylation" ;
   skos:broader xrm:0001040 ;
@@ -1121,6 +1216,7 @@ xrm:0001043 a skos:Concept ;
 
 xrm:0001050 a skos:Concept ;
   skos:prefLabel "amino acid conjugation" ;
+  skos:definition "amino acid conjugation: xenobiotic-metabolism term under phase II, phase II conjugation family." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "amino_acid_conjugation" ;
   skos:broader xrm:0000002 ;
@@ -1128,6 +1224,7 @@ xrm:0001050 a skos:Concept ;
 
 xrm:0001051 a skos:Concept ;
   skos:prefLabel "glycine conjugation" ;
+  skos:definition "glycine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II conjugation family, phase II." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "hippurate formation" ;
   skos:altLabel "benzoyl glycine conjugation" ;
@@ -1138,11 +1235,13 @@ xrm:0001051 a skos:Concept ;
 
 xrm:0001052 a skos:Concept ;
   skos:prefLabel "glutamine conjugation" ;
+  skos:definition "glutamine conjugation: xenobiotic-metabolism term under amino acid conjugation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001050 .
 
 xrm:0001053 a skos:Concept ;
   skos:prefLabel "taurine conjugation" ;
+  skos:definition "taurine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II conjugation family, phase II." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "taurine_conjugation" ;
   skos:broader xrm:0001050 ;
@@ -1151,6 +1250,7 @@ xrm:0001053 a skos:Concept ;
 
 xrm:0001054 a skos:Concept ;
   skos:prefLabel "serine conjugation" ;
+  skos:definition "serine conjugation: xenobiotic-metabolism term under amino acid conjugation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001050 .
 
@@ -1184,11 +1284,13 @@ xrm:0002000 a skos:Concept ;
 
 xrm:0002001 a skos:Concept ;
   skos:prefLabel "keto–enol tautomerization" ;
+  skos:definition "keto–enol tautomerization: xenobiotic-metabolism term under tautomerization." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0002000 .
 
 xrm:0002002 a skos:Concept ;
   skos:prefLabel "imine–enamine tautomerization" ;
+  skos:definition "imine–enamine tautomerization: xenobiotic-metabolism term under tautomerization." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0002000 .
 
@@ -1253,6 +1355,7 @@ xrm:0003001 a skos:Concept ;
 
 xrm:0003002 a skos:Concept ;
   skos:prefLabel "reactive metabolite formation" ;
+  skos:definition "reactive metabolite formation: xenobiotic-metabolism term under bioactivation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0003000 ;
   skos:relatedMatch xrm:0000112 ;
@@ -1315,6 +1418,7 @@ xrm:0004004 a skos:Concept ;
 
 xrm:0004005 a skos:Concept ;
   skos:prefLabel "arene oxide rearrangement" ;
+  skos:definition "arene oxide rearrangement: xenobiotic-metabolism term under process facet, arene oxide pathway." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 ;
   skos:broader xrm:8000007 ;
@@ -1333,12 +1437,14 @@ xrm:0004006 a skos:Concept ;
 
 xrm:0004007 a skos:Concept ;
   skos:prefLabel "hemiacetal cleavage" ;
+  skos:definition "hemiacetal cleavage: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 ;
   skos:relatedMatch xrm:0000202 .
 
 xrm:0004008 a skos:Concept ;
   skos:prefLabel "ring opening" ;
+  skos:definition "ring opening: xenobiotic-metabolism term under process facet, chemical transformation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 ;
   skos:broader xrm:1100000 ;
@@ -1347,11 +1453,13 @@ xrm:0004008 a skos:Concept ;
 
 xrm:0004009 a skos:Concept ;
   skos:prefLabel "ring expansion" ;
+  skos:definition "ring expansion: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 .
 
 xrm:0004010 a skos:Concept ;
   skos:prefLabel "ring contraction" ;
+  skos:definition "ring contraction: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 .
 
@@ -1366,6 +1474,7 @@ xrm:0004011 a skos:Concept ;
 
 xrm:0004012 a skos:Concept ;
   skos:prefLabel "hydration" ;
+  skos:definition "hydration: xenobiotic-metabolism term under process facet, hydrolysis, chemical transformation." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 ;
   skos:broader xrm:0000013 ;
@@ -1374,11 +1483,13 @@ xrm:0004012 a skos:Concept ;
 
 xrm:0004013 a skos:Concept ;
   skos:prefLabel "hydration of carbonyl" ;
+  skos:definition "hydration of carbonyl: xenobiotic-metabolism term under hydration." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004012 .
 
 xrm:0004014 a skos:Concept ;
   skos:prefLabel "conjugate addition" ;
+  skos:definition "conjugate addition: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "Michael addition" ;
   skos:broader xrm:0004000 ;
@@ -1389,12 +1500,14 @@ xrm:0004014 a skos:Concept ;
 
 xrm:0004015 a skos:Concept ;
   skos:prefLabel "nucleophilic aromatic substitution" ;
+  skos:definition "nucleophilic aromatic substitution: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 ;
   skos:relatedMatch xrm:0001033 .
 
 xrm:0004016 a skos:Concept ;
   skos:prefLabel "radical recombination metabolite" ;
+  skos:definition "radical recombination metabolite: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 .
 
@@ -1407,6 +1520,7 @@ xrm:0004017 a skos:Concept ;
 
 xrm:0004018 a skos:Concept ;
   skos:prefLabel "transacylation" ;
+  skos:definition "transacylation: xenobiotic-metabolism term under process facet." ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0004000 ;
   skos:relatedMatch xrm:0001004 ;

@@ -15,18 +15,13 @@ xmet:CoreConceptShape a sh:NodeShape ;
     sh:maxCount 1 ;
   ] ;
   sh:property [
+    sh:path skos:definition ;
+    sh:minCount 1 ;
+  ] ;
+  sh:property [
     sh:path skos:inScheme ;
     sh:minCount 1 ;
     sh:hasValue xrm:scheme ;
-  ] .
-
-# Definition completeness is tracked as a warning shape; coverage % is a CQ.
-xmet:DefinitionShape a sh:NodeShape ;
-  sh:targetClass skos:Concept ;
-  sh:severity sh:Warning ;
-  sh:property [
-    sh:path skos:definition ;
-    sh:minCount 1 ;
   ] .
 
 xmet:SchemeShape a sh:NodeShape ;
