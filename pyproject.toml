@@ -168,6 +168,7 @@ markers = [
     "regression: deferred bug, not correct behavior or out of scope",
     "cleared_0_7: former hard xfail that now passes on live forest (since v0.6)",
     "allow_formula_delta_mismatch: intentional FormulaDeltaMismatch records (skip suite zero-assert)",
+    "parity_full: slower full rule×mol parity/CSMI sweep (--parity-full / XENOSITE_PARITY_FULL=1)",
 ]
 
 [tool.coverage.run]

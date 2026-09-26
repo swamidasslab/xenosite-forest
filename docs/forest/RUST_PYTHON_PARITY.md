@@ -11,12 +11,14 @@ divergent leaves use **rule attributes**:
 - Rust: ``RuleSet::parity_exception`` / ``with_parity_exception``
 
 Corpus completeness (every PatternInfo possibility / every ``when``):
-``tests/forest/test_rule_parity_corpus.py`` + ``PARITY_FUZZ_MOLS``.
+``tests/forest/test_rule_parity_corpus.py`` + ``PARITY_CORPUS``
+(``ParityEntry`` = mol + ``CoverIntent`` correspondences).
 
 Pairing completeness: ``tests/forest/test_rule_parity_pairs.py``.
 
-Product/site parity: ``tests/forest/test_rule_parity_fuzz.py`` (parametric over
-``PARITY_FUZZ_MOLS`` × paired leaves).
+Product/site parity: ``tests/forest/test_rule_parity_fuzz.py`` (parametric
+over focused cover ``(rule, mol)``; full cartesian with
+``--parity-full`` / ``XENOSITE_PARITY_FULL=1``).
 
 Native doors: ``xenosite_forest.RuleSet`` (``leaf`` / ``phase_one`` /
 ``default_ruleset`` / ``all_rules`` / ``catalog_names``), ``find_path``
@@ -55,14 +57,19 @@ Status: **approved**.
 
 ### C4 — Corpus must cover every pattern possibility and every ``when``
 
-``PARITY_FUZZ_MOLS`` is owned by ``test_rule_parity_corpus``. Missing cover is
-a failure (no xfail). Grow the list; do not drop inventory rows.
+``PARITY_CORPUS`` / ``PARITY_FUZZ_MOLS`` is owned by
+``test_rule_parity_corpus``. Missing cover is a failure (no xfail). Grow the
+list; do not drop inventory rows. Each inventory possibility has a designated
+``CoverIntent`` on a corpus mol (verified by meta-tests).
 Status: **approved**.
 
-### C5 — Bounded corpus × paired leaves is parametric, not Hypothesis
+### C5 — Focused CoverIntent params by default; full cartesian opt-in
 
-Finite ``PARITY_FUZZ_MOLS`` × ``paired_rule_names()`` →
-``pytest.mark.parametrize``. Hypothesis sampling over that grid is redundant.
+Default parametric parity / CSMI uses focused ``(rule, mol)`` from
+``parity_param_cases`` (one designated cover per inventory possibility) —
+``pytest.mark.parametrize``, not Hypothesis. Full rule×corpus cartesian is
+available for slower exhaustive runs via ``XENOSITE_PARITY_FULL=1`` or
+``pytest --parity-full``. Hypothesis sampling over that grid is redundant.
 Status: **approved**.
 
 ### C6 — Attribute exceptions recorded to date
@@ -130,8 +137,9 @@ the rule is compliant. Non-compliant leaves emit every unique-edit survivor
 **Tests:** only ``tests/forest/test_csmi_dedup_soft_failure.py`` gates this —
 compliant → hard-fail on duplicate ``(rule, pattern, CSMI)`` keys or
 ``SiteDeduplicationWarning``; non-compliant → ``pytest.xfail`` on hits (and
-a meta check that the corpus still hits). Other suites do **not** xfail
-non-compliant rules.
+a meta check that the corpus still hits). Cases default to focused
+CoverIntent ``(rule, mol)``; full cartesian via ``--parity-full`` /
+``XENOSITE_PARITY_FULL``. Other suites do **not** xfail non-compliant rules.
 
 ``SiteDeduplicationWarning`` remains the unique-edit-miss check signal.
 Quiet unequal-rank same-CSMI pairs are C13 until ``product_equiv`` / identity
@@ -254,7 +262,7 @@ gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 | 0 | Corpus meta-test covers every pattern / every ``when`` | **done** | C4 |
 | 1 | Discover all Rust + Python leaves; pair or attribute-exception | **done** | C3, C6 |
 | 2 | Expose rulesets + ``find_path`` + enumerate to Python | **done** | C9; doors wired |
-| 3 | Parametric parity (bounded corpus × paired leaves), not Hypothesis | **done** | C5 |
+| 3 | Parametric parity (focused CoverIntent; full via ``--parity-full``) | **done** | C5 |
 | 4 | **Pair / dual-door unique-edit: partition SMIRKS↔pair overlap** | **open** | C12 — fix data/unique-edit (not no-dedup); H alkene+path_end |
 | 5 | Acetylation: chematic SMIRKS apply miss | **done** | Product keeps ``[#6](=[#8])[#6]``; Rust ``organic_product_variants`` expands ``#`` to organic aliphatic then aromatic (bracket expand misses). Issue: ``CHEMATIC_ISSUE_acetyl_atomic_product.md`` |
 | 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **open** | recursive SMARTS / P valence? |

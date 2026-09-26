@@ -1,16 +1,27 @@
-"""Meta-test: :data:`PARITY_FUZZ_MOLS` covers every pattern / every ``when``.
+"""Meta-test: :data:`PARITY_CORPUS` covers every pattern / every ``when``.
 
-Write and keep this green *before* relying on the mol set for Rust↔RDKit
-parity fuzz. Failures list each uncovered possibility so the corpus can be
+Write and keep this green *before* relying on the corpus for Rust↔RDKit
+parity. Failures list each uncovered possibility so the corpus can be
 grown deliberately (no silent skips, no xfails for missing cover).
+
+Each :class:`~.rule_parity_corpus.ParityEntry` carries a list of
+:class:`~.rule_parity_corpus.CoverIntent` correspondences (rule / pattern /
+poss_i / when). Meta-tests verify intents hold and are inventory-complete.
+Parametric suites use those intents via :func:`~.rule_parity_corpus.parity_param_cases`
+(focused) or full cartesian under ``--parity-full`` / ``XENOSITE_PARITY_FULL``.
 
 Also requires ResonancePair **close-end** and **identical-partner** coverage
 (ortho catechols, crowded ethers, …) — geometries Python often mishandles
 relative to Rust.
+
+Mapped reactant ``[#Z]`` (aromaticable Z) must hit **aliphatic and aromatic**
+in the corpus whenever both states are reachable — data indicator on the
+SMARTS, not rule-name branches (equivalent ``#`` expand coverage).
 """
 
 from __future__ import annotations
 
+import pytest
 from rdkit.Chem import rdmolops
 
 from xenosite.forest.rdkit_api import MolFromSmiles
@@ -21,12 +32,22 @@ from xenosite.forest.rules import (
     ResonancePairRule,
 )
 
-from .pattern_cover import uncovered_possibilities
+from .pattern_cover import (
+    find_cover,
+    parse_mols,
+    pattern_info_for,
+    uncovered_possibilities,
+)
 from .pattern_info_inventory import (
     iter_pattern_possibilities,
+    possibility_key,
     when_key,
 )
-from .rule_parity_corpus import PARITY_FUZZ_MOLS
+from .rule_parity_corpus import (
+    PARITY_CORPUS,
+    PARITY_FUZZ_MOLS,
+    parity_cover_cases,
+)
 
 
 def test_parity_fuzz_mols_cover_every_pattern_and_when():
@@ -202,6 +223,64 @@ def test_parity_fuzz_mols_inventory_is_nonempty_target():
     assert rows, "pattern inventory is empty"
     assert len(PARITY_FUZZ_MOLS) >= 50, (
         f"expected a diverse corpus, got {len(PARITY_FUZZ_MOLS)} mols"
+    )
+    assert PARITY_CORPUS, "PARITY_CORPUS is empty"
+    assert parity_cover_cases(), "expected CoverIntent correspondences"
+
+
+def test_parity_cover_intents_complete_inventory():
+    """Every inventory possibility appears exactly once as a CoverIntent key."""
+
+    inv = {
+        possibility_key(r.rule_cls, r.pattern_name or "?", r.poss_i, r.when)
+        for r in iter_pattern_possibilities()
+    }
+    covers = {
+        (rule, pattern, poss_i, when)
+        for rule, _smiles, pattern, poss_i, when in parity_cover_cases()
+    }
+    missing = sorted(inv - covers)
+    extra = sorted(covers - inv)
+    lines: list[str] = []
+    if missing:
+        lines.append(f"{len(missing)} inventory keys lack CoverIntent:")
+        lines.extend(f"  {m}" for m in missing[:40])
+    if extra:
+        lines.append(f"{len(extra)} CoverIntent keys not in inventory:")
+        lines.extend(f"  {e}" for e in extra[:40])
+    assert not lines, "\n".join(lines)
+
+
+@pytest.mark.parametrize(
+    "rule,smiles,pattern,poss_i,when",
+    parity_cover_cases() or [("Hydroxylation", "CC", "h2", 0, None)],
+)
+def test_parity_cover_intent_holds(
+    rule: str, smiles: str, pattern: str, poss_i: int, when: object
+) -> None:
+    """Declared CoverIntent actually selects that possibility on that mol."""
+
+    if not parity_cover_cases():
+        pytest.skip("no cover intents")
+    rows = [
+        r
+        for r in iter_pattern_possibilities()
+        if r.rule_cls.__name__ == rule
+        and (r.pattern_name or "?") == pattern
+        and r.poss_i == poss_i
+        and when_key(r.when) == when
+    ]
+    assert rows, (
+        f"no inventory row for CoverIntent "
+        f"{rule}/{pattern}#{poss_i} when={when!r}"
+    )
+    row = rows[0]
+    info = pattern_info_for(row)
+    reactant = row.smarts.split(">>", 1)[0]
+    hit = find_cover(info, reactant, poss_i, parse_mols([smiles]))
+    assert hit is not None, (
+        f"CoverIntent failed: {rule}/{pattern}#{poss_i} when={when!r} "
+        f"on {smiles!r} (smarts={reactant!r})"
     )
 
 

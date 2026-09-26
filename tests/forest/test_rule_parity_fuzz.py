@@ -1,7 +1,10 @@
-"""Rust↔RDKit leaf-rule product parity (parametric over a bounded corpus).
+"""Rust↔RDKit leaf-rule product parity (parametric over cover intents).
 
-Bounded ``PARITY_FUZZ_MOLS`` × paired leaves → ``pytest.mark.parametrize``,
-not Hypothesis. For each ``(rule, mol)``:
+Default: focused ``(rule, mol)`` from :func:`parity_param_cases` — every
+inventory possibility has a designated cover. Full cartesian paired×corpus
+via ``XENOSITE_PARITY_FULL=1`` or ``pytest --parity-full``.
+
+For each ``(rule, mol)``:
 
 1. Collect emissions on both engines.
 2. Collapse sites by **that engine's** topological ranks (orbits).
@@ -27,7 +30,7 @@ from xenosite.forest.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.forest.rules import ReactionRule
 
 from .pattern_info_inventory import instantiate_rule
-from .rule_parity_corpus import PARITY_FUZZ_MOLS
+from .rule_parity_corpus import parity_full_enabled, parity_param_cases
 from .rule_parity_pairs import paired_rule_names, python_leaf_classes
 
 pytestmark = pytest.mark.skipif(
@@ -168,12 +171,16 @@ def _paired_names() -> list[str]:
 
 
 _PAIRED = _paired_names()
+_CASES = (
+    parity_param_cases(_PAIRED)
+    if _PAIRED
+    else (("Hydroxylation", "CCO"),)
+)
 
 
-@pytest.mark.parametrize("rule_name", _PAIRED or ["Hydroxylation"])
-@pytest.mark.parametrize("smiles", PARITY_FUZZ_MOLS)
+@pytest.mark.parametrize("rule_name,smiles", _CASES)
 def test_leaf_rule_product_parity(rule_name: str, smiles: str) -> None:
-    """Every paired leaf × every corpus mol: sites by topology, products by RDKit CSMI."""
+    """Paired leaf × cover mol (or full cartesian when parity_full enabled)."""
 
     if not _PAIRED:
         pytest.skip("no paired leaf rules")
@@ -190,3 +197,23 @@ def test_leaf_parity_on_example_substrate(rule_name: str) -> None:
     examples = getattr(cls, "_example_substrates", ()) or ()
     assert examples, f"{rule_name} lacks _example_substrates"
     _assert_parity(rule_name, examples[0])
+
+
+def test_parity_param_mode_is_focused_by_default() -> None:
+    """Default collection uses CoverIntent focus, not full cartesian."""
+
+    if not _PAIRED:
+        pytest.skip("no paired leaf rules")
+    if parity_full_enabled():
+        pytest.skip("parity_full enabled for this run")
+    from .rule_parity_corpus import (
+        parity_rule_mol_cases,
+        parity_rule_mol_cases_full,
+    )
+
+    focused = parity_rule_mol_cases(_PAIRED)
+    full = parity_rule_mol_cases_full(_PAIRED)
+    assert len(_CASES) == len(focused)
+    assert len(focused) < len(full), (
+        f"focused ({len(focused)}) should be smaller than full ({len(full)})"
+    )

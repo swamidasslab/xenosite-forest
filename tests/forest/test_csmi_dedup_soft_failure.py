@@ -11,6 +11,10 @@ parity / chemistry tests run them normally.
   keys or ``SiteDeduplicationWarning`` (unique-edit miss).
 - **Non-compliant:** xfail when a hit is present; fail if the corpus no
   longer hits (then mark ``unique_csmi_compliant = True``).
+
+Default cases: focused CoverIntent ``(rule, mol)`` via
+:func:`parity_param_cases`. Full leaf×corpus cartesian with
+``XENOSITE_PARITY_FULL=1`` / ``pytest --parity-full``.
 """
 
 from __future__ import annotations
@@ -28,7 +32,13 @@ from xenosite.forest.rules import (
 )
 
 from .pattern_info_inventory import instantiate_rule
-from .rule_parity_corpus import PARITY_FUZZ_MOLS
+from .rule_parity_corpus import (
+    PARITY_FUZZ_MOLS,
+    parity_full_enabled,
+    parity_param_cases,
+    parity_rule_mol_cases,
+    parity_rule_mol_cases_full,
+)
 from .rule_parity_pairs import python_leaf_classes, python_parity_exception
 
 # Formula-delta suite gate is orthogonal; this sweep only asserts CSMI soft fails.
@@ -45,6 +55,11 @@ def _leaf_names() -> list[str]:
 
 
 _LEAVES = _leaf_names()
+_CASES = (
+    parity_param_cases(_LEAVES)
+    if _LEAVES
+    else (("Hydroxylation", "CCO"),)
+)
 
 
 def _noncompliant_names() -> list[str]:
@@ -91,8 +106,7 @@ def _csmi_dup_hits(rule: ReactionRule, smiles: str) -> tuple[int, int]:
     return n_dup, n_warn
 
 
-@pytest.mark.parametrize("rule_name", _LEAVES or ["Hydroxylation"])
-@pytest.mark.parametrize("smiles", PARITY_FUZZ_MOLS)
+@pytest.mark.parametrize("rule_name,smiles", _CASES)
 def test_unique_csmi_compliance(rule_name: str, smiles: str) -> None:
     """Compliant: no CSMI dups. Non-compliant: xfail only here when dups remain."""
 
@@ -132,11 +146,28 @@ def test_noncompliant_still_hits_somewhere(rule_name: str) -> None:
     cls = python_leaf_classes()[rule_name]
     rule = instantiate_rule(cls)
     assert not rule.unique_csmi_compliant
-    for smiles in PARITY_FUZZ_MOLS:
+    # Prefer designated covers for this rule; fall back to full corpus mols.
+    mols = [s for r, s in parity_rule_mol_cases([rule_name])] or list(PARITY_FUZZ_MOLS)
+    for smiles in mols:
         n_dup, n_warn = _csmi_dup_hits(rule, smiles)
         if n_dup > 0 or n_warn > 0:
             return
     raise AssertionError(
-        f"{rule_name} is unique_csmi_compliant=False but PARITY_FUZZ_MOLS has no "
+        f"{rule_name} is unique_csmi_compliant=False but corpus has no "
         f"CSMI dup / SiteDeduplicationWarning — set unique_csmi_compliant=True"
+    )
+
+
+def test_csmi_param_mode_is_focused_by_default() -> None:
+    """Default collection uses CoverIntent focus, not full cartesian."""
+
+    if not _LEAVES:
+        pytest.skip("no Python leaf rules")
+    if parity_full_enabled():
+        pytest.skip("parity_full enabled for this run")
+    focused = parity_rule_mol_cases(_LEAVES)
+    full = parity_rule_mol_cases_full(_LEAVES)
+    assert len(_CASES) == len(focused)
+    assert len(focused) < len(full), (
+        f"focused ({len(focused)}) should be smaller than full ({len(full)})"
     )
