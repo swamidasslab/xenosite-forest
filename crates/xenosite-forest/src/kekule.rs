@@ -846,6 +846,28 @@ pub(crate) fn bond_order_sums(mol: &Molecule) -> HashMap<usize, f32> {
 /// Closed-shell valence after **end edits** (forced doubles, cleavage) belongs
 /// on the emit path ([`crate::pair_edit`] / valence fill), not here — do not
 /// special-case elements for named reactions.
+/// Python 3 `int(round(x))` — half to even — so aromatic 4.5→4 Kekulé
+/// bridge carbons get delta 0 (not −1). Rust `f32::round` is half away from
+/// zero and would mint a spurious explicit H (`[CH]` on a quaternary bridge).
+fn round_half_even(x: f32) -> i8 {
+    let floored = x.floor();
+    let frac = x - floored;
+    const EPS: f32 = 1e-6;
+    if frac < 0.5 - EPS {
+        floored as i8
+    } else if frac > 0.5 + EPS {
+        (floored + 1.0) as i8
+    } else {
+        // Exactly .5 (within EPS): toward even.
+        let n = floored as i32;
+        if n.rem_euclid(2) == 0 {
+            n as i8
+        } else {
+            (n + 1) as i8
+        }
+    }
+}
+
 pub fn move_charge_with_bonds(
     mol: &mut Molecule,
     before: &HashMap<usize, f32>,
@@ -859,7 +881,7 @@ pub fn move_charge_with_bonds(
             None => continue,
         };
         let new = after[&i];
-        let delta = (new - old).round() as i8;
+        let delta = round_half_even(new - old);
         if delta == 0 {
             continue;
         }
@@ -1392,6 +1414,10 @@ pub fn reactant_parent(
     if !aromatic {
         return Ok(mol.clone());
     }
+    // Bare mols need tags for SystemKey; ForestMol already stamps.
+    let mut stamped = mol.clone();
+    stamp_missing_index_tags(&mut stamped);
+    let mol = &stamped;
     let want = smirks_mapped_bond_order(smirks).unwrap_or(2.0);
     let want_code: u8 = if want >= 1.5 { 2 } else { 1 };
     ensure_kekule_parents(mol, left, right, cache);
@@ -1787,5 +1813,30 @@ mod tests {
         let (_, bond) = parent.bond_between(atom_idx(a), atom_idx(b)).unwrap();
         assert_eq!(bond.order, BondOrder::Double);
         assert_eq!(aromatic_count(&parent), 0);
+    }
+
+    #[test]
+    fn indole_kekule_parent_is_closed_shell() {
+        // Bridge carbons are aromatic bos 4.5 → Kekulé 4.0 (delta −0.5).
+        // Banker's round → 0 so move_charge must not mint `[CH]` (Rust
+        // f32::round would); otherwise ring-open Dealk refuses the parent.
+        use chematic::perception::validate_valence;
+        let mol = parse_mol("c1ccc2[nH]ccc2c1").unwrap();
+        let hits = smarts_matches(&mol, "[#6H1:1][#7:2]").unwrap();
+        assert!(!hits.is_empty());
+        let mut cache = KekuleCache::default();
+        let parent = reactant_parent(
+            &mol,
+            &hits[0],
+            "[#6H1:1][#7:2]>>([*:2].[*:1]=O)",
+            &mut cache,
+        )
+        .unwrap();
+        assert!(
+            validate_valence(&parent).is_empty(),
+            "indole single-bond parent must be closed-shell: {} errs={:?}",
+            canon_smiles(&parent),
+            validate_valence(&parent)
+        );
     }
 }

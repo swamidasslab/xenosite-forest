@@ -30,12 +30,49 @@ pub fn nitrogen_two_doubles(mol: &Molecule) -> bool {
     false
 }
 
-/// Forest `_sanitize_piece`: valence ok and not the two-double nitrogen.
+/// Forest `_sanitize_piece`: valence ok, not the two-double nitrogen, and
+/// closed-shell (chematic does not model radicals — refuse underfilled C/N/O).
 pub fn accept_product(mol: &Molecule) -> bool {
     if !validate_valence(mol).is_empty() {
         return false;
     }
-    !nitrogen_two_doubles(mol)
+    if nitrogen_two_doubles(mol) {
+        return false;
+    }
+    closed_shell(mol)
+}
+
+/// Organic C/N/O atoms have enough bonds+H for a closed shell (no radicals).
+fn closed_shell(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        let z = atom.element.atomic_number();
+        let target = match z {
+            6 => 4 + atom.charge as i16,
+            7 => 3 + atom.charge as i16,
+            8 => 2 + atom.charge as i16,
+            _ => continue,
+        };
+        let mut bond_sum = 0.0_f32;
+        for (_nbr, bidx) in mol.neighbors(idx) {
+            bond_sum += match mol.bond(bidx).order {
+                BondOrder::Single | BondOrder::Up | BondOrder::Down => 1.0,
+                BondOrder::Double => 2.0,
+                BondOrder::Triple => 3.0,
+                BondOrder::Aromatic => 1.5,
+                BondOrder::Quadruple => 4.0,
+                _ => 1.0,
+            };
+        }
+        let h = atom.hydrogen_count.unwrap_or_else(|| {
+            // Implicit H: chematic inference when unset.
+            mol.implicit_hydrogen_count(idx)
+        }) as i16;
+        let used = bond_sum.round() as i16 + h;
+        if used < target {
+            return false;
+        }
+    }
+    true
 }
 
 /// Set explicit H so atom valence is complete (closed shell).
@@ -141,6 +178,13 @@ mod tests {
         // Force zero explicit H then refill.
         fill_closed_shell_h(&mut mol, 0);
         assert!(accept_product(&mol));
+    }
+
+    #[test]
+    fn radical_carbon_is_refused() {
+        // Formyl radical — chematic valence may pass; closed-shell gate refuses.
+        let mol = parse_mol("[C]=O").unwrap();
+        assert!(!accept_product(&mol), "open-shell [C]=O must be refused");
     }
 
     #[test]

@@ -397,12 +397,16 @@ fn cleave_oxygenate(
     mapped: &BTreeMap<u16, usize>,
     mode: RingOpenOxygenate,
 ) -> Option<Vec<Molecule>> {
+    use crate::valence::{edited_valence_atoms, fill_closed_shell_h};
+
     let (&left, &right) = (mapped.get(&1)?, mapped.get(&2)?);
     let (bond_idx, bond) = mol.bond_between(atom_idx(left), atom_idx(right))?;
-    // Oxygenate cleavage is a σ-bond cut (Me–O, ring single, …). Do not
-    // "cleave" a carbonyl C=O into atomic O + hemiacetal (methyl acetate).
-    if bond.order != BondOrder::Single {
-        return None;
+    // Oxygenate cleavage is a σ-bond cut (Me–O, ring Kekulé single, or the
+    // aromatic bond when no single parent exists). Do not cleave a carbonyl
+    // C=O into atomic O + hemiacetal (methyl acetate).
+    match bond.order {
+        BondOrder::Single | BondOrder::Aromatic => {}
+        _ => return None,
     }
     let mut product = mol.with_bond_removed(bond_idx);
     match mode {
@@ -439,6 +443,12 @@ fn cleave_oxygenate(
     let right_el = product.atom(atom_idx(right)).element;
     product = product.with_atom_element(atom_idx(left), left_el);
     product = product.with_atom_element(atom_idx(right), right_el);
+
+    // Emit-path closed-shell settle (same as pair dealkylate): fill H from
+    // remaining bond orders so ring-open leaves are not radicals / overfilled.
+    for a in edited_valence_atoms(mol, &product) {
+        fill_closed_shell_h(&mut product, a);
+    }
 
     let mut frags: Vec<Molecule> = product
         .fragments()
@@ -517,13 +527,17 @@ pub(crate) fn apply_edit_mols(
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
             let mode = ring_open_oxygenate_mode(smirks);
             // Ring bond: chematic A.B returns wrong non-empty fragments — prefer
-            // graph edit. Open-chain: try SMIRKS first (anisole O-dealk); fall
-            // back to graph edit when chematic apply is empty (methyl acetate).
+            // graph edit (σ cut on Kekulé single or aromatic). Open-chain: try
+            // SMIRKS first (anisole O-dealk); fall back to graph edit when
+            // chematic apply is empty (methyl acetate).
             if let Some(mode) = mode {
                 if mapped_bond_in_ring(&work, mapped) {
                     if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
                         return Ok(products);
                     }
+                    // Ring oxygenate refused — do not fall through to aromatic
+                    // SMIRKS junk (thiophene `O=CC=CS` / unparseable `:ccs`).
+                    return Ok(Vec::new());
                 }
             }
             let smirks_products = apply_smirks_at(smirks, &work, mapped)?;

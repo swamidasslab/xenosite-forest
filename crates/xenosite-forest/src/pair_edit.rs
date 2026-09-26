@@ -600,12 +600,10 @@ pub(crate) fn pair_candidates(
             systems.push(set);
         }
     }
-    if systems.is_empty() {
-        let all: HashSet<usize> = mol.atoms().map(|(i, _)| atom_usize(i)).collect();
-        if hits.keys().filter(|a| all.contains(a)).count() >= 2 {
-            systems.push(all);
-        }
-    }
+    // No full-mol fallback: aliphatic ethanol has no conjugated system that
+    // holds two anchors, and inventing one emits ketene (C=C=O) that Python's
+    // ResonancePair door never sees (systems empty → return). Pair ends stay
+    // on real conjugated/aromatic components only.
 
     let mut out = Vec::new();
     let mut seen_sig: BTreeSet<(usize, usize, String, String, usize)> = BTreeSet::new();
