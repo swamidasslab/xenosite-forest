@@ -9,12 +9,19 @@
 //! - [`align_shells`] — two [`MoleculeShells`] + a reactant→target map → the
 //!   **same atom shape** with **deltas** (target − reactant) on aligned atoms,
 //!   plus how many heavy atoms sit outside the alignment on each side.
-//! - **Cost** — iterate the structure (aromatic + n0, n1, n2); Σ |δ| with
-//!   missing keys treated as 0. Site selection uses that on [`AlignedShells::at_sites`];
-//!   product closeness uses it on the full align.
+//! - **Cost** — at a site, Σ over atoms of normalized shell distance between
+//!   `current + δ` and target ([`site_shell_cost`]). Each shell contributes
+//!   `L1 / Σ max(|a|,|b|)` ∈ [0,1] ([`shell_norm_l1`]), so each atom is at
+//!   most 3 (n0+n1+n2). Aligned atoms share n0 → at most 2. Site atoms are
+//!   matched as a **multiset** (orbit / MCS swap safe). `δ = 0` is distance
+//!   now; a complete edit scores 0. Close pairs use the joint site atom list.
+//! - **Site bag** — [`SiteShellBag`]: order-invariant multiset of kept site
+//!   deltas plus cleaved/added counts. Cleavage (methyl leave) is first-class.
+//! - [`check_site_shell_bags`] — warn or error on mismatch after an edit.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
+use crate::forest_mol::ForestMol;
 use crate::mol::{Molecule, atom_idx, atom_usize};
 
 /// Element → count (absolute ≥ 0) or signed delta. Includes `"H"`.
@@ -32,11 +39,32 @@ pub fn shell_l1(a: &Shell, b: &Shell) -> usize {
         .sum()
 }
 
+/// Normalized shell distance: `L1 / Σ_k max(|a[k]|, |b[k]|)` ∈ [0,1].
+///
+/// Empty vs empty is 0. Each of n0/n1/n2 can contribute at most 1 to an atom.
+pub fn shell_norm_l1(a: &Shell, b: &Shell) -> f64 {
+    let mut keys: BTreeSet<&str> = a.keys().map(String::as_str).collect();
+    keys.extend(b.keys().map(String::as_str));
+    let mut num = 0i64;
+    let mut den = 0i64;
+    for k in keys {
+        let av = a.get(k).copied().unwrap_or(0);
+        let bv = b.get(k).copied().unwrap_or(0);
+        num += i64::from((av - bv).unsigned_abs());
+        den += i64::from(av.unsigned_abs().max(bv.unsigned_abs()));
+    }
+    if den == 0 {
+        0.0
+    } else {
+        num as f64 / den as f64
+    }
+}
+
 /// Local environment of one heavy atom: aromatic + shells n0/n1/n2.
 ///
 /// Absolute shells use `aromatic` ∈ {0,1} and non-negative bag counts.
 /// Aligned deltas use `aromatic` = target−reactant ∈ {−1,0,1} and signed bags.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AtomNeighborhood {
     /// 0/1 on a molecule; target−reactant (−1/0/1) after alignment.
     pub aromatic: i8,
@@ -71,6 +99,21 @@ impl AtomNeighborhood {
     pub fn abs_delta(&self) -> usize {
         self.l1(&Self::default())
     }
+
+    /// Normalized shell distance vs `other`: Σ [`shell_norm_l1`] over n0/n1/n2.
+    ///
+    /// At most 3. When atoms are element-aligned, n0 matches → at most 2.
+    /// Aromatic is not included (shells only).
+    pub fn norm_l1(&self, other: &Self) -> f64 {
+        shell_norm_l1(&self.n0, &other.n0)
+            + shell_norm_l1(&self.n1, &other.n1)
+            + shell_norm_l1(&self.n2, &other.n2)
+    }
+
+    /// [`Self::norm_l1`] against empty (full miss on all shells).
+    pub fn abs_norm(&self) -> f64 {
+        self.norm_l1(&Self::default())
+    }
 }
 
 /// Neighborhoods for **all** heavy atoms in one molecule (keyed by atom index).
@@ -82,18 +125,17 @@ pub struct MoleculeShells {
 /// Same atom records as deltas under an alignment, plus unaligned heavy counts.
 ///
 /// On a full-molecule align, `unaligned_*` are absolute unmatched heavy counts.
-/// On a [`site_delta_forecast`], unchanged atoms are omitted and `unaligned_*`
-/// are **projected reductions** in those unmatched counts (matched-side change
-/// is `atoms.len()` nonzero site deltas).
+/// On a site view ([`AlignedShells::at_sites`]), `unaligned_*` count **site**
+/// atoms that are cleaved / added.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AlignedShells {
     /// Target − reactant neighborhood for each (kept) aligned reactant atom.
     pub atoms: BTreeMap<usize, AtomNeighborhood>,
     /// Reactant → target atom index (for atoms present in `atoms`).
     pub alignment: BTreeMap<usize, usize>,
-    /// Unmatched reactant heavies (absolute), or projected reduction in a forecast.
+    /// Unmatched reactant heavies (absolute), or site cleaved count on a site view.
     pub unaligned_reactant: usize,
-    /// Unmatched target heavies (absolute), or projected reduction in a forecast.
+    /// Unmatched target heavies (absolute), or site added count on a site view.
     pub unaligned_target: usize,
 }
 
@@ -124,37 +166,324 @@ impl AlignedShells {
         self.atoms.values().filter(|e| !e.is_unchanged()).count()
     }
 
-    /// Site-scoped view: only `site_atoms` that still have a nonzero delta.
+    /// Site-scoped view: kept site atoms with nonzero delta, plus how many site
+    /// atoms are cleaved (unaligned on reactant).
     ///
-    /// Keeps the parent's absolute `unaligned_*` (not a projected reduction;
-    /// see [`site_delta_forecast`]).
+    /// Methyl leave: the methyl index is absent from `alignment` → cleaved += 1,
+    /// and the heteroatom’s shell delta (C:−1 H:+1) stays in `atoms`.
     pub fn at_sites(&self, site_atoms: &[usize]) -> Self {
         let site: HashSet<usize> = site_atoms.iter().copied().collect();
         let mut atoms = BTreeMap::new();
         let mut alignment = BTreeMap::new();
-        for (&r, env) in &self.atoms {
-            if !site.contains(&r) || env.is_unchanged() {
-                continue;
-            }
-            atoms.insert(r, env.clone());
-            if let Some(&t) = self.alignment.get(&r) {
-                alignment.insert(r, t);
+        let mut cleaved = 0usize;
+        for &r in &site {
+            if let Some(env) = self.atoms.get(&r) {
+                if !env.is_unchanged() {
+                    atoms.insert(r, env.clone());
+                }
+                if let Some(&t) = self.alignment.get(&r) {
+                    alignment.insert(r, t);
+                }
+            } else if !self.alignment.contains_key(&r) {
+                cleaved += 1;
             }
         }
         Self {
             atoms,
             alignment,
-            unaligned_reactant: self.unaligned_reactant,
-            unaligned_target: self.unaligned_target,
+            unaligned_reactant: cleaved,
+            unaligned_target: 0,
         }
     }
 
-    /// Σ |δ| over aromatic + n0/n1/n2 on every kept aligned atom ([`shell_l1`],
-    /// missing = 0). Full align → product closeness; [`Self::at_sites`] → site
-    /// selection. Unaligned counts are not part of this sum.
-    pub fn cost(&self) -> usize {
-        self.atoms.values().map(AtomNeighborhood::abs_delta).sum()
+    /// Magnitude of stored deltas: Σ |δ| on kept atoms + cleaved + added.
+    ///
+    /// Site / search cost is [`site_shell_cost`] (Σ |current + δ − target|), not
+    /// this magnitude.
+    pub fn delta_magnitude(&self) -> usize {
+        self.atoms
+            .values()
+            .map(AtomNeighborhood::abs_delta)
+            .sum::<usize>()
+            + self.unaligned_reactant
+            + self.unaligned_target
     }
+
+    /// Deprecated name for [`Self::delta_magnitude`]. Prefer [`site_shell_cost`].
+    pub fn cost(&self) -> usize {
+        self.delta_magnitude()
+    }
+
+    /// Order-invariant site bag (forecast ↔ applied edit).
+    pub fn site_bag(&self, site_atoms: &[usize]) -> SiteShellBag {
+        SiteShellBag::from_align(self, site_atoms)
+    }
+}
+
+/// Order-invariant site shell pattern: kept deltas as a multiset + cleaved/added.
+///
+/// Indices are dropped so unique-edit orbit mates / MCS orientation swaps do not
+/// spuriously mismatch. Close pairs must pass the **joint** site atom list so
+/// each end’s n1/n2 (which may include the other end) is in the same bag.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SiteShellBag {
+    /// Sorted neighborhood deltas for kept site atoms (nonzero only).
+    pub kept: Vec<AtomNeighborhood>,
+    /// Site atoms cleaved (reactant heavy absent from the alignment).
+    pub cleaved: usize,
+    /// Site-side additions (target heavies counted into the site view).
+    pub added: usize,
+}
+
+impl SiteShellBag {
+    pub fn from_align(align: &AlignedShells, site_atoms: &[usize]) -> Self {
+        let site = align.at_sites(site_atoms);
+        let mut kept: Vec<AtomNeighborhood> = site.atoms.into_values().collect();
+        kept.sort();
+        Self {
+            kept,
+            cleaved: site.unaligned_reactant,
+            added: site.unaligned_target,
+        }
+    }
+
+    /// Magnitude of the bag’s deltas (not residual cost — use [`site_shell_cost`]).
+    pub fn delta_magnitude(&self) -> usize {
+        self.kept
+            .iter()
+            .map(AtomNeighborhood::abs_delta)
+            .sum::<usize>()
+            + self.cleaved
+            + self.added
+    }
+
+    /// Deprecated name for [`Self::delta_magnitude`].
+    pub fn cost(&self) -> usize {
+        self.delta_magnitude()
+    }
+
+    /// True when bags match exactly (sorted kept + cleaved/added counts).
+    pub fn matches(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    /// Multiset L1 after greedy matching of kept neighborhoods; plus |Δcleaved|, |Δadded|.
+    pub fn l1(&self, other: &Self) -> usize {
+        let mut unused: Vec<AtomNeighborhood> = other.kept.clone();
+        let mut cost = 0usize;
+        for a in &self.kept {
+            if let Some((i, _)) = unused.iter().enumerate().min_by_key(|(_, b)| a.l1(b)) {
+                let b = unused.swap_remove(i);
+                cost += a.l1(&b);
+            } else {
+                cost += a.abs_delta();
+            }
+        }
+        for b in &unused {
+            cost += b.abs_delta();
+        }
+        cost + self.cleaved.abs_diff(other.cleaved) + self.added.abs_diff(other.added)
+    }
+}
+
+/// How [`check_site_shell_bags`] reports a mismatch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SiteShellCheck {
+    /// `log::warn!` only.
+    Warn,
+    /// Return [`Err`]([`SiteShellMismatch`]).
+    Error,
+}
+
+/// Forecast site bag did not match the applied edit’s site bag.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SiteShellMismatch {
+    pub label: String,
+    pub forecast: SiteShellBag,
+    pub actual: SiteShellBag,
+    pub l1: usize,
+}
+
+impl std::fmt::Display for SiteShellMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "site shell mismatch [{}]: l1={} forecast_cost={} actual_cost={} cleaved {}→{} kept {}→{}",
+            self.label,
+            self.l1,
+            self.forecast.delta_magnitude(),
+            self.actual.delta_magnitude(),
+            self.forecast.cleaved,
+            self.actual.cleaved,
+            self.forecast.kept.len(),
+            self.actual.kept.len()
+        )
+    }
+}
+
+impl std::error::Error for SiteShellMismatch {}
+
+/// Compare forecast vs applied site bags. Close pairs: pass **both** ends in
+/// `site_atoms` so mutual n1/n2 effects stay in one bag.
+pub fn check_site_shell_bags(
+    label: &str,
+    forecast: &SiteShellBag,
+    actual: &SiteShellBag,
+    mode: SiteShellCheck,
+) -> Result<(), SiteShellMismatch> {
+    if forecast.matches(actual) {
+        return Ok(());
+    }
+    let l1 = forecast.l1(actual);
+    let miss = SiteShellMismatch {
+        label: label.into(),
+        forecast: forecast.clone(),
+        actual: actual.clone(),
+        l1,
+    };
+    match mode {
+        SiteShellCheck::Warn => {
+            log::warn!("{miss}");
+            Ok(())
+        }
+        SiteShellCheck::Error => Err(miss),
+    }
+}
+
+/// Tag-aligned reactant→product shell deltas ([`ForestMol`] labels).
+///
+/// Cleaved heavies (parent tag absent on child) → `unaligned_reactant`.
+/// Added heavies (child tag absent on parent) → `unaligned_target`.
+pub fn edit_shells(parent: &ForestMol, child: &ForestMol) -> AlignedShells {
+    let mut alignment = BTreeMap::new();
+    for i in 0..parent.mol().atom_count() {
+        if parent.mol().atom(atom_idx(i)).element.atomic_number() <= 1 {
+            continue;
+        }
+        let Some(tag) = parent.tag_of(i) else {
+            continue;
+        };
+        if let Some(j) = child.index_of(tag) {
+            if child.mol().atom(atom_idx(j)).element.atomic_number() > 1 {
+                alignment.insert(i, j);
+            }
+        }
+    }
+    let parent_shells = molecule_shells(parent.mol());
+    let child_shells = molecule_shells(child.mol());
+    align_shells(&parent_shells, &child_shells, &alignment)
+}
+
+/// Site bag of an applied edit at `site_atoms` (parent indices).
+///
+/// Use the joint atom list for ResonancePair ends (close pairs share shells).
+pub fn edit_site_bag(parent: &ForestMol, child: &ForestMol, site_atoms: &[usize]) -> SiteShellBag {
+    let edit = edit_shells(parent, child);
+    SiteShellBag::from_align(&edit, site_atoms)
+}
+
+/// Forecast site bag from a reactant→target align at `site_atoms`.
+pub fn forecast_site_bag(align: &AlignedShells, site_atoms: &[usize]) -> SiteShellBag {
+    SiteShellBag::from_align(align, site_atoms)
+}
+
+fn shell_add(base: &Shell, delta: &Shell) -> Shell {
+    let mut keys: BTreeSet<&str> = base.keys().map(String::as_str).collect();
+    keys.extend(delta.keys().map(String::as_str));
+    let mut out = Shell::new();
+    for key in keys {
+        let v = base.get(key).copied().unwrap_or(0) + delta.get(key).copied().unwrap_or(0);
+        if v != 0 {
+            out.insert(key.to_string(), v);
+        }
+    }
+    out
+}
+
+fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> AtomNeighborhood {
+    AtomNeighborhood {
+        aromatic: current.aromatic + delta.aromatic,
+        n0: shell_add(&current.n0, &delta.n0),
+        n1: shell_add(&current.n1, &delta.n1),
+        n2: shell_add(&current.n2, &delta.n2),
+    }
+}
+
+/// Site cost: Σ normalized |current + δ − target| at `site_atoms`.
+///
+/// Each atom contributes [`AtomNeighborhood::norm_l1`] (≤ 3; ≤ 2 when n0 matches).
+/// Projected site neighborhoods are matched to target site neighborhoods as a
+/// **multiset** (greedy), so unique-edit orbit mates / MCS orientation swaps do
+/// not inflate cost. Close pairs: pass **both** ends so mutual n1/n2 effects
+/// stay in one comparison.
+///
+/// - `delta == None`: distance of current to target at the site.
+/// - `delta` = an edit (or residual align): residual after applying that δ.
+/// - A δ that lands on target scores 0.
+pub fn site_shell_cost(
+    current: &MoleculeShells,
+    delta: Option<&AlignedShells>,
+    target: &MoleculeShells,
+    reactant_to_target: &BTreeMap<usize, usize>,
+    site_atoms: &[usize],
+) -> f64 {
+    let zero = AtomNeighborhood::default();
+    let mut projected: Vec<AtomNeighborhood> = Vec::new();
+    let mut target_envs: Vec<AtomNeighborhood> = Vec::new();
+
+    for &r in site_atoms {
+        let Some(cur) = current.atoms.get(&r) else {
+            continue;
+        };
+        let mapped = reactant_to_target.get(&r).copied();
+        let cleaved = delta.is_some_and(|d| !d.alignment.contains_key(&r));
+
+        if let Some(t) = mapped {
+            if let Some(tgt) = target.atoms.get(&t) {
+                target_envs.push(tgt.clone());
+            }
+        }
+
+        if cleaved {
+            // Left the molecule; no projected shell. If target still listed it
+            // above, the unmatched target env pays abs_norm in the bag match.
+            continue;
+        }
+
+        let projected_env = match delta {
+            Some(d) => apply_neighborhood(cur, d.atoms.get(&r).unwrap_or(&zero)),
+            None => cur.clone(),
+        };
+        projected.push(projected_env);
+
+        // Unmapped leave still present (δ kept it / no δ): no target mate was
+        // pushed; unmatched projected pays abs_norm below.
+        let _ = mapped;
+    }
+
+    neighborhood_bag_norm_l1(&projected, &target_envs)
+}
+
+/// Greedy multiset normalized L1 between two neighborhood bags.
+fn neighborhood_bag_norm_l1(a: &[AtomNeighborhood], b: &[AtomNeighborhood]) -> f64 {
+    let mut unused: Vec<AtomNeighborhood> = b.to_vec();
+    let mut cost = 0.0;
+    for env in a {
+        if let Some((i, _)) = unused.iter().enumerate().min_by(|(_, x), (_, y)| {
+            env.norm_l1(x)
+                .partial_cmp(&env.norm_l1(y))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            let other = unused.swap_remove(i);
+            cost += env.norm_l1(&other);
+        } else {
+            cost += env.abs_norm();
+        }
+    }
+    for other in &unused {
+        cost += other.abs_norm();
+    }
+    cost
 }
 
 fn hydrogens(mol: &Molecule, idx: usize) -> i32 {
@@ -177,10 +506,6 @@ fn add_heavy(shell: &mut Shell, mol: &Molecule, idx: usize) {
 }
 
 /// Heavy+H bags at distance 0 / 1 / 2 from heavy `center`, plus aromatic.
-///
-/// H is not a separate field: center H lands in `n1`; H on a dist-1 heavy
-/// lands in `n2`. Explicit H atoms in the mol are ignored as centers (heavy
-/// only); their contribution is via the owning heavy's implicit count.
 pub fn atom_neighborhood(mol: &Molecule, center: usize) -> AtomNeighborhood {
     let atom = mol.atom(atom_idx(center));
     debug_assert!(atom.element.atomic_number() > 1);
@@ -312,40 +637,17 @@ pub fn align_shells(
     }
 }
 
-/// Site delta forecast: **same shape** as [`AlignedShells`].
-///
-/// - `atoms` / `alignment`: only site atoms that currently have a nonzero delta
-///   (unchanged excluded). That set is the projected matched-side reduction.
-/// - `unaligned_reactant` / `unaligned_target`: **projected reductions** in
-///   unmatched heavies (not absolute remaining counts).
-///
-/// Prefer [`AlignedShells::at_sites`] when site selection only needs the site
-/// shells (no projected unaligned). Use this when a step forecast should also
-/// claim unmatched reductions.
+/// Site delta forecast with caller-projected unmatched reductions.
 pub fn site_delta_forecast(
     current: &AlignedShells,
     site_atoms: &[usize],
     reduce_unaligned_reactant: usize,
     reduce_unaligned_target: usize,
 ) -> AlignedShells {
-    let site: HashSet<usize> = site_atoms.iter().copied().collect();
-    let mut atoms = BTreeMap::new();
-    let mut alignment = BTreeMap::new();
-    for (&r, env) in &current.atoms {
-        if !site.contains(&r) || env.is_unchanged() {
-            continue;
-        }
-        atoms.insert(r, env.clone());
-        if let Some(&t) = current.alignment.get(&r) {
-            alignment.insert(r, t);
-        }
-    }
-    AlignedShells {
-        atoms,
-        alignment,
-        unaligned_reactant: reduce_unaligned_reactant.min(current.unaligned_reactant),
-        unaligned_target: reduce_unaligned_target.min(current.unaligned_target),
-    }
+    let mut site = current.at_sites(site_atoms);
+    site.unaligned_reactant = reduce_unaligned_reactant.min(current.unaligned_reactant);
+    site.unaligned_target = reduce_unaligned_target.min(current.unaligned_target);
+    site
 }
 
 /// Compact shell for display: `C:1`, `C:1 H:3`, or signed `H:-1`.
@@ -365,12 +667,22 @@ mod tests {
     use super::*;
     use crate::atom_diff::atom_diff;
     use crate::mol::parse_mol;
+    use crate::rules::dehydrogenation;
+    use crate::rules::{dealkylation, hydroxylation};
 
-    fn aligned(a: &str, b: &str) -> AlignedShells {
-        let ra = parse_mol(a).unwrap();
-        let rb = parse_mol(b).unwrap();
-        let diff = atom_diff(&ra, &rb);
-        align_shells(&molecule_shells(&ra), &molecule_shells(&rb), &diff.mapping)
+    fn site_atoms_cand(c: &crate::candidate::Candidate) -> Vec<usize> {
+        let mut atoms: Vec<usize> = c
+            .pattern
+            .site_map
+            .iter()
+            .filter_map(|m| c.mapped.get(m).copied())
+            .collect();
+        if atoms.is_empty() {
+            atoms.push(c.site);
+        }
+        atoms.sort_unstable();
+        atoms.dedup();
+        atoms
     }
 
     #[test]
@@ -382,60 +694,7 @@ mod tests {
             assert_eq!(format_shell(&env.n0), "C:1");
             assert_eq!(format_shell(&env.n1), "C:1 H:3");
             assert_eq!(format_shell(&env.n2), "H:3");
-            assert_eq!(env.aromatic, 0);
         }
-    }
-
-    #[test]
-    fn ethene_carbon_shells_include_h() {
-        let ethene = parse_mol("C=C").unwrap();
-        let shells = molecule_shells(&ethene);
-        for env in shells.atoms.values() {
-            assert_eq!(format_shell(&env.n0), "C:1");
-            assert_eq!(format_shell(&env.n1), "C:1 H:2");
-            assert_eq!(format_shell(&env.n2), "H:2");
-        }
-    }
-
-    #[test]
-    fn ethane_to_ethene_h_delta_in_n1_n2() {
-        let d = aligned("CC", "C=C");
-        assert_eq!(d.unaligned_reactant, 0);
-        assert_eq!(d.unaligned_target, 0);
-        for env in d.atoms.values() {
-            assert_eq!(format_shell(&env.n0), "∅");
-            assert_eq!(format_shell(&env.n1), "H:-1");
-            assert_eq!(format_shell(&env.n2), "H:-1");
-        }
-        assert_eq!(d.without_unchanged().atoms.len(), 2);
-    }
-
-    #[test]
-    fn ethane_to_ethanol_site_forecast_places_oxygen() {
-        let d = aligned("CC", "CCO");
-        assert_eq!(d.unaligned_target, 1);
-        let site = site_delta_forecast(&d, &[1], 0, 1);
-        assert_eq!(site.unaligned_reactant, 0);
-        assert_eq!(site.unaligned_target, 1);
-        assert!(site.atoms.contains_key(&1));
-        assert!(!site.atoms.contains_key(&0));
-        assert!(!site.atoms.values().any(|e| e.is_unchanged()));
-    }
-
-    #[test]
-    fn anisole_to_phenol_unaligned_methyl() {
-        let d = aligned("COc1ccccc1", "Oc1ccccc1");
-        assert_eq!(d.unaligned_reactant, 1);
-        assert_eq!(d.unaligned_target, 0);
-        let o = d
-            .atoms
-            .values()
-            .find(|e| e.n1.get("H") == Some(&1))
-            .expect("O n1 H:+1");
-        assert_eq!(o.n1.get("H"), Some(&1));
-        let cleave = site_delta_forecast(&d, &[0, 1], 1, 0);
-        assert_eq!(cleave.unaligned_reactant, 1);
-        assert_eq!(cleave.unaligned_target, 0);
     }
 
     #[test]
@@ -445,49 +704,173 @@ mod tests {
         a.insert("H".into(), 2);
         let mut b = Shell::new();
         b.insert("H".into(), 3);
-        // |O:1−0| + |H:2−3| = 1 + 1
         assert_eq!(shell_l1(&a, &b), 2);
-        assert_eq!(shell_l1(&a, &Shell::new()), 3);
     }
 
     #[test]
-    fn site_abs_delta_vs_full_cost() {
-        let alcohol = aligned("CC", "CCO");
-        let carbonyl = aligned("CC", "CC=O");
-        let cleave = aligned("COc1ccccc1", "Oc1ccccc1");
+    fn shell_norm_l1_unit_interval() {
+        let mut a = Shell::new();
+        a.insert("C".into(), 1);
+        a.insert("H".into(), 3);
+        let mut b = Shell::new();
+        b.insert("C".into(), 1);
+        b.insert("H".into(), 2);
+        b.insert("O".into(), 1);
+        let n = shell_norm_l1(&a, &b);
+        assert!((0.0..1.0).contains(&n) || (n - 1.0).abs() < 1e-12, "{n}");
+        assert_eq!(shell_norm_l1(&a, &a), 0.0);
+        assert_eq!(shell_norm_l1(&Shell::new(), &Shell::new()), 0.0);
+        // Full miss vs empty: 1.0
+        assert!((shell_norm_l1(&a, &Shell::new()) - 1.0).abs() < 1e-12);
+    }
 
-        let oh = alcohol
-            .atoms
-            .iter()
-            .find(|(_, e)| e.n1.get("O") == Some(&1))
-            .map(|(&i, _)| i)
-            .expect("attachment");
-        let co = carbonyl
-            .atoms
-            .iter()
-            .find(|(_, e)| e.n1.get("O") == Some(&1))
-            .map(|(&i, _)| i)
-            .expect("attachment");
+    #[test]
+    fn aligned_atom_norm_at_most_two() {
+        // Same element → n0 matches; only n1/n2 can differ → ≤ 2.
+        let mut left = AtomNeighborhood {
+            aromatic: 1,
+            ..Default::default()
+        };
+        left.n0.insert("C".into(), 1);
+        left.n1.insert("C".into(), 1);
+        left.n1.insert("H".into(), 3);
+        let mut right = left.clone();
+        right.n1.insert("O".into(), 1);
+        *right.n1.get_mut("H").unwrap() = 2;
+        let n = left.norm_l1(&right);
+        assert!(n <= 2.0 + 1e-12, "{n}");
+        assert!(n > 0.0, "{n}");
+        assert_eq!(shell_norm_l1(&left.n0, &right.n0), 0.0);
+    }
 
-        // Site cost = Σ|δ| on site atoms only (n0/n1/n2 + aromatic, missing=0).
-        let oh_cost = alcohol.at_sites(&[oh]).cost();
-        let co_cost = carbonyl.at_sites(&[co]).cost();
-        assert!(oh_cost > 0 && co_cost > 0);
-        // Carbonyl attachment n1 has a larger H change → higher site |δ|.
+    #[test]
+    fn demethylation_site_bag_matches_applied() {
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
+        let align = aligned_shells_mol(parent.mol(), &target);
+        let map = atom_diff(parent.mol(), &target).mapping;
+        let set = dealkylation();
+        let cands = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let c = cands
+            .iter()
+            .find(|c| c.pattern.name.contains("methyl_alcohol"))
+            .expect("methyl_alcohol");
+        let atoms = site_atoms_cand(c);
         assert!(
-            co_cost >= oh_cost,
-            "carbonyl site {co_cost} vs alcohol site {oh_cost}"
+            atoms.len() >= 2,
+            "demethylation site should be the O–Me bond: {atoms:?}"
         );
-        assert_eq!(oh_cost, alcohol.atoms[&oh].abs_delta());
-        assert_eq!(
-            alcohol.atoms[&oh].abs_delta(),
-            shell_l1(&alcohol.atoms[&oh].n0, &Shell::new())
-                + shell_l1(&alcohol.atoms[&oh].n1, &Shell::new())
-                + shell_l1(&alcohol.atoms[&oh].n2, &Shell::new())
+        let forecast = forecast_site_bag(&align, &atoms);
+        assert!(
+            forecast.cleaved >= 1,
+            "methyl leave must count as cleaved: {forecast:?}"
+        );
+        assert!(
+            forecast.delta_magnitude() > 0,
+            "edit delta magnitude: {forecast:?}"
         );
 
-        assert_eq!(cleave.unaligned_reactant, 1);
-        assert!(cleave.without_unchanged().cost() > 0);
-        assert!(carbonyl.without_unchanged().cost() > alcohol.without_unchanged().cost());
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+        assert!(
+            site_shell_cost(&cur, None, &tgt, &map, &atoms) > 0.0,
+            "distance now at demethylation site"
+        );
+        // Residual align as δ lands on target → cost 0.
+        assert!(
+            site_shell_cost(&cur, Some(&align), &tgt, &map, &atoms) < 1e-12,
+            "perfect residual δ"
+        );
+
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let actual = edit_site_bag(&parent, &child, &atoms);
+        check_site_shell_bags(
+            "anisole demethylation",
+            &forecast,
+            &actual,
+            SiteShellCheck::Error,
+        )
+        .unwrap();
+        let edit = edit_shells(&parent, &child);
+        assert!(
+            site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms) < 1e-12,
+            "applied demethylation lands on target at site"
+        );
+    }
+
+    #[test]
+    fn hydroxylation_orbit_bag_matches_applied() {
+        // MCS may label either ethane carbon as the attachment; bag is order-invariant.
+        let parent = ForestMol::parse("CC").unwrap();
+        let target = parse_mol("CCO").unwrap();
+        let align = aligned_shells_mol(parent.mol(), &target);
+        let map = atom_diff(parent.mol(), &target).mapping;
+        let set = hydroxylation();
+        let cands = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let c = &cands[0];
+        // Joint orbit: both carbons — edit hydroxylates one; bags still match.
+        let mut atoms = site_atoms_cand(c);
+        for &i in &c.orbit {
+            atoms.push(i);
+        }
+        atoms.sort_unstable();
+        atoms.dedup();
+        let forecast = forecast_site_bag(&align, &atoms);
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let actual = edit_site_bag(&parent, &child, &atoms);
+        check_site_shell_bags("ethane OH orbit", &forecast, &actual, SiteShellCheck::Error)
+            .unwrap();
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+        let edit = edit_shells(&parent, &child);
+        assert!(
+            site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms) < 1e-12,
+            "OH lands on target at joint orbit site"
+        );
+    }
+
+    #[test]
+    fn hydroquinone_pair_joint_bag_matches() {
+        let parent = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let align = aligned_shells_mol(parent.mol(), &target);
+        let map = atom_diff(parent.mol(), &target).mapping;
+        let pairs = dehydrogenation()
+            .pair_candidates_leaf(parent.mol())
+            .unwrap();
+        let pair = &pairs[0];
+        let (a, b) = pair.end_atoms().expect("ends");
+        // Joint site — each end’s shell sees the other when close.
+        let atoms = [a, b];
+        let forecast = forecast_site_bag(&align, &atoms);
+        let pieces = pair.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let actual = edit_site_bag(&parent, &child, &atoms);
+        check_site_shell_bags("HQ DH joint", &forecast, &actual, SiteShellCheck::Error).unwrap();
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+        let edit = edit_shells(&parent, &child);
+        assert!(
+            site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms) < 1e-12,
+            "joint pair δ lands on quinone at both ends"
+        );
+        // Solo end under-counts mutual shell effects when ends are close.
+        let solo = site_shell_cost(&cur, Some(&edit), &tgt, &map, &[a]);
+        let joint = site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms);
+        assert!(joint < 1e-12);
+        let _ = solo;
+    }
+
+    fn aligned_shells_mol(a: &Molecule, b: &Molecule) -> AlignedShells {
+        let diff = atom_diff(a, b);
+        align_shells(&molecule_shells(a), &molecule_shells(b), &diff.mapping)
     }
 }

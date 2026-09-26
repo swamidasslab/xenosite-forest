@@ -1,19 +1,17 @@
-//! Verify site shell deltas against the actual edit when applied.
+//! Verify site shell bags: forecast (reactant→target at site) vs applied edit.
 //!
-//! For each live-gate survivor: materialize → tag-align reactant↔product →
-//! compare (1) forecast `at_sites` vs target with (2) actual reactant→product
-//! shell L1 at the same tagged atoms.
+//! Cost at a site is Σ |current + δ − target| (`site_shell_cost`). Bags must
+//! match exactly; mismatches are reported (Error mode aborts the example).
+//! Close pairs use the joint site atom list.
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example verify_site_shells --release
 //! ```
 
-use std::collections::BTreeMap;
-
 use xenosite_forest::{
-    AtomNeighborhood, ForestMol, aligned_shells, atom_diff, atom_neighborhood,
-    candidate_could_help_on, format_shell, molecule_shells, pair_could_help, parse_mol, phase_one,
-    shell_l1,
+    ForestMol, SiteShellCheck, aligned_shells, atom_diff, candidate_could_help_on,
+    check_site_shell_bags, edit_shells, edit_site_bag, forecast_site_bag, molecule_shells,
+    pair_could_help, parse_mol, phase_one, site_shell_cost,
 };
 
 const CASES: &[(&str, &str, &str)] = &[
@@ -56,82 +54,50 @@ fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
     atoms
 }
 
-fn env_line(e: &AtomNeighborhood) -> String {
-    format!(
-        "n0{{{}}} n1{{{}}} n2{{{}}} Σ={}",
-        format_shell(&e.n0),
-        format_shell(&e.n1),
-        format_shell(&e.n2),
-        e.abs_delta()
-    )
-}
-
-/// Actual reactant→product neighborhood delta at a reactant atom, via tags.
-fn actual_delta(parent: &ForestMol, child: &ForestMol, r_idx: usize) -> Option<AtomNeighborhood> {
-    let tag = parent.tag_of(r_idx)?;
-    let c_idx = child.index_of(tag)?;
-    let from = atom_neighborhood(parent.mol(), r_idx);
-    let to = atom_neighborhood(child.mol(), c_idx);
-    Some(neighborhood_delta(&to, &from))
-}
-
-fn shell_delta_map(
-    to: &BTreeMap<String, i32>,
-    from: &BTreeMap<String, i32>,
-) -> BTreeMap<String, i32> {
-    let mut out = BTreeMap::new();
-    for k in to.keys().chain(from.keys()) {
-        let d = to.get(k).copied().unwrap_or(0) - from.get(k).copied().unwrap_or(0);
-        if d != 0 {
-            out.insert(k.clone(), d);
-        }
-    }
-    out
-}
-
-fn neighborhood_delta(to: &AtomNeighborhood, from: &AtomNeighborhood) -> AtomNeighborhood {
-    AtomNeighborhood {
-        aromatic: to.aromatic - from.aromatic,
-        n0: shell_delta_map(&to.n0, &from.n0),
-        n1: shell_delta_map(&to.n1, &from.n1),
-        n2: shell_delta_map(&to.n2, &from.n2),
-    }
-}
-
 fn main() {
-    println!(
-        "verify_site_shells — forecast (reactant→target at_sites) vs actual (reactant→product)\n"
-    );
+    println!("verify_site_shells — bag match + site_shell_cost = Σ|current+δ−target|\n");
 
     let mut n_applied = 0usize;
-    let mut n_site_atoms = 0usize;
-    let mut exact_match = 0usize;
-    let mut forecast_only = 0usize; // forecast nonzero, actual zero/missing
-    let mut actual_only = 0usize; // actual nonzero, forecast empty/missing
-    let mut both_nonzero_diff = 0usize;
-    let mut cost_drop = 0usize;
-    let mut cost_flat = 0usize;
-    let mut cost_up = 0usize;
-    let mut hop0_forecast_zero = 0usize;
+    let mut n_match = 0usize;
+    let mut n_mismatch = 0usize;
+    let mut n_inconsistent = 0usize;
+    let mut cost_now_pos = 0usize;
+    let mut cost_edit_zero = 0usize;
+    let mut cost_edit_pos = 0usize;
+    let mut residual_drop = 0usize;
+    let mut residual_flat = 0usize;
+    let mut residual_up = 0usize;
 
     for (name, reactant, target) in CASES {
         let parent = ForestMol::parse(reactant).unwrap();
         let tgt = parse_mol(target).unwrap();
         let set = phase_one();
         let forecast_align = aligned_shells(parent.mol(), &tgt);
-        let parent_cost = forecast_align.without_unchanged().cost();
-        let ad = atom_diff(parent.mol(), &tgt);
+        let map = atom_diff(parent.mol(), &tgt).mapping;
+        let cur = molecule_shells(parent.mol());
+        let tgt_shells = molecule_shells(&tgt);
+        let parent_residual = site_shell_cost(
+            &cur,
+            None,
+            &tgt_shells,
+            &map,
+            &cur.atoms.keys().copied().collect::<Vec<_>>(),
+        );
 
-        println!("=== {name}  parent_shell_cost={parent_cost} ===");
+        println!("=== {name}  parent_residual={parent_residual:.4} ===");
 
-        // Single-site candidates
         let cands = set
             .candidates(parent.mol())
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let mut checked = 0usize;
         for c in &cands {
-            if !candidate_could_help_on(c, &ad, Some(parent.mol()), Some(&tgt)) {
+            if !candidate_could_help_on(
+                c,
+                &atom_diff(parent.mol(), &tgt),
+                Some(parent.mol()),
+                Some(&tgt),
+            ) {
                 continue;
             }
             let Ok(pieces) = c.materialize_mols(parent.mol()) else {
@@ -140,109 +106,91 @@ fn main() {
             if pieces.is_empty() {
                 continue;
             }
-            // Prefer product that drops shell cost to target, else first piece.
-            let mut best: Option<(ForestMol, usize)> = None;
+            let mut best: Option<(xenosite_forest::ForestMol, f64)> = None;
             for piece in pieces {
                 let child = parent.adopt_product(piece);
-                let child_cost = aligned_shells(child.mol(), &tgt).without_unchanged().cost();
+                let child_shells = molecule_shells(child.mol());
+                let child_map = atom_diff(child.mol(), &tgt).mapping;
+                let child_residual = site_shell_cost(
+                    &child_shells,
+                    None,
+                    &tgt_shells,
+                    &child_map,
+                    &child_shells.atoms.keys().copied().collect::<Vec<_>>(),
+                );
                 best = Some(match best {
-                    None => (child, child_cost),
-                    Some((_b, bc)) if child_cost < bc => (child, child_cost),
+                    None => (child, child_residual),
+                    Some((_b, bc)) if child_residual < bc => (child, child_residual),
                     Some(prev) => prev,
                 });
             }
-            let Some((child, child_cost)) = best else {
+            let Some((child, child_residual)) = best else {
                 continue;
             };
             n_applied += 1;
             checked += 1;
-            match child_cost.cmp(&parent_cost) {
-                std::cmp::Ordering::Less => cost_drop += 1,
-                std::cmp::Ordering::Equal => cost_flat += 1,
-                std::cmp::Ordering::Greater => cost_up += 1,
+            match child_residual
+                .partial_cmp(&parent_residual)
+                .unwrap_or(std::cmp::Ordering::Equal)
+            {
+                std::cmp::Ordering::Less => residual_drop += 1,
+                std::cmp::Ordering::Equal => residual_flat += 1,
+                std::cmp::Ordering::Greater => residual_up += 1,
             }
 
             let atoms = site_atoms_cand(c);
-            let forecast = forecast_align.at_sites(&atoms);
-            let fcost = forecast.cost();
-            if fcost == 0 {
-                hop0_forecast_zero += 1;
+            let forecast = forecast_site_bag(&forecast_align, &atoms);
+            let actual = edit_site_bag(&parent, &child, &atoms);
+            let now = site_shell_cost(&cur, None, &tgt_shells, &map, &atoms);
+            let edit = edit_shells(&parent, &child);
+            let after = site_shell_cost(&cur, Some(&edit), &tgt_shells, &map, &atoms);
+            if now > 0.0 {
+                cost_now_pos += 1;
+            }
+            if after < 1e-9 {
+                cost_edit_zero += 1;
+            } else {
+                cost_edit_pos += 1;
             }
 
-            println!(
-                "  {} site={:?}  forecast_Σ={fcost}  shell_cost {}→{} ({})",
-                c.pattern.name,
-                atoms,
-                parent_cost,
-                child_cost,
-                if child_cost < parent_cost {
-                    "↓"
-                } else if child_cost > parent_cost {
-                    "↑"
-                } else {
-                    "="
-                }
-            );
-
-            for &r in &atoms {
-                n_site_atoms += 1;
-                let f_env = forecast.atoms.get(&r);
-                let a_env = actual_delta(&parent, &child, r);
-                match (f_env, a_env) {
-                    (None, None) => {
-                        exact_match += 1; // both absent / unchanged
-                    }
-                    (None, Some(a)) if a.is_unchanged() => exact_match += 1,
-                    (None, Some(a)) => {
-                        actual_only += 1;
-                        println!("    r{r} ACTUAL_ONLY  actual={}", env_line(&a));
-                    }
-                    (Some(f), None) => {
-                        // Atom left (cleavage) — forecast had a delta, product lost the atom.
-                        if f.is_unchanged() {
-                            exact_match += 1;
-                        } else {
-                            forecast_only += 1;
-                            println!(
-                                "    r{r} FORECAST_ONLY (atom gone on product)  forecast={}",
-                                env_line(f)
-                            );
-                        }
-                    }
-                    (Some(f), Some(a)) => {
-                        if f == &a {
-                            exact_match += 1;
-                        } else if f.is_unchanged() {
-                            actual_only += 1;
-                            println!("    r{r} ACTUAL_ONLY  actual={}", env_line(&a));
-                        } else if a.is_unchanged() {
-                            forecast_only += 1;
-                            println!("    r{r} FORECAST_ONLY  forecast={}", env_line(f));
-                        } else {
-                            both_nonzero_diff += 1;
-                            // How much of the forecast appears in the actual edit?
-                            let overlap = shell_l1(&f.n1, &a.n1)
-                                + shell_l1(&f.n2, &a.n2)
-                                + shell_l1(&f.n0, &a.n0);
-                            println!(
-                                "    r{r} DIFF  forecast={}  actual={}  |f−a|={overlap}",
-                                env_line(f),
-                                env_line(&a)
-                            );
-                        }
-                    }
-                }
+            let label = format!("{} / {}", name, c.pattern.name);
+            let bags_eq = forecast.matches(&actual);
+            let done = after < 1e-9;
+            if bags_eq {
+                n_match += 1;
+                println!(
+                    "  OK  {} site={:?}  now={now:.4} after_δ={after:.4}  residual {parent_residual:.4}→{child_residual:.4}",
+                    c.pattern.name, atoms
+                );
+            } else {
+                n_mismatch += 1;
+                let _ = check_site_shell_bags(&label, &forecast, &actual, SiteShellCheck::Warn);
+                println!(
+                    "  DIFF  {} site={:?}  bag_l1={}  now={now:.4} after_δ={after:.4}  cleaved {}→{} kept {}→{}",
+                    c.pattern.name,
+                    atoms,
+                    forecast.l1(&actual),
+                    forecast.cleaved,
+                    actual.cleaved,
+                    forecast.kept.len(),
+                    actual.kept.len()
+                );
+            }
+            // Residual bag ≡ edit bag iff the edit completes the site.
+            if bags_eq != done {
+                n_inconsistent += 1;
+                println!("    INCONSISTENT bags_eq={bags_eq} after_δ≈0={done}");
             }
             if checked >= 8 {
-                break; // cap per case
+                break;
             }
         }
 
-        // Pairs (DH / QF) — sample a few gate survivors
         let pairs = set
             .pair_candidates(parent.mol())
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
+        let ad = atom_diff(parent.mol(), &tgt);
         let mut pair_checked = 0usize;
         for p in &pairs {
             if !pair_could_help(p, &ad, parent.mol(), &tgt) {
@@ -255,58 +203,66 @@ fn main() {
                 continue;
             }
             let child = parent.adopt_product(pieces[0].clone());
-            let child_cost = aligned_shells(child.mol(), &tgt).without_unchanged().cost();
+            let child_shells = molecule_shells(child.mol());
+            let child_map = atom_diff(child.mol(), &tgt).mapping;
+            let child_residual = site_shell_cost(
+                &child_shells,
+                None,
+                &tgt_shells,
+                &child_map,
+                &child_shells.atoms.keys().copied().collect::<Vec<_>>(),
+            );
             n_applied += 1;
             pair_checked += 1;
-            match child_cost.cmp(&parent_cost) {
-                std::cmp::Ordering::Less => cost_drop += 1,
-                std::cmp::Ordering::Equal => cost_flat += 1,
-                std::cmp::Ordering::Greater => cost_up += 1,
+            match child_residual
+                .partial_cmp(&parent_residual)
+                .unwrap_or(std::cmp::Ordering::Equal)
+            {
+                std::cmp::Ordering::Less => residual_drop += 1,
+                std::cmp::Ordering::Equal => residual_flat += 1,
+                std::cmp::Ordering::Greater => residual_up += 1,
             }
+            // Joint ends — close pairs share shells.
             let atoms = p.plan_site_atoms();
-            let forecast = forecast_align.at_sites(&atoms);
-            let fcost = forecast.cost();
-            if fcost == 0 {
-                hop0_forecast_zero += 1;
+            let forecast = forecast_site_bag(&forecast_align, &atoms);
+            let actual = edit_site_bag(&parent, &child, &atoms);
+            let now = site_shell_cost(&cur, None, &tgt_shells, &map, &atoms);
+            let edit = edit_shells(&parent, &child);
+            let after = site_shell_cost(&cur, Some(&edit), &tgt_shells, &map, &atoms);
+            if now > 0.0 {
+                cost_now_pos += 1;
             }
-            println!(
-                "  PAIR {} atoms={:?} forecast_Σ={fcost}  shell_cost {}→{} ({})",
-                p.pattern_name,
-                atoms,
-                parent_cost,
-                child_cost,
-                if child_cost < parent_cost {
-                    "↓"
-                } else if child_cost > parent_cost {
-                    "↑"
-                } else {
-                    "="
-                }
-            );
-            for &r in &atoms {
-                n_site_atoms += 1;
-                let f_env = forecast.atoms.get(&r);
-                let a_env = actual_delta(&parent, &child, r);
-                match (f_env, a_env.as_ref()) {
-                    (Some(f), Some(a)) if f == a => exact_match += 1,
-                    (Some(f), Some(a)) if !f.is_unchanged() && !a.is_unchanged() => {
-                        both_nonzero_diff += 1;
-                        println!(
-                            "    r{r} DIFF  forecast={}  actual={}",
-                            env_line(f),
-                            env_line(a)
-                        );
-                    }
-                    (Some(f), _) if !f.is_unchanged() => {
-                        forecast_only += 1;
-                        println!("    r{r} FORECAST_ONLY  {}", env_line(f));
-                    }
-                    (_, Some(a)) if !a.is_unchanged() => {
-                        actual_only += 1;
-                        println!("    r{r} ACTUAL_ONLY  {}", env_line(a));
-                    }
-                    _ => exact_match += 1,
-                }
+            if after < 1e-9 {
+                cost_edit_zero += 1;
+            } else {
+                cost_edit_pos += 1;
+            }
+            let label = format!("{} / PAIR {}", name, p.pattern_name);
+            let bags_eq = forecast.matches(&actual);
+            let done = after < 1e-9;
+            if bags_eq {
+                n_match += 1;
+                println!(
+                    "  OK  PAIR {} atoms={:?}  now={now:.4} after_δ={after:.4}  residual {parent_residual:.4}→{child_residual:.4}",
+                    p.pattern_name, atoms
+                );
+            } else {
+                n_mismatch += 1;
+                let _ = check_site_shell_bags(&label, &forecast, &actual, SiteShellCheck::Warn);
+                println!(
+                    "  DIFF  PAIR {} atoms={:?}  bag_l1={}  now={now:.4} after_δ={after:.4}  cleaved {}→{} kept {}→{}",
+                    p.pattern_name,
+                    atoms,
+                    forecast.l1(&actual),
+                    forecast.cleaved,
+                    actual.cleaved,
+                    forecast.kept.len(),
+                    actual.kept.len()
+                );
+            }
+            if bags_eq != done {
+                n_inconsistent += 1;
+                println!("    INCONSISTENT bags_eq={bags_eq} after_δ≈0={done}");
             }
             if pair_checked >= 4 {
                 break;
@@ -317,13 +273,15 @@ fn main() {
 
     println!("## Summary");
     println!("  applied edits: {n_applied}");
-    println!("  site-atom checks: {n_site_atoms}");
-    println!("  exact match (forecast==actual or both empty): {exact_match}");
-    println!("  both nonzero but differ: {both_nonzero_diff}");
-    println!("  forecast only (target residual ≠ applied edit / atom left): {forecast_only}");
-    println!("  actual only (edit changed site; forecast silent): {actual_only}");
-    println!("  gate survivors with forecast_Σ=0: {hop0_forecast_zero}/{n_applied}");
-    println!("  full shell_cost to target after apply: ↓{cost_drop} ={cost_flat} ↑{cost_up}");
-
-    let _ = (molecule_shells, neighborhood_delta);
+    println!("  bag match (residual≡edit at site): {n_match}");
+    println!("  bag diff (partial / off-target edit): {n_mismatch}");
+    println!("  inconsistent (bags_eq XOR after_δ≈0): {n_inconsistent}");
+    println!("  site now>0: {cost_now_pos}/{n_applied}");
+    println!("  site after_δ==0 (edit completes site): {cost_edit_zero}");
+    println!("  site after_δ>0 (partial / off-target): {cost_edit_pos}");
+    println!("  full residual after apply: ↓{residual_drop} ={residual_flat} ↑{residual_up}");
+    if n_inconsistent > 0 {
+        eprintln!("verify_site_shells: {n_inconsistent} bag/cost inconsistenc(ies)");
+        std::process::exit(1);
+    }
 }
