@@ -337,6 +337,33 @@ mod tests {
     };
     use crate::ruleset::RuleSet;
 
+    /// Every emitted hit's final product (and last path-step product) must
+    /// lie within `tol_da` of the target m/z. Intermediates need not.
+    fn assert_hits_satisfy_mz(hits: &[PathOutcome], mz: f64, tol_da: f64) {
+        assert!(!hits.is_empty(), "expected at least one MS1 hit");
+        for h in hits {
+            let mol = ForestMol::parse(&h.smiles).unwrap();
+            let got = mz_of_mol(mol.mol(), Ms1Adduct::MPlusH).unwrap();
+            assert!(
+                mz_within(got, mz, tol_da),
+                "hit smiles {} mz={got} outside tol of target {mz}",
+                h.smiles
+            );
+            let last = h.steps.last().expect("hit has steps");
+            assert_eq!(
+                last.product, h.smiles,
+                "last path step product must equal hit smiles"
+            );
+            let step_mol = ForestMol::parse(&last.product).unwrap();
+            let step_mz = mz_of_mol(step_mol.mol(), Ms1Adduct::MPlusH).unwrap();
+            assert!(
+                mz_within(step_mz, mz, tol_da),
+                "last step product {} mz={step_mz} outside tol of {mz}",
+                last.product
+            );
+        }
+    }
+
     /// Apply `leaf` once to `reactant`; return distinct (csmi, mz) products.
     fn products_from_apply(reactant: &str, set: &RuleSet) -> Vec<(String, f64)> {
         let parent = ForestMol::parse(reactant).unwrap();
@@ -394,6 +421,7 @@ mod tests {
                 hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
                 counters.billed()
             );
+            assert_hits_satisfy_mz(&hits, *mz, 0.001);
         }
     }
 
@@ -489,6 +517,7 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
+        assert_hits_satisfy_mz(&hits, mz, 0.001);
     }
 
     #[test]
@@ -572,6 +601,7 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
+        assert_hits_satisfy_mz(&hits, mz, 0.001);
     }
 
     #[test]
@@ -624,6 +654,90 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
+        assert_hits_satisfy_mz(&hits, mz, 0.001);
+    }
+
+    #[test]
+    fn harder_three_hydroxylations_on_benzene() {
+        assert_chain_in_ms1(
+            "c1ccccc1",
+            &hydroxylation(),
+            &["Hydroxylation"],
+            3,
+            &["Hydroxylation", "Hydroxylation", "Hydroxylation"],
+            2000,
+        );
+    }
+
+    #[test]
+    fn harder_toluene_two_oh_under_phase_one_or() {
+        assert_chain_in_ms1(
+            "Cc1ccccc1",
+            &phase_one(),
+            &[
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+                "Dehydrogenation",
+            ],
+            2,
+            &["Hydroxylation", "Hydroxylation"],
+            3000,
+        );
+    }
+
+    #[test]
+    fn harder_butylbenzene_two_hydroxylations() {
+        assert_chain_in_ms1(
+            "CCCCc1ccccc1",
+            &hydroxylation(),
+            &["Hydroxylation"],
+            2,
+            &["Hydroxylation", "Hydroxylation"],
+            3000,
+        );
+    }
+
+    #[test]
+    fn harder_ethene_glycol_then_dehydrogenation() {
+        assert_chain_in_ms1(
+            "C=C",
+            &phase_one(),
+            &[
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideOpening",
+            ],
+            2,
+            &["EpoxideHydration", "Dehydrogenation"],
+            3000,
+        );
+    }
+
+    #[test]
+    fn harder_veratrole_dealkylation() {
+        assert_chain_in_ms1(
+            "COc1ccc(OC)cc1",
+            &dealkylation(),
+            &["Dealkylation"],
+            1,
+            &["Dealkylation"],
+            2000,
+        );
+    }
+
+    #[test]
+    fn harder_n_dealkylation_dimethylaniline() {
+        assert_chain_in_ms1(
+            "CN(C)c1ccccc1",
+            &crate::rules::n_dealkylation(),
+            &["NDealkylation"],
+            1,
+            &["NDealkylation"],
+            2000,
+        );
     }
 
     /// Fuzz-style property: for each (reactant, leaf) pair, every distinct
@@ -635,10 +749,13 @@ mod tests {
             ("CC", "Hydroxylation"),
             ("CCC", "Hydroxylation"),
             ("c1ccccc1", "Hydroxylation"),
+            ("Cc1ccccc1", "Hydroxylation"),
+            ("CCCCc1ccccc1", "Hydroxylation"),
             ("CCO", "Hydroxylation"),
             ("C=C", "Epoxidation"),
             ("C=C", "EpoxideHydration"),
             ("C/C=C/C", "Epoxidation"),
+            ("c1ccccc1", "Epoxidation"),
             ("C1OC1", "EpoxideOpening"),
             ("CC1OC1C", "EpoxideOpening"),
             ("CCS", "SulfurOxidation"),
@@ -648,6 +765,8 @@ mod tests {
             ("CCO", "Dehydrogenation"),
             ("CC(O)C", "Dehydrogenation"),
             ("COc1ccccc1", "Dealkylation"),
+            ("COc1ccc(OC)cc1", "Dealkylation"),
+            ("CN(C)c1ccccc1", "NDealkylation"),
             ("C=C", "Hydrogenation"),
             ("C#C", "Hydrogenation"),
         ];
