@@ -641,6 +641,13 @@ fn apply_edit_mols_raw(
                     );
                 if prefer_graph {
                     if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
+                        // Ring-open must stay one connected piece. A ring σ cut
+                        // that yields ≥2 fragments is a bad parent/cut (thiophene
+                        // truncated aldehyde + junk leave) — refuse rather than
+                        // emit or fall through to aromatic SMIRKS.
+                        if mapped_bond_in_ring(&work, mapped, mode) && products.len() >= 2 {
+                            return Ok(Vec::new());
+                        }
                         return Ok(products);
                     }
                     if mapped_bond_in_ring(&work, mapped, mode) {
@@ -1059,6 +1066,19 @@ mod tests {
             got,
             canon_set(["C=CC=CC=CO", "C=CC=CC=C=O"]),
             "chematic A.B cleavage drops a ring atom; ring-open edit must keep C6"
+        );
+    }
+
+    #[test]
+    fn dealkylation_thiophene_refuses_truncated_aldehyde_leave() {
+        // Ring σ cut that bifurcates (truncated O=CC=CS + junk) is refused;
+        // connected ring-opens (C=CSC=C=O family) remain.
+        use crate::rules::dealkylation;
+        let got = products_of(&dealkylation(), "c1ccsc1", accept_all_rules, accept_all_sites);
+        let truncated = canon_of("O=CC=CS").unwrap();
+        assert!(
+            !got.contains(&truncated),
+            "must not emit truncated thiophene aldehyde; got {got:?}"
         );
     }
 

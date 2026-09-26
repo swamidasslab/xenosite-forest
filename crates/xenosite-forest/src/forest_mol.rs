@@ -26,6 +26,18 @@ fn sync_tags_to_mol(mol: &mut Molecule, labels: &[Option<Tag>]) {
     }
 }
 
+/// Shared Kekulé bag unless `XENOSITE_KEKULE_SHARE=0` (fresh bag for A/B).
+fn inherit_kekule(parent: &ForestMol) -> Rc<RefCell<KekuleCache>> {
+    if std::env::var_os("XENOSITE_KEKULE_SHARE")
+        .map(|v| v == "0")
+        .unwrap_or(false)
+    {
+        Rc::new(RefCell::new(KekuleCache::default()))
+    } else {
+        Rc::clone(&parent.kekule)
+    }
+}
+
 /// Canonical SMILES → `parse_mol` (aromatize), tags remapped by visit order.
 fn normalize_tagged_product(product: &Molecule) -> Result<Molecule, ForestError> {
     if product.atom_count() == 0 {
@@ -88,6 +100,9 @@ impl ForestMol {
     /// Unmodified systems still hit. An edit that changes a system's shape
     /// is a new [`crate::kekule::SystemKey`] (tag-keyed, not index-keyed) and
     /// starts an empty bag.
+    ///
+    /// Set `XENOSITE_KEKULE_SHARE=0` to force a fresh Kekulé bag (A/B for
+    /// cache-corruption bugs). Default keeps the shared `Rc`.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
         let mut mol = mol;
         let start = labels::next_tag(&parent.labels);
@@ -100,7 +115,7 @@ impl ForestMol {
             labels,
             tag_gen: Rc::clone(&parent.tag_gen),
             structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::clone(&parent.kekule),
+            kekule: inherit_kekule(parent),
             is_terminal_product: Cell::new(false),
         }
     }
@@ -121,7 +136,7 @@ impl ForestMol {
             labels,
             tag_gen: Rc::clone(&self.tag_gen),
             structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::clone(&self.kekule),
+            kekule: inherit_kekule(self),
             is_terminal_product: Cell::new(false),
         }
     }
@@ -145,7 +160,7 @@ impl ForestMol {
             labels,
             tag_gen: Rc::clone(&self.tag_gen),
             structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::clone(&self.kekule),
+            kekule: inherit_kekule(self),
             is_terminal_product: Cell::new(false),
         }
     }
