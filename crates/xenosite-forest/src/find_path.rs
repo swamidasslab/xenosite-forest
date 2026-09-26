@@ -609,7 +609,7 @@ pub fn hop_match_score(
     }
 }
 
-/// Convenience: [`MatchScoreSpec::add_both`] (default match recipe).
+/// Convenience: [`MatchScoreSpec::add_both`] (former default; log-Product).
 pub fn hop_match_add_score(
     parent_formula_dist: usize,
     child_formula_dist: usize,
