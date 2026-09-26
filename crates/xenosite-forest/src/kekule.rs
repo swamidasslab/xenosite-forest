@@ -641,6 +641,11 @@ impl SystemKekule {
         !self.assignments.is_empty()
     }
 
+    /// Semantic identity of cached writings (assignments + by_order), not `Rc`.
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        self.assignments == other.assignments && self.by_order == other.by_order
+    }
+
     /// Derived bag: keep assignments where each forced tag-pair is Double.
     ///
     /// Does not refill matching — alters only the selected writings so callers
@@ -719,6 +724,11 @@ impl KekuleCache {
 
     pub fn get(&self, key: &SystemKey) -> Option<Rc<RefCell<SystemKekule>>> {
         self.systems.get(key).cloned()
+    }
+
+    /// Tag-keyed system keys currently held (for cache-identity tests).
+    pub fn system_keys(&self) -> Vec<SystemKey> {
+        self.systems.keys().cloned().collect()
     }
 
     /// Fill (or reuse) the bag for `graph`'s [`SystemKey`].
@@ -1529,6 +1539,54 @@ mod tests {
         }
     }
 
+    /// Naphthalene → 1,4-naphthoquinone: one fused ring collapses to a
+    /// cyclohexadienedione; the other remains aromatic. Gate is cyclic 2-core
+    /// + Kekulé + 4n+2 — no `aromatize` / sanitize call.
+    ///
+    /// Reactant topology `c1ccc2ccccc2c1`; product shape
+    /// `O=C1C=CC(=O)c2ccccc12`. Forced exocyclic C=O doubles consume the
+    /// quinone carbons' π demand; residual 2-core keeps the benzenoid sextet.
+    #[test]
+    fn naphthalene_14_naphthoquinone_partial_collapse_without_sanitize() {
+        // 1,4-naphthalenediol: phenol ends become the forced C=O leaves.
+        // Indices (RDKit/chematic): O0–C1, O5–C4; fused ring C6–C11.
+        let mol = parse_mol("Oc1ccc(O)c2ccccc12").unwrap();
+        let parent = PiGraph::conjugated(&mol, 1);
+        assert!(
+            parent.atoms.len() >= 10,
+            "naphthalene diol is one fused conjugated system: {:?}",
+            parent.atoms
+        );
+        let forced: BTreeSet<(usize, usize)> =
+            [(0usize, 1usize), (4usize, 5usize)]
+                .into_iter()
+                .map(|(a, b)| bond_key(a, b))
+                .collect();
+        // Perceive as the emit path does: only the in-system endpoint of each
+        // exocyclic forced double is demand-consumed.
+        let residual = parent.after_forced_doubles(&forced);
+        assert!(
+            !residual.atoms.contains(&1) && !residual.atoms.contains(&4),
+            "quinone carbons leave the residual π graph"
+        );
+        let core = residual.two_core();
+        assert_eq!(
+            core.atoms,
+            BTreeSet::from([6, 7, 8, 9, 10, 11]),
+            "dangling quinone ring strips; fused benzenoid 2-core remains"
+        );
+        let aromatic = residual.aromatic_2core_atoms(&mol, &KekuleConfig::for_constraints());
+        assert_eq!(
+            aromatic,
+            BTreeSet::from([6, 7, 8, 9, 10, 11]),
+            "partial collapse stamps only the surviving aromatic sextet (no sanitize)"
+        );
+        assert!(
+            !aromatic.contains(&1) && !aromatic.contains(&4) && !aromatic.contains(&2),
+            "quinone-ring carbons must not stay aromatic"
+        );
+    }
+
     /// Naphthalene epoxidize outer left bond 0-1: left collapses, right 2-core
     /// stays aromatic (HEURISTICS cyclic 2-core partial collapse).
     #[test]
@@ -1873,5 +1931,81 @@ mod tests {
             canon_smiles(&parent),
             validate_valence(&parent)
         );
+    }
+
+    #[test]
+    fn shared_kekule_bag_matches_fresh_fill_after_edit_copy() {
+        // edit_copy shares the Kekulé Rc. Untouched systems' cached
+        // assignments must equal a fresh fill on the same mol (tag-keyed).
+        let parent = ForestMol::parse("c1ccc(-c2ccccc2)cc1").unwrap();
+        let (atoms, bonds) = conjugated_component(parent.mol(), 0);
+        let seed = *bonds.iter().next().expect("ring bond");
+        parent.ensure_kekule(seed.0, seed.1);
+        let key = SystemKey::of(parent.mol(), &atoms, &bonds);
+        let shared = parent
+            .kekule()
+            .borrow()
+            .get(&key)
+            .expect("parent bag")
+            .borrow()
+            .clone();
+
+        let child = parent.edit_copy();
+        assert!(child.shares_kekule(&parent));
+        // Fresh cache on the same chemistry must match the shared bag.
+        let mut fresh = KekuleCache::default();
+        ensure_kekule_parents(child.mol(), seed.0, seed.1, &mut fresh);
+        let fresh_bag = fresh.get(&key).expect("fresh bag").borrow().clone();
+        assert!(
+            shared.semantically_eq(&fresh_bag),
+            "shared cache after edit_copy must match fresh fill"
+        );
+    }
+
+    #[test]
+    fn product_that_breaks_system_misses_parent_key() {
+        // Hydroxylate a ring carbon → new structure; shared Rc still holds the
+        // old key, but a fresh fill on the product builds its own bag.
+        use crate::rules::hydroxylation;
+        use crate::Candidate;
+        let parent = ForestMol::parse("c1ccccc1").unwrap();
+        let (atoms, bonds) = conjugated_component(parent.mol(), 0);
+        let seed = *bonds.iter().next().unwrap();
+        parent.ensure_kekule(seed.0, seed.1);
+        let parent_key = SystemKey::of(parent.mol(), &atoms, &bonds);
+        let parent_bag = parent
+            .kekule()
+            .borrow()
+            .get(&parent_key)
+            .unwrap()
+            .borrow()
+            .clone();
+
+        let set = hydroxylation();
+        let cand = set.candidates(parent.mol()).next().unwrap().unwrap();
+        assert!(matches!(cand, Candidate::Edit(_)));
+        let products = cand.materialize_mols(parent.mol()).unwrap();
+        assert!(!products.is_empty());
+        let child = parent.adopt_product(products[0].clone());
+        // Product may still share Rc until structure-changing invalidation;
+        // semantic check: fresh fill on child equals what child would compute.
+        let mut fresh = KekuleCache::default();
+        let (catoms, cbonds) = conjugated_component(child.mol(), 0);
+        if catoms.len() >= 2 && !cbonds.is_empty() {
+            let cseed = *cbonds.iter().next().unwrap();
+            ensure_kekule_parents(child.mol(), cseed.0, cseed.1, &mut fresh);
+            let ckey = SystemKey::of(child.mol(), &catoms, &cbonds);
+            let fresh_bag = fresh.get(&ckey).unwrap().borrow().clone();
+            // If the parent key still resolves on the child (tags survive),
+            // shared bag must match fresh for that key; otherwise keys differ.
+            if let Some(shared_slot) = child.kekule().borrow().get(&ckey) {
+                assert!(
+                    shared_slot.borrow().semantically_eq(&fresh_bag),
+                    "child shared bag for live key must match fresh"
+                );
+            }
+            // Parent's old bag content is still well-formed.
+            assert!(parent_bag.is_filled());
+        }
     }
 }

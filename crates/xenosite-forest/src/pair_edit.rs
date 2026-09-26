@@ -606,9 +606,10 @@ pub(crate) fn pair_candidates(
     // on real conjugated/aromatic components only.
 
     let mut out = Vec::new();
-    let mut seen_sig: BTreeSet<(usize, usize, String, String, usize)> = BTreeSet::new();
-    let gens = crate::orbits::atom_bond_generators(mol);
-    let n_atoms = mol.atom_count();
+    // Dedup like Python pair_site_signature: site atoms + pattern names +
+    // path-end anchors (map-1 carbons). Site-only keys collapsed amide
+    // carbonyl–N vs aryl–N embeddings that share {N,O} sites (APAP DH).
+    let mut seen_sig: BTreeSet<(usize, usize, String, String, usize, usize)> = BTreeSet::new();
 
     for system in &systems {
         let anchors: Vec<usize> = hits
@@ -645,24 +646,31 @@ pub(crate) fn pair_candidates(
                         if shared_exclusive_partner(map1, info1, map2, info2) {
                             continue;
                         }
-                        let (n1, n2) = if info1.name <= info2.name {
-                            (info1.name.clone(), info2.name.clone())
+                        // Resolve dearomatizes against site_map atoms (Python
+                        // resolve_effect): phenol/amine ends sit on O/N, so the
+                        // capability clears even when the conjugated system is
+                        // aromatic — then merge with system_aromatic.
+                        let left = info1.resolve_for_match(mol, map1);
+                        let right = info2.resolve_for_match(mol, map2);
+                        let (n1, n2) = if left.name <= right.name {
+                            (left.name.clone(), right.name.clone())
                         } else {
-                            (info2.name.clone(), info1.name.clone())
+                            (right.name.clone(), left.name.clone())
                         };
                         let sa = site_a.min(site_b);
                         let sb = site_a.max(site_b);
-                        let orbit =
-                            crate::orbits::atom_pair_orbit_id_with_gens(&gens, n_atoms, sa, sb);
-                        if !seen_sig.insert((sa, sb, n1.clone(), n2.clone(), orbit)) {
+                        let pe_a = start.min(end);
+                        let pe_b = start.max(end);
+                        if !seen_sig.insert((sa, sb, n1.clone(), n2.clone(), pe_a, pe_b)) {
                             continue;
                         }
+                        let effect = merge_effect_fields(&left, &right, system_aromatic);
                         out.push(PairCandidate {
                             site: sa,
                             pattern_name: format!("{n1}+{n2}"),
-                            left: (*info1).clone(),
-                            right: (*info2).clone(),
-                            effect: merge_effect_fields(info1, info2, system_aromatic),
+                            left,
+                            right,
+                            effect,
                             rule_path: Vec::new(),
                             map1: map1.clone(),
                             map2: map2.clone(),
@@ -1024,5 +1032,70 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn apap_amine_phenol_pair_emits_quinone_imine() {
+        let mol = parse_mol("CC(=O)Nc1ccc(O)cc1").unwrap();
+        let endpoints = dehydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let want = canon_of("CC(=O)N=C1C=CC(=O)C=C1").unwrap();
+        let products: Vec<String> = cands
+            .iter()
+            .filter(|c| {
+                (c.left.name.contains("amine") && c.right.name.contains("phenol"))
+                    || (c.left.name.contains("phenol") && c.right.name.contains("amine"))
+            })
+            .flat_map(|c| c.materialize(&mol).unwrap_or_default())
+            .collect();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == want),
+            "APAP DH pair should emit quinone-imine; got {products:?}"
+        );
+    }
+
+    /// 1,4-naphthalenediol → 1,4-naphthoquinone: fused system partially
+    /// collapses; product keeps one aromatic ring (`c2ccccc12`).
+    #[test]
+    fn naphthalene_diol_dh_emits_14_naphthoquinone() {
+        let mol = parse_mol("Oc1ccc(O)c2ccccc12").unwrap();
+        let endpoints = dehydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let want = canon_of("O=C1C=CC(=O)c2ccccc12").unwrap();
+        let products: Vec<String> = cands
+            .iter()
+            .filter(|c| c.left.name.contains("phenol") && c.right.name.contains("phenol"))
+            .flat_map(|c| c.materialize(&mol).unwrap_or_default())
+            .collect();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == want),
+            "1,4-naphthalenediol DH should emit naphthoquinone; got {products:?}"
+        );
+        // Surviving fused ring stays aromatic on the accepted product.
+        let product = cands
+            .iter()
+            .filter(|c| c.left.name.contains("phenol") && c.right.name.contains("phenol"))
+            .flat_map(|c| c.materialize_mols(&mol).unwrap_or_default())
+            .find(|m| canon_smiles(m) == want || canon_of(&canon_smiles(m)).unwrap() == want)
+            .expect("naphthoquinone mol");
+        let aromatic: Vec<_> = product
+            .atoms()
+            .filter_map(|(idx, atom)| atom.aromatic.then_some(atom_usize(idx)))
+            .collect();
+        assert_eq!(
+            aromatic.len(),
+            6,
+            "fused ring remains aromatic after partial collapse: {aromatic:?}"
+        );
     }
 }
