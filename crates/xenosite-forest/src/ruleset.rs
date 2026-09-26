@@ -389,27 +389,15 @@ fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
     None
 }
 
-fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
-    for ring in find_sssr(mol).rings() {
-        let atoms: BTreeSet<usize> = ring.iter().copied().map(atom_usize).collect();
-        if atoms.contains(&left) && atoms.contains(&right) {
-            return true;
-        }
-    }
-    false
-}
-
-/// Chematic cleavage SMIRKS (`A.B`) on a ring bond drops a ring atom. Break the
-/// bond and oxygenate map 1 on the live graph instead (ring stays one piece).
-fn ring_open_oxygenate(
+/// Chematic cleavage SMIRKS (`A.B`) drops ring atoms and can fail to apply on
+/// open chains (methyl acetate cc_quat). Break the mapped bond and oxygenate
+/// map 1 on the live graph; split into fragments when the cut disconnects.
+fn cleave_oxygenate(
     mol: &Molecule,
     mapped: &BTreeMap<u16, usize>,
     mode: RingOpenOxygenate,
 ) -> Option<Vec<Molecule>> {
     let (&left, &right) = (mapped.get(&1)?, mapped.get(&2)?);
-    if !atoms_share_ring(mol, left, right) {
-        return None;
-    }
     let (bond_idx, _) = mol.bond_between(atom_idx(left), atom_idx(right))?;
     let mut product = mol.with_bond_removed(bond_idx);
     match mode {
@@ -446,11 +434,37 @@ fn ring_open_oxygenate(
     let right_el = product.atom(atom_idx(right)).element;
     product = product.with_atom_element(atom_idx(left), left_el);
     product = product.with_atom_element(atom_idx(right), right_el);
-    if accept_product(&product) {
-        Some(vec![product])
-    } else {
-        None
+
+    let mut frags: Vec<Molecule> = product
+        .fragments()
+        .into_iter()
+        .filter(|f| accept_product(f))
+        .collect();
+    if frags.is_empty() && accept_product(&product) {
+        frags.push(product);
     }
+    if frags.is_empty() {
+        None
+    } else {
+        Some(frags)
+    }
+}
+
+fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
+    for ring in find_sssr(mol).rings() {
+        let atoms: BTreeSet<usize> = ring.iter().copied().map(atom_usize).collect();
+        if atoms.contains(&left) && atoms.contains(&right) {
+            return true;
+        }
+    }
+    false
+}
+
+fn mapped_bond_in_ring(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> bool {
+    let (Some(&left), Some(&right)) = (mapped.get(&1), mapped.get(&2)) else {
+        return false;
+    };
+    atoms_share_ring(mol, left, right)
 }
 
 /// Same as [`apply_edit_mols`], returning product CSMIs.
@@ -496,12 +510,27 @@ pub(crate) fn apply_edit_mols(
             }
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
-            if let Some(mode) = ring_open_oxygenate_mode(smirks) {
-                if let Some(products) = ring_open_oxygenate(&work, mapped, mode) {
+            let mode = ring_open_oxygenate_mode(smirks);
+            // Ring bond: chematic A.B returns wrong non-empty fragments — prefer
+            // graph edit. Open-chain: try SMIRKS first (anisole O-dealk); fall
+            // back to graph edit when chematic apply is empty (methyl acetate).
+            if let Some(mode) = mode {
+                if mapped_bond_in_ring(&work, mapped) {
+                    if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
+                        return Ok(products);
+                    }
+                }
+            }
+            let smirks_products = apply_smirks_at(smirks, &work, mapped)?;
+            if !smirks_products.is_empty() {
+                return Ok(smirks_products);
+            }
+            if let Some(mode) = mode {
+                if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
                     return Ok(products);
                 }
             }
-            apply_smirks_at(smirks, &work, mapped)
+            Ok(Vec::new())
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
     }
@@ -924,6 +953,16 @@ mod tests {
         assert!(
             got.contains(&canon_of("NC=Cc1ccccc1O").unwrap()),
             "quaternary alcohol ring-open; got {got:?}"
+        );
+    }
+
+    #[test]
+    fn dealkylation_cleave_oxygenate_on_methyl_acetate() {
+        use crate::rules::dealkylation;
+        let got = products_of(&dealkylation(), "CC(=O)OC", accept_all_rules, accept_all_sites);
+        assert!(
+            got.contains(&canon_of("C").unwrap()) && got.contains(&canon_of("COC(=O)O").unwrap()),
+            "cc_quaternary graph cleave; got {got:?}"
         );
     }
 
