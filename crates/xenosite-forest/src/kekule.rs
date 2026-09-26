@@ -11,6 +11,20 @@
 //!   still matches. An edit that changes kekulization of a system misses
 //!   that key and starts a new bag.
 //!
+//! # [`PiGraph`] methods (reuse + derived systems)
+//!
+//! Perception and residual derivation go through [`PiGraph`]:
+//! [`PiGraph::conjugated`], [`PiGraph::components`], [`PiGraph::two_core`],
+//! [`PiGraph::without_atoms`] / [`PiGraph::after_forced_doubles`],
+//! [`PiGraph::aromatic_subgraph`]. [`KekuleCache::ensure_graph`] fills bags
+//! from a graph; [`SystemKekule::with_forced_doubles`] derives a constrained
+//! bag without refill; [`ResidualKey::apply_to`] rebuilds an index residual
+//! from tags.
+//!
+//! **Chematic:** `kekulize` / `apply_kekule` are single aromatic-bond matchings;
+//! `Molecule::fragments` is σ connectivity. Neither is a conjugated flood-fill
+//! or multi-resonance / residual API — keep π graphs here (HEURISTICS).
+//!
 //! # Tag keys, not indexes
 //!
 //! Reusable Kekulé objects ([`SystemKey`], [`SystemKekule`] assignments /
@@ -216,28 +230,262 @@ fn conjugated_bond(
 }
 
 /// Conjugated component containing `start`. Biaryl single bonds do not join rings.
+///
+/// Prefer [`PiGraph::conjugated`] when deriving residuals / components; this
+/// free function remains for call sites that only need the atom/bond sets.
 pub fn conjugated_component(
     mol: &Molecule,
     start: usize,
 ) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
-    let in_ring = in_ring_bonds(mol);
-    let mut atoms = BTreeSet::from([start]);
-    let mut bonds = BTreeSet::new();
-    let mut stack = vec![start];
-    while let Some(index) = stack.pop() {
-        for (nbr, bond_idx) in mol.neighbors(atom_idx(index)) {
-            let bond = mol.bond(bond_idx);
-            let other = atom_usize(nbr);
-            if !conjugated_bond(mol, index, other, bond.order, &in_ring) {
-                continue;
-            }
-            bonds.insert(bond_key(index, other));
-            if atoms.insert(other) {
-                stack.push(other);
+    let g = PiGraph::conjugated(mol, start);
+    (g.atoms, g.bonds)
+}
+
+/// Index-keyed π topology on the **current** mol layout (perception).
+///
+/// This is the reusable graph object for conjugated systems, residual views,
+/// 2-core / component decomposition, and constrained matching. Cache identity
+/// stays on [`SystemKey`] / [`ResidualKey`] (tags); [`PiGraph`] is the working
+/// form once tags resolve to indexes on a mol.
+///
+/// **Not Chematic's job:** chematic `kekulize` matches aromatic bonds once;
+/// `Molecule::fragments` splits σ components. Forest conjugation (exocyclic
+/// hetero singles, multi-resonance bags, residual/2-core) lives here — do not
+/// move this flood-fill into chematic without a shared schema both doors read.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PiGraph {
+    pub atoms: BTreeSet<usize>,
+    pub bonds: BTreeSet<(usize, usize)>,
+}
+
+impl PiGraph {
+    pub fn new(atoms: BTreeSet<usize>, bonds: BTreeSet<(usize, usize)>) -> Self {
+        let bonds = bonds
+            .into_iter()
+            .filter(|&(a, b)| atoms.contains(&a) && atoms.contains(&b))
+            .map(|(a, b)| bond_key(a, b))
+            .collect();
+        Self { atoms, bonds }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+    }
+
+    /// Conjugated component flood-fill from `start`.
+    pub fn conjugated(mol: &Molecule, start: usize) -> Self {
+        let in_ring = in_ring_bonds(mol);
+        let mut atoms = BTreeSet::from([start]);
+        let mut bonds = BTreeSet::new();
+        let mut stack = vec![start];
+        while let Some(index) = stack.pop() {
+            for (nbr, bond_idx) in mol.neighbors(atom_idx(index)) {
+                let bond = mol.bond(bond_idx);
+                let other = atom_usize(nbr);
+                if !conjugated_bond(mol, index, other, bond.order, &in_ring) {
+                    continue;
+                }
+                bonds.insert(bond_key(index, other));
+                if atoms.insert(other) {
+                    stack.push(other);
+                }
             }
         }
+        Self { atoms, bonds }
     }
-    (atoms, bonds)
+
+    /// Restrict to `keep` (saturate sites leave; epoxide sp³ dropped).
+    pub fn without_atoms(&self, drop: &BTreeSet<usize>) -> Self {
+        let atoms: BTreeSet<usize> = self
+            .atoms
+            .iter()
+            .copied()
+            .filter(|a| !drop.contains(a))
+            .collect();
+        Self::new(atoms, self.bonds.clone())
+    }
+
+    /// Keep only atoms in `keep` (and bonds between them).
+    pub fn restrict_atoms(&self, keep: &BTreeSet<usize>) -> Self {
+        let atoms: BTreeSet<usize> = self
+            .atoms
+            .iter()
+            .copied()
+            .filter(|a| keep.contains(a))
+            .collect();
+        Self::new(atoms, self.bonds.clone())
+    }
+
+    /// Aromatic atoms of this graph (pair aromatic-scoped parents).
+    pub fn aromatic_subgraph(&self, mol: &Molecule) -> Self {
+        let keep: BTreeSet<usize> = self
+            .atoms
+            .iter()
+            .copied()
+            .filter(|&i| mol.atom(atom_idx(i)).aromatic)
+            .collect();
+        self.restrict_atoms(&keep)
+    }
+
+    /// Drop atoms whose π demand is consumed by a forced double (exocyclic
+    /// leaf or in-system forced edge) before the cyclic 2-core aromaticity test.
+    pub fn after_forced_doubles(&self, forced: &BTreeSet<(usize, usize)>) -> Self {
+        let mut atoms = self.atoms.clone();
+        for &(a, b) in forced {
+            let a_in = atoms.contains(&a);
+            let b_in = atoms.contains(&b);
+            if a_in && b_in {
+                atoms.remove(&a);
+                atoms.remove(&b);
+            } else if a_in {
+                atoms.remove(&a);
+            } else if b_in {
+                atoms.remove(&b);
+            }
+        }
+        Self::new(atoms, self.bonds.clone())
+    }
+
+    /// 2-core: iteratively drop atoms with π-degree &lt; 2.
+    pub fn two_core(&self) -> Self {
+        let mut atoms = self.atoms.clone();
+        let mut bonds = self.bonds.clone();
+        loop {
+            let mut deg: HashMap<usize, usize> = atoms.iter().map(|&a| (a, 0)).collect();
+            for &(a, b) in &bonds {
+                *deg.entry(a).or_default() += 1;
+                *deg.entry(b).or_default() += 1;
+            }
+            let drop: Vec<usize> = deg
+                .iter()
+                .filter(|(_, d)| **d < 2)
+                .map(|(&a, _)| a)
+                .collect();
+            if drop.is_empty() {
+                break;
+            }
+            for a in drop {
+                atoms.remove(&a);
+            }
+            bonds.retain(|&(a, b)| atoms.contains(&a) && atoms.contains(&b));
+        }
+        Self { atoms, bonds }
+    }
+
+    /// Connected components under this graph's edges (π-component split).
+    pub fn components(&self) -> Vec<Self> {
+        let mut seen = BTreeSet::new();
+        let mut out = Vec::new();
+        for &start in &self.atoms {
+            if !seen.insert(start) {
+                continue;
+            }
+            let mut stack = vec![start];
+            let mut comp_atoms = BTreeSet::from([start]);
+            while let Some(a) = stack.pop() {
+                for &(left, right) in &self.bonds {
+                    let other = if left == a {
+                        right
+                    } else if right == a {
+                        left
+                    } else {
+                        continue;
+                    };
+                    if comp_atoms.insert(other) {
+                        seen.insert(other);
+                        stack.push(other);
+                    }
+                }
+            }
+            let comp_bonds: BTreeSet<_> = self
+                .bonds
+                .iter()
+                .copied()
+                .filter(|&(a, b)| comp_atoms.contains(&a) && comp_atoms.contains(&b))
+                .collect();
+            out.push(Self {
+                atoms: comp_atoms,
+                bonds: comp_bonds,
+            });
+        }
+        out
+    }
+
+    /// Doubles on `edited` that touch this graph (perception for constraints).
+    pub fn perceive_forced_doubles(&self, edited: &Molecule) -> BTreeSet<(usize, usize)> {
+        let mut forced = BTreeSet::new();
+        for (_, bond) in edited.bonds() {
+            if bond.order != BondOrder::Double {
+                continue;
+            }
+            let a = atom_usize(bond.atom1);
+            let b = atom_usize(bond.atom2);
+            if self.atoms.contains(&a) || self.atoms.contains(&b) {
+                forced.insert(bond_key(a, b));
+            }
+        }
+        forced
+    }
+
+    pub fn try_system_key(&self, mol: &Molecule) -> Option<SystemKey> {
+        SystemKey::try_of(mol, &self.atoms, &self.bonds)
+    }
+
+    pub fn system_key(&self, mol: &Molecule) -> SystemKey {
+        SystemKey::of(mol, &self.atoms, &self.bonds)
+    }
+
+    pub fn complete_assignment(
+        &self,
+        mol: &Molecule,
+        constraints: &KekuleConstraints,
+        config: &KekuleConfig,
+    ) -> Option<BTreeMap<(usize, usize), BondOrder>> {
+        complete_assignment(mol, &self.atoms, &self.bonds, constraints, config)
+    }
+
+    pub fn all_assignments(
+        &self,
+        mol: &Molecule,
+        constraints: &KekuleConstraints,
+        config: &KekuleConfig,
+    ) -> Vec<BTreeMap<(usize, usize), BondOrder>> {
+        all_assignments(mol, &self.atoms, &self.bonds, constraints, config)
+    }
+
+    /// Cyclic 2-core components that remain aromatic under `config`.
+    /// Cyclic 2-core components that remain aromatic under `config`.
+    pub fn aromatic_2core_atoms(&self, mol: &Molecule, config: &KekuleConfig) -> BTreeSet<usize> {
+        let core = self.two_core();
+        let empty = KekuleConstraints::default();
+        let match_cfg = config.explicit_forced_only().single_assignment();
+        let mut aromatic = BTreeSet::new();
+        for comp in core.components() {
+            // Cyclic: at least as many edges as atoms.
+            if comp.bonds.len() < comp.atoms.len() {
+                continue;
+            }
+            if complete_assignment(mol, &comp.atoms, &comp.bonds, &empty, &match_cfg).is_none()
+            {
+                continue;
+            }
+            let n = comp.atoms.len();
+            if !config.huckel_4n2 || (n >= 6 && n % 4 == 2) {
+                aromatic.extend(comp.atoms);
+            }
+        }
+        aromatic
+    }
+
+    /// Residual view key for this graph under `removed` / `forced` (tags).
+    pub fn residual_key(
+        &self,
+        mol: &Molecule,
+        removed: &BTreeSet<usize>,
+        forced_doubles: &BTreeSet<(usize, usize)>,
+    ) -> Option<ResidualKey> {
+        ResidualKey::try_of(mol, self, removed, forced_doubles)
+    }
 }
 
 fn order_code(order: BondOrder) -> Option<u8> {
@@ -313,11 +561,65 @@ impl SystemKey {
 /// **Tag-keyed:** `removed` and `forced_doubles` are labels / label-pairs, not
 /// indexes — so a child mol with the same tags can reuse a parent-derived
 /// residual after index shuffle. See HEURISTICS edit-as-π-constraints cache plan.
+///
+/// Build with [`ResidualKey::try_of`] from a parent [`PiGraph`]; apply back to
+/// indexes with [`ResidualKey::apply_to`].
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResidualKey {
     pub parent: SystemKey,
     pub removed: BTreeSet<Tag>,
     pub forced_doubles: BTreeSet<(Tag, Tag)>,
+}
+
+impl ResidualKey {
+    /// Tag-keyed residual identity from parent topology + index constraints.
+    pub fn try_of(
+        mol: &Molecule,
+        parent: &PiGraph,
+        removed: &BTreeSet<usize>,
+        forced_doubles: &BTreeSet<(usize, usize)>,
+    ) -> Option<Self> {
+        let parent_key = parent.try_system_key(mol)?;
+        let mut rem = BTreeSet::new();
+        for &i in removed {
+            rem.insert(tag_of(mol, i)?);
+        }
+        let mut forced = BTreeSet::new();
+        for &(a, b) in forced_doubles {
+            let ta = tag_of(mol, a)?;
+            let tb = tag_of(mol, b)?;
+            forced.insert(tag_bond_key(ta, tb));
+        }
+        Some(Self {
+            parent: parent_key,
+            removed: rem,
+            forced_doubles: forced,
+        })
+    }
+
+    /// Resolve this residual onto `parent`'s index graph for `mol`.
+    ///
+    /// Drops `removed` atoms; does **not** strip forced-demand atoms — call
+    /// [`PiGraph::after_forced_doubles`] on the result when building the
+    /// aromatic 2-core candidate.
+    pub fn apply_to(&self, mol: &Molecule, parent: &PiGraph) -> Option<PiGraph> {
+        let mut drop = BTreeSet::new();
+        for &tag in &self.removed {
+            drop.insert(index_of_tag(mol, tag)?);
+        }
+        Some(parent.without_atoms(&drop))
+    }
+
+    /// Forced doubles as indexes on `mol`.
+    pub fn forced_indexes(&self, mol: &Molecule) -> Option<BTreeSet<(usize, usize)>> {
+        let mut out = BTreeSet::new();
+        for &(ta, tb) in &self.forced_doubles {
+            let a = index_of_tag(mol, ta)?;
+            let b = index_of_tag(mol, tb)?;
+            out.insert(bond_key(a, b));
+        }
+        Some(out)
+    }
 }
 
 /// One system's kekulé assignments (bond-order maps, not baked mols).
@@ -334,6 +636,42 @@ pub struct SystemKekule {
 impl SystemKekule {
     pub fn is_filled(&self) -> bool {
         !self.assignments.is_empty()
+    }
+
+    /// Derived bag: keep assignments where each forced tag-pair is Double.
+    ///
+    /// Does not refill matching — alters only the selected writings so callers
+    /// can constrain one conjugated system without recomputing the parent bag.
+    pub fn with_forced_doubles(&self, forced: &BTreeSet<(Tag, Tag)>) -> Self {
+        if forced.is_empty() {
+            return self.clone();
+        }
+        let mut out = Self::default();
+        let mut seen = BTreeSet::new();
+        for assignment in &self.assignments {
+            let ok = forced.iter().all(|&(a, b)| {
+                let key = tag_bond_key(a, b);
+                assignment.get(&key) == Some(&BondOrder::Double)
+            });
+            if !ok {
+                continue;
+            }
+            let signature: Vec<_> = assignment
+                .iter()
+                .map(|(&k, &o)| (k, order_code(o)))
+                .collect();
+            if !seen.insert(signature) {
+                continue;
+            }
+            let index = out.assignments.len();
+            for (key, order) in assignment {
+                if let Some(code) = order_code(*order) {
+                    out.by_order.insert((*key, code), index);
+                }
+            }
+            out.assignments.push(assignment.clone());
+        }
+        out
     }
 }
 
@@ -366,6 +704,18 @@ impl KekuleCache {
 
     pub fn get(&self, key: &SystemKey) -> Option<Rc<RefCell<SystemKekule>>> {
         self.systems.get(key).cloned()
+    }
+
+    /// Fill (or reuse) the bag for `graph`'s [`SystemKey`].
+    pub fn ensure_graph(
+        &mut self,
+        mol: &Molecule,
+        graph: &PiGraph,
+    ) -> Rc<RefCell<SystemKekule>> {
+        let key = graph.system_key(mol);
+        let slot = self.slot(key);
+        fill_slot(mol, &graph.atoms, &graph.bonds, &slot);
+        slot
     }
 }
 
@@ -740,99 +1090,31 @@ pub fn all_assignments(
 }
 
 /// 2-core of a π graph: iteratively drop atoms with degree &lt; 2.
+///
+/// Prefer [`PiGraph::two_core`].
 pub fn two_core(
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
 ) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
-    let mut atoms = atoms.clone();
-    let mut bonds: BTreeSet<(usize, usize)> = bonds
-        .iter()
-        .copied()
-        .filter(|&(a, b)| atoms.contains(&a) && atoms.contains(&b))
-        .collect();
-    loop {
-        let mut deg: HashMap<usize, usize> = atoms.iter().map(|&a| (a, 0)).collect();
-        for &(a, b) in &bonds {
-            *deg.entry(a).or_default() += 1;
-            *deg.entry(b).or_default() += 1;
-        }
-        let drop: Vec<usize> = deg
-            .iter()
-            .filter(|(_, d)| **d < 2)
-            .map(|(&a, _)| a)
-            .collect();
-        if drop.is_empty() {
-            break;
-        }
-        for a in drop {
-            atoms.remove(&a);
-        }
-        bonds.retain(|&(a, b)| atoms.contains(&a) && atoms.contains(&b));
-    }
-    (atoms, bonds)
+    let g = PiGraph::new(atoms.clone(), bonds.clone()).two_core();
+    (g.atoms, g.bonds)
 }
 
 /// Atoms that remain aromatic: cyclic 2-core components with a valid Kekulé
 /// state (and 4n+2 π electrons when [`KekuleConfig::huckel_4n2`] is set —
 /// all-carbon benzenoid shortcut).
 ///
-/// Build `residual_atoms` / `residual_bonds` **after** dearomatizing edits
-/// (drop sp³ / demand-consumed atoms from the aromatic candidate, or treat
-/// demand as consumed by a forced exocyclic double — same effect on the
-/// candidate graph). Then ask which cyclic 2-core pieces survive — not whether
-/// the original fused system is still aromatic.
+/// Build the residual [`PiGraph`] **after** dearomatizing edits
+/// ([`PiGraph::without_atoms`] / [`PiGraph::after_forced_doubles`]). Then ask
+/// which cyclic 2-core pieces survive — not whether the original fused system
+/// is still aromatic. Prefer [`PiGraph::aromatic_2core_atoms`].
 pub fn aromatic_2core_atoms(
     mol: &Molecule,
     residual_atoms: &BTreeSet<usize>,
     residual_bonds: &BTreeSet<(usize, usize)>,
     config: &KekuleConfig,
 ) -> BTreeSet<usize> {
-    let (core_atoms, core_bonds) = two_core(residual_atoms, residual_bonds);
-    let mut aromatic = BTreeSet::new();
-    let mut seen = BTreeSet::new();
-    let empty = KekuleConstraints::default();
-    // 2-core matching: caller already stripped demand; do not re-perceive
-    // doubles from the (possibly still-edited) mol as extra forced seeds.
-    let match_cfg = config.explicit_forced_only().single_assignment();
-    for &start in &core_atoms {
-        if !seen.insert(start) {
-            continue;
-        }
-        let mut stack = vec![start];
-        let mut comp_atoms = BTreeSet::from([start]);
-        while let Some(a) = stack.pop() {
-            for &(left, right) in &core_bonds {
-                let other = if left == a {
-                    right
-                } else if right == a {
-                    left
-                } else {
-                    continue;
-                };
-                if comp_atoms.insert(other) {
-                    seen.insert(other);
-                    stack.push(other);
-                }
-            }
-        }
-        let comp_bonds: BTreeSet<_> = core_bonds
-            .iter()
-            .copied()
-            .filter(|&(a, b)| comp_atoms.contains(&a) && comp_atoms.contains(&b))
-            .collect();
-        // Cyclic: connected component with at least as many edges as atoms.
-        if comp_bonds.len() < comp_atoms.len() {
-            continue;
-        }
-        if complete_assignment(mol, &comp_atoms, &comp_bonds, &empty, &match_cfg).is_none() {
-            continue;
-        }
-        let n = comp_atoms.len();
-        if !config.huckel_4n2 || (n >= 6 && n % 4 == 2) {
-            aromatic.extend(comp_atoms);
-        }
-    }
-    aromatic
+    PiGraph::new(residual_atoms.clone(), residual_bonds.clone()).aromatic_2core_atoms(mol, config)
 }
 
 /// Stamp one system's assignment onto `mol`. Other systems stay as they were.
@@ -921,14 +1203,15 @@ fn fill_slot(
     }
 }
 
-fn system_of(mol: &Molecule, left: usize, right: usize) -> (SystemKey, BTreeSet<(usize, usize)>) {
-    let (mut atoms, mut bonds) = conjugated_component(mol, left);
+fn system_of(mol: &Molecule, left: usize, right: usize) -> (SystemKey, PiGraph) {
+    let mut graph = PiGraph::conjugated(mol, left);
     let seed = bond_key(left, right);
-    if !bonds.contains(&seed) && mol.bond_between(atom_idx(left), atom_idx(right)).is_some() {
-        bonds.insert(seed);
-        atoms.insert(right);
+    if !graph.bonds.contains(&seed) && mol.bond_between(atom_idx(left), atom_idx(right)).is_some()
+    {
+        graph.bonds.insert(seed);
+        graph.atoms.insert(right);
     }
-    (SystemKey::of(mol, &atoms, &bonds), bonds)
+    (graph.system_key(mol), graph)
 }
 
 /// Fill (or reuse) the bag for the system that contains `(left, right)`.
@@ -938,11 +1221,8 @@ pub fn ensure_kekule_parents(
     right: usize,
     cache: &mut KekuleCache,
 ) -> Rc<RefCell<SystemKekule>> {
-    let (key, bonds) = system_of(mol, left, right);
-    let atoms: BTreeSet<usize> = atoms_to_idxs(mol, &key.atoms).expect("system tags resolve");
-    let slot = cache.slot(key);
-    fill_slot(mol, &atoms, &bonds, &slot);
-    slot
+    let (_key, graph) = system_of(mol, left, right);
+    cache.ensure_graph(mol, &graph)
 }
 
 /// Overlay `mol` with the cached assignment where `(left, right)` has `order`.
@@ -986,9 +1266,9 @@ pub fn parents_for_ends(
                 same_system: true,
             };
         }
-        let key = SystemKey::of(mol, atoms, &bonds);
-        let slot = cache.slot(key.clone());
-        fill_slot(mol, atoms, &bonds, &slot);
+        let graph = PiGraph::new(atoms.clone(), bonds);
+        let key = graph.system_key(mol);
+        let slot = cache.ensure_graph(mol, &graph);
         let parents = slot
             .borrow()
             .assignments
@@ -1002,16 +1282,14 @@ pub fn parents_for_ends(
             same_system: true,
         };
     }
-    let (start_atoms, start_bonds) = conjugated_component(mol, start);
-    let (end_atoms, end_bonds) = conjugated_component(mol, end);
-    let start_key = SystemKey::of(mol, &start_atoms, &start_bonds);
-    let end_key = SystemKey::of(mol, &end_atoms, &end_bonds);
-    let start_slot = cache.slot(start_key.clone());
-    fill_slot(mol, &start_atoms, &start_bonds, &start_slot);
-    let same = start_atoms == end_atoms;
+    let start_g = PiGraph::conjugated(mol, start);
+    let end_g = PiGraph::conjugated(mol, end);
+    let start_key = start_g.system_key(mol);
+    let end_key = end_g.system_key(mol);
+    let start_slot = cache.ensure_graph(mol, &start_g);
+    let same = start_g.atoms == end_g.atoms;
     if !same {
-        let end_slot = cache.slot(end_key);
-        fill_slot(mol, &end_atoms, &end_bonds, &end_slot);
+        let _ = cache.ensure_graph(mol, &end_g);
     }
     let mut parents: Vec<Molecule> = start_slot
         .borrow()
@@ -1027,10 +1305,7 @@ pub fn parents_for_ends(
         })
         .collect();
     if !same {
-        let end_slot = cache
-            .get(&SystemKey::of(mol, &end_atoms, &end_bonds))
-            .expect("end system filled");
-        let end_key = SystemKey::of(mol, &end_atoms, &end_bonds);
+        let end_slot = cache.get(&end_key).expect("end system filled");
         parents.extend(end_slot.borrow().assignments.iter().filter_map(|assignment| {
             overlay_tagged(mol, &end_key.atoms, assignment, &KekuleConfig::for_parents())
         }));
@@ -1071,27 +1346,14 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         if !covered.insert(start) {
             continue;
         }
-        let (atoms, bonds) = conjugated_component(mol, start);
-        covered.extend(&atoms);
-        let aromatic: BTreeSet<usize> = atoms
-            .iter()
-            .copied()
-            .filter(|&i| mol.atom(atom_idx(i)).aromatic)
-            .collect();
-        if aromatic.len() < 2 {
+        let graph = PiGraph::conjugated(mol, start);
+        covered.extend(&graph.atoms);
+        let aromatic = graph.aromatic_subgraph(mol);
+        if aromatic.atoms.len() < 2 || aromatic.bonds.is_empty() {
             continue;
         }
-        let arbonds: BTreeSet<_> = bonds
-            .iter()
-            .copied()
-            .filter(|&(a, b)| aromatic.contains(&a) && aromatic.contains(&b))
-            .collect();
-        if arbonds.is_empty() {
-            continue;
-        }
-        let key = SystemKey::of(mol, &aromatic, &arbonds);
-        let slot = cache.slot(key.clone());
-        fill_slot(mol, &aromatic, &arbonds, &slot);
+        let key = aromatic.system_key(mol);
+        let slot = cache.ensure_graph(mol, &aromatic);
         forms.extend(
             slot.borrow()
                 .assignments
@@ -1336,6 +1598,49 @@ mod tests {
             },
         );
         assert_eq!(without, four);
+    }
+
+    #[test]
+    fn pi_graph_derives_residual_and_filters_assignments() {
+        let mut mol = parse_mol("c1ccc2ccccc2c1").unwrap();
+        stamp_missing_index_tags(&mut mol);
+        let parent = PiGraph::conjugated(&mol, 0);
+        assert!(parent.atoms.len() >= 10);
+        // Epoxide-style: drop two outer atoms → residual 2-core keeps one ring.
+        let drop: BTreeSet<usize> = parent
+            .bonds
+            .iter()
+            .copied()
+            .find(|&(a, b)| {
+                let da = parent.bonds.iter().filter(|&&(x, y)| x == a || y == a).count();
+                let db = parent.bonds.iter().filter(|&&(x, y)| x == b || y == b).count();
+                da == 2 && db == 2
+            })
+            .map(|(a, b)| BTreeSet::from([a, b]))
+            .expect("outer bond");
+        let residual = parent.without_atoms(&drop);
+        let core = residual.two_core();
+        assert_eq!(core.atoms.len(), 6, "one benzenoid 2-core: {:?}", core.atoms);
+        assert_eq!(core.components().len(), 1);
+
+        let mut cache = KekuleCache::default();
+        let slot = cache.ensure_graph(&mol, &parent);
+        let n = slot.borrow().assignments.len();
+        assert!(n >= 2);
+        // Forced double on any ring bond → derived bag is a non-empty subset.
+        let (a, b) = *parent.bonds.iter().next().unwrap();
+        let ta = tag_of(&mol, a).unwrap();
+        let tb = tag_of(&mol, b).unwrap();
+        let forced = BTreeSet::from([tag_bond_key(ta, tb)]);
+        let derived = slot.borrow().with_forced_doubles(&forced);
+        assert!(!derived.assignments.is_empty());
+        assert!(derived.assignments.len() <= n);
+
+        let rkey = parent
+            .residual_key(&mol, &drop, &BTreeSet::new())
+            .expect("tags");
+        let applied = rkey.apply_to(&mol, &parent).unwrap();
+        assert_eq!(applied.atoms, residual.atoms);
     }
 
     #[test]

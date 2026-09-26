@@ -330,6 +330,20 @@ emit path (`valence::fill_closed_shell_h` / `edited_valence_atoms`), not in
 field (or PatternInfo/Effect data) — not a silent `if` for one reaction.
 Status: approved.
 
+**π graph methods / Chematic (approved):** reusable conjugated topology lives
+on [`PiGraph`](../../crates/xenosite-forest/src/kekule.rs) methods
+(`conjugated`, `components`, `two_core`, `without_atoms`,
+`after_forced_doubles`, `aromatic_subgraph`, matching helpers) plus
+[`KekuleCache::ensure_graph`](../../crates/xenosite-forest/src/kekule.rs),
+[`SystemKekule::with_forced_doubles`](../../crates/xenosite-forest/src/kekule.rs)
+(derived bag without refill), and [`ResidualKey::apply_to`](../../crates/xenosite-forest/src/kekule.rs).
+**Do not move into Chematic:** chematic `kekulize`/`apply_kekule` are a single
+aromatic-bond matching; `Molecule::fragments` / `is_connected` are σ
+components. Forest conjugation (exocyclic hetero singles, multi-resonance
+parent bags, tag-keyed cache, residual/2-core) is door-specific. Revisit only
+if Chematic grows a shared π-schema both ResonanceRule and pair doors read.
+Status: approved (keep in forest).
+
 **Python → Rust Kekulé (parents):** on a probe set (benzene, naphthalene,
 hydroquinone, anisole, PhNCO, pyridine, pyrrole) Rust `kekule_forms` counts
 match Python `ResonanceMolSupplier` / `_kekule_forms`. The demonstrable

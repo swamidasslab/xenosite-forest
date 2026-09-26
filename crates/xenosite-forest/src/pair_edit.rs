@@ -11,8 +11,8 @@ use chematic::core::{Atom, BondOrder, Element};
 use chematic::perception::find_sssr;
 
 use crate::kekule::{
-    KekuleConfig, KekuleConstraints, all_assignments, aromatic_2core_atoms, bond_order_sums,
-    conjugated_component, move_charge_with_bonds, with_atom_explicit_h,
+    KekuleConfig, KekuleConstraints, PiGraph, bond_order_sums, conjugated_component,
+    move_charge_with_bonds, with_atom_explicit_h,
 };
 use crate::mol::{ForestError, Molecule, aromatize, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
@@ -70,97 +70,44 @@ fn saturate_sites(pattern: &PatternInfo, mapped: &BTreeMap<u16, usize>) -> BTree
 
 /// Residual π graph: conjugated edges among system atoms minus saturate sites.
 ///
-/// Topology from the parent (pre-edit) conjugated component. Saturate atoms
+/// Topology from the parent (pre-edit) conjugated [`PiGraph`]. Saturate atoms
 /// leave must-match; demand-consumed atoms for the aromatic 2-core gate are
-/// stripped after forced doubles are perceived.
+/// stripped via [`PiGraph::after_forced_doubles`].
 fn residual_pi_graph(
     parent: &Molecule,
     system: &HashSet<usize>,
     saturate: &BTreeSet<usize>,
-) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
-    let atoms: BTreeSet<usize> = system
+) -> PiGraph {
+    let keep: BTreeSet<usize> = system
         .iter()
         .copied()
         .filter(|a| !saturate.contains(a))
         .collect();
-    let mut bonds = BTreeSet::new();
-    if let Some(&seed) = atoms.iter().next().or_else(|| system.iter().next()) {
-        let (_, comp_bonds) = conjugated_component(parent, seed);
-        for (a, b) in comp_bonds {
-            if atoms.contains(&a) && atoms.contains(&b) {
-                bonds.insert(bond_key(a, b));
-            }
+    if let Some(&seed) = keep.iter().next().or_else(|| system.iter().next()) {
+        let conj = PiGraph::conjugated(parent, seed);
+        let residual = conj.restrict_atoms(&keep);
+        if !residual.bonds.is_empty() || residual.atoms.len() <= 1 {
+            return residual;
         }
     }
     // Fallback: any bond between residual atoms (full-mol system path).
-    if bonds.is_empty() {
-        for (_, bond) in parent.bonds() {
-            let a = atom_usize(bond.atom1);
-            let b = atom_usize(bond.atom2);
-            if atoms.contains(&a) && atoms.contains(&b) {
-                match bond.order {
-                    BondOrder::Single
-                    | BondOrder::Double
-                    | BondOrder::Triple
-                    | BondOrder::Aromatic => {
-                        bonds.insert(bond_key(a, b));
-                    }
-                    _ => {}
+    let mut bonds = BTreeSet::new();
+    for (_, bond) in parent.bonds() {
+        let a = atom_usize(bond.atom1);
+        let b = atom_usize(bond.atom2);
+        if keep.contains(&a) && keep.contains(&b) {
+            match bond.order {
+                BondOrder::Single
+                | BondOrder::Double
+                | BondOrder::Triple
+                | BondOrder::Aromatic => {
+                    bonds.insert(bond_key(a, b));
                 }
+                _ => {}
             }
         }
     }
-    (atoms, bonds)
-}
-
-/// Forced doubles from the post-edit graph (perception; PatternInfo fills gaps
-/// via saturate_sites). Any double touching the residual atoms is a constraint.
-fn perceive_forced_doubles(
-    edited: &Molecule,
-    atoms: &BTreeSet<usize>,
-) -> BTreeSet<(usize, usize)> {
-    let mut forced = BTreeSet::new();
-    for (_, bond) in edited.bonds() {
-        if bond.order != BondOrder::Double {
-            continue;
-        }
-        let a = atom_usize(bond.atom1);
-        let b = atom_usize(bond.atom2);
-        if atoms.contains(&a) || atoms.contains(&b) {
-            forced.insert(bond_key(a, b));
-        }
-    }
-    forced
-}
-
-/// Drop atoms whose π demand is consumed by a forced double (exocyclic leaf or
-/// in-system forced edge) before the cyclic 2-core aromaticity test.
-fn aromatic_residual_after_forced(
-    atoms: &BTreeSet<usize>,
-    bonds: &BTreeSet<(usize, usize)>,
-    forced: &BTreeSet<(usize, usize)>,
-) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
-    let mut arom_atoms = atoms.clone();
-    for &(a, b) in forced {
-        let a_in = arom_atoms.contains(&a);
-        let b_in = arom_atoms.contains(&b);
-        if a_in && b_in {
-            // Forced edge inside the residual (phenol C=O, iminium, …): both
-            // demands consumed — drop both from the aromatic candidate.
-            arom_atoms.remove(&a);
-            arom_atoms.remove(&b);
-        } else if a_in {
-            arom_atoms.remove(&a);
-        } else if b_in {
-            arom_atoms.remove(&b);
-        }
-    }
-    let arom_bonds: BTreeSet<_> = bonds
-        .iter()
-        .copied()
-        .filter(|&(a, b)| arom_atoms.contains(&a) && arom_atoms.contains(&b))
-        .collect();
-    (arom_atoms, arom_bonds)
+    PiGraph::new(keep, bonds)
 }
 
 fn bump_h(mol: &mut Molecule, atom: usize, delta: i8) {
@@ -441,23 +388,23 @@ impl PairCandidate {
         for &a in &settle {
             fill_closed_shell_h(&mut rw, a);
         }
-        let (atoms, bonds) = residual_pi_graph(mol, &self.system, &saturate);
-        let forced = perceive_forced_doubles(&rw, &atoms);
+        let residual = residual_pi_graph(mol, &self.system, &saturate);
+        let forced = residual.perceive_forced_doubles(&rw);
         let config = KekuleConfig::for_constraints();
         let constraints = KekuleConstraints::new()
             .with_forced(forced.clone())
             .with_saturate(saturate.clone());
         // Caller already perceived forced doubles — do not double-count from mol.
         let match_cfg = config.explicit_forced_only();
-        let assignments = all_assignments(&rw, &atoms, &bonds, &constraints, &match_cfg);
+        let assignments = residual.all_assignments(&rw, &constraints, &match_cfg);
         if assignments.is_empty() {
             return Ok(Vec::new());
         }
 
         // Residual aromaticity: cyclic 2-core after dropping demand-consumed
         // atoms (forced doubles / saturate) — HEURISTICS, not sanitize flags.
-        let (arom_atoms, arom_bonds) = aromatic_residual_after_forced(&atoms, &bonds, &forced);
-        let aromatic_core = aromatic_2core_atoms(&rw, &arom_atoms, &arom_bonds, &config);
+        let arom = residual.after_forced_doubles(&forced);
+        let aromatic_core = arom.aromatic_2core_atoms(&rw, &config);
         if self.effect.dearomatizes {
             let edited: HashSet<usize> = self
                 .system
@@ -496,7 +443,7 @@ impl PairCandidate {
                     product.set_bond_order(bond_idx, order);
                 }
             }
-            for &atom in &atoms {
+            for &atom in &residual.atoms {
                 if product.atom(atom_idx(atom)).aromatic {
                     product = product.with_atom_aromatic(atom_idx(atom), false);
                 }
