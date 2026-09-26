@@ -89,7 +89,10 @@ fn residual_drops(
     target: &ForestMol,
     atoms: &[usize],
 ) -> bool {
-    let opts = SiteShellCostOpts { dearomatic: false };
+    let opts = SiteShellCostOpts {
+        dearomatic: false,
+        ..SiteShellCostOpts::default()
+    };
     // Map parent→target by tags when possible; else MCS atom_diff.
     let ad = atom_diff(parent.mol(), target.mol());
     let cur = molecule_shells(parent.mol());

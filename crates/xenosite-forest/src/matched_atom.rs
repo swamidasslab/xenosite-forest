@@ -441,6 +441,56 @@ pub struct SiteShellCostOpts {
     /// [`crate::pattern::Effect::dearomatizes`] is true (Epoxidation on
     /// aromatic sites, DH/QF ends). Ablation may force it for all sites.
     pub dearomatic: bool,
+    /// On-demand view: move every H bag one shell closer and drop n2.
+    /// `n1["H"]→n0`, `n2["H"]→n1`; n2 heavies discarded. PatternInfo unchanged.
+    pub h_closer_no_n2: bool,
+}
+
+/// Shift H one shell inward and clear n2 (on-demand view of full n0/n1/n2).
+///
+/// Ethane carbon `n0=C:1, n1=C:1 H:3, n2=H:3` → `n0=C:1 H:3, n1=C:1 H:3, n2=∅`.
+pub fn neighborhood_h_closer_no_n2(env: &AtomNeighborhood) -> AtomNeighborhood {
+    let mut n0 = env.n0.clone();
+    let mut n1 = env.n1.clone();
+    if let Some(h) = n1.remove("H") {
+        *n0.entry("H".into()).or_default() += h;
+    }
+    if let Some(&h) = env.n2.get("H") {
+        *n1.entry("H".into()).or_default() += h;
+    }
+    n1.retain(|_, v| *v != 0);
+    n0.retain(|_, v| *v != 0);
+    AtomNeighborhood {
+        aromatic: env.aromatic,
+        n0,
+        n1,
+        n2: Shell::new(),
+    }
+}
+
+/// [`neighborhood_h_closer_no_n2`] on every atom.
+pub fn molecule_shells_h_closer_no_n2(shells: &MoleculeShells) -> MoleculeShells {
+    MoleculeShells {
+        atoms: shells
+            .atoms
+            .iter()
+            .map(|(&i, env)| (i, neighborhood_h_closer_no_n2(env)))
+            .collect(),
+    }
+}
+
+/// [`neighborhood_h_closer_no_n2`] on aligned deltas (linear on bags).
+pub fn aligned_shells_h_closer_no_n2(align: &AlignedShells) -> AlignedShells {
+    AlignedShells {
+        atoms: align
+            .atoms
+            .iter()
+            .map(|(&i, env)| (i, neighborhood_h_closer_no_n2(env)))
+            .collect(),
+        alignment: align.alignment.clone(),
+        unaligned_reactant: align.unaligned_reactant,
+        unaligned_target: align.unaligned_target,
+    }
 }
 
 /// Site cost: Σ normalized |projected − target| at `site_atoms`.
@@ -527,6 +577,11 @@ pub fn site_shell_cost_leave(
             Some(d) => apply_neighborhood(cur, d.atoms.get(&r).unwrap_or(&zero)),
             None => cur.clone(),
         };
+        let projected_env = if opts.h_closer_no_n2 {
+            neighborhood_h_closer_no_n2(&projected_env)
+        } else {
+            projected_env
+        };
         projected.push(projected_env);
 
         // Leave fragment: no target mate (gate discards it). Kept site: pair.
@@ -535,7 +590,12 @@ pub fn site_shell_cost_leave(
         }
         if let Some(t) = reactant_to_target.get(&r).copied() {
             if let Some(tgt) = target.atoms.get(&t) {
-                target_envs.push(tgt.clone());
+                let tgt = if opts.h_closer_no_n2 {
+                    neighborhood_h_closer_no_n2(tgt)
+                } else {
+                    tgt.clone()
+                };
+                target_envs.push(tgt);
             }
         }
     }
@@ -962,6 +1022,22 @@ mod tests {
     }
 
     #[test]
+    fn h_closer_no_n2_shifts_ethane_carbon() {
+        // Ethane C: n0=C:1, n1=C:1 H:3, n2=H:3 → n0=C:1 H:3, n1=C:1 H:3, n2=∅.
+        let mol = parse_mol("CC").unwrap();
+        let env = atom_neighborhood(&mol, 0);
+        assert_eq!(env.n0.get("C").copied(), Some(1));
+        assert_eq!(env.n1.get("H").copied(), Some(3));
+        assert_eq!(env.n2.get("H").copied(), Some(3));
+        let v = neighborhood_h_closer_no_n2(&env);
+        assert_eq!(v.n0.get("C").copied(), Some(1));
+        assert_eq!(v.n0.get("H").copied(), Some(3));
+        assert_eq!(v.n1.get("C").copied(), Some(1));
+        assert_eq!(v.n1.get("H").copied(), Some(3));
+        assert!(v.n2.is_empty(), "{:?}", v.n2);
+    }
+
+    #[test]
     fn shell_norm_l1_unit_interval() {
         let mut a = Shell::new();
         a.insert("C".into(), 1);
@@ -1198,6 +1274,7 @@ mod tests {
         let edit = edit_shells(&parent, &child);
         let opts = SiteShellCostOpts {
             dearomatic: c.pattern.effect.dearomatizes,
+            ..SiteShellCostOpts::default()
         };
         let before = site_shell_cost_opts(&cur, None, &tgt, &ad.mapping, &atoms, opts);
         let after = site_shell_cost_opts(&cur, Some(&edit), &tgt, &ad.mapping, &atoms, opts);

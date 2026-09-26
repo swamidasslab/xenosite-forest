@@ -97,6 +97,8 @@ struct Mode {
     leave: bool,
     /// Include |Δaromatic| ∈ {0,1} per atom when comparing projected vs target.
     aromatic_delta: bool,
+    /// H bags one shell closer; drop n2 (on-demand view).
+    h_closer_no_n2: bool,
     kind: CostKind,
 }
 
@@ -105,6 +107,7 @@ impl Mode {
         Self {
             leave: false,
             aromatic_delta: false,
+            h_closer_no_n2: false,
             kind: CostKind::AtSitesLegacy,
         }
     }
@@ -113,6 +116,7 @@ impl Mode {
         Self {
             leave: false,
             aromatic_delta: false,
+            h_closer_no_n2: false,
             kind: CostKind::ProjResidualDrop,
         }
     }
@@ -124,6 +128,9 @@ impl Mode {
             CostKind::AtSitesCleaved => "at_sites Σ|δ|+cleaved",
             CostKind::ProjResidualDrop => "Σ|proj−tgt| keep-if-drop",
         });
+        if self.h_closer_no_n2 {
+            parts.push("H→closer/no-n2");
+        }
         if self.aromatic_delta {
             parts.push("+|Δaromatic|");
         }
@@ -136,6 +143,7 @@ impl Mode {
     fn opts_for_effect(self, dearomatizes: bool) -> SiteShellCostOpts {
         SiteShellCostOpts {
             dearomatic: self.aromatic_delta || dearomatizes,
+            h_closer_no_n2: self.h_closer_no_n2,
         }
     }
 }
@@ -681,6 +689,7 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
                 Mode {
                     kind: CostKind::ProjResidualDrop,
                     aromatic_delta: false,
+                    h_closer_no_n2: false,
                     leave: base.leave,
                 },
             ));
@@ -691,11 +700,21 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
                 Mode {
                     kind: CostKind::ProjResidualDrop,
                     aromatic_delta: false,
+                    h_closer_no_n2: false,
                     leave: base.leave,
                 },
             ));
         }
         CostKind::ProjResidualDrop => {
+            if !base.h_closer_no_n2 {
+                out.push((
+                    "H→closer/no-n2".into(),
+                    Mode {
+                        h_closer_no_n2: true,
+                        ..base
+                    },
+                ));
+            }
             if !base.aromatic_delta {
                 out.push((
                     "+|Δaromatic|".into(),
@@ -945,6 +964,42 @@ fn main() {
         proj_stats.hard.agree_rate(),
     );
     print_dis_report(&diss, &proj_stats.mid, &proj_stats.hard);
+
+    // Head-to-head: full n0/n1/n2 vs H-closer/no-n2 (PatternInfo unchanged).
+    println!("\n## Shell view: full n0/n1/n2 vs H→closer/no-n2");
+    let views = [
+        (
+            "full n0/n1/n2",
+            Mode::proj_baseline(),
+        ),
+        (
+            "full +leave",
+            Mode {
+                leave: true,
+                ..Mode::proj_baseline()
+            },
+        ),
+        (
+            "H→closer/no-n2",
+            Mode {
+                h_closer_no_n2: true,
+                ..Mode::proj_baseline()
+            },
+        ),
+        (
+            "H→closer/no-n2 +leave",
+            Mode {
+                h_closer_no_n2: true,
+                leave: true,
+                ..Mode::proj_baseline()
+            },
+        ),
+    ];
+    for (tag, mode) in views {
+        let (s, _) = run_mode(mode, false);
+        print_row(tag, &s);
+        history.push((format!("view {tag}"), s));
+    }
 
     // Per-case live find_path cost traces (dropped when gate-as-gold was removed).
     print_find_path_costs("MID", MID);
