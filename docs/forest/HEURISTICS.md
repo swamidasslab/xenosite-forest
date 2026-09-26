@@ -370,10 +370,11 @@ when needed; prefer perceiving them from the edited graph:
 Pre-existing **cumulated** doubles on the parent (N=C=O: an atom with two
 doubles) are **fixed framework**: drop those atoms from the residual before
 rematch — exclusive one-partner matching cannot express cumulated demand.
-Ordinary parent doubles (vinyl C=C, carbonyl C=O) stay in the residual for path
-rematch (styrene / enone Hydrogenation). Only edit-new doubles (forced leaf/edge
-from the endpoint edits) seed [`KekuleConstraints`](../../crates/xenosite-forest/src/kekule.rs).
-Status: approved. Tests: `quinone_formation_add_carbonyl_on_phnco_keeps_nco` /
+Surviving non-cumulated doubles on the edited mol (other quinone C=O, etc.)
+**exclusive-seed** so rematch does not rewrite them into charge junk. Saturate
+demotes path π first (styrene vinyl), so those edges are gone before perceive
+and rematch freely. Status: approved. Tests:
+`quinone_formation_add_carbonyl_on_phnco_keeps_nco` /
 `hydrogenation_styrene_vinyl_ring_path_emits_exocyclic`.
 
 **Saturate→residual π:** when a saturate site still has a double/triple into the
