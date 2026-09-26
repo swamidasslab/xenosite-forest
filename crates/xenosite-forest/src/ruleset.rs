@@ -440,6 +440,12 @@ fn ring_open_oxygenate(
                 .ok()?;
         }
     }
+    // Bracket H on the cleaved atoms (e.g. pyrrole [nH]) is stale after the
+    // bond break; clear so chematic recomputes implicit H (aniline NH2).
+    let left_el = product.atom(atom_idx(left)).element;
+    let right_el = product.atom(atom_idx(right)).element;
+    product = product.with_atom_element(atom_idx(left), left_el);
+    product = product.with_atom_element(atom_idx(right), right_el);
     if accept_product(&product) {
         Some(vec![product])
     } else {
@@ -895,6 +901,29 @@ mod tests {
             got,
             canon_set(["C=CC=CC=CO", "C=CC=CC=C=O"]),
             "chematic A.B cleavage drops a ring atom; ring-open edit must keep C6"
+        );
+    }
+
+    #[test]
+    fn n_dealkylation_ring_open_on_indole_keeps_nitrogen() {
+        use crate::rules::n_dealkylation;
+        let got = products_of(
+            &n_dealkylation(),
+            "c1ccc2[nH]ccc2c1",
+            accept_all_rules,
+            accept_all_sites,
+        );
+        assert!(
+            got.contains(&canon_of("Nc1ccccc1C=C=O").unwrap()),
+            "methine carbonyl ring-open; got {got:?}"
+        );
+        assert!(
+            got.contains(&canon_of("Nc1ccccc1C=CO").unwrap()),
+            "methine alcohol ring-open; got {got:?}"
+        );
+        assert!(
+            got.contains(&canon_of("NC=Cc1ccccc1O").unwrap()),
+            "quaternary alcohol ring-open; got {got:?}"
         );
     }
 
