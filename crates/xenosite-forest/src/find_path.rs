@@ -1037,7 +1037,7 @@ pub struct FindPathConfig {
     pub drop_skeleton_twins: bool,
     /// Match diversity: count accepted applications per site key, add
     /// fixed-point `−n` into the heap primary (`score + diversity`). On pop,
-    /// refresh or accept. SoftStack ignores. Default **true**.
+    /// refresh or accept. SoftStack ignores. Default **false** (opt-in).
     pub diversity: bool,
 }
 
@@ -1051,7 +1051,7 @@ impl Default for FindPathConfig {
             lazy_closer: false,
             heap_score: HeapScoreMode::match_log_neg_pc(),
             drop_skeleton_twins: true,
-            diversity: true,
+            diversity: false,
         }
     }
 }
@@ -2724,7 +2724,7 @@ mod tests {
     }
 
     #[test]
-    fn diversity_off_matches_prior_default_on_simple_path() {
+    fn diversity_opt_in_finds_simple_path() {
         let rules = o_dealkylation();
         let mut with = PathCounters::default();
         let mut without = PathCounters::default();
@@ -2750,7 +2750,6 @@ mod tests {
             &mut without,
             FindPathConfig {
                 max_paths: 1,
-                diversity: false,
                 ..FindPathConfig::default()
             },
             accept_all_candidates,
@@ -2762,6 +2761,7 @@ mod tests {
         assert_eq!(b.len(), 1);
         assert_eq!(a[0].smiles, b[0].smiles);
         assert_eq!(without.diversity_repush, 0);
+        assert!(!FindPathConfig::default().diversity);
     }
 
     #[test]

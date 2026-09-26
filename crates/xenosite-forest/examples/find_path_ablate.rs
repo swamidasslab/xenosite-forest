@@ -418,10 +418,10 @@ fn main() {
             },
         },
         Variant {
-            label: "no-diversity",
+            label: "diversity",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {
-                diversity: false,
+                diversity: true,
                 ..base_cfg
             },
         },

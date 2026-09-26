@@ -97,7 +97,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 - `find_path` and `ReactionRule.metabolize` / `RuleSet.metabolize` raise `ValueError` on `None` input (invalid parse must not soft-pass as any-path).
 - Lazy heap / stale-priority handling on the find_path frontier. Status: approved (shape).
 
-  **Current default — `HeapScoreMode::Match(MatchScoreSpec::log_neg_pc())`.** Heap key is `(score + diversity, score)`, then `seq`. Base score = `Σ −ln(1+child) − ln(1+parent)` over atom+formula. **Diversity** (default on): count accepted pops per key `(rule, site Tags, added-atom Tags)`; primary += fixed-point `−n` (stronger than `−ln(n+1)`). On pop, recompute; if stale, re-push (`diversity_repush`); else accept and increment. SoftStack ignores. Ablate: `no-diversity`. Status: **approved** log-neg-pc; diversity `−n` **not decided**.
+  **Current default — `HeapScoreMode::Match(MatchScoreSpec::log_neg_pc())`.** Heap key is score then `seq` (with opt-in diversity: `(score + −n, score)`). Base score = `Σ −ln(1+child) − ln(1+parent)` over atom+formula. **Diversity** (`FindPathConfig.diversity`, default **off**): count accepted pops per key `(rule, site Tags, added-atom Tags)`; primary += fixed-point `−n`. On pop, recompute; if stale, re-push (`diversity_repush`); else accept and increment. SoftStack ignores. Ablate: `diversity`. Hard p5: off **1266** / −n on **1588**; p10 nearly tied. Status: **approved** log-neg-pc default; diversity opt-in **not decided**.
 
   **Match-score matrix (filter-only, plain pop; mid + hard).** Axes: combine = close | improve | product; metric = atom | formula | both. SoftStack included as baseline. Cost = MCS HA gaps only; `formula_l1` includes H (no special `h_off`).
 
