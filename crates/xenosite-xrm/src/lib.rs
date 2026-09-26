@@ -24,14 +24,14 @@ mod skos;
 mod sssom;
 mod term;
 
-pub use assignment::{AssignmentRule, Assignments};
-pub use chemistry::{AtomMap, MappedReaction};
+pub use assignment::{AssignmentHit, AssignmentRule, Assignments};
+pub use chemistry::{AtomMap, LocalizedTag, MappedReaction}; // LocalizedTag for site-localized caller tags
 pub use curie::Curie;
 pub use error::{Error, Result};
 pub use namer::{Namer, NamerConfig};
 pub use skos::{ConceptScheme, SkosConcept, Thesaurus};
 pub use sssom::{MappingPredicate, SssomMapping, SssomTable};
-pub use term::{OntologyRef, Specificity, Term, TermLink};
+pub use term::{OntologyRef, SiteRef, Specificity, Term, TermLink};
 
 /// Default bundled manifest (relative to this crate's `data/` directory).
 pub const DEFAULT_MANIFEST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data/manifest.json");

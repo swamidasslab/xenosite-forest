@@ -49,8 +49,20 @@ Each [`Term`](src/term.rs) includes ontology identity, pref/alt labels, broader/
 
 1. **Separate XRM + declared synonyms** — MeSH is too coarse (Phase I/II only); KEGG RCLASS is RDM-centric; MOP has good leaves but no xenobiotic Phase spine.
 2. **SKOS + SSSOM + JSONL** — established standards; no OWL reasoner required on the hot path.
-3. **Assignment without forest imports** — structural SMARTS / formula delta / opaque tags only.
-4. **Phase I / Phase II expected**; enzyme names excluded from primary output.
+3. **Assignment without forest imports** — prefer structural SMARTS / formula delta; opaque tags only when structure cannot decide (and for Forest-map correspondence).
+4. **Cross-cutting multi-spine tagging** — many parallel hierarchies (chemist type, Forest map, aromatic impact, redox, ambiguity, …).
+5. **Site-localized terms** — caller tags may use `@map` (`chem:hydroxylation@1`); SMARTS hits attach `SiteRef` so multi-change cases disambiguate.
+6. **Phase I / Phase II expected**; enzyme names excluded from primary output.
+
+## Candidate harvest (offline Python)
+
+```bash
+python3 crates/xenosite-xrm/tools/harvest/harvest_candidates.py \
+  --out crates/xenosite-xrm/data/candidates/round-001.jsonl
+```
+
+Sources: seed, ChEBI, PubChem, KEGG, Rhea, GO, Reactome. See
+[`tools/harvest/GUIDANCE_SOURCES.md`](tools/harvest/GUIDANCE_SOURCES.md).
 
 ## Feedback samples
 

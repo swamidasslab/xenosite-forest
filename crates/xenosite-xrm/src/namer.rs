@@ -5,7 +5,7 @@ use crate::chemistry::{MappedReaction, ReactionChemistry};
 use crate::error::{Error, Result};
 use crate::skos::Thesaurus;
 use crate::sssom::SssomTable;
-use crate::term::Term;
+use crate::term::{SiteRef, Term};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -70,30 +70,40 @@ impl Namer {
     }
 
     /// Name a mapped reactant→product. Most specific terms first; ancestors included.
+    ///
+    /// Terms are site-localized when assignment hits carry a [`SiteRef`]. The same
+    /// concept may appear once per distinct site so multi-change cases disambiguate.
     pub fn name(&self, query: &MappedReaction) -> Result<Vec<Term>> {
         let chem = ReactionChemistry::prepare(query)?;
         let hits = self.assignments.matching(&chem)?;
 
-        let mut evidence: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        let mut ids = BTreeSet::new();
-        for rule in hits {
-            for id in &rule.emit {
+        // Key: (concept id, site) → evidence rule ids
+        let mut evidence: BTreeMap<(String, SiteRef), Vec<String>> = BTreeMap::new();
+        let mut keys: BTreeSet<(String, SiteRef)> = BTreeSet::new();
+
+        for hit in hits {
+            for id in &hit.rule.emit {
                 if self.thesaurus.get(id).is_none() {
-                    return Err(Error::UnknownConcept(format!("{id} ({})", rule.id)));
+                    return Err(Error::UnknownConcept(format!("{id} ({})", hit.rule.id)));
                 }
-                evidence.entry(id.clone()).or_default().push(rule.id.clone());
-                ids.insert(id.clone());
+                let key = (id.clone(), hit.site.clone());
+                evidence
+                    .entry(key.clone())
+                    .or_default()
+                    .push(hit.rule.id.clone());
+                keys.insert(key);
                 for anc in self.thesaurus.ancestors(id) {
-                    ids.insert(anc.as_str().to_string());
+                    let akey = (anc.as_str().to_string(), hit.site.clone());
+                    keys.insert(akey);
                 }
             }
         }
 
-        let mut terms = Vec::with_capacity(ids.len());
-        for id in ids {
-            let mut term = self
-                .thesaurus
-                .term_shell(&id, evidence.get(&id).cloned().unwrap_or_default())?;
+        let mut terms = Vec::with_capacity(keys.len());
+        for (id, site) in keys {
+            let ev = evidence.get(&(id.clone(), site.clone())).cloned().unwrap_or_default();
+            let mut term = self.thesaurus.term_shell(&id, ev)?;
+            term.site = site;
             let (intra, inter) = self.mappings.links_for(&id, &self.scheme_prefix);
             term.intra_matches.extend(intra);
             term.inter_matches.extend(inter);
@@ -103,6 +113,7 @@ impl Namer {
             b.specificity
                 .depth
                 .cmp(&a.specificity.depth)
+                .then_with(|| a.site.cmp(&b.site))
                 .then_with(|| a.pref_label.cmp(&b.pref_label))
         });
         Ok(terms)
@@ -117,15 +128,16 @@ impl Namer {
         self.name(&MappedReaction::new(reactant, product).with_tags(tags.iter().copied()))
     }
 
-    /// Compact lines for feedback dumps: `prefLabel [id] ← path`.
+    /// Compact lines for feedback dumps: `prefLabel [id]@site ← path`.
     pub fn format_sample_lines(&self, terms: &[Term]) -> Vec<String> {
         terms
             .iter()
             .map(|t| {
                 format!(
-                    "{} [{}] ← {}",
+                    "{} [{}]{} ← {}",
                     t.pref_label,
                     t.id,
+                    t.site.display_suffix(),
                     t.path_labels.join(" > ")
                 )
             })

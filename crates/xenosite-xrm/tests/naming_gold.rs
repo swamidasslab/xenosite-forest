@@ -267,3 +267,37 @@ fn tag_hydroxylation_without_structural_match_still_names() {
         .unwrap();
     assert!(labels(&terms).contains(&"hydroxylation"));
 }
+
+#[test]
+fn site_localized_tags_disambiguate_multi_change() {
+    // Two methyls; only map 1 is asserted as N/A hydroxylation via localized tag.
+    // Structural SMARTS also fire per mapped carbon when present.
+    let terms = namer()
+        .name_smiles(
+            "[CH3:1]c1ccc([CH3:2])cc1",
+            "O[CH2:1]c1ccc([CH3:2])cc1",
+            &["chem:benzylic-hydroxylation@1"],
+        )
+        .unwrap();
+    let benzylic: Vec<_> = terms
+        .iter()
+        .filter(|t| t.pref_label == "benzylic hydroxylation")
+        .collect();
+    assert_eq!(benzylic.len(), 1, "{:?}", labels(&terms));
+    assert_eq!(benzylic[0].site.map_nums, vec![1]);
+
+    // Localized chem tag alone pins site 2 (no structural SMARTS required).
+    let terms = namer()
+        .name_smiles(
+            "[CH3:1]c1ccc([CH3:2])cc1",
+            "[CH3:1]c1ccc([CH3:2])cc1",
+            &["chem:aromatic-hydroxylation@2"],
+        )
+        .unwrap();
+    let aryl: Vec<_> = terms
+        .iter()
+        .filter(|t| t.pref_label == "aromatic hydroxylation")
+        .collect();
+    assert_eq!(aryl.len(), 1, "{:?}", labels(&terms));
+    assert_eq!(aryl[0].site.map_nums, vec![2]);
+}

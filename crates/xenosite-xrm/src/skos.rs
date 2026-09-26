@@ -222,6 +222,7 @@ impl Thesaurus {
                 .collect(),
             path_labels: self.path_labels(id),
             evidence,
+            site: crate::term::SiteRef::default(),
         })
     }
 

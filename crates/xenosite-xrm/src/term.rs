@@ -37,7 +37,63 @@ pub struct TermLink {
     pub target_ontology: Option<String>,
 }
 
-/// One systematic name hit for a mapped reaction.
+/// Localized site of metabolism on the mapped reactant/product.
+///
+/// Prefer atom-map numbers from mapped SMILES (`[C:1]`). When maps are absent,
+/// reactant atom indices are retained so multi-change cases can still be split.
+/// An empty [`SiteRef`] means the term is molecule-level (not site-localized).
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SiteRef {
+    /// Stable atom-map numbers from the mapped SMILES (sorted, unique).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub map_nums: Vec<u16>,
+    /// Reactant atom indices for the matched site (sorted, unique).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactant_atoms: Vec<usize>,
+}
+
+impl SiteRef {
+    pub fn is_empty(&self) -> bool {
+        self.map_nums.is_empty() && self.reactant_atoms.is_empty()
+    }
+
+    pub fn from_map_nums(nums: impl IntoIterator<Item = u16>) -> Self {
+        let mut map_nums: Vec<u16> = nums.into_iter().filter(|n| *n != 0).collect();
+        map_nums.sort_unstable();
+        map_nums.dedup();
+        Self {
+            map_nums,
+            reactant_atoms: Vec::new(),
+        }
+    }
+
+    /// Compact display: `@1,2` (map nums) or `@a3,a5` (atom indices) or empty.
+    pub fn display_suffix(&self) -> String {
+        if !self.map_nums.is_empty() {
+            format!(
+                "@{}",
+                self.map_nums
+                    .iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        } else if !self.reactant_atoms.is_empty() {
+            format!(
+                "@{}",
+                self.reactant_atoms
+                    .iter()
+                    .map(|a| format!("a{a}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        } else {
+            String::new()
+        }
+    }
+}
+
+/// One systematic name hit for a mapped reaction (optionally site-localized).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Term {
     pub id: Curie,
@@ -64,6 +120,9 @@ pub struct Term {
     /// Assignment rule ids from config that emitted this term.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<String>,
+    /// Site localization for this emit; empty = molecule-level.
+    #[serde(default, skip_serializing_if = "SiteRef::is_empty")]
+    pub site: SiteRef,
 }
 
 impl Term {

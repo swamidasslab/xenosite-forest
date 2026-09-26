@@ -68,3 +68,16 @@ Rules and patterns hang under those rulesets (`Hydroxylation rule`,
 4. **IUPAC** xenobiotic metabolism glossary (Pure Appl. Chem. 2021,
    [10.1515/pac-2018-0208](https://doi.org/10.1515/pac-2018-0208)).
 5. DMPK / Phase II teaching literature for conjugation and process facets.
+
+## Automated external guidance
+
+Offline harvesters (Python, stdlib) collect candidate terms, synonyms, and
+example pairs from **ChEBI, PubChem, KEGG, Rhea, GO, Reactome**, plus a local
+seed lexicon. See:
+
+- [`tools/harvest/README.md`](../tools/harvest/README.md)
+- [`tools/harvest/GUIDANCE_SOURCES.md`](../tools/harvest/GUIDANCE_SOURCES.md)
+- Output: [`data/candidates/`](../candidates/)
+
+Promote reviewed candidates into SKOS `altLabel`, SSSOM, and SMARTS-backed
+goldens. Prefer structure (SMARTS/delta) over Forest reaction-tool tags.
