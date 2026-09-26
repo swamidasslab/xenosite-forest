@@ -27,6 +27,7 @@ pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
 pub mod pattern;
+pub mod product_graph;
 pub mod rules;
 pub mod ruleset;
 pub mod smarts;
@@ -107,6 +108,10 @@ pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
     bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o, leave_oo,
     merge_delta_formula, named_leave_formula, site_map_aromatic,
+};
+pub use product_graph::{
+    ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
+    product_graph, product_graph_stats, product_layer,
 };
 pub use rules::{
     all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
