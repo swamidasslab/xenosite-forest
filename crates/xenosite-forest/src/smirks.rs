@@ -234,4 +234,61 @@ mod tests {
             products.iter().map(canon_smiles).collect::<Vec<_>>()
         );
     }
+
+    /// Chematic `expand_atomic_number_primitives` turns product `[#6](=[#8])[#6]`
+    /// into bracket `[C]`/`[c]` variants that do not apply cleanly. Organic
+    /// subset `C(=O)C` does (forest acetylation workaround).
+    #[test]
+    fn acetylation_atomic_product_misses_organic_applies() {
+        let mol = parse_mol("CCO").unwrap();
+        let hits = smarts_matches(&mol, "[#8h1:1]").unwrap();
+        assert_eq!(hits.len(), 1);
+        let atomic = apply_smirks_at("[#8h1:1]>>[*:1][#6](=[#8])[#6]", &mol, &hits[0]).unwrap();
+        assert!(
+            atomic.is_empty(),
+            "atomic product should miss, got {:?}",
+            atomic.iter().map(canon_smiles).collect::<Vec<_>>()
+        );
+        let organic = apply_smirks_at("[#8h1:1]>>[*:1]C(=O)C", &mol, &hits[0]).unwrap();
+        assert_eq!(
+            organic
+                .iter()
+                .map(|p| canon_of(&canon_smiles(p)).unwrap())
+                .collect::<Vec<_>>(),
+            vec![canon_of("CC(=O)OCC").unwrap()]
+        );
+    }
+
+    /// specialize rewrites reactant `#` to aliphatic `O`/`N`/`S` or aromatic
+    /// `n` (etc.). Organic product must cover both branches.
+    #[test]
+    fn acetylation_organic_covers_aliphatic_and_aromatic_heteroatom_branches() {
+        let smirks = "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1]C(=O)C";
+        let cases = [
+            // aliphatic heteroatom spelling after specialize
+            ("CCO", "[O:1]>>[*:1]C(=O)C", "CC(=O)OCC"),
+            ("CCN", "[N:1]>>[*:1]C(=O)C", "CCNC(C)=O"),
+            ("CS", "[S:1]>>[*:1]C(=O)C", "CSC(C)=O"),
+            // aryl-attached aliphatic heteroatoms
+            ("Oc1ccccc1", "[O:1]>>[*:1]C(=O)C", "CC(=O)Oc1ccccc1"),
+            ("Nc1ccccc1", "[N:1]>>[*:1]C(=O)C", "CC(=O)Nc1ccccc1"),
+            ("Sc1ccccc1", "[S:1]>>[*:1]C(=O)C", "CC(=O)Sc1ccccc1"),
+            // aromatic heteroatom spelling (pyrrole NH)
+            ("[nH]1cccc1", "[n:1]>>[*:1]C(=O)C", "CC(=O)n1cccc1"),
+        ];
+        for (smiles, want_form, want_prod) in cases {
+            let mol = parse_mol(smiles).unwrap();
+            let hits = smarts_matches(&mol, "[#7h1,#7h2,#8h1,#16h1:1]").unwrap();
+            assert_eq!(hits.len(), 1, "{smiles}");
+            let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
+            assert_eq!(form, want_form, "{smiles}");
+            let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
+            let got: BTreeSet<String> = products
+                .iter()
+                .map(|p| canon_of(&canon_smiles(p)).unwrap())
+                .collect();
+            let want = BTreeSet::from([canon_of(want_prod).unwrap()]);
+            assert_eq!(got, want, "{smiles} form={form}");
+        }
+    }
 }

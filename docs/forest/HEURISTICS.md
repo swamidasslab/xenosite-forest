@@ -244,19 +244,27 @@ xfail if non-compliant + hit. Other suites do not xfail on this flag.
 
 Status: **not approved**. Materializing every Kekulé form inside plain `SmirksReactionRule.metabolites` is combinatorial expansion — that is why `ResonanceRule` exists. Match once on the aromatic parent; react on a cached Kekulé parent selected by SMARTS-implied bond order. Do not reintroduce an all-forms loop or an easy opt-in that restores the tax. `_kekule_forms` may remain for tests / helpers that need the list explicitly.
 
-## Chematic bond-flip walk for ResonancePair path edits
+## Chematic / RDKit resonance engines for ResonancePair path edits
 
-Status: **not approved** (do not migrate).
+Status: **not approved** (do not migrate the path flip onto these).
 
-Chematic exposes aromatic **kekulization** (`chematic_core::kekulize` /
-`kekulize_inplace`) and low-level `set_bond_order` / `with_bond_order`. It does
-**not** offer a conjugated-path flip / resonance-move API. ResonancePair needs
-odd alternating-path discovery between two ends, then single↔double flip along
-that path after end edits (`swap_bonds_along_path` / Rust `flip_path`). Replacing
-that with re-kekulize would pick *some* matching, not the intentional path
-between the chosen ends. Sanitize / C10 product failures are not fixed by this
-swap; keep the hand walk on both sides for parity. Revisit only if Chematic
-gains an explicit path-flip / electrocyclic primitive.
+**Chematic** exposes aromatic kekulization (`chematic_core::kekulize` /
+`kekulize_inplace`) and low-level `set_bond_order`. **RDKit**
+`ResonanceMolSupplier` (+ `KEKULE_ALL`) enumerates conjugated-group electron /
+Kekulé arrangements and filters them with octet and formal-charge rules
+(`checkChargesAndBondOrders`: fc in −2…+1, no cumulated multiples on aromatic
+atoms, constrained cations/anions left of N, etc.). Forest already uses the
+supplier correctly for **Kekulé parents and conjugated groups**
+(`resonance_bond_maps` / `_kekule_forms`).
+
+Neither API is a conjugated-**path flip**. ResonancePair needs odd
+alternating-path discovery between two ends, then single↔double flip along
+that path after end edits (`swap_bonds_along_path` / Rust `flip_path`).
+Replacing that with re-kekulize or “pick a ResonanceMolSupplier form” would
+choose *some* matching, not the intentional path. Keep the hand walk; keep
+post-flip gates (H adjust, valence / two-double N, re-aromatized system drop).
+Sanitize / C10 failures are usually end-edit / SMIRKS products, not missing a
+library flip. Revisit only if a library gains an explicit path-flip primitive.
 
 ## Narrowing SMARTS vs ``swap_group`` (ResonancePair)
 

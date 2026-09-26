@@ -1502,7 +1502,12 @@ pub fn acetylation() -> RuleSet {
         Some("Acetylation".into()),
         [smirks_row(
             "acetyl",
-            "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1][#6](=[#8])[#6]",
+            // Organic-subset product: chematic expand of ``[#6](=[#8])[#6]``
+            // yields bracket ``[C]``/``[c]`` forms that do not apply cleanly
+            // (RUST_PYTHON_PARITY #5). New acetyl atoms are aliphatic; reactant
+            // still uses ``#`` so specialize covers aliphatic and aromatic
+            // heteroatom branches (see smirks tests).
+            "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1]C(=O)C",
             SiteKind::Atom,
             vec![1],
             Effect {
@@ -2219,6 +2224,36 @@ mod tests {
                 .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == phenol) }),
             "{emissions:?}"
         );
+    }
+
+    /// Organic product `C(=O)C` must acetylate aliphatic and aromatic
+    /// heteroatom sites (specialize `O`/`N`/`S` vs `n`).
+    #[test]
+    fn acetylation_covers_aliphatic_and_aromatic_heteroatom_branches() {
+        let cases = [
+            ("CCO", "CC(=O)OCC"),
+            ("CCN", "CCNC(C)=O"),
+            ("CS", "CSC(C)=O"),
+            ("Oc1ccccc1", "CC(=O)Oc1ccccc1"),
+            ("Nc1ccccc1", "CC(=O)Nc1ccccc1"),
+            ("Sc1ccccc1", "CC(=O)Sc1ccccc1"),
+            ("[nH]1cccc1", "CC(=O)n1cccc1"),
+        ];
+        let set = acetylation();
+        for (smiles, want) in cases {
+            let mol = parse_mol(smiles).unwrap();
+            let emissions = set
+                .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            let want = canon_of(want).unwrap();
+            assert!(
+                emissions
+                    .iter()
+                    .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+                "{smiles}: want {want}, got {emissions:?}"
+            );
+        }
     }
 
     #[test]
