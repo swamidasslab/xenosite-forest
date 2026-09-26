@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-description = "Config-driven xenobiotic reaction naming (SKOS + SSSOM + JSONL). No forest rule coupling."
+description = "Med-chem SKOS thesaurus for xenobiotic metabolism reaction naming (SSSOM to RXNO/MOP/GO/ChEBI/…). No forest rule coupling."
 repository = "https://github.com/swamidasslab/xenosite-forest"
 publish = false
 
