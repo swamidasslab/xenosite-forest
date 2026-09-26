@@ -56,5 +56,15 @@ fn namer_still_has_no_forest_code_dependency() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
     )
     .unwrap();
-    assert!(!cargo.contains("xenosite-forest"));
+    let deps = cargo
+        .split("[dependencies]")
+        .nth(1)
+        .unwrap_or("")
+        .split('[')
+        .next()
+        .unwrap_or("");
+    assert!(
+        !deps.contains("xenosite-forest") && !deps.contains("xenosite_forest"),
+        "dependencies must not include forest crates:\n{deps}"
+    );
 }
