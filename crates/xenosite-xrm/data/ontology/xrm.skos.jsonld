@@ -42,7 +42,8 @@
       "id": "xrm:scheme",
       "type": "skos:ConceptScheme",
       "prefLabel": "Xenobiotic Reaction Metabolism",
-      "iri": "https://xenosite.org/ontology/xrm#"
+      "iri": "https://xenosite.org/ontology/xrm#",
+      "definition": "XRM tags each reaction with many terms from parallel, cross-cutting spines. Spines include chemist reaction type, Metabolic Forest map (ruleset→rule→pattern), aromatic/conjugated-system impact, redox polarity, site atom class, bond-edit topology, metabolite cardinality, oxygenation outcome, electrophile role, ring fate, formula-delta class, site aromaticity, pathway-step role, and ambiguity / underspecification. Prefer polyhierarchy and relatedMatch over a single parent. Forest abbreviations are never XRM labels."
     },
     {
       "id": "xrm:0000000",
@@ -68,7 +69,8 @@
         "Metabolic Detoxication, Phase I"
       ],
       "definition": "Functionalization: oxidation, reduction, hydrolysis, and related edits that introduce or expose polar groups.",
-      "broader": "xrm:0000000"
+      "broader": "xrm:0000000",
+      "relatedMatch": "xrm:9000018"
     },
     {
       "id": "xrm:0000002",
@@ -88,16 +90,22 @@
       "type": "skos:Concept",
       "prefLabel": "stable oxygenation",
       "inScheme": "xrm:scheme",
-      "definition": "Phase I class in which oxygen is added and a single observable metabolite results (hydroxylation, aromatic/aliphatic epoxidation, nitrogen oxidation, sulfur oxidation). Maps to the Metabolic Forest / Rainbow stable-oxygenation ruleset; prefer this full name over localized abbreviations.",
-      "broader": "xrm:0000001"
+      "definition": "Metabolic Forest / Rainbow class parent in the Forest-map portion (full name). Not a chemist reaction-type organizer; see parallel chemist hierarchy under phase I. Phase I class in which oxygen is added and a single observable metabolite results (hydroxylation, aromatic/aliphatic epoxidation, nitrogen oxidation, sulfur oxidation). Maps to the Metabolic Forest / Rainbow stable-oxygenation ruleset; prefer this full name over localized abbreviations.",
+      "broader": [
+        "xrm:9000000",
+        "xrm:9000018"
+      ]
     },
     {
       "id": "xrm:0000011",
       "type": "skos:Concept",
       "prefLabel": "unstable oxygenation",
       "inScheme": "xrm:scheme",
-      "definition": "Phase I class in which oxygenation destabilizes a heavy-atom bond that then cleaves (N-/O-/S-/C-dealkylation, oxidative deamination, oxidative dehalogenation). Maps to the Metabolic Forest / Rainbow unstable-oxygenation ruleset; prefer this full name over localized abbreviations.",
-      "broader": "xrm:0000001"
+      "definition": "Metabolic Forest / Rainbow class parent in the Forest-map portion (full name). Not a chemist reaction-type organizer; see parallel chemist hierarchy under phase I. Phase I class in which oxygenation destabilizes a heavy-atom bond that then cleaves (N-/O-/S-/C-dealkylation, oxidative deamination, oxidative dehalogenation). Maps to the Metabolic Forest / Rainbow unstable-oxygenation ruleset; prefer this full name over localized abbreviations.",
+      "broader": [
+        "xrm:9000000",
+        "xrm:9000018"
+      ]
     },
     {
       "id": "xrm:0000012",
@@ -106,7 +114,15 @@
       "inScheme": "xrm:scheme",
       "altLabel": "desaturation",
       "definition": "Phase I class that extracts hydrogen(s) to form a multiple bond, iminium, or quinoid (alcohol→carbonyl, bond unsaturation, quinone/imine/methide formation, iminium formation). Maps to the Metabolic Forest / Rainbow dehydrogenation ruleset; prefer this full name over localized abbreviations.",
-      "broader": "xrm:0000001"
+      "broader": "xrm:0000001",
+      "relatedMatch": [
+        "xrm:9000012",
+        "xrm:9100300",
+        "xrm:7000001",
+        "xrm:7200003",
+        "xrm:7700004",
+        "xrm:7400003"
+      ]
     },
     {
       "id": "xrm:0000013",
@@ -114,7 +130,15 @@
       "prefLabel": "hydrolysis",
       "inScheme": "xrm:scheme",
       "definition": "Phase I class in which water addition cleaves amide, ester, ether, or related bonds (including cyanide/nitrile hydrolysis). Maps to the Metabolic Forest / Rainbow hydrolysis ruleset; prefer this full name over localized abbreviations.",
-      "broader": "xrm:0000001"
+      "broader": "xrm:0000001",
+      "relatedMatch": [
+        "xrm:9000013",
+        "xrm:9100400",
+        "xrm:7000003",
+        "xrm:7200002",
+        "xrm:7300002",
+        "xrm:7700005"
+      ]
     },
     {
       "id": "xrm:0000014",
@@ -122,7 +146,12 @@
       "prefLabel": "reduction",
       "inScheme": "xrm:scheme",
       "definition": "Phase I class that removes oxygen or adds hydrogen(s) (nitro, carbonyl, and sulfo reduction; reductive dehalogenation; hydrogenation). Maps to the Metabolic Forest / Rainbow reduction ruleset; prefer this full name over localized abbreviations.",
-      "broader": "xrm:0000001"
+      "broader": "xrm:0000001",
+      "relatedMatch": [
+        "xrm:9000014",
+        "xrm:7000002",
+        "xrm:7400003"
+      ]
     },
     {
       "id": "xrm:0000020",
@@ -160,10 +189,7 @@
       "inScheme": "xrm:scheme",
       "altLabel": "α-carbon hydroxylation cleavage",
       "definition": "α-Carbon hydroxylation followed by C–X cleavage (N-/O-/S-dealkylation, oxidative deamination).",
-      "broader": [
-        "xrm:0000020",
-        "xrm:0000011"
-      ]
+      "broader": "xrm:0000020"
     },
     {
       "id": "xrm:0000100",
@@ -171,9 +197,15 @@
       "prefLabel": "hydroxylation",
       "inScheme": "xrm:scheme",
       "definition": "Introduction of a hydroxyl group, typically at carbon.",
-      "broader": [
-        "xrm:0000010",
-        "xrm:0000021"
+      "broader": "xrm:0000021",
+      "relatedMatch": [
+        "xrm:9100100",
+        "xrm:7000001",
+        "xrm:7100001",
+        "xrm:7200001",
+        "xrm:7300001",
+        "xrm:7400001",
+        "xrm:7700001"
       ]
     },
     {
@@ -183,7 +215,11 @@
       "inScheme": "xrm:scheme",
       "altLabel": "aryl hydroxylation",
       "definition": "Hydroxylation of an aromatic ring; often via arene oxide / NIH-shift pathways.",
-      "broader": "xrm:0000100"
+      "broader": "xrm:0000100",
+      "relatedMatch": [
+        "xrm:8000003",
+        "xrm:7800001"
+      ]
     },
     {
       "id": "xrm:0000102",
@@ -192,7 +228,8 @@
       "inScheme": "xrm:scheme",
       "altLabel": "alkyl hydroxylation",
       "definition": "Hydroxylation of an aliphatic carbon.",
-      "broader": "xrm:0000100"
+      "broader": "xrm:0000100",
+      "relatedMatch": "xrm:7800002"
     },
     {
       "id": "xrm:0000103",
@@ -292,9 +329,14 @@
       "prefLabel": "epoxidation",
       "inScheme": "xrm:scheme",
       "definition": "Formation of a three-membered epoxide ring.",
-      "broader": [
-        "xrm:0000010",
-        "xrm:0000021"
+      "broader": "xrm:0000021",
+      "relatedMatch": [
+        "xrm:9100110",
+        "xrm:7000001",
+        "xrm:7200006",
+        "xrm:7600003",
+        "xrm:7400001",
+        "xrm:7700001"
       ]
     },
     {
@@ -317,16 +359,21 @@
       "broader": [
         "xrm:0000110",
         "xrm:0000101"
-      ]
+      ],
+      "relatedMatch": "xrm:8000007"
     },
     {
       "id": "xrm:0000113",
       "type": "skos:Concept",
       "prefLabel": "thiophene epoxidation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000110",
+      "broader": [
+        "xrm:0000110",
+        "xrm:8000006"
+      ],
       "relatedMatch": [
-        "xrm:0004001"
+        "xrm:0004001",
+        "xrm:8000006"
       ]
     },
     {
@@ -335,10 +382,8 @@
       "prefLabel": "nitrogen oxidation",
       "inScheme": "xrm:scheme",
       "altLabel": "N-oxidation",
-      "broader": [
-        "xrm:0000010",
-        "xrm:0000022"
-      ]
+      "broader": "xrm:0000022",
+      "relatedMatch": "xrm:9100120"
     },
     {
       "id": "xrm:0000121",
@@ -383,10 +428,8 @@
       "prefLabel": "sulfur oxidation",
       "inScheme": "xrm:scheme",
       "altLabel": "S-oxidation",
-      "broader": [
-        "xrm:0000010",
-        "xrm:0000022"
-      ]
+      "broader": "xrm:0000022",
+      "relatedMatch": "xrm:9100130"
     },
     {
       "id": "xrm:0000131",
@@ -411,8 +454,10 @@
       "definition": "S-oxidation of a thiophene ring; a dearomatizing path to S-oxides.",
       "broader": [
         "xrm:0000130",
-        "xrm:0004001"
-      ]
+        "xrm:0004001",
+        "xrm:8000006"
+      ],
+      "relatedMatch": "xrm:8000006"
     },
     {
       "id": "xrm:0000134",
@@ -435,9 +480,14 @@
       "inScheme": "xrm:scheme",
       "altLabel": "oxidative dealkylation",
       "definition": "Oxidative removal of an alkyl group from N, O, S, or C via α-carbon hydroxylation.",
-      "broader": [
-        "xrm:0000011",
-        "xrm:0000023"
+      "broader": "xrm:0000023",
+      "relatedMatch": [
+        "xrm:9100200",
+        "xrm:7000001",
+        "xrm:7200002",
+        "xrm:7300002",
+        "xrm:7400002",
+        "xrm:7100007"
       ]
     },
     {
@@ -445,21 +495,34 @@
       "type": "skos:Concept",
       "prefLabel": "N-dealkylation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000200"
+      "broader": "xrm:0000200",
+      "relatedMatch": [
+        "xrm:9100201",
+        "xrm:7100002",
+        "xrm:7100007"
+      ]
     },
     {
       "id": "xrm:0000202",
       "type": "skos:Concept",
       "prefLabel": "O-dealkylation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000200"
+      "broader": "xrm:0000200",
+      "relatedMatch": [
+        "xrm:7100003",
+        "xrm:7100007"
+      ]
     },
     {
       "id": "xrm:0000203",
       "type": "skos:Concept",
       "prefLabel": "S-dealkylation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000200"
+      "broader": "xrm:0000200",
+      "relatedMatch": [
+        "xrm:7100004",
+        "xrm:7100007"
+      ]
     },
     {
       "id": "xrm:0000204",
@@ -540,9 +603,13 @@
       "inScheme": "xrm:scheme",
       "altLabel": "oxidative dehalogenation",
       "definition": "Replacement of halogen by oxygen via oxidative pathways.",
-      "broader": [
-        "xrm:0000011",
-        "xrm:0000020"
+      "broader": "xrm:0000020",
+      "relatedMatch": [
+        "xrm:9100210",
+        "xrm:7100005",
+        "xrm:7200002",
+        "xrm:7400002",
+        "xrm:7700009"
       ]
     },
     {
@@ -576,11 +643,19 @@
         "quinone species formation"
       ],
       "definition": "Formation of a quinone species by metabolic oxidation (quinone, quinone-imine, quinone-methide, or imine-methide), in one or two metabolic steps. From the quinone-formation and Metabolic Forest papers; under dehydrogenation in the Forest-mapped Phase I hierarchy.",
-      "broader": "xrm:0000012",
+      "broader": "xrm:0000001",
       "relatedMatch": [
+        "xrm:0000012",
         "xrm:0004001",
         "xrm:0003000",
-        "xrm:0003002"
+        "xrm:0003002",
+        "xrm:9000015",
+        "xrm:9100600",
+        "xrm:8000004",
+        "xrm:8000005",
+        "xrm:7500001",
+        "xrm:7000001",
+        "xrm:7900002"
       ]
     },
     {
@@ -603,7 +678,8 @@
       "prefLabel": "quinone-imine formation",
       "inScheme": "xrm:scheme",
       "altLabel": "quinone imine formation",
-      "broader": "xrm:0000300"
+      "broader": "xrm:0000300",
+      "relatedMatch": "xrm:8000005"
     },
     {
       "id": "xrm:0000304",
@@ -611,7 +687,8 @@
       "prefLabel": "quinone-methide formation",
       "inScheme": "xrm:scheme",
       "altLabel": "quinone methide formation",
-      "broader": "xrm:0000300"
+      "broader": "xrm:0000300",
+      "relatedMatch": "xrm:8000005"
     },
     {
       "id": "xrm:0000305",
@@ -619,13 +696,8 @@
       "prefLabel": "iminium ion formation",
       "inScheme": "xrm:scheme",
       "altLabel": "iminium formation",
-      "broader": [
-        "xrm:0000012",
-        "xrm:0000001"
-      ],
-      "relatedMatch": [
-        "xrm:0003000"
-      ]
+      "broader": "xrm:0000012",
+      "relatedMatch": "xrm:0003000"
     },
     {
       "id": "xrm:0000310",
@@ -679,7 +751,8 @@
       "broader": [
         "xrm:0000012",
         "xrm:0004002"
-      ]
+      ],
+      "relatedMatch": "xrm:8000002"
     },
     {
       "id": "xrm:0000400",
@@ -690,7 +763,8 @@
         "epoxide hydration",
         "epoxide hydrolysis"
       ],
-      "broader": "xrm:0000013"
+      "broader": "xrm:0000013",
+      "relatedMatch": "xrm:9100401"
     },
     {
       "id": "xrm:0000401",
@@ -752,7 +826,8 @@
       "prefLabel": "dephosphorylation",
       "inScheme": "xrm:scheme",
       "altLabel": "phosphate ester hydrolysis",
-      "broader": "xrm:0000013"
+      "broader": "xrm:0000013",
+      "relatedMatch": "xrm:9100402"
     },
     {
       "id": "xrm:0000411",
@@ -775,7 +850,8 @@
       "broader": [
         "xrm:0000013",
         "xrm:0000014"
-      ]
+      ],
+      "relatedMatch": "xrm:9100403"
     },
     {
       "id": "xrm:0000500",
@@ -786,7 +862,13 @@
         "alkene hydrogenation",
         "reductive saturation"
       ],
-      "broader": "xrm:0000014"
+      "broader": "xrm:0000014",
+      "relatedMatch": [
+        "xrm:9100500",
+        "xrm:7000002",
+        "xrm:7200003",
+        "xrm:7700003"
+      ]
     },
     {
       "id": "xrm:0000501",
@@ -807,7 +889,8 @@
       "type": "skos:Concept",
       "prefLabel": "nitrogen reduction",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000014"
+      "broader": "xrm:0000014",
+      "relatedMatch": "xrm:9100510"
     },
     {
       "id": "xrm:0000511",
@@ -830,9 +913,7 @@
       "prefLabel": "nitroaromatic reduction",
       "inScheme": "xrm:scheme",
       "broader": "xrm:0000511",
-      "relatedMatch": [
-        "xrm:0003000"
-      ]
+      "relatedMatch": "xrm:0003000"
     },
     {
       "id": "xrm:0000514",
@@ -864,7 +945,8 @@
         "carbonyl reduction",
         "ketone/aldehyde reduction"
       ],
-      "broader": "xrm:0000014"
+      "broader": "xrm:0000014",
+      "relatedMatch": "xrm:9100520"
     },
     {
       "id": "xrm:0000521",
@@ -889,16 +971,15 @@
         "xrm:0000520",
         "xrm:0000014"
       ],
-      "relatedMatch": [
-        "xrm:0004002"
-      ]
+      "relatedMatch": "xrm:0004002"
     },
     {
       "id": "xrm:0000530",
       "type": "skos:Concept",
       "prefLabel": "sulfur reduction",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000014"
+      "broader": "xrm:0000014",
+      "relatedMatch": "xrm:9100530"
     },
     {
       "id": "xrm:0000531",
@@ -906,9 +987,7 @@
       "prefLabel": "sulfoxide reduction",
       "inScheme": "xrm:scheme",
       "broader": "xrm:0000530",
-      "relatedMatch": [
-        "xrm:0000533"
-      ]
+      "relatedMatch": "xrm:0000533"
     },
     {
       "id": "xrm:0000532",
@@ -922,7 +1001,8 @@
       "type": "skos:Concept",
       "prefLabel": "reductive dehalogenation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000014"
+      "broader": "xrm:0000014",
+      "relatedMatch": "xrm:9100540"
     },
     {
       "id": "xrm:0000541",
@@ -947,7 +1027,8 @@
       "broader": [
         "xrm:0000014",
         "xrm:0000001"
-      ]
+      ],
+      "relatedMatch": "xrm:9100501"
     },
     {
       "id": "xrm:0001000",
@@ -958,7 +1039,13 @@
         "glucuronosylation",
         "glucuronic acid conjugation"
       ],
-      "broader": "xrm:0000002"
+      "broader": "xrm:0000002",
+      "relatedMatch": [
+        "xrm:9101000",
+        "xrm:7000003",
+        "xrm:7500003",
+        "xrm:7700008"
+      ]
     },
     {
       "id": "xrm:0001001",
@@ -1037,7 +1124,8 @@
         "sulfonation",
         "sulfate conjugation"
       ],
-      "broader": "xrm:0000002"
+      "broader": "xrm:0000002",
+      "relatedMatch": "xrm:9101010"
     },
     {
       "id": "xrm:0001011",
@@ -1076,7 +1164,8 @@
         "N-acetylation",
         "acylation"
       ],
-      "broader": "xrm:0000002"
+      "broader": "xrm:0000002",
+      "relatedMatch": "xrm:9101020"
     },
     {
       "id": "xrm:0001021",
@@ -1113,7 +1202,12 @@
         "GSH conjugation",
         "glutathionylation"
       ],
-      "broader": "xrm:0000002"
+      "broader": "xrm:0000002",
+      "relatedMatch": [
+        "xrm:9101030",
+        "xrm:7500002",
+        "xrm:7000003"
+      ]
     },
     {
       "id": "xrm:0001031",
@@ -1122,7 +1216,12 @@
       "inScheme": "xrm:scheme",
       "altLabel": "GSH Michael addition",
       "definition": "Glutathione addition at a Michael acceptor.",
-      "broader": "xrm:0001030"
+      "broader": "xrm:0001030",
+      "relatedMatch": [
+        "xrm:8000004",
+        "xrm:8000008",
+        "xrm:7500002"
+      ]
     },
     {
       "id": "xrm:0001032",
@@ -1161,7 +1260,8 @@
       "inScheme": "xrm:scheme",
       "broader": "xrm:0001030",
       "relatedMatch": [
-        "xrm:0000300"
+        "xrm:0000300",
+        "xrm:8000008"
       ]
     },
     {
@@ -1263,7 +1363,14 @@
       "prefLabel": "tautomerization",
       "inScheme": "xrm:scheme",
       "definition": "Tautomer interconversion; often peripheral to labeled metabolism.",
-      "broader": "xrm:0000000"
+      "broader": "xrm:0000000",
+      "relatedMatch": [
+        "xrm:9000017",
+        "xrm:9102000",
+        "xrm:7000003",
+        "xrm:7700010",
+        "xrm:7200005"
+      ]
     },
     {
       "id": "xrm:0002001",
@@ -1292,7 +1399,9 @@
         "xrm:0000300",
         "xrm:0000513",
         "xrm:0000133",
-        "xrm:0001004"
+        "xrm:0001004",
+        "xrm:9000019",
+        "xrm:7500001"
       ]
     },
     {
@@ -1305,7 +1414,11 @@
         "bioinactivation"
       ],
       "definition": "Role facet: conversion toward less reactive, more excretable products.",
-      "broader": "xrm:0000000"
+      "broader": "xrm:0000000",
+      "relatedMatch": [
+        "xrm:7500002",
+        "xrm:7500004"
+      ]
     },
     {
       "id": "xrm:0003002",
@@ -1317,7 +1430,8 @@
         "xrm:0000112",
         "xrm:0000303",
         "xrm:0000304",
-        "xrm:0001004"
+        "xrm:0001004",
+        "xrm:7500001"
       ]
     },
     {
@@ -1325,7 +1439,7 @@
       "type": "skos:Concept",
       "prefLabel": "process facet",
       "inScheme": "xrm:scheme",
-      "definition": "Cross-cutting chemical process descriptors that apply across multiple reaction classes.",
+      "definition": "Cross-cutting process-mechanism facets (NIH shift, ipso, carbinolamine cleavage, acyl migration, …). Orthogonal to reaction-type, Forest-map, and impact spines.",
       "broader": "xrm:0000000"
     },
     {
@@ -1334,12 +1448,17 @@
       "prefLabel": "dearomatization",
       "inScheme": "xrm:scheme",
       "definition": "Loss of aromatic character (arene oxide, quinone, thiophene S-oxide, cis-dihydrodiol, etc.).",
-      "broader": "xrm:0004000",
+      "broader": [
+        "xrm:0004000",
+        "xrm:8000001"
+      ],
       "relatedMatch": [
         "xrm:0000112",
         "xrm:0000300",
         "xrm:0000133",
-        "xrm:0000500"
+        "xrm:0000500",
+        "xrm:8000001",
+        "xrm:7600001"
       ]
     },
     {
@@ -1348,10 +1467,14 @@
       "prefLabel": "rearomatization",
       "inScheme": "xrm:scheme",
       "definition": "Restoration of aromaticity after a dearomatized intermediate (e.g. NIH-shift phenol formation).",
-      "broader": "xrm:0004000",
+      "broader": [
+        "xrm:0004000",
+        "xrm:8000002"
+      ],
       "relatedMatch": [
         "xrm:0000101",
-        "xrm:0004003"
+        "xrm:0004003",
+        "xrm:8000002"
       ]
     },
     {
@@ -1360,11 +1483,16 @@
       "prefLabel": "NIH shift",
       "inScheme": "xrm:scheme",
       "definition": "1,2-Migration of H/halogen/substituent during aromatic hydroxylation via arene oxide.",
-      "broader": "xrm:0004000",
+      "broader": [
+        "xrm:0004000",
+        "xrm:8000007"
+      ],
       "relatedMatch": [
         "xrm:0000101",
         "xrm:0000112",
-        "xrm:0004002"
+        "xrm:0004002",
+        "xrm:8000003",
+        "xrm:8000007"
       ]
     },
     {
@@ -1377,7 +1505,8 @@
       "relatedMatch": [
         "xrm:0000101",
         "xrm:0000210",
-        "xrm:0000202"
+        "xrm:0000202",
+        "xrm:8000003"
       ]
     },
     {
@@ -1385,11 +1514,15 @@
       "type": "skos:Concept",
       "prefLabel": "arene oxide rearrangement",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0004000",
+      "broader": [
+        "xrm:0004000",
+        "xrm:8000007"
+      ],
       "relatedMatch": [
         "xrm:0000112",
         "xrm:0000101",
-        "xrm:0004003"
+        "xrm:0004003",
+        "xrm:8000007"
       ]
     },
     {
@@ -1410,9 +1543,7 @@
       "prefLabel": "hemiacetal cleavage",
       "inScheme": "xrm:scheme",
       "broader": "xrm:0004000",
-      "relatedMatch": [
-        "xrm:0000202"
-      ]
+      "relatedMatch": "xrm:0000202"
     },
     {
       "id": "xrm:0004008",
@@ -1450,9 +1581,7 @@
         "xrm:0004000",
         "xrm:0000021"
       ],
-      "relatedMatch": [
-        "xrm:0004001"
-      ]
+      "relatedMatch": "xrm:0004001"
     },
     {
       "id": "xrm:0004012",
@@ -1463,9 +1592,7 @@
         "xrm:0004000",
         "xrm:0000013"
       ],
-      "relatedMatch": [
-        "xrm:0000400"
-      ]
+      "relatedMatch": "xrm:0000400"
     },
     {
       "id": "xrm:0004013",
@@ -1483,7 +1610,9 @@
       "broader": "xrm:0004000",
       "relatedMatch": [
         "xrm:0001031",
-        "xrm:0001036"
+        "xrm:0001036",
+        "xrm:8000004",
+        "xrm:8000008"
       ]
     },
     {
@@ -1492,9 +1621,7 @@
       "prefLabel": "nucleophilic aromatic substitution",
       "inScheme": "xrm:scheme",
       "broader": "xrm:0004000",
-      "relatedMatch": [
-        "xrm:0001033"
-      ]
+      "relatedMatch": "xrm:0001033"
     },
     {
       "id": "xrm:0004016",
@@ -1510,9 +1637,7 @@
       "inScheme": "xrm:scheme",
       "definition": "Intramolecular migration of an acyl group (notable for acyl glucuronides).",
       "broader": "xrm:0004000",
-      "relatedMatch": [
-        "xrm:0001004"
-      ]
+      "relatedMatch": "xrm:0001004"
     },
     {
       "id": "xrm:0004018",
@@ -1532,7 +1657,8 @@
       "inScheme": "xrm:scheme",
       "altLabel": "imine methide formation",
       "definition": "Formation of an imine-methide quinoid species (quinone-formation paper subtype alongside quinone, quinone-imine, and quinone-methide).",
-      "broader": "xrm:0000300"
+      "broader": "xrm:0000300",
+      "relatedMatch": "xrm:8000005"
     },
     {
       "id": "xrm:0000307",
@@ -1540,7 +1666,8 @@
       "prefLabel": "one-step quinone formation",
       "inScheme": "xrm:scheme",
       "definition": "Direct dehydrogenation of the parent to a quinone species without a prior hydroxylation intermediate (quinone-formation / Rainbow papers).",
-      "broader": "xrm:0000300"
+      "broader": "xrm:0000300",
+      "relatedMatch": "xrm:7900001"
     },
     {
       "id": "xrm:0000308",
@@ -1548,7 +1675,12 @@
       "prefLabel": "two-step quinone formation",
       "inScheme": "xrm:scheme",
       "definition": "Quinone species formed after an intermediate hydroxylation (or related) step followed by dehydrogenation (quinone-formation / Metabolic Forest papers).",
-      "broader": "xrm:0000300"
+      "broader": "xrm:0000300",
+      "relatedMatch": [
+        "xrm:7900002",
+        "xrm:7900003",
+        "xrm:6000040"
+      ]
     },
     {
       "id": "xrm:0000316",
@@ -1575,9 +1707,7 @@
       "inScheme": "xrm:scheme",
       "definition": "Hydrolytic cleavage of an ether bond (Rainbow hydrolysis types; distinct from oxidative O-dealkylation).",
       "broader": "xrm:0000013",
-      "relatedMatch": [
-        "xrm:0000407"
-      ]
+      "relatedMatch": "xrm:0000407"
     },
     {
       "id": "xrm:0000409",
@@ -1665,9 +1795,7 @@
       "inScheme": "xrm:scheme",
       "definition": "Formation of a radical metabolite intermediate (Rainbow excluded phase I remainder).",
       "broader": "xrm:0004000",
-      "relatedMatch": [
-        "xrm:0004016"
-      ]
+      "relatedMatch": "xrm:0004016"
     },
     {
       "id": "xrm:0000024",
@@ -1681,7 +1809,2067 @@
         "xrm:0001000",
         "xrm:0001010",
         "xrm:0001020",
-        "xrm:0001030"
+        "xrm:0001030",
+        "xrm:9000016"
+      ]
+    },
+    {
+      "id": "xrm:9000000",
+      "type": "skos:Concept",
+      "prefLabel": "Metabolic Forest map",
+      "inScheme": "xrm:scheme",
+      "altLabel": [
+        "forest alignment",
+        "ruleset–rule–pattern map"
+      ],
+      "definition": "Parallel hierarchy that intentionally mirrors Metabolic Forest rulesets, rules, and PatternInfo names in this repository. Opaque forest.* CURIEs are linked via SSSOM; this branch is not the only organizing spine for chemist naming.",
+      "broader": "xrm:0000000",
+      "topConcept": false
+    },
+    {
+      "id": "xrm:9000012",
+      "type": "skos:Concept",
+      "prefLabel": "dehydrogenation ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest ruleset containing the Dehydrogenation rule (quinone formation is a separate Forest ruleset). Full name only; localized abbreviations are not XRM labels.",
+      "broader": [
+        "xrm:9000000",
+        "xrm:9000018"
+      ]
+    },
+    {
+      "id": "xrm:9000013",
+      "type": "skos:Concept",
+      "prefLabel": "hydrolysis ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest ruleset for Hydrolysis, EpoxideOpening, Dephosphorylation (and AzoSplitting in Full). Full name only; localized abbreviations are not XRM labels.",
+      "broader": [
+        "xrm:9000000",
+        "xrm:9000018"
+      ]
+    },
+    {
+      "id": "xrm:9000014",
+      "type": "skos:Concept",
+      "prefLabel": "reduction ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest ruleset for hydrogenation, dehydration, nitrogen/oxygen/sulfur reduction, reductive dehalogenation. Full name only; localized abbreviations are not XRM labels.",
+      "broader": [
+        "xrm:9000000",
+        "xrm:9000018"
+      ]
+    },
+    {
+      "id": "xrm:9000015",
+      "type": "skos:Concept",
+      "prefLabel": "quinone formation ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest ruleset for quinone / quinone-imine / quinone-methide structure enumeration. Full name only; localized abbreviations are not XRM labels.",
+      "broader": "xrm:9000000"
+    },
+    {
+      "id": "xrm:9000016",
+      "type": "skos:Concept",
+      "prefLabel": "conjugation ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest conjugation ruleset: acetylation, glucuronidation, glutathionation, sulfation. Full name only; localized abbreviations are not XRM labels.",
+      "broader": "xrm:9000000"
+    },
+    {
+      "id": "xrm:9000017",
+      "type": "skos:Concept",
+      "prefLabel": "tautomerization ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest tautomerization ruleset. Full name only; localized abbreviations are not XRM labels.",
+      "broader": "xrm:9000000"
+    },
+    {
+      "id": "xrm:9000018",
+      "type": "skos:Concept",
+      "prefLabel": "phase I ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest Phase I aggregate ruleset (stable/unstable oxygenation, dehydrogenation, hydrolysis, reduction). Full name only; localized abbreviations are not XRM labels.",
+      "broader": "xrm:9000000"
+    },
+    {
+      "id": "xrm:9000019",
+      "type": "skos:Concept",
+      "prefLabel": "bioactivation ruleset",
+      "inScheme": "xrm:scheme",
+      "definition": "Forest convenience ruleset for common bioactivation routes (quinone, epoxidation, nitroaromatic reduction, thiophene S-oxidation). Full name only; localized abbreviations are not XRM labels.",
+      "broader": "xrm:9000000"
+    },
+    {
+      "id": "xrm:9100100",
+      "type": "skos:Concept",
+      "prefLabel": "Hydroxylation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Hydroxylation",
+      "definition": "Metabolic Forest rule `Hydroxylation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000010",
+      "relatedMatch": "xrm:0000100"
+    },
+    {
+      "id": "xrm:9200001",
+      "type": "skos:Concept",
+      "prefLabel": "Hydroxylation/h",
+      "inScheme": "xrm:scheme",
+      "altLabel": "h",
+      "definition": "Metabolic Forest PatternInfo `h` under rule `Hydroxylation`.",
+      "broader": "xrm:9100100"
+    },
+    {
+      "id": "xrm:9200002",
+      "type": "skos:Concept",
+      "prefLabel": "Hydroxylation/h2",
+      "inScheme": "xrm:scheme",
+      "altLabel": "h2",
+      "definition": "Metabolic Forest PatternInfo `h2` under rule `Hydroxylation`.",
+      "broader": "xrm:9100100"
+    },
+    {
+      "id": "xrm:9100110",
+      "type": "skos:Concept",
+      "prefLabel": "Epoxidation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Epoxidation",
+      "definition": "Metabolic Forest rule `Epoxidation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000010",
+      "relatedMatch": "xrm:0000110"
+    },
+    {
+      "id": "xrm:9200003",
+      "type": "skos:Concept",
+      "prefLabel": "Epoxidation/epoxide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "epoxide",
+      "definition": "Metabolic Forest PatternInfo `epoxide` under rule `Epoxidation`.",
+      "broader": "xrm:9100110"
+    },
+    {
+      "id": "xrm:9100120",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenOxidation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "NitrogenOxidation",
+      "definition": "Metabolic Forest rule `NitrogenOxidation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000010",
+      "relatedMatch": "xrm:0000120"
+    },
+    {
+      "id": "xrm:9200004",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenOxidation/hydroxylamine",
+      "inScheme": "xrm:scheme",
+      "altLabel": "hydroxylamine",
+      "definition": "Metabolic Forest PatternInfo `hydroxylamine` under rule `NitrogenOxidation`.",
+      "broader": "xrm:9100120"
+    },
+    {
+      "id": "xrm:9200005",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenOxidation/nitroso",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitroso",
+      "definition": "Metabolic Forest PatternInfo `nitroso` under rule `NitrogenOxidation`.",
+      "broader": "xrm:9100120"
+    },
+    {
+      "id": "xrm:9200006",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenOxidation/n_oxide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "n_oxide",
+      "definition": "Metabolic Forest PatternInfo `n_oxide` under rule `NitrogenOxidation`.",
+      "broader": "xrm:9100120"
+    },
+    {
+      "id": "xrm:9100130",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurOxidation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "SulfurOxidation",
+      "definition": "Metabolic Forest rule `SulfurOxidation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000010",
+      "relatedMatch": "xrm:0000130"
+    },
+    {
+      "id": "xrm:9200007",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurOxidation/zwitterion",
+      "inScheme": "xrm:scheme",
+      "altLabel": "zwitterion",
+      "definition": "Metabolic Forest PatternInfo `zwitterion` under rule `SulfurOxidation`.",
+      "broader": "xrm:9100130"
+    },
+    {
+      "id": "xrm:9200008",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurOxidation/hydroxy",
+      "inScheme": "xrm:scheme",
+      "altLabel": "hydroxy",
+      "definition": "Metabolic Forest PatternInfo `hydroxy` under rule `SulfurOxidation`.",
+      "broader": "xrm:9100130"
+    },
+    {
+      "id": "xrm:9200009",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurOxidation/oxo",
+      "inScheme": "xrm:scheme",
+      "altLabel": "oxo",
+      "definition": "Metabolic Forest PatternInfo `oxo` under rule `SulfurOxidation`.",
+      "broader": "xrm:9100130"
+    },
+    {
+      "id": "xrm:9100200",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Dealkylation",
+      "definition": "Metabolic Forest rule `Dealkylation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000011",
+      "relatedMatch": "xrm:0000200"
+    },
+    {
+      "id": "xrm:9200010",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methyl_carboxylic",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methyl_carboxylic",
+      "definition": "Metabolic Forest PatternInfo `methyl_carboxylic` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200011",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methyl_carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methyl_carbonyl",
+      "definition": "Metabolic Forest PatternInfo `methyl_carbonyl` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200012",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methyl_alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methyl_alcohol",
+      "definition": "Metabolic Forest PatternInfo `methyl_alcohol` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200013",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methylene_carboxylic",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methylene_carboxylic",
+      "definition": "Metabolic Forest PatternInfo `methylene_carboxylic` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200014",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methylene_carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methylene_carbonyl",
+      "definition": "Metabolic Forest PatternInfo `methylene_carbonyl` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200015",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methylene_alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methylene_alcohol",
+      "definition": "Metabolic Forest PatternInfo `methylene_alcohol` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200016",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methine_carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methine_carbonyl",
+      "definition": "Metabolic Forest PatternInfo `methine_carbonyl` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200017",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/methine_alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methine_alcohol",
+      "definition": "Metabolic Forest PatternInfo `methine_alcohol` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200018",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/quaternary_alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "quaternary_alcohol",
+      "definition": "Metabolic Forest PatternInfo `quaternary_alcohol` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200019",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/cc_quaternary_alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "cc_quaternary_alcohol",
+      "definition": "Metabolic Forest PatternInfo `cc_quaternary_alcohol` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200020",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/cc_alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "cc_alcohol",
+      "definition": "Metabolic Forest PatternInfo `cc_alcohol` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200021",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/cc_carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "cc_carbonyl",
+      "definition": "Metabolic Forest PatternInfo `cc_carbonyl` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9200022",
+      "type": "skos:Concept",
+      "prefLabel": "Dealkylation/hemiaminal",
+      "inScheme": "xrm:scheme",
+      "altLabel": "hemiaminal",
+      "definition": "Metabolic Forest PatternInfo `hemiaminal` under rule `Dealkylation`.",
+      "broader": "xrm:9100200"
+    },
+    {
+      "id": "xrm:9100201",
+      "type": "skos:Concept",
+      "prefLabel": "NDealkylation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "NDealkylation",
+      "definition": "Metabolic Forest rule `NDealkylation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000011",
+      "relatedMatch": "xrm:0000201"
+    },
+    {
+      "id": "xrm:9100210",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "OxidativeDehalogenation",
+      "definition": "Metabolic Forest rule `OxidativeDehalogenation` in the Forest-map hierarchy.",
+      "broader": "xrm:0000011",
+      "relatedMatch": "xrm:0000210"
+    },
+    {
+      "id": "xrm:9200023",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation/alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alcohol",
+      "definition": "Metabolic Forest PatternInfo `alcohol` under rule `OxidativeDehalogenation`.",
+      "broader": "xrm:9100210"
+    },
+    {
+      "id": "xrm:9200024",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation/carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "carbonyl",
+      "definition": "Metabolic Forest PatternInfo `carbonyl` under rule `OxidativeDehalogenation`.",
+      "broader": "xrm:9100210"
+    },
+    {
+      "id": "xrm:9200025",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation/carboxylic",
+      "inScheme": "xrm:scheme",
+      "altLabel": "carboxylic",
+      "definition": "Metabolic Forest PatternInfo `carboxylic` under rule `OxidativeDehalogenation`.",
+      "broader": "xrm:9100210"
+    },
+    {
+      "id": "xrm:9200026",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation/rearrange",
+      "inScheme": "xrm:scheme",
+      "altLabel": "rearrange",
+      "definition": "Metabolic Forest PatternInfo `rearrange` under rule `OxidativeDehalogenation`.",
+      "broader": "xrm:9100210"
+    },
+    {
+      "id": "xrm:9200027",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation/gem_carboxylic",
+      "inScheme": "xrm:scheme",
+      "altLabel": "gem_carboxylic",
+      "definition": "Metabolic Forest PatternInfo `gem_carboxylic` under rule `OxidativeDehalogenation`.",
+      "broader": "xrm:9100210"
+    },
+    {
+      "id": "xrm:9200028",
+      "type": "skos:Concept",
+      "prefLabel": "OxidativeDehalogenation/gem_hydrate",
+      "inScheme": "xrm:scheme",
+      "altLabel": "gem_hydrate",
+      "definition": "Metabolic Forest PatternInfo `gem_hydrate` under rule `OxidativeDehalogenation`.",
+      "broader": "xrm:9100210"
+    },
+    {
+      "id": "xrm:9100300",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Dehydrogenation",
+      "definition": "Metabolic Forest rule `Dehydrogenation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000012",
+      "relatedMatch": "xrm:0000012"
+    },
+    {
+      "id": "xrm:9200029",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/sulfoxide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "sulfoxide",
+      "definition": "Metabolic Forest PatternInfo `sulfoxide` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9200030",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alcohol",
+      "definition": "Metabolic Forest PatternInfo `alcohol` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9200031",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/amine",
+      "inScheme": "xrm:scheme",
+      "altLabel": "amine",
+      "definition": "Metabolic Forest PatternInfo `amine` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9200032",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/alkyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alkyl",
+      "definition": "Metabolic Forest PatternInfo `alkyl` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9200033",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/phenol_end",
+      "inScheme": "xrm:scheme",
+      "altLabel": "phenol_end",
+      "definition": "Metabolic Forest PatternInfo `phenol_end` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9200034",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/amine_end",
+      "inScheme": "xrm:scheme",
+      "altLabel": "amine_end",
+      "definition": "Metabolic Forest PatternInfo `amine_end` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9200035",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydrogenation/methide_end",
+      "inScheme": "xrm:scheme",
+      "altLabel": "methide_end",
+      "definition": "Metabolic Forest PatternInfo `methide_end` under rule `Dehydrogenation`.",
+      "broader": "xrm:9100300"
+    },
+    {
+      "id": "xrm:9100400",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrolysis rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Hydrolysis",
+      "definition": "Metabolic Forest rule `Hydrolysis` in the Forest-map hierarchy.",
+      "broader": "xrm:9000013",
+      "relatedMatch": "xrm:0000013"
+    },
+    {
+      "id": "xrm:9200036",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrolysis/add_water",
+      "inScheme": "xrm:scheme",
+      "altLabel": "add_water",
+      "definition": "Metabolic Forest PatternInfo `add_water` under rule `Hydrolysis`.",
+      "broader": "xrm:9100400"
+    },
+    {
+      "id": "xrm:9200037",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrolysis/cleave",
+      "inScheme": "xrm:scheme",
+      "altLabel": "cleave",
+      "definition": "Metabolic Forest PatternInfo `cleave` under rule `Hydrolysis`.",
+      "broader": "xrm:9100400"
+    },
+    {
+      "id": "xrm:9100401",
+      "type": "skos:Concept",
+      "prefLabel": "EpoxideOpening rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "EpoxideOpening",
+      "definition": "Metabolic Forest rule `EpoxideOpening` in the Forest-map hierarchy.",
+      "broader": "xrm:9000013",
+      "relatedMatch": "xrm:0000400"
+    },
+    {
+      "id": "xrm:9200038",
+      "type": "skos:Concept",
+      "prefLabel": "EpoxideOpening/rearrange",
+      "inScheme": "xrm:scheme",
+      "altLabel": "rearrange",
+      "definition": "Metabolic Forest PatternInfo `rearrange` under rule `EpoxideOpening`.",
+      "broader": "xrm:9100401"
+    },
+    {
+      "id": "xrm:9200039",
+      "type": "skos:Concept",
+      "prefLabel": "EpoxideOpening/hydrate",
+      "inScheme": "xrm:scheme",
+      "altLabel": "hydrate",
+      "definition": "Metabolic Forest PatternInfo `hydrate` under rule `EpoxideOpening`.",
+      "broader": "xrm:9100401"
+    },
+    {
+      "id": "xrm:9100402",
+      "type": "skos:Concept",
+      "prefLabel": "Dephosphorylation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Dephosphorylation",
+      "definition": "Metabolic Forest rule `Dephosphorylation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000013",
+      "relatedMatch": "xrm:0000410"
+    },
+    {
+      "id": "xrm:9200040",
+      "type": "skos:Concept",
+      "prefLabel": "Dephosphorylation/phosphate_ester",
+      "inScheme": "xrm:scheme",
+      "altLabel": "phosphate_ester",
+      "definition": "Metabolic Forest PatternInfo `phosphate_ester` under rule `Dephosphorylation`.",
+      "broader": "xrm:9100402"
+    },
+    {
+      "id": "xrm:9100403",
+      "type": "skos:Concept",
+      "prefLabel": "AzoSplitting rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "AzoSplitting",
+      "definition": "Metabolic Forest rule `AzoSplitting` in the Forest-map hierarchy.",
+      "broader": "xrm:9000013",
+      "relatedMatch": "xrm:0000412"
+    },
+    {
+      "id": "xrm:9200041",
+      "type": "skos:Concept",
+      "prefLabel": "AzoSplitting/azo",
+      "inScheme": "xrm:scheme",
+      "altLabel": "azo",
+      "definition": "Metabolic Forest PatternInfo `azo` under rule `AzoSplitting`.",
+      "broader": "xrm:9100403"
+    },
+    {
+      "id": "xrm:9100500",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrogenation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Hydrogenation",
+      "definition": "Metabolic Forest rule `Hydrogenation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014",
+      "relatedMatch": "xrm:0000500"
+    },
+    {
+      "id": "xrm:9200042",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrogenation/alkyne",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alkyne",
+      "definition": "Metabolic Forest PatternInfo `alkyne` under rule `Hydrogenation`.",
+      "broader": "xrm:9100500"
+    },
+    {
+      "id": "xrm:9200043",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrogenation/alkene",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alkene",
+      "definition": "Metabolic Forest PatternInfo `alkene` under rule `Hydrogenation`.",
+      "broader": "xrm:9100500"
+    },
+    {
+      "id": "xrm:9200044",
+      "type": "skos:Concept",
+      "prefLabel": "Hydrogenation/path_end",
+      "inScheme": "xrm:scheme",
+      "altLabel": "path_end",
+      "definition": "Metabolic Forest PatternInfo `path_end` under rule `Hydrogenation`.",
+      "broader": "xrm:9100500"
+    },
+    {
+      "id": "xrm:9100501",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydration rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Dehydration",
+      "definition": "Metabolic Forest rule `Dehydration` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014",
+      "relatedMatch": "xrm:0000550"
+    },
+    {
+      "id": "xrm:9200045",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydration/alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alcohol",
+      "definition": "Metabolic Forest PatternInfo `alcohol` under rule `Dehydration`.",
+      "broader": "xrm:9100501"
+    },
+    {
+      "id": "xrm:9200046",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydration/beta_elimination",
+      "inScheme": "xrm:scheme",
+      "altLabel": "beta_elimination",
+      "definition": "Metabolic Forest PatternInfo `beta_elimination` under rule `Dehydration`.",
+      "broader": "xrm:9100501"
+    },
+    {
+      "id": "xrm:9200047",
+      "type": "skos:Concept",
+      "prefLabel": "Dehydration/carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "carbonyl",
+      "definition": "Metabolic Forest PatternInfo `carbonyl` under rule `Dehydration`.",
+      "broader": "xrm:9100501"
+    },
+    {
+      "id": "xrm:9100510",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "NitrogenReduction",
+      "definition": "Metabolic Forest rule `NitrogenReduction` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014",
+      "relatedMatch": "xrm:0000510"
+    },
+    {
+      "id": "xrm:9200048",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitro_charged",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitro_charged",
+      "definition": "Metabolic Forest PatternInfo `nitro_charged` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200049",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitro_anion",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitro_anion",
+      "definition": "Metabolic Forest PatternInfo `nitro_anion` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200050",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitro_neutral",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitro_neutral",
+      "definition": "Metabolic Forest PatternInfo `nitro_neutral` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200051",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitro_to_amine",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitro_to_amine",
+      "definition": "Metabolic Forest PatternInfo `nitro_to_amine` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200052",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitro_both",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitro_both",
+      "definition": "Metabolic Forest PatternInfo `nitro_both` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200053",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/hydroxylamine",
+      "inScheme": "xrm:scheme",
+      "altLabel": "hydroxylamine",
+      "definition": "Metabolic Forest PatternInfo `hydroxylamine` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200054",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitroso",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitroso",
+      "definition": "Metabolic Forest PatternInfo `nitroso` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9200055",
+      "type": "skos:Concept",
+      "prefLabel": "NitrogenReduction/nitro_both_any",
+      "inScheme": "xrm:scheme",
+      "altLabel": "nitro_both_any",
+      "definition": "Metabolic Forest PatternInfo `nitro_both_any` under rule `NitrogenReduction`.",
+      "broader": "xrm:9100510"
+    },
+    {
+      "id": "xrm:9100520",
+      "type": "skos:Concept",
+      "prefLabel": "OxygenReduction rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "OxygenReduction",
+      "definition": "Metabolic Forest rule `OxygenReduction` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014",
+      "relatedMatch": "xrm:0000520"
+    },
+    {
+      "id": "xrm:9200056",
+      "type": "skos:Concept",
+      "prefLabel": "OxygenReduction/carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "carbonyl",
+      "definition": "Metabolic Forest PatternInfo `carbonyl` under rule `OxygenReduction`.",
+      "broader": "xrm:9100520"
+    },
+    {
+      "id": "xrm:9200057",
+      "type": "skos:Concept",
+      "prefLabel": "OxygenReduction/peroxide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "peroxide",
+      "definition": "Metabolic Forest PatternInfo `peroxide` under rule `OxygenReduction`.",
+      "broader": "xrm:9100520"
+    },
+    {
+      "id": "xrm:9100530",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurReduction rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "SulfurReduction",
+      "definition": "Metabolic Forest rule `SulfurReduction` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014",
+      "relatedMatch": "xrm:0000530"
+    },
+    {
+      "id": "xrm:9200058",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurReduction/sulfoxide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "sulfoxide",
+      "definition": "Metabolic Forest PatternInfo `sulfoxide` under rule `SulfurReduction`.",
+      "broader": "xrm:9100530"
+    },
+    {
+      "id": "xrm:9200059",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurReduction/disulfide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "disulfide",
+      "definition": "Metabolic Forest PatternInfo `disulfide` under rule `SulfurReduction`.",
+      "broader": "xrm:9100530"
+    },
+    {
+      "id": "xrm:9200060",
+      "type": "skos:Concept",
+      "prefLabel": "SulfurReduction/thioether",
+      "inScheme": "xrm:scheme",
+      "altLabel": "thioether",
+      "definition": "Metabolic Forest PatternInfo `thioether` under rule `SulfurReduction`.",
+      "broader": "xrm:9100530"
+    },
+    {
+      "id": "xrm:9100540",
+      "type": "skos:Concept",
+      "prefLabel": "ReductiveDehalogenation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "ReductiveDehalogenation",
+      "definition": "Metabolic Forest rule `ReductiveDehalogenation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014",
+      "relatedMatch": "xrm:0000540"
+    },
+    {
+      "id": "xrm:9200061",
+      "type": "skos:Concept",
+      "prefLabel": "ReductiveDehalogenation/cleave",
+      "inScheme": "xrm:scheme",
+      "altLabel": "cleave",
+      "definition": "Metabolic Forest PatternInfo `cleave` under rule `ReductiveDehalogenation`.",
+      "broader": "xrm:9100540"
+    },
+    {
+      "id": "xrm:9200062",
+      "type": "skos:Concept",
+      "prefLabel": "ReductiveDehalogenation/alkene",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alkene",
+      "definition": "Metabolic Forest PatternInfo `alkene` under rule `ReductiveDehalogenation`.",
+      "broader": "xrm:9100540"
+    },
+    {
+      "id": "xrm:9100541",
+      "type": "skos:Concept",
+      "prefLabel": "BenzodioxoleReduction rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "BenzodioxoleReduction",
+      "definition": "Metabolic Forest rule `BenzodioxoleReduction` in the Forest-map hierarchy.",
+      "broader": "xrm:9000014"
+    },
+    {
+      "id": "xrm:9200063",
+      "type": "skos:Concept",
+      "prefLabel": "BenzodioxoleReduction/dioxole_methylene",
+      "inScheme": "xrm:scheme",
+      "altLabel": "dioxole_methylene",
+      "definition": "Metabolic Forest PatternInfo `dioxole_methylene` under rule `BenzodioxoleReduction`.",
+      "broader": "xrm:9100541"
+    },
+    {
+      "id": "xrm:9100600",
+      "type": "skos:Concept",
+      "prefLabel": "QuinoneFormation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "QuinoneFormation",
+      "definition": "Metabolic Forest rule `QuinoneFormation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000015",
+      "relatedMatch": "xrm:0000300"
+    },
+    {
+      "id": "xrm:9200064",
+      "type": "skos:Concept",
+      "prefLabel": "QuinoneFormation/single_to_double",
+      "inScheme": "xrm:scheme",
+      "altLabel": "single_to_double",
+      "definition": "Metabolic Forest PatternInfo `single_to_double` under rule `QuinoneFormation`.",
+      "broader": "xrm:9100600"
+    },
+    {
+      "id": "xrm:9200065",
+      "type": "skos:Concept",
+      "prefLabel": "QuinoneFormation/add_carbonyl_o",
+      "inScheme": "xrm:scheme",
+      "altLabel": "add_carbonyl_o",
+      "definition": "Metabolic Forest PatternInfo `add_carbonyl_o` under rule `QuinoneFormation`.",
+      "broader": "xrm:9100600"
+    },
+    {
+      "id": "xrm:9200066",
+      "type": "skos:Concept",
+      "prefLabel": "QuinoneFormation/replace_halogen",
+      "inScheme": "xrm:scheme",
+      "altLabel": "replace_halogen",
+      "definition": "Metabolic Forest PatternInfo `replace_halogen` under rule `QuinoneFormation`.",
+      "broader": "xrm:9100600"
+    },
+    {
+      "id": "xrm:9200067",
+      "type": "skos:Concept",
+      "prefLabel": "QuinoneFormation/iminium",
+      "inScheme": "xrm:scheme",
+      "altLabel": "iminium",
+      "definition": "Metabolic Forest PatternInfo `iminium` under rule `QuinoneFormation`.",
+      "broader": "xrm:9100600"
+    },
+    {
+      "id": "xrm:9200068",
+      "type": "skos:Concept",
+      "prefLabel": "QuinoneFormation/dealkylate",
+      "inScheme": "xrm:scheme",
+      "altLabel": "dealkylate",
+      "definition": "Metabolic Forest PatternInfo `dealkylate` under rule `QuinoneFormation`.",
+      "broader": "xrm:9100600"
+    },
+    {
+      "id": "xrm:9101000",
+      "type": "skos:Concept",
+      "prefLabel": "Glucuronidation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Glucuronidation",
+      "definition": "Metabolic Forest rule `Glucuronidation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000016",
+      "relatedMatch": "xrm:0001000"
+    },
+    {
+      "id": "xrm:9200069",
+      "type": "skos:Concept",
+      "prefLabel": "Glucuronidation/alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alcohol",
+      "definition": "Metabolic Forest PatternInfo `alcohol` under rule `Glucuronidation`.",
+      "broader": "xrm:9101000"
+    },
+    {
+      "id": "xrm:9200070",
+      "type": "skos:Concept",
+      "prefLabel": "Glucuronidation/carboxylate",
+      "inScheme": "xrm:scheme",
+      "altLabel": "carboxylate",
+      "definition": "Metabolic Forest PatternInfo `carboxylate` under rule `Glucuronidation`.",
+      "broader": "xrm:9101000"
+    },
+    {
+      "id": "xrm:9101010",
+      "type": "skos:Concept",
+      "prefLabel": "Sulfation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Sulfation",
+      "definition": "Metabolic Forest rule `Sulfation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000016",
+      "relatedMatch": "xrm:0001010"
+    },
+    {
+      "id": "xrm:9200071",
+      "type": "skos:Concept",
+      "prefLabel": "Sulfation/alcohol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alcohol",
+      "definition": "Metabolic Forest PatternInfo `alcohol` under rule `Sulfation`.",
+      "broader": "xrm:9101010"
+    },
+    {
+      "id": "xrm:9200072",
+      "type": "skos:Concept",
+      "prefLabel": "Sulfation/epoxide_methyl_sulfone",
+      "inScheme": "xrm:scheme",
+      "altLabel": "epoxide_methyl_sulfone",
+      "definition": "Metabolic Forest PatternInfo `epoxide_methyl_sulfone` under rule `Sulfation`.",
+      "broader": "xrm:9101010"
+    },
+    {
+      "id": "xrm:9101020",
+      "type": "skos:Concept",
+      "prefLabel": "Acetylation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Acetylation",
+      "definition": "Metabolic Forest rule `Acetylation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000016",
+      "relatedMatch": "xrm:0001020"
+    },
+    {
+      "id": "xrm:9101030",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Glutathionation",
+      "definition": "Metabolic Forest rule `Glutathionation` in the Forest-map hierarchy.",
+      "broader": "xrm:9000016",
+      "relatedMatch": "xrm:0001030"
+    },
+    {
+      "id": "xrm:9200073",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/epoxide_ch",
+      "inScheme": "xrm:scheme",
+      "altLabel": "epoxide_ch",
+      "definition": "Metabolic Forest PatternInfo `epoxide_ch` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200074",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/epoxide_ch2",
+      "inScheme": "xrm:scheme",
+      "altLabel": "epoxide_ch2",
+      "definition": "Metabolic Forest PatternInfo `epoxide_ch2` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200075",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/epoxide_c",
+      "inScheme": "xrm:scheme",
+      "altLabel": "epoxide_c",
+      "definition": "Metabolic Forest PatternInfo `epoxide_c` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200076",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/halide",
+      "inScheme": "xrm:scheme",
+      "altLabel": "halide",
+      "definition": "Metabolic Forest PatternInfo `halide` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200077",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/thiol",
+      "inScheme": "xrm:scheme",
+      "altLabel": "thiol",
+      "definition": "Metabolic Forest PatternInfo `thiol` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200078",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/alkene",
+      "inScheme": "xrm:scheme",
+      "altLabel": "alkene",
+      "definition": "Metabolic Forest PatternInfo `alkene` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200079",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/michael",
+      "inScheme": "xrm:scheme",
+      "altLabel": "michael",
+      "definition": "Metabolic Forest PatternInfo `michael` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200080",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/carbonyl",
+      "inScheme": "xrm:scheme",
+      "altLabel": "carbonyl",
+      "definition": "Metabolic Forest PatternInfo `carbonyl` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200081",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/aziridine_ch",
+      "inScheme": "xrm:scheme",
+      "altLabel": "aziridine_ch",
+      "definition": "Metabolic Forest PatternInfo `aziridine_ch` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200082",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/aziridine_ch2",
+      "inScheme": "xrm:scheme",
+      "altLabel": "aziridine_ch2",
+      "definition": "Metabolic Forest PatternInfo `aziridine_ch2` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200083",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/aziridine_c",
+      "inScheme": "xrm:scheme",
+      "altLabel": "aziridine_c",
+      "definition": "Metabolic Forest PatternInfo `aziridine_c` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200084",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/mesylate",
+      "inScheme": "xrm:scheme",
+      "altLabel": "mesylate",
+      "definition": "Metabolic Forest PatternInfo `mesylate` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9200085",
+      "type": "skos:Concept",
+      "prefLabel": "Glutathionation/isocyanate",
+      "inScheme": "xrm:scheme",
+      "altLabel": "isocyanate",
+      "definition": "Metabolic Forest PatternInfo `isocyanate` under rule `Glutathionation`.",
+      "broader": "xrm:9101030"
+    },
+    {
+      "id": "xrm:9102000",
+      "type": "skos:Concept",
+      "prefLabel": "Tautomerization rule",
+      "inScheme": "xrm:scheme",
+      "altLabel": "Tautomerization",
+      "definition": "Metabolic Forest rule `Tautomerization` in the Forest-map hierarchy.",
+      "broader": "xrm:9000017",
+      "relatedMatch": "xrm:0002000"
+    },
+    {
+      "id": "xrm:8000000",
+      "type": "skos:Concept",
+      "prefLabel": "aromatic and conjugated-system impact",
+      "inScheme": "xrm:scheme",
+      "altLabel": [
+        "aromatic/conjugate impact",
+        "π-system impact"
+      ],
+      "definition": "Parallel hierarchy focused on how a transformation impacts aromatic and conjugated π-systems: loss or gain of aromaticity, engagement of conjugated acceptors, and rearrangements within those systems. Orthogonal to both the chemist reaction-type spine and the Metabolic Forest map.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:8000001",
+      "type": "skos:Concept",
+      "prefLabel": "aromaticity loss",
+      "inScheme": "xrm:scheme",
+      "definition": "Transformations that destroy or interrupt an aromatic system.",
+      "broader": "xrm:8000000",
+      "relatedMatch": "xrm:0004001"
+    },
+    {
+      "id": "xrm:8000002",
+      "type": "skos:Concept",
+      "prefLabel": "aromaticity gain",
+      "inScheme": "xrm:scheme",
+      "definition": "Transformations that form or restore an aromatic system.",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0004002",
+        "xrm:0000315"
+      ]
+    },
+    {
+      "id": "xrm:8000003",
+      "type": "skos:Concept",
+      "prefLabel": "aromatic ring substitution impact",
+      "inScheme": "xrm:scheme",
+      "definition": "Substitution on an aromatic ring that preserves the aromatic sextet (e.g. phenolic hydroxylation after NIH shift).",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0000101",
+        "xrm:0004003",
+        "xrm:0004004"
+      ]
+    },
+    {
+      "id": "xrm:8000004",
+      "type": "skos:Concept",
+      "prefLabel": "conjugated π-system engagement",
+      "inScheme": "xrm:scheme",
+      "definition": "Reactions whose defining impact is engagement of a conjugated acceptor or donor (Michael acceptors, quinoids, extended enones).",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0004014",
+        "xrm:0000300",
+        "xrm:0001031"
+      ]
+    },
+    {
+      "id": "xrm:8000005",
+      "type": "skos:Concept",
+      "prefLabel": "quinoid π-system formation",
+      "inScheme": "xrm:scheme",
+      "definition": "Formation of quinone, quinone-imine, quinone-methide, or imine-methide π-systems from aromatic or conjugated precursors.",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0000300",
+        "xrm:0000303",
+        "xrm:0000304",
+        "xrm:0000306"
+      ]
+    },
+    {
+      "id": "xrm:8000006",
+      "type": "skos:Concept",
+      "prefLabel": "heteroaromatic oxidation impact",
+      "inScheme": "xrm:scheme",
+      "definition": "Oxidation paths that specifically perturb heteroaromatic rings (e.g. thiophene S-oxidation or epoxidation).",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0000133",
+        "xrm:0000113"
+      ]
+    },
+    {
+      "id": "xrm:8000007",
+      "type": "skos:Concept",
+      "prefLabel": "arene oxide pathway",
+      "inScheme": "xrm:scheme",
+      "definition": "Passage through an arene oxide / NIH-shift manifold on an aromatic ring.",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0000112",
+        "xrm:0004003",
+        "xrm:0004005"
+      ]
+    },
+    {
+      "id": "xrm:8000008",
+      "type": "skos:Concept",
+      "prefLabel": "conjugated adduct formation",
+      "inScheme": "xrm:scheme",
+      "definition": "Conjugation (e.g. GSH) that captures a conjugated electrophile without requiring the reaction type hierarchy.",
+      "broader": "xrm:8000000",
+      "relatedMatch": [
+        "xrm:0001031",
+        "xrm:0001036",
+        "xrm:0004014"
+      ]
+    },
+    {
+      "id": "xrm:7000000",
+      "type": "skos:Concept",
+      "prefLabel": "redox polarity",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: net redox character of the transformation, independent of named reaction type.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7000001",
+      "type": "skos:Concept",
+      "prefLabel": "net oxidation",
+      "inScheme": "xrm:scheme",
+      "definition": "Net loss of electrons / gain of oxygen or unsaturation.",
+      "broader": "xrm:7000000",
+      "relatedMatch": [
+        "xrm:0000100",
+        "xrm:0000110",
+        "xrm:0000200",
+        "xrm:0000012",
+        "xrm:0000300"
+      ]
+    },
+    {
+      "id": "xrm:7000002",
+      "type": "skos:Concept",
+      "prefLabel": "net reduction",
+      "inScheme": "xrm:scheme",
+      "definition": "Net gain of electrons / loss of oxygen or gain of saturation.",
+      "broader": "xrm:7000000",
+      "relatedMatch": [
+        "xrm:0000014",
+        "xrm:0000500"
+      ]
+    },
+    {
+      "id": "xrm:7000003",
+      "type": "skos:Concept",
+      "prefLabel": "redox-neutral",
+      "inScheme": "xrm:scheme",
+      "definition": "No net redox change (e.g. many conjugations, tautomerizations, hydrolyses).",
+      "broader": "xrm:7000000",
+      "relatedMatch": [
+        "xrm:0000013",
+        "xrm:0001000",
+        "xrm:0001030",
+        "xrm:0002000"
+      ]
+    },
+    {
+      "id": "xrm:7000004",
+      "type": "skos:Concept",
+      "prefLabel": "redox polarity unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Redox polarity not determined from available evidence.",
+      "broader": "xrm:7000000"
+    },
+    {
+      "id": "xrm:7100000",
+      "type": "skos:Concept",
+      "prefLabel": "site atom class",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: principal element class at the site of metabolism.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7100001",
+      "type": "skos:Concept",
+      "prefLabel": "carbon site",
+      "inScheme": "xrm:scheme",
+      "definition": "Primary SOM involves carbon.",
+      "broader": "xrm:7100000",
+      "relatedMatch": "xrm:0000100"
+    },
+    {
+      "id": "xrm:7100002",
+      "type": "skos:Concept",
+      "prefLabel": "nitrogen site",
+      "inScheme": "xrm:scheme",
+      "definition": "Primary SOM involves nitrogen (lone pair or C–N).",
+      "broader": "xrm:7100000",
+      "relatedMatch": "xrm:0000201"
+    },
+    {
+      "id": "xrm:7100003",
+      "type": "skos:Concept",
+      "prefLabel": "oxygen site",
+      "inScheme": "xrm:scheme",
+      "definition": "Primary SOM involves oxygen (lone pair or C–O).",
+      "broader": "xrm:7100000",
+      "relatedMatch": "xrm:0000202"
+    },
+    {
+      "id": "xrm:7100004",
+      "type": "skos:Concept",
+      "prefLabel": "sulfur site",
+      "inScheme": "xrm:scheme",
+      "definition": "Primary SOM involves sulfur.",
+      "broader": "xrm:7100000",
+      "relatedMatch": "xrm:0000203"
+    },
+    {
+      "id": "xrm:7100005",
+      "type": "skos:Concept",
+      "prefLabel": "halogen site",
+      "inScheme": "xrm:scheme",
+      "definition": "Primary SOM involves halogen.",
+      "broader": "xrm:7100000",
+      "relatedMatch": "xrm:0000210"
+    },
+    {
+      "id": "xrm:7100006",
+      "type": "skos:Concept",
+      "prefLabel": "phosphorus site",
+      "inScheme": "xrm:scheme",
+      "definition": "Primary SOM involves phosphorus.",
+      "broader": "xrm:7100000"
+    },
+    {
+      "id": "xrm:7100007",
+      "type": "skos:Concept",
+      "prefLabel": "multi-element site",
+      "inScheme": "xrm:scheme",
+      "definition": "SOM spans more than one heavy-element class (e.g. C–X cleavage).",
+      "broader": "xrm:7100000",
+      "relatedMatch": [
+        "xrm:0000200",
+        "xrm:0000201",
+        "xrm:0000202",
+        "xrm:0000203"
+      ]
+    },
+    {
+      "id": "xrm:7100008",
+      "type": "skos:Concept",
+      "prefLabel": "site atom class unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Site element class not asserted.",
+      "broader": "xrm:7100000"
+    },
+    {
+      "id": "xrm:7200000",
+      "type": "skos:Concept",
+      "prefLabel": "bond-edit topology",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: graph-edit shape of the transformation.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7200001",
+      "type": "skos:Concept",
+      "prefLabel": "atom addition",
+      "inScheme": "xrm:scheme",
+      "definition": "Heavy atom(s) added without bond cleavage of the scaffold (e.g. hydroxylation).",
+      "broader": "xrm:7200000",
+      "relatedMatch": "xrm:0000100"
+    },
+    {
+      "id": "xrm:7200002",
+      "type": "skos:Concept",
+      "prefLabel": "bond cleavage",
+      "inScheme": "xrm:scheme",
+      "definition": "A heavy-atom bond is broken (dealkylation, hydrolysis, dehalogenation).",
+      "broader": "xrm:7200000",
+      "relatedMatch": [
+        "xrm:0000200",
+        "xrm:0000210",
+        "xrm:0000013"
+      ]
+    },
+    {
+      "id": "xrm:7200003",
+      "type": "skos:Concept",
+      "prefLabel": "bond order change",
+      "inScheme": "xrm:scheme",
+      "definition": "Bond order increases or decreases without heavy-atom count change (dehydrogenation, hydrogenation).",
+      "broader": "xrm:7200000",
+      "relatedMatch": [
+        "xrm:0000012",
+        "xrm:0000500"
+      ]
+    },
+    {
+      "id": "xrm:7200004",
+      "type": "skos:Concept",
+      "prefLabel": "substitution",
+      "inScheme": "xrm:scheme",
+      "definition": "One substituent replaces another at a site.",
+      "broader": "xrm:7200000"
+    },
+    {
+      "id": "xrm:7200005",
+      "type": "skos:Concept",
+      "prefLabel": "rearrangement topology",
+      "inScheme": "xrm:scheme",
+      "definition": "Atom connectivity is reshuffled (NIH shift, acyl migration, skeletal rearrangement).",
+      "broader": "xrm:7200000",
+      "relatedMatch": "xrm:0002000"
+    },
+    {
+      "id": "xrm:7200006",
+      "type": "skos:Concept",
+      "prefLabel": "ring closure",
+      "inScheme": "xrm:scheme",
+      "definition": "A new ring is formed.",
+      "broader": "xrm:7200000",
+      "relatedMatch": "xrm:0000110"
+    },
+    {
+      "id": "xrm:7200007",
+      "type": "skos:Concept",
+      "prefLabel": "ring opening topology",
+      "inScheme": "xrm:scheme",
+      "definition": "A ring bond is opened.",
+      "broader": "xrm:7200000"
+    },
+    {
+      "id": "xrm:7200008",
+      "type": "skos:Concept",
+      "prefLabel": "bond-edit topology unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Graph-edit class not asserted.",
+      "broader": "xrm:7200000"
+    },
+    {
+      "id": "xrm:7300000",
+      "type": "skos:Concept",
+      "prefLabel": "metabolite cardinality",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: whether the reaction yields one observed metabolite or fragments into more.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7300001",
+      "type": "skos:Concept",
+      "prefLabel": "single-metabolite transformation",
+      "inScheme": "xrm:scheme",
+      "definition": "One principal product retains the scaffold (Rainbow stable-oxygenation style outcome).",
+      "broader": "xrm:7300000",
+      "relatedMatch": "xrm:0000100"
+    },
+    {
+      "id": "xrm:7300002",
+      "type": "skos:Concept",
+      "prefLabel": "fragmenting transformation",
+      "inScheme": "xrm:scheme",
+      "definition": "Scaffold cleavage yields two (or more) products (dealkylation, hydrolysis).",
+      "broader": "xrm:7300000",
+      "relatedMatch": [
+        "xrm:0000200",
+        "xrm:0000013"
+      ]
+    },
+    {
+      "id": "xrm:7300003",
+      "type": "skos:Concept",
+      "prefLabel": "metabolite cardinality unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Whether the reaction fragments is not asserted.",
+      "broader": "xrm:7300000"
+    },
+    {
+      "id": "xrm:7400000",
+      "type": "skos:Concept",
+      "prefLabel": "oxygenation outcome",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting chemist spine for oxygenation fate: stable oxygen addition versus oxygen-triggered cleavage. Distinct from the Metabolic Forest map nodes.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7400001",
+      "type": "skos:Concept",
+      "prefLabel": "stable oxygen addition",
+      "inScheme": "xrm:scheme",
+      "definition": "Oxygen is retained in a single observable oxygenated metabolite.",
+      "broader": "xrm:7400000",
+      "relatedMatch": [
+        "xrm:0000100",
+        "xrm:0000110"
+      ]
+    },
+    {
+      "id": "xrm:7400002",
+      "type": "skos:Concept",
+      "prefLabel": "oxygen-triggered cleavage",
+      "inScheme": "xrm:scheme",
+      "definition": "Oxygenation precipitates heavy-bond cleavage (unstable oxygenation outcome).",
+      "broader": "xrm:7400000",
+      "relatedMatch": [
+        "xrm:0000200",
+        "xrm:0000210"
+      ]
+    },
+    {
+      "id": "xrm:7400003",
+      "type": "skos:Concept",
+      "prefLabel": "non-oxygenative transformation",
+      "inScheme": "xrm:scheme",
+      "definition": "No oxygenation step defines the outcome.",
+      "broader": "xrm:7400000",
+      "relatedMatch": [
+        "xrm:0000012",
+        "xrm:0000014"
+      ]
+    },
+    {
+      "id": "xrm:7400004",
+      "type": "skos:Concept",
+      "prefLabel": "oxygenation outcome unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Oxygenation fate not asserted.",
+      "broader": "xrm:7400000"
+    },
+    {
+      "id": "xrm:7500000",
+      "type": "skos:Concept",
+      "prefLabel": "electrophile role",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: relationship of the step to electrophilic reactivity / soft-hard capture.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7500001",
+      "type": "skos:Concept",
+      "prefLabel": "electrophile generation",
+      "inScheme": "xrm:scheme",
+      "definition": "Forms or unmasks an electrophilic metabolite.",
+      "broader": "xrm:7500000",
+      "relatedMatch": [
+        "xrm:0000300",
+        "xrm:0003000"
+      ]
+    },
+    {
+      "id": "xrm:7500002",
+      "type": "skos:Concept",
+      "prefLabel": "electrophile consumption",
+      "inScheme": "xrm:scheme",
+      "definition": "Captures or quenches an electrophile (e.g. GSH conjugation).",
+      "broader": "xrm:7500000",
+      "relatedMatch": [
+        "xrm:0001030",
+        "xrm:0001031",
+        "xrm:0003001"
+      ]
+    },
+    {
+      "id": "xrm:7500003",
+      "type": "skos:Concept",
+      "prefLabel": "nucleophile exposure",
+      "inScheme": "xrm:scheme",
+      "definition": "Exposes a nucleophilic handle for later conjugation.",
+      "broader": "xrm:7500000",
+      "relatedMatch": "xrm:0001000"
+    },
+    {
+      "id": "xrm:7500004",
+      "type": "skos:Concept",
+      "prefLabel": "reactivity-neutral step",
+      "inScheme": "xrm:scheme",
+      "definition": "Neither generates nor consumes a notable electrophile in the usual sense.",
+      "broader": "xrm:7500000",
+      "relatedMatch": "xrm:0003001"
+    },
+    {
+      "id": "xrm:7500005",
+      "type": "skos:Concept",
+      "prefLabel": "electrophile role unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Electrophile role not asserted.",
+      "broader": "xrm:7500000"
+    },
+    {
+      "id": "xrm:7600000",
+      "type": "skos:Concept",
+      "prefLabel": "ring fate",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: effect on ring systems.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7600001",
+      "type": "skos:Concept",
+      "prefLabel": "ring preserved",
+      "inScheme": "xrm:scheme",
+      "definition": "Existing rings unchanged in membership.",
+      "broader": "xrm:7600000",
+      "relatedMatch": "xrm:0004001"
+    },
+    {
+      "id": "xrm:7600002",
+      "type": "skos:Concept",
+      "prefLabel": "ring opened",
+      "inScheme": "xrm:scheme",
+      "definition": "A ring is opened.",
+      "broader": "xrm:7600000"
+    },
+    {
+      "id": "xrm:7600003",
+      "type": "skos:Concept",
+      "prefLabel": "ring formed",
+      "inScheme": "xrm:scheme",
+      "definition": "A new ring is formed (e.g. epoxide).",
+      "broader": "xrm:7600000",
+      "relatedMatch": "xrm:0000110"
+    },
+    {
+      "id": "xrm:7600004",
+      "type": "skos:Concept",
+      "prefLabel": "ring expanded",
+      "inScheme": "xrm:scheme",
+      "definition": "Ring size increases.",
+      "broader": "xrm:7600000"
+    },
+    {
+      "id": "xrm:7600005",
+      "type": "skos:Concept",
+      "prefLabel": "ring contracted",
+      "inScheme": "xrm:scheme",
+      "definition": "Ring size decreases.",
+      "broader": "xrm:7600000"
+    },
+    {
+      "id": "xrm:7600006",
+      "type": "skos:Concept",
+      "prefLabel": "ring fate unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Ring fate not asserted.",
+      "broader": "xrm:7600000"
+    },
+    {
+      "id": "xrm:7700000",
+      "type": "skos:Concept",
+      "prefLabel": "formula-delta class",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine keyed to heavy-atom formula change; highly automatable from reactant/product formulas.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7700001",
+      "type": "skos:Concept",
+      "prefLabel": "oxygen gain",
+      "inScheme": "xrm:scheme",
+      "definition": "Net +O (and no other heavy-atom change, unless further specialized).",
+      "broader": "xrm:7700000",
+      "altLabel": [
+        "+O"
+      ],
+      "relatedMatch": [
+        "xrm:0000100",
+        "xrm:0000110"
+      ]
+    },
+    {
+      "id": "xrm:7700002",
+      "type": "skos:Concept",
+      "prefLabel": "oxygen loss",
+      "inScheme": "xrm:scheme",
+      "definition": "Net −O.",
+      "broader": "xrm:7700000",
+      "altLabel": [
+        "-O"
+      ]
+    },
+    {
+      "id": "xrm:7700003",
+      "type": "skos:Concept",
+      "prefLabel": "hydrogenation delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net +H₂ equivalent without other heavy-atom change (often inferred with bond-order change).",
+      "broader": "xrm:7700000",
+      "relatedMatch": "xrm:0000500"
+    },
+    {
+      "id": "xrm:7700004",
+      "type": "skos:Concept",
+      "prefLabel": "dehydrogenation delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net −H₂ equivalent without other heavy-atom change.",
+      "broader": "xrm:7700000",
+      "relatedMatch": "xrm:0000012"
+    },
+    {
+      "id": "xrm:7700005",
+      "type": "skos:Concept",
+      "prefLabel": "water addition delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net +H₂O.",
+      "broader": "xrm:7700000",
+      "altLabel": [
+        "+H2O",
+        "hydration delta"
+      ],
+      "relatedMatch": "xrm:0000013"
+    },
+    {
+      "id": "xrm:7700006",
+      "type": "skos:Concept",
+      "prefLabel": "water loss delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net −H₂O.",
+      "broader": "xrm:7700000",
+      "altLabel": [
+        "-H2O"
+      ]
+    },
+    {
+      "id": "xrm:7700007",
+      "type": "skos:Concept",
+      "prefLabel": "alkyl loss delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net loss of carbon(s) consistent with dealkylation/fragmentation.",
+      "broader": "xrm:7700000"
+    },
+    {
+      "id": "xrm:7700008",
+      "type": "skos:Concept",
+      "prefLabel": "conjugate gain delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net gain matching a conjugation adduct formula class (when known).",
+      "broader": "xrm:7700000",
+      "relatedMatch": "xrm:0001000"
+    },
+    {
+      "id": "xrm:7700009",
+      "type": "skos:Concept",
+      "prefLabel": "halogen loss delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Net loss of halogen.",
+      "broader": "xrm:7700000",
+      "relatedMatch": "xrm:0000210"
+    },
+    {
+      "id": "xrm:7700010",
+      "type": "skos:Concept",
+      "prefLabel": "no heavy-atom delta",
+      "inScheme": "xrm:scheme",
+      "definition": "Heavy-atom formula unchanged (tautomer, many dehydrogenations if H ignored, rearrangements).",
+      "broader": "xrm:7700000",
+      "relatedMatch": "xrm:0002000"
+    },
+    {
+      "id": "xrm:7700011",
+      "type": "skos:Concept",
+      "prefLabel": "formula-delta unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Formula delta class not asserted.",
+      "broader": "xrm:7700000"
+    },
+    {
+      "id": "xrm:7800000",
+      "type": "skos:Concept",
+      "prefLabel": "site aromaticity",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: aromatic character of the mapped site on the reactant.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7800001",
+      "type": "skos:Concept",
+      "prefLabel": "aromatic site",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped site atom(s) are aromatic on the reactant.",
+      "broader": "xrm:7800000",
+      "relatedMatch": "xrm:0000101"
+    },
+    {
+      "id": "xrm:7800002",
+      "type": "skos:Concept",
+      "prefLabel": "aliphatic site",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped site atom(s) are non-aromatic on the reactant.",
+      "broader": "xrm:7800000",
+      "relatedMatch": "xrm:0000102"
+    },
+    {
+      "id": "xrm:7800003",
+      "type": "skos:Concept",
+      "prefLabel": "site aromaticity unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Aromaticity of the site was not determined (no map / no probe).",
+      "broader": "xrm:7800000"
+    },
+    {
+      "id": "xrm:7900000",
+      "type": "skos:Concept",
+      "prefLabel": "pathway-step role",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine: role of this step in a multi-step metabolic path.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:7900001",
+      "type": "skos:Concept",
+      "prefLabel": "direct one-step transformation",
+      "inScheme": "xrm:scheme",
+      "definition": "Observed product arises in a single metabolic step from the named parent.",
+      "broader": "xrm:7900000",
+      "relatedMatch": "xrm:0000307"
+    },
+    {
+      "id": "xrm:7900002",
+      "type": "skos:Concept",
+      "prefLabel": "multi-step pathway member",
+      "inScheme": "xrm:scheme",
+      "definition": "Step participates in a path of depth ≥ 2 (e.g. two-step quinone formation).",
+      "broader": "xrm:7900000",
+      "relatedMatch": [
+        "xrm:0000300",
+        "xrm:0000308"
+      ]
+    },
+    {
+      "id": "xrm:7900003",
+      "type": "skos:Concept",
+      "prefLabel": "preparatory intermediate step",
+      "inScheme": "xrm:scheme",
+      "definition": "Intermediate that enables a subsequent defining step (e.g. hydroxylation before quinone formation).",
+      "broader": "xrm:7900000",
+      "relatedMatch": "xrm:0000308"
+    },
+    {
+      "id": "xrm:7900004",
+      "type": "skos:Concept",
+      "prefLabel": "terminal observable step",
+      "inScheme": "xrm:scheme",
+      "definition": "Last enumerated step yielding the reported metabolite.",
+      "broader": "xrm:7900000"
+    },
+    {
+      "id": "xrm:7900005",
+      "type": "skos:Concept",
+      "prefLabel": "pathway-step role unspecified",
+      "inScheme": "xrm:scheme",
+      "definition": "Step role in a path is not asserted.",
+      "broader": "xrm:7900000"
+    },
+    {
+      "id": "xrm:6000000",
+      "type": "skos:Concept",
+      "prefLabel": "ambiguity and underspecification",
+      "inScheme": "xrm:scheme",
+      "definition": "Cross-cutting spine for incomplete, conflicting, or underdetermined naming evidence. Prefer specific ambiguity subtypes; tag alongside positive terms rather than replacing them.",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:6000001",
+      "type": "skos:Concept",
+      "prefLabel": "ambiguous reaction",
+      "inScheme": "xrm:scheme",
+      "definition": "Broad flag: more than one incompatible reading remains open.",
+      "broader": "xrm:6000000",
+      "altLabel": [
+        "underspecified reaction"
+      ]
+    },
+    {
+      "id": "xrm:6000010",
+      "type": "skos:Concept",
+      "prefLabel": "site-of-metabolism ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Which atom or bond is the SOM is not uniquely determined.",
+      "broader": "xrm:6000000"
+    },
+    {
+      "id": "xrm:6000011",
+      "type": "skos:Concept",
+      "prefLabel": "regiochemical ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Multiple regioisomeric sites remain plausible.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000010"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000012",
+      "type": "skos:Concept",
+      "prefLabel": "stereochemical ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Stereo outcome (or stereo of the site) is not specified.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000010"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000020",
+      "type": "skos:Concept",
+      "prefLabel": "reaction-type ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Multiple reaction-type labels remain compatible with the evidence.",
+      "broader": "xrm:6000000"
+    },
+    {
+      "id": "xrm:6000021",
+      "type": "skos:Concept",
+      "prefLabel": "competing-type ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Two or more named types actively compete (e.g. epoxidation vs aromatic hydroxylation via arene oxide).",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000020"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000022",
+      "type": "skos:Concept",
+      "prefLabel": "mechanism ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Overall type may be clear but the mechanistic path is not (e.g. NIH-shift vs direct insertion).",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000020"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000030",
+      "type": "skos:Concept",
+      "prefLabel": "metabolite-structure underspecification",
+      "inScheme": "xrm:scheme",
+      "definition": "Product structure is incomplete (missing stereo, tautomer, or connectivity detail).",
+      "broader": "xrm:6000000"
+    },
+    {
+      "id": "xrm:6000031",
+      "type": "skos:Concept",
+      "prefLabel": "atom-mapping underspecification",
+      "inScheme": "xrm:scheme",
+      "definition": "Atom map is missing, partial, or inconsistent, blocking site-level tags.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000030"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000032",
+      "type": "skos:Concept",
+      "prefLabel": "formula-only evidence",
+      "inScheme": "xrm:scheme",
+      "definition": "Only formula/delta evidence is available; connectivity change is not grounded.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000030"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000040",
+      "type": "skos:Concept",
+      "prefLabel": "pathway-depth ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Unclear whether the observed change is one-step or requires intermediates.",
+      "broader": "xrm:6000000",
+      "relatedMatch": "xrm:0000308"
+    },
+    {
+      "id": "xrm:6000041",
+      "type": "skos:Concept",
+      "prefLabel": "intermediate underspecification",
+      "inScheme": "xrm:scheme",
+      "definition": "A multi-step path is implied but intermediate structures are not specified.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000040"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000050",
+      "type": "skos:Concept",
+      "prefLabel": "phase ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Unclear whether the step is best typed as phase I, phase II, or neither.",
+      "broader": "xrm:6000000"
+    },
+    {
+      "id": "xrm:6000051",
+      "type": "skos:Concept",
+      "prefLabel": "forest-map correspondence ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Chemist typing and Metabolic Forest rule/pattern correspondence are unresolved or conflicting.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000001"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000052",
+      "type": "skos:Concept",
+      "prefLabel": "external-ontology alignment ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapping to MeSH/MOP/KEGG (or similar) is uncertain; keep XRM term and mark alignment soft.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000001"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000060",
+      "type": "skos:Concept",
+      "prefLabel": "aromatic-impact ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Impact on aromatic/conjugated systems is unclear (preserve vs dearomatize vs quinoid).",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000001"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000061",
+      "type": "skos:Concept",
+      "prefLabel": "electrophile-role ambiguity",
+      "inScheme": "xrm:scheme",
+      "definition": "Whether the step generates or consumes an electrophile is unclear.",
+      "broader": [
+        "xrm:6000000",
+        "xrm:6000001"
+      ],
+      "relatedMatch": "xrm:6000001"
+    },
+    {
+      "id": "xrm:6000070",
+      "type": "skos:Concept",
+      "prefLabel": "provenance underspecification",
+      "inScheme": "xrm:scheme",
+      "definition": "Evidence source/tag provenance is missing (no structural match and no caller tags).",
+      "broader": "xrm:6000000"
+    },
+    {
+      "id": "xrm:6000099",
+      "type": "skos:Concept",
+      "prefLabel": "fully specified",
+      "inScheme": "xrm:scheme",
+      "definition": "No outstanding ambiguity flags for the dimensions under consideration.",
+      "broader": "xrm:6000000",
+      "altLabel": [
+        "unambiguous naming"
       ]
     }
   ]

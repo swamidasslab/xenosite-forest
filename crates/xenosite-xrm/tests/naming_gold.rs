@@ -21,7 +21,15 @@ fn aliphatic_hydroxylation_ethane_to_ethanol() {
     assert!(labs.contains(&"hydroxylation"), "{labs:?}");
     assert!(labs.contains(&"aliphatic hydroxylation"), "{labs:?}");
     assert!(labs.contains(&"phase I"), "{labs:?}");
-    assert!(labs.contains(&"stable oxygenation"), "{labs:?}");
+    assert!(labs.contains(&"oxidation"), "{labs:?}");
+    // Cross-cutting spines auto-tag alongside the chemist type.
+    assert!(labs.contains(&"net oxidation"), "{labs:?}");
+    assert!(labs.contains(&"oxygen gain"), "{labs:?}");
+    assert!(labs.contains(&"stable oxygen addition"), "{labs:?}");
+    assert!(labs.contains(&"single-metabolite transformation"), "{labs:?}");
+    assert!(labs.contains(&"aliphatic site"), "{labs:?}");
+    // Forest-map class parents are a parallel hierarchy, not on the chemist path.
+    assert!(!labs.contains(&"stable oxygenation"), "{labs:?}");
     assert!(!labs.contains(&"aromatic hydroxylation"), "{labs:?}");
     assert!(terms[0].specificity.depth >= terms.last().unwrap().specificity.depth);
 }
@@ -118,35 +126,136 @@ fn no_enzyme_strings_in_primary_labels() {
 }
 
 #[test]
-fn forest_class_parents_use_unabbreviated_labels() {
+fn parallel_hierarchies_exist() {
     let namer = namer();
-    let expect = [
+    let forest_map = namer.thesaurus.get("xrm:9000000").expect("forest map");
+    assert_eq!(forest_map.pref_label, "Metabolic Forest map");
+    assert_eq!(
+        forest_map.broader.first().map(|b| b.as_str()),
+        Some("xrm:0000000")
+    );
+
+    let aromatic = namer.thesaurus.get("xrm:8000000").expect("aromatic impact");
+    assert_eq!(
+        aromatic.pref_label,
+        "aromatic and conjugated-system impact"
+    );
+
+    // Forest-map class parents use full names and hang under the Forest map, not phase I.
+    for (id, label) in [
         ("xrm:0000010", "stable oxygenation"),
         ("xrm:0000011", "unstable oxygenation"),
-        ("xrm:0000012", "dehydrogenation"),
-        ("xrm:0000013", "hydrolysis"),
-        ("xrm:0000014", "reduction"),
-    ];
-    for (id, label) in expect {
+    ] {
         let c = namer.thesaurus.get(id).expect(id);
         assert_eq!(c.pref_label, label);
-        assert_eq!(
-            c.broader.first().map(|b| b.as_str()),
-            Some("xrm:0000001"),
-            "{id} must hang under phase I"
+        assert!(
+            c.broader.iter().any(|b| b.as_str() == "xrm:9000000"),
+            "{id} broader={:?}",
+            c.broader
+        );
+        assert!(
+            !c.broader.iter().any(|b| b.as_str() == "xrm:0000001"),
+            "{id} must not be under chemist phase I"
         );
         for alt in &c.alt_labels {
             assert!(
                 !matches!(alt.as_str(), "SO" | "UO" | "DH" | "HD" | "RD"),
-                "{id} must not use Rainbow abbreviations as altLabel: {alt}"
+                "{id} must not use abbreviations as altLabel: {alt}"
             );
         }
     }
-    // Abbreviations may exist only as opaque forest SSSOM object ids.
+
+    // Chemist hydroxylation is under oxidation, related to Forest Hydroxylation rule.
+    let oh = namer.thesaurus.get("xrm:0000100").unwrap();
+    assert!(oh.broader.iter().any(|b| b.as_str() == "xrm:0000021"));
+    let rule = namer.thesaurus.get("xrm:9100100").unwrap();
+    assert_eq!(rule.pref_label, "Hydroxylation rule");
+    assert!(rule.broader.iter().any(|b| b.as_str() == "xrm:0000010"));
+
     let forest = &namer.mappings.by_subject;
     assert!(forest["xrm:0000010"]
         .iter()
         .any(|m| m.object_id.as_str() == "forest.ruleset:SO"));
+    assert!(forest["xrm:9100100"]
+        .iter()
+        .any(|m| m.object_id.as_str() == "forest.rule:Hydroxylation"));
+}
+
+#[test]
+fn forest_tag_emits_forest_map_rule() {
+    let terms = namer()
+        .name_smiles("C", "C", &["forest.rule:Hydroxylation"])
+        .unwrap();
+    let labs = labels(&terms);
+    assert!(labs.contains(&"hydroxylation"), "{labs:?}");
+    assert!(labs.contains(&"Hydroxylation rule"), "{labs:?}");
+    assert!(labs.contains(&"stable oxygenation"), "{labs:?}");
+    assert!(labs.contains(&"Metabolic Forest map"), "{labs:?}");
+}
+
+#[test]
+fn dearomatization_tag_reaches_aromatic_impact_hierarchy() {
+    let terms = namer()
+        .name_smiles("c1ccccc1", "C1=CC=CC=C1", &["chem:dearomatization"])
+        .unwrap();
+    let labs = labels(&terms);
+    assert!(labs.contains(&"dearomatization"), "{labs:?}");
+    assert!(labs.contains(&"aromaticity loss"), "{labs:?}");
+    assert!(
+        labs.contains(&"aromatic and conjugated-system impact"),
+        "{labs:?}"
+    );
+}
+
+#[test]
+fn ambiguity_tags_stack_with_positive_terms() {
+    let terms = namer()
+        .name_smiles(
+            "c1ccccc1",
+            "Oc1ccccc1",
+            &[
+                "chem:aromatic-hydroxylation",
+                "chem:regio-ambiguity",
+                "chem:competing-type",
+            ],
+        )
+        .unwrap();
+    let labs = labels(&terms);
+    assert!(labs.contains(&"aromatic hydroxylation"), "{labs:?}");
+    assert!(labs.contains(&"regiochemical ambiguity"), "{labs:?}");
+    assert!(labs.contains(&"competing-type ambiguity"), "{labs:?}");
+    assert!(labs.contains(&"site-of-metabolism ambiguity"), "{labs:?}");
+    assert!(
+        labs.contains(&"ambiguity and underspecification"),
+        "{labs:?}"
+    );
+}
+
+#[test]
+fn parallel_spine_roots_present() {
+    let namer = namer();
+    for (id, label) in [
+        ("xrm:6000000", "ambiguity and underspecification"),
+        ("xrm:7000000", "redox polarity"),
+        ("xrm:7100000", "site atom class"),
+        ("xrm:7200000", "bond-edit topology"),
+        ("xrm:7300000", "metabolite cardinality"),
+        ("xrm:7400000", "oxygenation outcome"),
+        ("xrm:7500000", "electrophile role"),
+        ("xrm:7600000", "ring fate"),
+        ("xrm:7700000", "formula-delta class"),
+        ("xrm:7800000", "site aromaticity"),
+        ("xrm:7900000", "pathway-step role"),
+        ("xrm:8000000", "aromatic and conjugated-system impact"),
+        ("xrm:9000000", "Metabolic Forest map"),
+    ] {
+        let c = namer.thesaurus.get(id).unwrap_or_else(|| panic!("{id}"));
+        assert_eq!(c.pref_label, label);
+        assert!(
+            c.broader.iter().any(|b| b.as_str() == "xrm:0000000"),
+            "{id} should hang under root"
+        );
+    }
 }
 
 #[test]

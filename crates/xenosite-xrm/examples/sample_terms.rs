@@ -155,17 +155,42 @@ const CASES: &[Case] = &[
         product: "CC(O)=C",
         tags: &["chem:tautomerization"],
     },
+    Case {
+        label: "chem:regio-ambiguity + aromatic hydroxylation",
+        reactant: "CCc1ccccc1",
+        product: "CCc1ccc(O)cc1",
+        tags: &[
+            "chem:aromatic-hydroxylation",
+            "chem:regio-ambiguity",
+            "chem:competing-type",
+        ],
+    },
+    Case {
+        label: "chem:pathway-depth-ambiguity + two-step quinone",
+        reactant: "c1ccccc1",
+        product: "O=C1C=CC(=O)C=C1",
+        tags: &[
+            "chem:two-step-quinone-formation",
+            "chem:pathway-depth-ambiguity",
+            "chem:intermediate-underspecified",
+        ],
+    },
+    Case {
+        label: "chem:mapping-underspecified",
+        reactant: "CC",
+        product: "CCO",
+        tags: &["chem:hydroxylation", "chem:mapping-underspecified"],
+    },
 ];
 
 fn main() {
     let write = env::args().any(|a| a == "--write");
     let namer = Namer::from_manifest(DEFAULT_MANIFEST).expect("manifest");
-    let mut out = String::from("# Proposed terms — feedback round 002\n\n");
-    out.push_str("Forest-mapped Phase I class parents use full names ");
-    out.push_str("(stable/unstable oxygenation, dehydrogenation, hydrolysis, reduction). ");
-    out.push_str("Leaves and facets from Rainbow (21 types), Metabolic Forest ");
-    out.push_str("(conjugation / quinone / tautomerization), and the quinone-formation ");
-    out.push_str("paper (species + one-/two-step). No SO/UO/DH/HD/RD as XRM labels.\n\n");
+    let mut out = String::from("# Proposed terms — feedback round 003\n\n");
+    out.push_str("Cross-cutting multi-spine tagging: chemist type, Forest map, ");
+    out.push_str("aromatic/conjugate impact, redox, site atom, bond-edit, ");
+    out.push_str("cardinality, oxygenation outcome, electrophile role, formula-delta, ");
+    out.push_str("pathway-step, and typed ambiguity/underspecification.\n\n");
     out.push_str("Regenerate: `cargo run -p xenosite-xrm --example sample_terms -- --write`\n\n");
 
     for case in CASES {
@@ -178,7 +203,7 @@ fn main() {
     }
 
     if write {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/samples/round-002.md");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/samples/round-003.md");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &out).unwrap();
         eprintln!("wrote {}", path.display());

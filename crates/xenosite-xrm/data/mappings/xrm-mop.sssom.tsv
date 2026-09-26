@@ -6,3 +6,5 @@ xrm:0001000	skos:exactMatch	mop:0000156	semapv:ManualMappingCuration	glucuronida
 xrm:0000200	skos:closeMatch	mop:0000669	semapv:ManualMappingCuration	dealkylation	demethylation
 xrm:0000205	skos:closeMatch	mop:0000669	semapv:ManualMappingCuration	N-demethylation	demethylation
 xrm:0001040	skos:closeMatch	mop:0000060	semapv:ManualMappingCuration	methylation	methylation
+xrm:7000001	skos:relatedMatch	mop:0000673	semapv:ManualMappingCuration	net oxidation	hydroxylation
+xrm:7200002	skos:relatedMatch	mop:0000669	semapv:ManualMappingCuration	bond cleavage	demethylation

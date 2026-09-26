@@ -1,57 +1,70 @@
 # Sources for XRM term inventory
 
-Chemist-facing subclasses and cross-cutting process facets were drawn from
-expert xenobiotic-metabolism vocabulary and Swamidass-lab papers, **not** from
-this repository’s rule-implementation abbreviations.
+XRM **tags each reaction with many terms** from parallel, cross-cutting spines.
+That improves chemist readability and makes soft alignment to external
+ontologies (MeSH, MOP, Forest opaque CURIEs) easier: each spine can map
+independently.
 
-## Metabolic Forest hierarchy spine
+Forest abbreviations (`SO`, `UO`, `DH`, `HD`, `RD`, …) are **never** XRM
+prefLabels or altLabels. They appear only as opaque `forest.*` CURIE object
+ids in SSSOM.
 
-The Phase I portion intended to map to Metabolic Forest keeps the five
-Rainbow / Forest **class** parents under `phase I`, using **unabbreviated**
-prefLabels only:
+## Parallel spines (under `xenobiotic biotransformation`)
 
-| XRM prefLabel | Forest opaque CURIE (SSSOM) | Paper class |
+| Spine | Role | Auto-tag cues |
 | --- | --- | --- |
-| stable oxygenation | `forest.ruleset:SO` | Rainbow red |
-| unstable oxygenation | `forest.ruleset:UO` | Rainbow orange |
-| dehydrogenation | `forest.ruleset:DH` | Rainbow green |
-| hydrolysis | `forest.ruleset:HD` | Rainbow blue |
-| reduction | `forest.ruleset:RD` | Rainbow purple |
+| Chemist reaction type (`phase I` / `phase II`, named transformations) | Primary chemist vocabulary | SMARTS, delta, `chem:*` tags |
+| **Metabolic Forest map** | Intentionally mirrors repo rulesets → rules → PatternInfo | `forest.rule:*`, `forest.pattern:*`, `forest.ruleset:*` |
+| **Aromatic and conjugated-system impact** | π-system fate (dearomatize, quinoid, arene oxide, …) | quinone / arene-oxide / GSH-Michael / dearomatization tags |
+| **Redox polarity** | Net oxidation / reduction / redox-neutral | delta O, typed oxidations/reductions/conjugations |
+| **Site atom class** | C / N / O / S / halogen / multi-element site | typed dealkylation / oxidation tags |
+| **Bond-edit topology** | Addition, cleavage, bond-order change, ring closure, … | SMARTS class of edit |
+| **Metabolite cardinality** | Single metabolite vs fragmenting | hydroxylation vs dealkylation/hydrolysis |
+| **Oxygenation outcome** | Stable oxygen addition vs oxygen-triggered cleavage | chemist parallel to Forest stable/unstable classes |
+| **Electrophile role** | Generate / consume electrophile; nucleophile exposure | quinone, epoxide, GSH, bioactivation tags |
+| **Ring fate** | Preserved / opened / formed / resized | epoxide, ring-opening facets |
+| **Formula-delta class** | `+O`, −halogen, −C, … | elemental delta only |
+| **Site aromaticity** | Aromatic vs aliphatic site | `site_aromatic` on typed rules |
+| **Pathway-step role** | One-step / multi-step / preparatory / terminal | quinone one-/two-step and path tags |
+| **Ambiguity and underspecification** | Typed incomplete/conflicting evidence | `chem:*-ambiguity`, `chem:*-underspecified` |
+| Process facet | NIH shift, ipso, carbinolamine cleavage, acyl migration, … | mechanism tags |
+| Bioactivation / detoxication | Toxicity-oriented outcome framing | reactive-metabolite tags |
 
-Localized abbreviations (`SO`, `UO`, `DH`, `HD`, `RD`) and CamelCase
-identifiers (`StableOxygenation`, …) are **not** XRM prefLabels or altLabels.
-They may appear only as opaque `forest.*` CURIE object ids in SSSOM.
+Ambiguity subtypes include site/regio/stereo SOM ambiguity, reaction-type and
+competing-type ambiguity, mechanism ambiguity, metabolite-structure and
+atom-mapping underspecification, formula-only evidence, pathway-depth and
+intermediate gaps, phase ambiguity, Forest-map correspondence ambiguity,
+external-ontology alignment ambiguity, aromatic-impact and electrophile-role
+ambiguity, and provenance underspecification — plus `fully specified` when
+callers assert completeness.
+
+## Metabolic Forest map (full names)
+
+| XRM prefLabel | Opaque Forest CURIE |
+| --- | --- |
+| stable oxygenation | `forest.ruleset:SO` |
+| unstable oxygenation | `forest.ruleset:UO` |
+| dehydrogenation ruleset | `forest.ruleset:DH` |
+| hydrolysis ruleset | `forest.ruleset:HD` |
+| reduction ruleset | `forest.ruleset:RD` |
+| quinone formation ruleset | `forest.ruleset:QF` |
+| conjugation ruleset | `forest.ruleset:CJ` |
+| tautomerization ruleset | `forest.ruleset:TT` |
+| phase I ruleset | `forest.ruleset:PhaseOne` |
+| bioactivation ruleset | `forest.ruleset:BA` |
+
+Rules and patterns hang under those rulesets (`Hydroxylation rule`,
+`Hydroxylation/h`, …) with `skos:exactMatch` to `forest.rule:*` /
+`forest.pattern:*`.
 
 ## Primary literature
 
-1. **Rainbow** — Dang, Matlock, Hughes, Swamidass. *The Metabolic Rainbow:
-   Deep Learning Phase I Metabolism in Five Colors*. JCIM 2020.
-   DOI [10.1021/acs.jcim.9b00836](https://doi.org/10.1021/acs.jcim.9b00836) /
-   PMC [PMC8716320](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8716320/).
-   Five classes + **21 reaction types** (aromatic/aliphatic hydroxylation;
-   aromatic/aliphatic epoxidation; N-/S-oxidation; N-/O-/S-/C-dealkylation;
-   oxidative deamination & dehalogenation; alcohol→carbonyl; single→double /
-   double→triple bond; quinone & iminium formation; ester/amide/ether/cyanide
-   hydrolysis; carbonyl/nitro/sulfo reduction; reductive dehalogenation;
-   hydrogenation). Also cues the excluded remainder (tautomerization,
-   isomerization, rearrangement, radical formation, hydration, deacylation,
-   denitrogenation, decarbonylation).
-2. **Metabolic Forest** — Hughes, Dang, Swamidass (and related). Metabolite
-   structure enumeration with rulesets for the five Phase I classes,
-   **conjugation** (acetylation, glucuronidation, glutathionation, sulfation),
-   **quinone formation**, and **tautomerization**.
-3. **Quinone formation** — Hughes, Miller, Swamidass. Computational prediction
-   of quinone formation. Chem. Res. Toxicol. (quinone-formation model).
-   Species: quinone, quinone-imine, quinone-methide, imine-methide; routes:
-   **one-step** vs **two-step** quinone formation; bioactivation framing.
-4. **IUPAC** — *Glossary and tutorial of xenobiotic metabolism terms* (Pure
-   Appl. Chem. 2021, DOI [10.1515/pac-2018-0208](https://doi.org/10.1515/pac-2018-0208)).
-5. **Medicinal chemistry / DMPK teaching notes** — arene oxide / NIH shift;
-   N-/O-/S-dealkylation and oxidative deamination via α-carbon hydroxylation;
-   ω / ω−1, allylic, benzylic hydroxylation.
-6. **Phase II literature** — O-/N-/S-/C-glucuronidation; acyl glucuronides;
-   phenolic vs alcoholic sulfation; GSH Michael / epoxide / halide paths;
-   mercapturic acid; amino-acid conjugation; methylation.
-7. **Cross-cutting process facets** — oxidative **dearomatization**,
-   **rearomatization**, **NIH shift**, **ipso substitution**, conjugate
-   addition, acyl migration.
+1. **Rainbow** — Dang et al., JCIM 2020
+   ([10.1021/acs.jcim.9b00836](https://doi.org/10.1021/acs.jcim.9b00836)).
+2. **Metabolic Forest** — metabolite enumeration; rulesets for Phase I classes,
+   conjugation, quinone formation, tautomerization.
+3. **Quinone formation** — Hughes & Swamidass, Chem. Res. Toxicol. 2017
+   ([10.1021/acs.chemrestox.6b00385](https://doi.org/10.1021/acs.chemrestox.6b00385)).
+4. **IUPAC** xenobiotic metabolism glossary (Pure Appl. Chem. 2021,
+   [10.1515/pac-2018-0208](https://doi.org/10.1515/pac-2018-0208)).
+5. DMPK / Phase II teaching literature for conjugation and process facets.
