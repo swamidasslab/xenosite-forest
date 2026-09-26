@@ -12,7 +12,7 @@ from xenosite.forest.rules import (
     FormulaDeltaMismatchWarning,
     Hydroxylation,
     SmirksReactionRule,
-    describe,
+    _describe,
 )
 
 
@@ -39,7 +39,7 @@ def test_wrong_delta_formula_warns_and_counts():
         smirks = (
             (
                 Smirks("[#6h3:1]>>[*:1]O"),
-                describe(adds="OO", removes="H", name="too_much_o"),
+                _describe(adds="OO", removes="H", name="too_much_o"),
             ),
         )
 

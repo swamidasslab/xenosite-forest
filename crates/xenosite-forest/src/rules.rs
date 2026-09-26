@@ -226,6 +226,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: Some("H".into()),
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -274,6 +275,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -286,6 +288,7 @@ pub fn quinone_formation() -> RuleSet {
                 Effect {
                     adds: Some("O".into()),
                     dearomatizes: true,
+                    exclusive_partner: true,
                     ..Default::default()
                 },
             )),
@@ -298,9 +301,10 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
-                    partner: None,
+                    partner: Some("N".into()),
                     ..Default::default()
                 },
                 "iminium",
@@ -314,6 +318,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: true,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -854,7 +859,8 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("".into()),
+                    // Open chain saturates: C2H4O → C2H6O (+2H).
+                    adds: Some("HH".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -870,7 +876,8 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("O".into()),
+                    // Vicinal diol: +O and the two H that come with opening/OH.
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -948,9 +955,10 @@ pub fn dehydration() -> RuleSet {
                 "beta_elimination",
                 "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
                 SiteKind::Atom,
-                // Alcohol carbon + adjacent carbon — site set differs from a
-                // lone hydroxylation site, so OH→beta-elim is not circular.
-                vec![1, 3],
+                // Match Python PatternInfo (default site_map=1): both alcohol
+                // and beta-elim share the alcohol-carbon atom site. Product
+                // bags differ (CC vs C=C); topo collapse is one site.
+                vec![1],
                 o_leave.clone(),
             ),
             smirks_row(
@@ -1174,7 +1182,10 @@ pub fn reductive_dehalogenation() -> RuleSet {
             .with_possibilities(halide_remove_branches(1, base.clone())),
             smirks_row(
                 "alkene",
-                "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
+                // Map 3 must be aliphatic: aromatic partner forces a
+                // dearomatizing exocyclic methylene that RDKit sanitize
+                // papers into junk (C=C1CCCCC1) — C10. Rust refused; keep both off.
+                "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6;!a:3]>>[*:1].[*:2]=[*:3]",
                 SiteKind::Atom,
                 vec![2],
                 base.clone(),
@@ -1284,7 +1295,8 @@ pub fn epoxide_hydration() -> RuleSet {
             SiteKind::Bond,
             vec![1, 2],
             Effect {
-                adds: Some("OO".into()),
+                // Alkene → vicinal diol: +2O +2H (each OH carries H).
+                adds: Some("OOHH".into()),
                 removes: None,
                 cleaves: false,
                 methide: false,
@@ -1296,6 +1308,9 @@ pub fn epoxide_hydration() -> RuleSet {
         )],
     )
     .with_canonical_plan(crate::canonical_plan::epoxide_hydration_canonical_plan)
+    .with_parity_exception(
+        "Rust-only PhaseOne leaf (epoxide→diol one-hop); Python PhaseOne omits it",
+    )
 }
 
 /// `SulfurOxidation` from Python `xenosite.forest.rules`.
@@ -1321,10 +1336,14 @@ pub fn sulfur_oxidation() -> RuleSet {
             ),
             smirks_row(
                 "hydroxy",
-                "[#16;v2,v4:1]>>[*:1][O]",
+                // Organic `O` (not `[O]`): chematic `[O]` leaves a radical;
+                // RDKit `[O]` becomes OH. Bare `O` matches both (CCSO).
+                "[#16;v2,v4:1]>>[*:1]O",
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    // Net H is substrate-dependent (thioether may gain H; thiol
+                    // may not). Keep O-only; formula_check strips H.
                     adds: Some("O".into()),
                     removes: None,
                     cleaves: false,
@@ -1382,8 +1401,9 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    // Primary amine → nitroso: +O and lose both N–H.
                     adds: Some("O".into()),
-                    removes: None,
+                    removes: Some("HH".into()),
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -1488,6 +1508,9 @@ pub fn acetylation() -> RuleSet {
         Some("Acetylation".into()),
         [smirks_row(
             "acetyl",
+            // Product keeps ``[#6](=[#8])[#6]``. Apply expands product ``#`` to
+            // organic aliphatic then aromatic (chematic bracket expand misses).
+            // Reactant ``#`` covers aliphatic and aromatic heteroatom branches.
             "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1][#6](=[#8])[#6]",
             SiteKind::Atom,
             vec![1],
@@ -1775,7 +1798,8 @@ pub fn glutathionation() -> RuleSet {
                 vec![1],
                 Effect {
                     adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                    removes: None,
+                    // Mesyl leaving group OSO2Me eliminated (not a product fragment).
+                    removes: Some("COOOS".into()),
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -1842,6 +1866,23 @@ pub fn default_ruleset() -> RuleSet {
             dehydrogenation(),
         ],
     )
+}
+
+/// Process-wide [`default_ruleset`] for doors that take `&RuleSet`.
+///
+/// Callers that need a different catalog pass their own `&RuleSet` to the
+/// non-`_default` APIs (`find_path`, `bfs`, `product_graph`, …).
+pub fn default_ruleset_ref() -> &'static RuleSet {
+    use std::sync::OnceLock;
+    static DEFAULT: OnceLock<RuleSet> = OnceLock::new();
+    DEFAULT.get_or_init(default_ruleset)
+}
+
+/// Process-wide [`phase_one`] (full Phase-I nest).
+pub fn phase_one_ref() -> &'static RuleSet {
+    use std::sync::OnceLock;
+    static PHASE_ONE: OnceLock<RuleSet> = OnceLock::new();
+    PHASE_ONE.get_or_init(phase_one)
 }
 
 /// Every ported leaf rule as one nested catalog.
@@ -1982,10 +2023,10 @@ mod tests {
             .unwrap();
         assert!(!arom.is_empty(), "{arom:?}");
         assert!(
-            arom.iter().all(|c| c.pattern.effect.dearomatizes),
+            arom.iter().all(|c| c.effect().dearomatizes),
             "aromatic site resolves dearomatizes; got {:?}",
             arom.iter()
-                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .map(|c| (c.site(), c.effect().dearomatizes))
                 .collect::<Vec<_>>()
         );
 
@@ -1996,11 +2037,11 @@ mod tests {
             .unwrap();
         assert!(!aliph.is_empty(), "{aliph:?}");
         assert!(
-            aliph.iter().all(|c| !c.pattern.effect.dearomatizes),
+            aliph.iter().all(|c| !c.effect().dearomatizes),
             "aliphatic site resolves false; got {:?}",
             aliph
                 .iter()
-                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .map(|c| (c.site(), c.effect().dearomatizes))
                 .collect::<Vec<_>>()
         );
     }
@@ -2015,8 +2056,9 @@ mod tests {
         assert_eq!(info.name, "diol");
         assert_eq!(info.site_kind, SiteKind::Bond);
         assert_eq!(info.site_map, vec![1, 2]);
-        assert_eq!(info.effect.adds.as_deref(), Some("OO"));
+        assert_eq!(info.effect.adds.as_deref(), Some("OOHH"));
         assert_eq!(info.effect.delta_formula.get("O"), Some(&2));
+        assert_eq!(info.effect.delta_formula.get("H"), Some(&2));
         assert!(info.effect.dearomatizes, "catalog capability");
         assert!(!info.effect.cleaves);
         match &info.edit {
@@ -2187,6 +2229,36 @@ mod tests {
                 .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == phenol) }),
             "{emissions:?}"
         );
+    }
+
+    /// Organic product `C(=O)C` must acetylate aliphatic and aromatic
+    /// heteroatom sites (specialize `O`/`N`/`S` vs `n`).
+    #[test]
+    fn acetylation_covers_aliphatic_and_aromatic_heteroatom_branches() {
+        let cases = [
+            ("CCO", "CC(=O)OCC"),
+            ("CCN", "CCNC(C)=O"),
+            ("CS", "CSC(C)=O"),
+            ("Oc1ccccc1", "CC(=O)Oc1ccccc1"),
+            ("Nc1ccccc1", "CC(=O)Nc1ccccc1"),
+            ("Sc1ccccc1", "CC(=O)Sc1ccccc1"),
+            ("[nH]1cccc1", "CC(=O)n1cccc1"),
+        ];
+        let set = acetylation();
+        for (smiles, want) in cases {
+            let mol = parse_mol(smiles).unwrap();
+            let emissions = set
+                .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            let want = canon_of(want).unwrap();
+            assert!(
+                emissions
+                    .iter()
+                    .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+                "{smiles}: want {want}, got {emissions:?}"
+            );
+        }
     }
 
     #[test]

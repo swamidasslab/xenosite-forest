@@ -958,14 +958,9 @@ mod tests {
     use crate::rules::{dealkylation, epoxidation, hydroxylation};
 
     fn site_atoms_cand(c: &crate::candidate::Candidate) -> Vec<usize> {
-        let mut atoms: Vec<usize> = c
-            .pattern
-            .site_map
-            .iter()
-            .filter_map(|m| c.mapped.get(m).copied())
-            .collect();
+        let mut atoms: Vec<usize> = c.site_atoms();
         if atoms.is_empty() {
-            atoms.push(c.site);
+            atoms.push(c.site());
         }
         atoms.sort_unstable();
         atoms.dedup();
@@ -1091,7 +1086,7 @@ mod tests {
             .unwrap();
         let c = cands
             .iter()
-            .find(|c| c.pattern.name.contains("methyl_alcohol"))
+            .find(|c| c.pattern_name().contains("methyl_alcohol"))
             .expect("methyl_alcohol");
         let atoms = site_atoms_cand(c);
         assert!(
@@ -1151,7 +1146,7 @@ mod tests {
             .unwrap();
         let c = cands
             .iter()
-            .find(|c| c.pattern.name.contains("methyl_alcohol"))
+            .find(|c| c.pattern_name().contains("methyl_alcohol"))
             .expect("methyl_alcohol");
         let atoms = site_atoms_cand(c);
         let pieces = c.materialize_mols(parent.mol()).unwrap();
@@ -1197,7 +1192,7 @@ mod tests {
         let c = &cands[0];
         // Joint orbit: both carbons — edit hydroxylates one; bags still match.
         let mut atoms = site_atoms_cand(c);
-        for &i in &c.orbit {
+        for &i in c.orbit() {
             atoms.push(i);
         }
         atoms.sort_unstable();
@@ -1262,10 +1257,10 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
-            .find(|c| c.site == 4)
+            .find(|c| c.site() == 4)
             .expect("epoxide at site 4");
         assert!(
-            c.pattern.effect.dearomatizes,
+            c.effect().dearomatizes,
             "aromatic MeOPhOH site must resolve dearomatizes"
         );
         let atoms = site_atoms_cand(&c);
@@ -1273,7 +1268,7 @@ mod tests {
         let child = parent.adopt_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let opts = SiteShellCostOpts {
-            dearomatic: c.pattern.effect.dearomatizes,
+            dearomatic: c.effect().dearomatizes,
             ..SiteShellCostOpts::default()
         };
         let before = site_shell_cost_opts(&cur, None, &tgt, &ad.mapping, &atoms, opts);
@@ -1342,21 +1337,16 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
-            .find(|c| c.pattern.name == "alcohol")
+            .find(|c| c.pattern_name() == "alcohol")
             .expect("Dehydration alcohol");
-        assert!(c.pattern.effect.cleaves);
-        assert_eq!(c.pattern.effect.leave_count, Some(1));
-        let site: Vec<usize> = c
-            .pattern
-            .site_map
-            .iter()
-            .filter_map(|m| c.mapped.get(m).copied())
-            .collect();
-        let mapped: Vec<usize> = c.mapped.values().copied().collect();
+        assert!(c.effect().cleaves);
+        assert_eq!(c.effect().leave_count, Some(1));
+        let site: Vec<usize> = c.site_atoms();
+        let mapped: Vec<usize> = c.as_edit().map(|e| e.mapped.values().copied().collect()).unwrap_or_default();
         let atoms = site_atoms_with_leave(
             parent.mol(),
             &site,
-            c.pattern.effect.leave_count.map(|n| n as usize),
+            c.effect().leave_count.map(|n| n as usize),
             &ad.cleavage_bonds,
             &mapped,
         );
@@ -1414,17 +1404,12 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
-            .find(|c| c.pattern.name == "cc_quaternary_alcohol" && c.site == 2)
+            .find(|c| c.pattern_name() == "cc_quaternary_alcohol" && c.site() == 2)
             .expect("cc_quaternary at site 2");
-        assert!(c.pattern.effect.cleaves);
-        assert!(c.pattern.effect.leave_count.is_none());
-        let site: Vec<usize> = c
-            .pattern
-            .site_map
-            .iter()
-            .filter_map(|m| c.mapped.get(m).copied())
-            .collect();
-        let mapped: Vec<usize> = c.mapped.values().copied().collect();
+        assert!(c.effect().cleaves);
+        assert!(c.effect().leave_count.is_none());
+        let site: Vec<usize> = c.site_atoms();
+        let mapped: Vec<usize> = c.as_edit().map(|e| e.mapped.values().copied().collect()).unwrap_or_default();
         let expanded =
             site_atoms_with_leave(parent.mol(), &site, None, &ad.cleavage_bonds, &mapped);
         assert_eq!(

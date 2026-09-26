@@ -12,6 +12,35 @@ from hypothesis.database import DirectoryBasedExampleDatabase
 _DB_PATH = Path(__file__).resolve().parents[1] / ".hypothesis" / "examples"
 _DB_PATH.mkdir(parents=True, exist_ok=True)
 
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--parity-focused",
+        action="store_true",
+        default=False,
+        help=(
+            "Focused CoverIntent-only parity/CSMI cases (sets XENOSITE_PARITY_FULL=0). "
+            "Default is full rule×mol cartesian; CI may pass this for speed."
+        ),
+    )
+    # Back-compat alias: --parity-full is a no-op (full is already default).
+    parser.addoption(
+        "--parity-full",
+        action="store_true",
+        default=False,
+        help="Deprecated no-op: full parity coverage is the default.",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if config.getoption("--parity-focused"):
+        os.environ["XENOSITE_PARITY_FULL"] = "0"
+    config.addinivalue_line(
+        "markers",
+        "parity_full: full rule×mol sweep (default; disable with --parity-focused / "
+        "XENOSITE_PARITY_FULL=0)",
+    )
+
 settings.register_profile(
     "default",
     database=DirectoryBasedExampleDatabase(str(_DB_PATH)),

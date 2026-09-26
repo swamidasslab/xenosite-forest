@@ -47,10 +47,15 @@ The Rust `ForestMol` is the payload. Bindings do **not** reimplement the cache.
 maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
 ```
 
-Exposes `ForestMol` / `RuleSet` / `metabolize`, plus **`xenosite_forest.find_path`**
-(PhaseOne chematic search). Python package re-exports that as
-``xenosite.forest.find_path_rust`` (optional; raises if the wheel is missing).
-Live RDKit ``xenosite.forest.find_path`` is unchanged.
+Exposes `ForestMol` / `RuleSet` (`leaf` / `phase_one` / `default_ruleset` /
+`all_rules` / `catalog_names` / `metabolize`), **`find_path`** (``ruleset=``
+override; default PhaseOne), and **`bfs`` / ``dfs`` / ``enumerate``**. Python
+package re-exports those as ``xenosite.forest.find_path_rust`` (optional;
+raises if the wheel is missing). Live RDKit ``xenosite.forest.find_path`` is
+unchanged.
+
+Leaf product / site parity vs RDKit (issues, work order, attribute exceptions):
+[RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md).
 
 ```rust
 #[pyclass(name = "ForestMol", unsendable)]
@@ -198,11 +203,17 @@ Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --
 
 ## Atom identity (vendored chematic patch)
 
-Chematic on crates.io still has no atom userdata and no public SMILES visit
-order. This repo vendors `chematic` @ `v1.0.21` as a **sparse submodule**
-(`vendor/chematic`) and applies
+Chematic on crates.io historically lacked atom userdata and a public SMILES
+visit order. This repo still vendors `chematic` @ `v1.0.21` as a **sparse
+submodule** (`vendor/chematic`) and applies
 [`patches/chematic-v1.0.21-atom-tag-visit-order.patch`](../../patches/chematic-v1.0.21-atom-tag-visit-order.patch)
 via `./scripts/vendor-chematic.sh`.
+
+**Post-parity (do not start early):** Chematic upstream has landed atom
+tracking. After Rust↔Python leaf product parity is green
+([RUST_PYTHON_PARITY](RUST_PYTHON_PARITY.md) work order #16 / [TODO.md](../../TODO.md)):
+migrate to the released API, pass tracking tests, remove the vendored
+submodule and patch.
 
 The patch adds:
 

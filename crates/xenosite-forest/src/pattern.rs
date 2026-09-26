@@ -181,6 +181,12 @@ pub struct Effect {
     pub leave_count: Option<u16>,
     /// Effect bit, not a `pathways=("methide",)` switch.
     pub methide: bool,
+    /// Partner atom (non-site mapped) is exclusive to this ResonancePair end.
+    ///
+    /// Set when chemistry consumes that partner (bridging N/O on iminium /
+    /// hetero ``single_to_double`` / dealkylate). Not a global shared-map
+    /// refuse — methide alkyl (`partner == "C"`) leaves this false.
+    pub exclusive_partner: bool,
     /// Capability: pair/path may dearomatize. Resolved against system aromaticity.
     pub dearomatizes: bool,
     /// Methide / alkyl partner element hint (`"C"`). Filters read this.
@@ -444,12 +450,15 @@ pub struct SiteInfo {
     pub shell_forecast: Option<crate::matched_atom::AlignedShells>,
 }
 
-/// One metabolize emission: discovery site, pattern, rule namespace, product CSMIs.
+/// One metabolize emission: discovery site, pattern, rule namespace, product mols.
 ///
 /// `rule_path` is leaf-first (emitting rule, then each containing [`crate::ruleset::RuleSet`]),
 /// matching Python `info["rule"]` / addition chain order. Unnamed sets stay on the
 /// chain as `None`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Pair and SMIRKS hops share this type — callers do not branch on pair discovery.
+/// [`Self::rule_name`] reads the leaf set from `rule_path` (same as find_path).
+#[derive(Clone)]
 pub struct Emission {
     pub site: usize,
     /// Primary-map orbit passed down from unique-edit (see [`SiteInfo::orbit`]).
@@ -461,11 +470,33 @@ pub struct Emission {
     /// From [`PatternInfo::search_bias`] (pair: min of both ends).
     pub search_bias: i8,
     pub rule_path: Vec<Option<String>>,
+    /// Product molecules (keep for adopt / tags). [`Self::products`] are CSMIs.
+    pub mols: Vec<crate::mol::Molecule>,
+    /// Canonical SMILES of [`Self::mols`] (sorted by callers that need a key).
     pub products: Vec<String>,
+    /// Cleavage Or-fold signature (from pattern / merged pair ends).
+    pub cleave_side_sig: CleaveSideSig,
     /// Elementary steps for this hop (identity or quinone-shaped expansion).
     /// Bind with [`crate::canonical_plan::Deps::bind`] for precedes / replay.
     pub plan: Vec<crate::canonical_plan::Step>,
 }
+
+impl PartialEq for Emission {
+    fn eq(&self, other: &Self) -> bool {
+        self.site == other.site
+            && self.site_orbit == other.site_orbit
+            && self.site_atoms == other.site_atoms
+            && self.cleaves == other.cleaves
+            && self.pattern_name == other.pattern_name
+            && self.search_bias == other.search_bias
+            && self.rule_path == other.rule_path
+            && self.products == other.products
+            && self.cleave_side_sig == other.cleave_side_sig
+            && self.plan == other.plan
+    }
+}
+
+impl Eq for Emission {}
 
 impl Emission {
     /// Named segments of [`Self::rule_path`] (unnamed sets omitted).
@@ -479,6 +510,24 @@ impl Emission {
     /// Emitting (leaf) rule name, if the leaf was named.
     pub fn leaf_rule(&self) -> Option<&str> {
         self.rule_path.first().and_then(|n| n.as_deref())
+    }
+
+    /// Hop / path rule label: leaf set name, else [`Self::pattern_name`].
+    pub fn rule_name(&self) -> &str {
+        self.leaf_rule().unwrap_or(self.pattern_name.as_str())
+    }
+}
+
+impl std::fmt::Debug for Emission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Emission")
+            .field("site", &self.site)
+            .field("pattern_name", &self.pattern_name)
+            .field("rule_path", &self.rule_path)
+            .field("cleaves", &self.cleaves)
+            .field("products", &self.products)
+            .field("n_mols", &self.mols.len())
+            .finish()
     }
 }
 

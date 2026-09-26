@@ -80,13 +80,19 @@ impl ForestMol {
     /// Indexes of atoms that still exist are assumed stable (clone / append).
     /// SMIRKS apply that rewrites indexes must use [`Self::from_apply`].
     ///
+    /// Surviving atoms keep their tags. Born atoms mint from
+    /// [`labels::next_tag`] on the parent label set (not by advancing a
+    /// counter between sibling adopts), and the child **shares** the parent's
+    /// `tag_gen` so tags stay on the same generator.
+    ///
     /// Unmodified systems still hit. An edit that changes a system's shape
     /// is a new [`crate::kekule::SystemKey`] and starts an empty bag.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
         let mut mol = mol;
-        let next = parent.tag_gen.get();
-        let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), next);
-        parent.tag_gen.set(next);
+        let start = labels::next_tag(&parent.labels);
+        let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), start);
+        let hi = parent.tag_gen.get().max(next);
+        parent.tag_gen.set(hi);
         sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
@@ -99,11 +105,15 @@ impl ForestMol {
     }
 
     /// Product of a reindexing apply. `src_to_new[src] = Some(dst)` or `None`.
+    ///
+    /// Same shared `tag_gen` as [`Self::product`]: surviving atoms keep tags;
+    /// born atoms mint from [`labels::next_tag`] on this mol's labels.
     pub fn from_apply(&self, mol: Molecule, src_to_new: &[Option<usize>]) -> Self {
         let mut mol = mol;
-        let next = self.tag_gen.get();
-        let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), next);
-        self.tag_gen.set(next);
+        let start = labels::next_tag(&self.labels);
+        let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), start);
+        let hi = self.tag_gen.get().max(next);
+        self.tag_gen.set(hi);
         sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,

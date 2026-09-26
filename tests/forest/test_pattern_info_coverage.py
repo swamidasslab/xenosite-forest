@@ -235,6 +235,7 @@ def _assert_resolution(
         "cleaves",
         "leave_count",
         "methide",
+        "exclusive_partner",
         "needs",
     ):
         if key in chosen:

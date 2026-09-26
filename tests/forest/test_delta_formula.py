@@ -12,7 +12,7 @@ from xenosite.forest.rules import (
     bag_counts,
     bag_delta_formula,
     compose_delta_formula,
-    describe,
+    _describe,
 )
 
 from .pattern_info_inventory import (
@@ -31,7 +31,7 @@ def test_bag_delta_hydroxyl():
 
 
 def test_describe_seals_delta_formula():
-    info = describe(adds="O", removes="H", name="h")
+    info = _describe(adds="O", removes="H", name="h")
     poss = info["possibilities"][0]
     assert poss["delta_formula"] == {"O": 1, "H": -1}
     assert info["span"]["delta_formula"] == {"O": 1, "H": -1}

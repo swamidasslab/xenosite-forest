@@ -15,13 +15,16 @@ pub mod candidate;
 pub mod canonical_plan;
 pub mod chematic_vendor;
 pub mod cleavage_graph;
+pub mod enumerate;
 pub mod find_path;
+pub mod find_path_ms1;
 pub mod forest;
 pub mod forest_mol;
 pub mod formula_check;
 pub mod hydroxylation;
 pub mod kekule;
 pub mod labels;
+pub mod mass;
 pub mod matched_atom;
 pub mod mol;
 pub mod orbits;
@@ -62,27 +65,33 @@ pub use atom_diff::{
     try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
-pub use candidate::{Candidate, ParentRef};
+pub use candidate::{Candidate, EditCandidate, ParentRef};
 pub use canonical_plan::{
-    CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
-    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
-    epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
-    identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
-    transitive_closure_masks,
+    ApplyN, ApplyNEmitStats, ApplyNProduct, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps,
+    Linearization, Maybe, PlanAtom, Step, align_deps_indices, apply_n_distinct_products,
+    apply_n_emit_products, apply_n_n_distinct_products, as_deps, bind_deps,
+    canonical_dependency_edges, eligible_sites_for_apply_n, epoxide_hydration_canonical_plan,
+    identity_canonical_plan, identity_plan, identity_plan_at_indexes, identity_plan_with_orbit,
+    label_at, plan_for_leaf, quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
 };
 pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
     CleavageNode, CleavageOr, CleavageSeed, CleavageSeedHop, cleavage_first_seeds,
-    cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
-    fold_cleavage_arms,
+    cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_graph_stats_default,
+    cleavage_layer, cleavage_product_graph, cleavage_product_graph_default, fold_cleavage_arms,
+};
+pub use enumerate::{
+    EnumConfig, EnumOrder, Metabolite, MetaboliteEnum, PathHop, PathInfo, bfs, bfs_default, dfs,
+    dfs_default, enumerate_metabolites, enumerate_metabolites_default,
 };
 pub use find_path::{
     FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
     MatchScoreSpec, OpenFindPath, PathCounters, PathOutcome, PathStep, diversity_penalty,
-    find_path, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
-    hop_match_add_score, hop_match_product_score, hop_match_score, log_close_term,
-    log_improve_term, neg_log1p_score,
+    find_path, find_path_default, find_path_diff, find_path_diff_default, find_path_with,
+    find_path_with_filters, hop_match_add_score, hop_match_product_score, hop_match_score,
+    log_close_term, log_improve_term, neg_log1p_score,
 };
+pub use find_path_ms1::{Ms1Config, find_path_ms1, find_path_ms1_default, predicted_mz_after_delta};
 pub use forest::{
     Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
 };
@@ -90,6 +99,10 @@ pub use forest_mol::ForestMol;
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
+pub use mass::{
+    Ms1Adduct, PROTON_MASS, element_mono_mass, formula_apply_delta, formula_mono_mass,
+    isotope_exact_mass, molecule_mono_mass, mz_abs_error, mz_of, mz_of_mol, mz_within,
+};
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
     SiteShellCostOpts, SiteShellMismatch, align_shells, aligned_shells_h_closer_no_n2,
@@ -105,7 +118,8 @@ pub use mol::{
 pub use orbits::{
     AtomBondGenerator, atom_bond_generators, atom_orbit, atom_orbit_with_gens, atom_pair_orbit_id,
     atom_pair_orbit_id_with_gens, atoms_orbit_with_gens, unordered_atom_pair_groups_with_gens,
-    unordered_atom_pair_orbit_sizes,
+    unordered_atom_pair_orbit_sizes, unordered_site_combinations,
+    unordered_site_combinations_with_gens,
 };
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{
@@ -115,10 +129,12 @@ pub use pattern::{
 };
 pub use product_graph::{
     ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
-    product_graph, product_graph_stats, product_layer,
+    product_graph, product_graph_default, product_graph_stats, product_graph_stats_default,
+    product_layer,
 };
 pub use rules::{
-    all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
+    all_rules, catalog_names, default_ruleset, default_ruleset_ref, epoxide_hydration, leaf_rule,
+    phase_one, phase_one_ref,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
@@ -126,7 +142,7 @@ pub use ruleset::{
 };
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;
-pub use stream::{Candidates, Metabolize, PairCandidates};
+pub use stream::{Candidates, Metabolize};
 pub use unique_edit::{
     UniqueSite, same_site_orbit, unique_atom_sites, unique_atom_sites_with_orbits,
 };

@@ -5,20 +5,32 @@
 //! after the child that emitted (leaf first, outer last), matching Python
 //! `info["rule"]` / addition chain order.
 //!
+//! # Call pattern (`rule_path`)
+//!
+//! Prefer these **public** doors — they stamp leaf names and cover SMIRKS +
+//! ResonancePair without a pair branch:
+//! - [`RuleSet::metabolites`] / [`RuleSet::metabolize`] → [`Emission`]
+//! - [`RuleSet::candidates`] → [`Candidate`] (edit or pair)
+//!
+//! Pair-only helpers (`pair_candidates_leaf`, `stamp_pair_paths`, …) are
+//! `pub(crate)`. Bare [`crate::pair_edit::pair_candidates`] is also crate-internal
+//! and leaves `rule_path` empty.
+//!
 //! Primary walk: [`RuleSet::candidates`] is a pull iterator of site–pattern–
 //! [`ParentRef`] triples without applying edits. A search reads [`PatternInfo`]
 //! / [`Effect`] to filter, then [`Candidate::materialize`] only for survivors.
 //! [`RuleSet::metabolize`] pulls the same way and materializes one emission per
 //! yield. Filter closures are optional convenience, not required.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chematic::core::{Atom, BondOrder, Element};
+use chematic::perception::find_sssr;
 use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
 use crate::ForestError;
 use crate::canonical_plan::{CanonicalPlanFn, Step, steps_for_leaf};
-use crate::mol::{Molecule, atom_idx, canon_smiles};
+use crate::mol::{Molecule, atom_idx, atom_usize, canon_smiles};
 use crate::pair_edit::pair_candidates;
 use crate::pattern::{Edit, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
@@ -95,12 +107,18 @@ pub struct RuleSet {
     /// Leaf-owned expander for [`Self::canonical_plan`] (Python method).
     plan_fn: Option<CanonicalPlanFn>,
     members: Vec<RuleMember>,
+    /// Cross-language parity excuse (data). ``None`` ⇒ must pair with a
+    /// same-named Python leaf and match products. Non-empty ⇒ unpaired or
+    /// intentionally divergent; reason is the string (test bodies do not
+    /// hardcode exception lists).
+    pub parity_exception: Option<String>,
 }
 
 impl PartialEq for RuleSet {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.members == other.members
+            && self.parity_exception == other.parity_exception
             && match (self.plan_fn, other.plan_fn) {
                 (None, None) => true,
                 (Some(a), Some(b)) => std::ptr::fn_addr_eq(a, b),
@@ -117,6 +135,7 @@ impl RuleSet {
             name,
             plan_fn: None,
             members: patterns.into_iter().map(RuleMember::Pattern).collect(),
+            parity_exception: None,
         }
     }
 
@@ -126,12 +145,20 @@ impl RuleSet {
             name,
             plan_fn: None,
             members: sets.into_iter().map(RuleMember::Set).collect(),
+            parity_exception: None,
         }
     }
 
     /// Attach a plan expander (composite leaves: return elementary rule steps).
     pub fn with_canonical_plan(mut self, f: CanonicalPlanFn) -> Self {
         self.plan_fn = Some(f);
+        self
+    }
+
+    /// Mark this leaf as excused from Rust↔Python product parity (or as
+    /// intentionally unpaired). Reason is required; empty is rejected by tests.
+    pub fn with_parity_exception(mut self, reason: impl Into<String>) -> Self {
+        self.parity_exception = Some(reason.into());
         self
     }
 
@@ -186,7 +213,9 @@ impl RuleSet {
     ///
     /// Pull iterator: each `next` advances one unique-edit survivor (or nested
     /// child). Pair-endpoint patterns are skipped here and resolved in
-    /// [`Self::metabolize`] / [`Self::pair_candidates`].
+    /// [`Self::metabolize`] / [`Self::pair_candidates`]. Each yield already has
+    /// a leaf-stamped [`crate::candidate::Candidate::rule_path`]; nested walks
+    /// append outer names.
     pub fn candidates<'a>(&'a self, mol: &'a Molecule) -> crate::stream::Candidates<'a> {
         crate::stream::Candidates::new(self, mol)
     }
@@ -204,9 +233,38 @@ impl RuleSet {
             .collect()
     }
 
+    /// Leaf segment of a leaf-first `rule_path`: this set's name alone.
+    /// Nested walks append outers via [`Self::with_outer_path`].
+    pub(crate) fn leaf_rule_path(&self) -> Vec<Option<String>> {
+        vec![self.name.clone()]
+    }
+
+    /// Append outer container names (root last) onto a leaf-stamped path.
+    ///
+    /// Crate-internal: nested discovery walks use this after a leaf stamp.
+    pub(crate) fn with_outer_path(
+        mut leaf_first: Vec<Option<String>>,
+        outers: impl IntoIterator<Item = Option<String>>,
+    ) -> Vec<Option<String>> {
+        leaf_first.extend(outers);
+        leaf_first
+    }
+
+    /// Stamp this set's name onto each pair's [`PairCandidate::rule_path`].
+    ///
+    /// Crate-internal. Callers use [`Self::candidates`] / [`Self::metabolites`].
+    pub(crate) fn stamp_pair_paths(&self, pairs: &mut [crate::pair_edit::PairCandidate]) {
+        let path = self.leaf_rule_path();
+        for pair in pairs {
+            pair.rule_path = path.clone();
+        }
+    }
+
     /// Materialize every candidate (and leaf pair paths). No filter closures.
     ///
-    /// Pull iterator — collects nothing until the caller drives `next` / `collect`.
+    /// Preferred door for product_layer / enumerate / depth-1 compares: one
+    /// iterator for SMIRKS and ResonancePair, with leaf-first `rule_path`
+    /// already stamped. Pull — collects nothing until the caller drives `next`.
     pub fn metabolites<'a>(
         &'a self,
         mol: &'a Molecule,
@@ -217,13 +275,18 @@ impl RuleSet {
 
     /// ResonancePair path candidates for this set and nested children.
     ///
-    /// Discovery only — no path flip. Pull iterator over nested leaves.
-    pub fn pair_candidates<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairCandidates<'a> {
+    /// Crate-internal discovery. Prefer [`Self::candidates`] (polymorphic).
+    pub(crate) fn pair_candidates<'a>(
+        &'a self,
+        mol: &'a Molecule,
+    ) -> crate::stream::PairCandidates<'a> {
         crate::stream::PairCandidates::new(self, mol)
     }
 
     /// Pair candidates from this leaf's own endpoint patterns only.
-    pub fn pair_candidates_leaf(
+    ///
+    /// Crate-internal. Prefer [`Self::candidates`] / [`Self::metabolites`].
+    pub(crate) fn pair_candidates_leaf(
         &self,
         mol: &Molecule,
     ) -> Result<Vec<crate::pair_edit::PairCandidate>, ForestError> {
@@ -231,14 +294,18 @@ impl RuleSet {
         if endpoints.is_empty() {
             return Ok(Vec::new());
         }
-        pair_candidates(mol, &endpoints)
+        let mut pairs = pair_candidates(mol, &endpoints)?;
+        self.stamp_pair_paths(&mut pairs);
+        Ok(pairs)
     }
 
     /// ResonancePair path emissions for this set and nested children.
     ///
-    /// Pull iterator: materializes one pair at a time (discovery may buffer
-    /// SMARTS hits for a leaf). Prefer [`Self::metabolize`] when filters apply.
-    pub fn pair_emissions<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairEmissions<'a> {
+    /// Crate-internal. Prefer [`Self::metabolites`] for the unified walk.
+    pub(crate) fn pair_emissions<'a>(
+        &'a self,
+        mol: &'a Molecule,
+    ) -> crate::stream::PairEmissions<'a> {
         crate::stream::PairEmissions::new(self, mol)
     }
 
@@ -291,6 +358,101 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
     Ok(product)
 }
 
+/// Cleavage product oxygenates map 1 (`O-`, `O=`, or carboxylic).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RingOpenOxygenate {
+    Alcohol,
+    Carbonyl,
+    Carboxylic,
+}
+
+/// Detect `>>(O-[*:1].[*:2])` / `>>([*:2].[*:1]-O)` / carbonyl / carboxylic forms.
+fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
+    let product = smirks.split_once(">>")?.1.trim();
+    let product = product
+        .strip_prefix('(')
+        .and_then(|p| p.strip_suffix(')'))
+        .unwrap_or(product);
+    if !product.contains('.') {
+        return None;
+    }
+    // Carboxylic before bare carbonyl (`(=O)O` contains `=O`).
+    if product.contains("[*:1](=O)O") {
+        return Some(RingOpenOxygenate::Carboxylic);
+    }
+    if product.contains("O=[*:1]") || product.contains("[*:1]=O") {
+        return Some(RingOpenOxygenate::Carbonyl);
+    }
+    if product.contains("O-[*:1]") || product.contains("[*:1]-O") {
+        return Some(RingOpenOxygenate::Alcohol);
+    }
+    None
+}
+
+fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
+    for ring in find_sssr(mol).rings() {
+        let atoms: BTreeSet<usize> = ring.iter().copied().map(atom_usize).collect();
+        if atoms.contains(&left) && atoms.contains(&right) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Chematic cleavage SMIRKS (`A.B`) on a ring bond drops a ring atom. Break the
+/// bond and oxygenate map 1 on the live graph instead (ring stays one piece).
+fn ring_open_oxygenate(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    mode: RingOpenOxygenate,
+) -> Option<Vec<Molecule>> {
+    let (&left, &right) = (mapped.get(&1)?, mapped.get(&2)?);
+    if !atoms_share_ring(mol, left, right) {
+        return None;
+    }
+    let (bond_idx, _) = mol.bond_between(atom_idx(left), atom_idx(right))?;
+    let mut product = mol.with_bond_removed(bond_idx);
+    match mode {
+        RingOpenOxygenate::Alcohol => {
+            let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), oxygen, BondOrder::Single)
+                .ok()?;
+        }
+        RingOpenOxygenate::Carbonyl => {
+            let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), oxygen, BondOrder::Double)
+                .ok()?;
+        }
+        RingOpenOxygenate::Carboxylic => {
+            let (next, oxo) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), oxo, BondOrder::Double)
+                .ok()?;
+            let (next, hydroxy) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), hydroxy, BondOrder::Single)
+                .ok()?;
+        }
+    }
+    // Bracket H on the cleaved atoms (e.g. pyrrole [nH]) is stale after the
+    // bond break; clear so chematic recomputes implicit H (aniline NH2).
+    let left_el = product.atom(atom_idx(left)).element;
+    let right_el = product.atom(atom_idx(right)).element;
+    product = product.with_atom_element(atom_idx(left), left_el);
+    product = product.with_atom_element(atom_idx(right), right_el);
+    if accept_product(&product) {
+        Some(vec![product])
+    } else {
+        None
+    }
+}
+
 /// Same as [`apply_edit_mols`], returning product CSMIs.
 pub(crate) fn apply_edit_for_candidate(
     mol: &Molecule,
@@ -322,12 +484,64 @@ pub(crate) fn apply_edit_mols(
             }
         }
         Edit::Smirks(smirks) => {
+            // CH2 leave (dioxole methylene, …): chematic SMIRKS disconnect
+            // drops ring bonds and opens the aromatic system. Removing the
+            // leave carbon on the live mol preserves the ring (catechol).
+            if pattern.effect.leave_count == Some(1)
+                && pattern.effect.leave_formula == crate::pattern::leave_ch2()
+            {
+                if let Some(products) = remove_mapped_ch2_leave(mol, mapped) {
+                    return Ok(products);
+                }
+            }
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
+            if let Some(mode) = ring_open_oxygenate_mode(smirks) {
+                if let Some(products) = ring_open_oxygenate(&work, mapped, mode) {
+                    return Ok(products);
+                }
+            }
             apply_smirks_at(smirks, &work, mapped)
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
     }
+}
+
+/// Remove a mapped dioxole-style methylene (C with two O neighbors).
+///
+/// Returns the aromatized heavy fragment plus a methane leave piece — matching
+/// Python's catechol + C split for benzodioxole reduction.
+fn remove_mapped_ch2_leave(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+) -> Option<Vec<Molecule>> {
+    use chematic::core::Element;
+    let mut leave_idx: Option<usize> = None;
+    for &idx in mapped.values() {
+        let atom = mol.atom(atom_idx(idx));
+        if atom.element != Element::C {
+            continue;
+        }
+        let nbrs: Vec<_> = mol
+            .neighbors(atom_idx(idx))
+            .map(|(n, _)| mol.atom(n).element)
+            .collect();
+        if nbrs.len() == 2 && nbrs.iter().all(|e| *e == Element::O) {
+            leave_idx = Some(idx);
+            break;
+        }
+    }
+    let leave_idx = leave_idx?;
+    let (product, _remap) = mol.with_atom_removed(atom_idx(leave_idx));
+    let product = crate::mol::aromatize(&product);
+    if !accept_product(&product) {
+        return None;
+    }
+    let leave = crate::mol::parse_mol("C").ok()?;
+    if !accept_product(&leave) {
+        return None;
+    }
+    Some(vec![product, leave])
 }
 
 /// O-dealkylation of a methyl ether (anisole-shaped SMARTS / SMIRKS).
@@ -406,8 +620,8 @@ mod tests {
             .candidates(&mol)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        let h = cands.iter().find(|c| c.pattern.name == "h").unwrap();
-        assert_eq!(h.orbit.len(), 6);
+        let h = cands.iter().find(|c| c.pattern_name() == "h").unwrap();
+        assert_eq!(h.orbit().len(), 6);
         let plan = &emissions[0].plan;
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].orbit.len(), 6);
@@ -547,6 +761,36 @@ mod tests {
         assert_eq!(emission.namespace(), vec!["Hydroxylation"]);
     }
 
+    #[test]
+    fn pair_leaf_door_stamps_rule_path_bare_does_not() {
+        use crate::pair_edit::pair_candidates as bare_pairs;
+        use crate::rules::quinone_formation;
+        let qf = quinone_formation();
+        let mol = parse_mol("COc1ccccc1").unwrap();
+        let stamped = qf.pair_candidates_leaf(&mol).unwrap();
+        assert!(!stamped.is_empty());
+        for pair in &stamped {
+            assert_eq!(pair.rule_path, qf.leaf_rule_path());
+            assert_eq!(pair.rule_name(), "QuinoneFormation");
+        }
+        let endpoints = qf.leaf_pair_endpoints();
+        let bare = bare_pairs(&mol, &endpoints).unwrap();
+        assert_eq!(bare.len(), stamped.len());
+        for pair in &bare {
+            assert!(pair.rule_path.is_empty());
+        }
+        let mut restamped = bare;
+        qf.stamp_pair_paths(&mut restamped);
+        let with_outer = RuleSet::with_outer_path(
+            restamped[0].rule_path.clone(),
+            [Some("PhaseOne".into())],
+        );
+        assert_eq!(
+            with_outer,
+            vec![Some("QuinoneFormation".into()), Some("PhaseOne".into())]
+        );
+    }
+
     /// Two overlapping leaf rules, same SMARTS / same product — outer unique_csmi
     /// keeps the first leaf (Python RuleSet cross-rule yield).
     #[test]
@@ -650,6 +894,40 @@ mod tests {
     }
 
     #[test]
+    fn dealkylation_ring_open_on_benzene_keeps_six_carbons() {
+        use crate::rules::dealkylation;
+        let got = products_of(&dealkylation(), "c1ccccc1", accept_all_rules, accept_all_sites);
+        assert_eq!(
+            got,
+            canon_set(["C=CC=CC=CO", "C=CC=CC=C=O"]),
+            "chematic A.B cleavage drops a ring atom; ring-open edit must keep C6"
+        );
+    }
+
+    #[test]
+    fn n_dealkylation_ring_open_on_indole_keeps_nitrogen() {
+        use crate::rules::n_dealkylation;
+        let got = products_of(
+            &n_dealkylation(),
+            "c1ccc2[nH]ccc2c1",
+            accept_all_rules,
+            accept_all_sites,
+        );
+        assert!(
+            got.contains(&canon_of("Nc1ccccc1C=C=O").unwrap()),
+            "methine carbonyl ring-open; got {got:?}"
+        );
+        assert!(
+            got.contains(&canon_of("Nc1ccccc1C=CO").unwrap()),
+            "methine alcohol ring-open; got {got:?}"
+        );
+        assert!(
+            got.contains(&canon_of("NC=Cc1ccccc1O").unwrap()),
+            "quaternary alcohol ring-open; got {got:?}"
+        );
+    }
+
+    #[test]
     fn epoxidation_matches_kekule_forms_on_benzene() {
         use crate::rules::epoxidation;
         let mol = parse_mol("c1ccccc1").unwrap();
@@ -659,7 +937,7 @@ mod tests {
             .unwrap();
         assert_eq!(candidates.len(), 1, "{candidates:?}");
         assert!(matches!(
-            candidates[0].parent,
+            candidates[0].as_edit().unwrap().parent,
             crate::candidate::ParentRef::Form(_)
         ));
         let emissions = epoxidation()
@@ -693,11 +971,11 @@ mod tests {
         let set = hydroxylation();
         let cands = set.candidates(&mol).collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(cands.len(), 1);
-        assert_eq!(cands[0].pattern.name, "h2");
+        assert_eq!(cands[0].as_edit().unwrap().pattern.name, "h2");
         // Filtering by pattern data needs no closure into the rule.
         let refuse: Vec<_> = cands
             .iter()
-            .filter(|c| c.pattern.effect.adds.as_deref() != Some("O"))
+            .filter(|c| c.effect().adds.as_deref() != Some("O"))
             .collect();
         assert!(refuse.is_empty());
         let products = cands[0].materialize(&mol).unwrap();

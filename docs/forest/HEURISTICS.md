@@ -38,7 +38,12 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 - **Or of cleavages that share an identical fragment.** Distinct cleaving steps that discard the **same** fragment CSMI multiset fold into one [`CleavageOr`](../../crates/xenosite-forest/src/cleavage_graph.rs): arms share sorted `fragments` (both sides of the bifurcation are first-class). Fold key is [`CleaveFoldKey`](../../crates/xenosite-forest/src/pattern.rs) = resolved `cleave_side_group` signature + fragments (cross-rule). Choosing an arm **and** a continuation fragment builds linked [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs) from the other side(s). `find_path` expand enqueues each `(fold_key, continue_csmi)` once. Not a revival of archive And/Or plan trees ([DROPPED](DROPPED.md)). Status: approved (Rust derisk).
 - **Cleavage product graph → Or/Maybe, then non-cleavage across survivors.** Enumerate the cleavage layer (on demand / BFS); both fragment CSMIs are graph nodes. Fold arms by [`CleaveFoldKey`](../../crates/xenosite-forest/src/pattern.rs). **MCS / `atom_diff` still gates** which fragments enqueue. Expand gate: strict cost drop vs parent **and** ha ≥ target; if **both** sides match, **both** stay — no single-winner prune. Shrink (and local-add) diffs **tag-lift + extend**; keep only cost-0 lifts, else **MCS** (`mcs_lift_rematch`); also MCS when lift is impossible (`mcs_lift_fallback`, expect zero). Do **not** add a find_path cleave-only phase — treat cleaving edits like other reactions (`order_key` / filters). Redundancy across cleavage *sides* uses ``cleave_side_group`` data collected at expand — not a second predicate. Status: approved (Rust derisk; free-step leave-group yield key still not decided).
 - **General product graph (all edits).** [`product_graph`](../../crates/xenosite-forest/src/product_graph.rs) BFS of PhaseOne metabolites as CSMI nodes with inbound [`ProductHop`](../../crates/xenosite-forest/src/product_graph.rs) edges (rule, pattern, site Tags, added Tags). Cleavage-only graph stays separate (Or fold). Not find_path; not archive NetworkX `MetaboliteNetwork` (DROPPED). Target MCS gate matches cleavage expand. Status: approved (Rust derisk door). Tests: `product_graph` unit; example `product_graph_bench`.
+- **Metabolite enumerator (stream).** [`enumerate`](../../crates/xenosite-forest/src/enumerate.rs) / [`bfs`](../../crates/xenosite-forest/src/enumerate.rs) / [`dfs`](../../crates/xenosite-forest/src/enumerate.rs): pull-iterator of metabolites up to `max_depth` with accumulated [`PathInfo`](../../crates/xenosite-forest/src/enumerate.rs) (hops = rule, pattern, site Tags, added Tags). BFS queue vs DFS stack (Python `find_path.bfs` / `dfs` shape). Default [`EnumConfig::unique_csmi`](../../crates/xenosite-forest/src/enumerate.rs) emits each CSMI once; `unique_csmi=false` / [`with_all_paths`](../../crates/xenosite-forest/src/enumerate.rs) streams every path (still drops cycles on the current walk). Optional `max_nodes`. Expand via `product_layer` with no target gate. Not find_path; not the product graph materialization. Status: approved (Rust derisk door). Tests: `enumerate` unit.
 - **Yield: remapped free-step twins (keep).** `same_rule_maybe_skeleton` (rule multiset + Maybe side CSMIs + precedes under rule-name align) runs beside exact `same_linearizations` at hit yield. Not orbit-aware — unique-edit canonical sites make that unnecessary. Counters: `PathCounters::dropped_duplicate_plan` (total wasted hits), split into `dropped_exact_plan` vs `dropped_skeleton_twin` (remapped twins only). Dominated-extension yield filter over-collapsed legitimate multipath (dimethylamine→PhCHO); dropped as a yield prune. `PathCounters::signal_contained_plan` still **counts** when a hit would match `dominates_extension_of` — signal only, does not drop. Status: **keep** skeleton twin yield-drop (ablation: off pads `max_paths` with remapped twins); dominated-extension as automatic drop/abort **not approved**.
+
+- **`ApplyN` plan pool (MS1).** [`ApplyN`](../../crates/xenosite-forest/src/canonical_plan.rs) on [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs): OR of elementary rule-name arms + exact apply `count`. Composable with steps / precedes / [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs) (same bag style as Maybe — not archive And/Or trees). Example: long hydroxylation list as arms, `count = N` when the spectrum expects N oxygenations. Pattern-level OR stays on PatternInfo inside a leaf. **Counts / dedup:** eligible sites = union of unique-edit orbits for matching arms; [`ApplyN::n_combinations`](../../crates/xenosite-forest/src/canonical_plan.rs) / [`unordered_site_combinations`](../../crates/xenosite-forest/src/orbits.rs) = Aut-deduped unordered `count`-subsets (benzene OH×2 → 3). **Emit:** [`apply_n_emit_products`](../../crates/xenosite-forest/src/canonical_plan.rs) one materialize per combo (sorted tags); each product carries free [`Deps`] plans whose linearizations cover path orders (`n_covering_linearizations`). Bench: `examples/apply_n_bench.rs`. Plan replay counts: [`Deps::n_linearizations`](../../crates/xenosite-forest/src/canonical_plan.rs) + [`Deps::n_distinct_products`](../../crates/xenosite-forest/src/canonical_plan.rs) / [`Deps::replay_stats`](../../crates/xenosite-forest/src/canonical_plan.rs). Status: approved (Rust derisk door). Tests: `apply_n_benzene_oh2_three_combinations_three_products`, `apply_n_emit_covers_paths_without_permuting_applies`.
+
+- **`find_path_ms1` (m/z target).** Sibling of structure [`find_path`](../../crates/xenosite-forest/src/find_path.rs): hit when formula m/z is within `tol_da` **and** ApplyN pools are exactly filled. Default adduct **[M+H]⁺**. No structure MCS. Closer uses materialized mono mass ([`molecule_mono_mass`](../../crates/xenosite-forest/src/mass.rs): common isotope unless `atom.isotope` labeled). Catalog `delta_formula` soft pre-hint picks the better of full vs heavy-only (hydroxyl `+O −H` vs live `+O`); skipped for `cleaves` (leave bags ≠ fragment mono mass). EpoxideHydration / EpoxideOpening / N-oxidation nitroso bags mass-faithful; hydroxyl junction bags and S-ox hydroxy left soft. **Yield:** same as structure find_path — drop exact `same_linearizations`; drop remapped `same_rule_maybe_skeleton` only when hit CSMI matches (isobar regioisomers must not collapse). Path orders for one product are covering linearizations on the plan, not extra hits. **Property:** apply leaf → product CSMI must appear in MS1 hits at that product's m/z; every emitted hit's final (and last-step) product satisfies tol; path mz-error is monotonic; emitted plans **replay** from the reactant (`Deps::reaches`) — site notes are forest **labels** ([`Tag`](../../crates/xenosite-forest/src/labels.rs) / `Atom.tag`), not chematic indexes, so multi-hop linearizations rebind after earlier edits. Cleavage leave fragments exempt from the mz check (hit species must appear). ApplyN Aut-emit products at the target mass ⊆ MS1 hits under the same pool (covering). Tests: unit apply/hard chains + proptest [`ms1_apply_fuzz`](../../crates/xenosite-forest/tests/ms1_apply_fuzz.rs) (`XENOSITE_FUZZ_EXAMPLES`). Must not break structure find_path. Status: approved (Rust derisk door).
 
 ## Plans are Deps (elementary Steps + precedes)
 
@@ -46,11 +51,12 @@ Status: approved (Rust derisk; shape may replace Python `CanonicalStep`).
 
 The plan language is flat [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs):
 elementary `Step`s (rule name + site notes) plus precedes, plus [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs)
-cleavage bags on the same plan (not a sibling on the path outcome). There is no
+cleavage bags and [`ApplyN`](../../crates/xenosite-forest/src/canonical_plan.rs) OR-pools
+on the same plan (not siblings on the path outcome). There is no
 parallel `CanonicalStep` dialect for search.
 
-Site notes are one enum: known index | `WillAdd(element @ anchor)` | `AddedBy(rule, anchors)`.
-`Deps::bind` rewrites will-add → added-by and builds precedes from those notes.
+Site notes are one enum: known **label** ([`Tag`](../../crates/xenosite-forest/src/labels.rs) / `Atom.tag`) | `WillAdd(element @ anchor label)` | `AddedBy(rule, anchor labels)`.
+Not chematic atom indexes — indexes shuffle across hops; labels survive so multi-hop plans replay.
 Composite hops own a `canonical_plan` hook on the leaf (Python
 `ReactionRule.canonical_plan`): it returns elementary `Step`s named after
 catalog rules (`Hydroxylation`, `Dehydrogenation`, …). Search asks the leaf;
@@ -79,6 +85,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
 - Put the isotope-bearing atom first in the reaction SMARTS. `SubstructMatch` starts at query atom 0 and does not reorder, so a common atom first is walked before the isotope is tested.
 - **Rust door candidates (site–pattern–parent).** `RuleSet::candidates` yields deferred triples; `Candidate::materialize` runs the edit. `PairCandidate` is the ResonancePair analogue (merged `Effect` for filtering; path flip on materialize). `find_path` filters by reading pattern/effect data before materialize (`mol_edits` only counts survivors). Filter closures on `metabolize` stay for Python parity. Status: approved for the derisk door.
+- **Pair products split like Python `split_fragments`.** `PairCandidate::materialize_mols` runs chematic `fragments()` after the path flip (same as SMIRKS `apply_smirks_at`). Cleaving pair ends (QF `dealkylate`) must not yield one disconnected `C.quinone` mol: `find_path` reads `n_products == 1 && cleaves` as ring-open and `n_products >= 2` as bifurcation (`PathStep.sides` / `Maybe`). Public doors are polymorphic: [`RuleSet::candidates`] / [`RuleSet::metabolites`] yield edit + ResonancePair under [`Candidate`] / [`Emission`] (materialize via `Candidate::materialize_mols` / `emit`). Pair-only helpers are `pub(crate)` — not underscore prefixes. Status: approved (Rust derisk + Python parity). Tests: `pair_edit::quinone_dealkylate_splits_fragments_like_find_path`, `find_path::quinone_formation_cleavage_records_side_and_maybe`, `enumerate::quinone_formation_cleavage_streams_both_fragments`, `python_suite_port::pair_cleave_splits_like_python_split_fragments`, `ruleset::pair_leaf_door_stamps_rule_path_bare_does_not`.
 - Deferred metabolites. `metabolites` should be able to yield a light object instead of a sanitized mol. The object carries the anticipated formula (the same counts as `atom_trace["formula"]` and `delta_formula`) and says whether it is sure materialization can succeed. `metabolize` either returns that object or materializes it, so today's callers still get mols. A later hop materializes only when a filter or the plan needs the real mol. The same object is how a `StepPlan` can check that a later site was `added_by` an earlier step without replaying the edit.
 - A richer walk-ranking key than target-hit + enqueue order. Status: approved (default). Default / current best is **`Match(close×improve-both)`** (formula × atom_diff close×improve); SoftStack and other `MatchScoreSpec` recipes remain opt-in (`--score`, `--matrix`). Plain max-heap pop. Trying absolute-cost sort before enqueue preferred locally cheap dead ends on PhCH2OH→quinone — do not revive that. **Tried `PatternInfo.search_bias`:** SoftStack-only soft i8. **Dropped:** alternate DFS/BFS among equal scores. **Tried switch to close-atom** (lowest single-path hard bill): not taken — multipath hard Σbill favors close×improve-both (3994 vs close-both 4224 / improve-both 4555).
 - Pattern frequency. Count how often each pattern matches, and how often that match shows up in a real metabolite. Deprioritize or filter patterns that match almost everything and are rarely the one that was used. That number belongs on `PatternInfo` (related trial: `search_bias`), not in a table inside `find_path`.
@@ -132,6 +139,8 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 - A nitrogen with two double bonds is not a product. `C=[N+]=C` sanitizes (degree 2, valence 4) but it is not an iminium. An iminium is one double bond and two single bonds. `_sanitize_piece` drops that fragment, and the split fails with it. Carbamazepine site `{4, 17}` was iminium on one ring carbon plus dealkylation of the carboxamide on the other, which left `C1=c2ccccc2=[N+]=c2ccccc2=C1` and `NC=O`. Status: approved. Test: `test_carbamazepine_does_not_emit_two_double_nitrogen`.
 - A dearomatizing pair edit must change the system that was kekulized. Other aromatic systems may stay. If every aromatic atom of that system is still aromatic and no non-aromatic double or triple bond touches it, the product re-aromatized and is dropped. Alprazolam site `{1, 4}` is that cation: `Cc1nnc2cnc(-c3ccccc3)c3cc(Cl)ccc3[n+]1-2`. A quinone, quinone-imine, or quinodimethane keeps a localized double bond, so it stays. Status: approved. Test: `test_alprazolam_re_aromatized_cation_is_not_a_quinone`.
 - Methide is always on the rule data (Dehydrogenation `methide_end`, QuinoneFormation alkyl branch). Opt-in `pathways=("methide",)` is dropped (DROPPED.md). Both ends may be methide: a para-quinodimethane is two alkyl single-to-double ends. The one-side skip was a mistake. There is no separate "no methides" mode. `merge_effects` sets `methide` when either end has it. Search already skips alkyl `partner=="C"` ends unless `_alkyl_bond_raises`. Tests: `test_dh_methide_pathways.py`.
+
+- **``exclusive_partner`` on Effect.** ResonancePair couple gate (Python `pair_metabolites` / Rust `pair_candidates`): when a resolved end sets the bit, its non-site mapped atoms must not appear on the other end's map. Chemistry sets the bit — QF iminium / O·N `single_to_double` / dealkylate / replace_halogen — not a blanket shared-map refuse. Methide alkyl (`partner=="C"`) stays off. Bridging non-aromatic N (or O) on an aromatic system is the motivating case: both sides can match, sharing that partner atom is refused by data. Status: approved. Tracker: [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) C14 / work #18–19.
 - **Adds-H vs removes-H filters (Hydrogenation ≠ Dehydrogenation).** `filter_sites` already refused removes-H effects unless some site atom has `atom_h_delta < 0` (or intersects `loses_aromaticity`). Symmetric: effects whose `adds` contains H (and that do not also add O / cleave) are refused unless some site atom has `atom_h_delta > 0`. `filter_rules` mirrors this on span.adds. **Hydrogenation adds H** (reduction / saturation); **Dehydrogenation removes H**. Do not conflate. `dearomatizes` alone is not enough toward a quinone target: both H and DH can dearomatize, but only DH/QF match oxidative H loss. Status: approved. Tests: `test_hydrogenation_pattern_info.py`.
 - **Hydrogenation `path_end` PatternInfo.** Declares `adds="H"` and `dearomatizes=True` (capability); `merge_effects` resolves dearomatizes against `system_aromatic`. Alkene SMARTS keep span `dearomatizes=False` so aliphatic C=C→CC is not refused by the pattern-level “all dearomatizes” check when `loses_aromaticity` is empty. The same check **skips** patterns whose span also adds H or O (path_end / Epoxidation): those resolve at the site / adds-H gate, so aliphatic carbonyl path reduction (`CC=O`→`CCO`) and ethene→epoxide (`C=C`→`C1OC1`) are not refused. Status: approved.
 - **Epoxidation / EpoxideHydration `dearomatizes` capability.** Catalog `Effect.dearomatizes=true` (aromatic epoxidation / diol look-ahead clears the ring bit at the site). [`PatternInfo::resolve_for_match`](../../crates/xenosite-forest/src/pattern.rs) / Python `resolve_effect` resolve false on aliphatic site_map atoms (context mol, not Kekulé form). Site-shell residual reads the resolved bit for `|Δaromatic|`. Same resolve shape as Hydrogenation / pair `merge_dearomatizes`. Python `Epoxidation` span matches Rust. Status: approved (Rust derisk + Python parity). Tests: `epoxidation_dearomatizes_capability_resolves_on_aromatic_site` / `epoxidation_aromatic_residual_drops_with_dearomatic` / `epoxide_hydration_pattern_info_and_plan` / `test_epoxidation_pattern_info.py` / always-on [`pattern_info_catalog`](../../crates/xenosite-forest/src/pattern_info_catalog.rs).
@@ -176,12 +185,13 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
 | Key | Redundant with ``delta_formula``? | Notes |
 | --- | --- | --- |
-| ``adds`` / ``removes`` | **Yes** (bag encoding of the junction part) | Positive ≡ adds bag; negative ≡ removes. Keep bags until callers migrate. Note: sealed pattern delta is edit stoichiometry (hydroxyl ``O:+1,H:-1``); mol ``formula_delta`` after sanitize may differ (``O:+1`` only — OH restores H). |
+| ``adds`` / ``removes`` | **Yes** (bag encoding of the junction part) | Positive ≡ adds bag; negative ≡ removes. Keep bags until callers migrate. Note: sealed pattern delta is usually the **net** mol change; hydroxyl is the documented exception (edit stoichiometry ``O:+1,H:-1`` vs sanitized ``O:+1`` — OH restores H). EpoxideHydration ``OOHH``, EpoxideOpening hydrate ``OHH`` / rearrange ``HH``, N-ox nitroso ``O``/``HH`` match sanitized nets (were undercounting H). S-ox hydroxy stays ``O`` — net H is substrate-dependent (thioether vs thiol). |
 | ``leave_formula`` | **Yes** (negative part of the sealed map) | Positive counts of the named leave; sealed as negatives. ``Me`` → ``{C:1,H:3}``. Open leaves (`leave_count` None) stay empty. |
 | ``leave_count`` | **Partial** | When ``leave_formula`` is set, equals its heavy-atom count. Still useful when leave is open (None) or as a cheap filter without walking the map. |
 | ``partner`` / ``partner_h`` | **No** | Site role / identity, not stoichiometry (though When+delta covers partner *removal*). |
 | ``needs`` | **No** | Capability / gating (e.g. needs O), not a count. |
 | ``cleaves`` / ``breaks_ring`` / ``dearomatizes`` / ``methide`` | **No** | Structural / pathway bits. |
+| ``exclusive_partner`` | **No** | Pair couple gate: non-site partner atom exclusive to this end (bridging N/O chemistry). Not global shared-map refuse. |
 | ``symbol`` / ``h`` / ``site_aromatic`` | **No** | Filled from the matched atom at resolve time. |
 
 ## Schema proposals (not yet in PatternInfo)
@@ -212,9 +222,67 @@ stays cached after first read. Emission identity for check/yield is
 
 Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`, `test_parity.py` (anisole dealk).
 
+## Product-identical distinct sites / Dealk other-side double-emit
+
+Status: **not decided** (emission shape); tracking in [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C13**.
+
+Automorphism-equivalent sites already emit once with ``orbit`` / ``site_orbit``.
+Ester Dealkylation (two directed ``quaternary_alcohol`` sites on the bridging
+O, unequal ranks, one product bag) and similar cases are a different class.
+``unique_csmi_compliant=False`` on those leaves until data (``product_equiv`` /
+identity maps) folds them — only the CSMI-dup test xfails (C11).
+
+## ``unique_csmi_compliant`` (rule data)
+
+Status: **approved**. Class attribute on ``ReactionRule`` (default ``True``).
+Yield-layer CSMI dedup runs only when compliant. Goal: all leaves ``True``.
+Non-compliant: ``Dealkylation``, ``OxidativeDehalogenation`` (corpus hits).
+Tests: ``test_csmi_dedup_soft_failure`` only — hard-fail if compliant + hit;
+xfail if non-compliant + hit. Other suites do not xfail on this flag.
+
 ## Antipattern: global `_kekule_forms` on SmirksReactionRule
 
 Status: **not approved**. Materializing every Kekulé form inside plain `SmirksReactionRule.metabolites` is combinatorial expansion — that is why `ResonanceRule` exists. Match once on the aromatic parent; react on a cached Kekulé parent selected by SMARTS-implied bond order. Do not reintroduce an all-forms loop or an easy opt-in that restores the tax. `_kekule_forms` may remain for tests / helpers that need the list explicitly.
+
+## Chematic / RDKit resonance engines for ResonancePair path edits
+
+Status: **not approved** (do not migrate the path flip onto these).
+
+**Chematic** exposes aromatic kekulization (`chematic_core::kekulize` /
+`kekulize_inplace`) and low-level `set_bond_order`. **RDKit**
+`ResonanceMolSupplier` (+ `KEKULE_ALL`) enumerates conjugated-group electron /
+Kekulé arrangements and filters them with octet and formal-charge rules
+(`checkChargesAndBondOrders`: fc in −2…+1, no cumulated multiples on aromatic
+atoms, constrained cations/anions left of N, etc.). Forest already uses the
+supplier correctly for **Kekulé parents and conjugated groups**
+(`resonance_bond_maps` / `_kekule_forms`).
+
+Neither API is a conjugated-**path flip**. ResonancePair needs odd
+alternating-path discovery between two ends, then single↔double flip along
+that path after end edits (`swap_bonds_along_path` / Rust `flip_path`).
+Replacing that with re-kekulize or “pick a ResonanceMolSupplier form” would
+choose *some* matching, not the intentional path. Keep the hand walk; keep
+post-flip gates (H adjust, valence / two-double N, re-aromatized system drop).
+Sanitize / C10 failures are usually end-edit / SMIRKS products, not missing a
+library flip. Revisit only if a library gains an explicit path-flip primitive.
+
+## Chematic product-side ``#`` expand → organic aliphatic + aromatic
+
+Status: **approved** (forest apply workaround; upstream issue drafted).
+
+Chematic `expand_atomic_number_primitives` turns product `[#6](=[#8])[#6]` into
+**bracket** `[C]`/`[c]`/`[O]`/`[o]` spellings that miss on apply or leave
+residual brackets. Forest `organic_product_variants` / `apply_smirks_at`
+instead rewrite product `#` to **organic-subset** aliphatic then aromatic
+(`C`/`c`, `O`/`o`, …). **Always include both variants** for equivalent `#`
+expand behavior: aliphatic-all is tried first; aromatic forms follow when
+aliphatic does not apply (chemically wrong aromatic products still fail
+`accept_product`). Catalog SMARTS keep `#` on both sides. Meta-test
+`test_parity_fuzz_mols_cover_aliphatic_and_aromatic_smarts_branches` keys off
+mapped ``[#Z]`` data (not rule names) and requires corpus hits for both
+aromaticity states whenever both are reachable.
+
+Tracker: RUST_PYTHON_PARITY #5; `CHEMATIC_ISSUE_acetyl_atomic_product.md`.
 
 ## Narrowing SMARTS vs ``swap_group`` (ResonancePair)
 

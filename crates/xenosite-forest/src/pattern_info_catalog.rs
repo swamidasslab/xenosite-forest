@@ -128,8 +128,9 @@ fn catalog_pattern_info_structural() {
             assert_eq!(patterns.len(), 1);
             assert_eq!(patterns[0].name, "diol");
             assert_eq!(patterns[0].site_kind, SiteKind::Bond);
-            assert_eq!(patterns[0].effect.adds.as_deref(), Some("OO"));
+            assert_eq!(patterns[0].effect.adds.as_deref(), Some("OOHH"));
             assert_eq!(patterns[0].effect.delta_formula.get("O"), Some(&2));
+            assert_eq!(patterns[0].effect.delta_formula.get("H"), Some(&2));
             assert!(patterns[0].effect.dearomatizes);
         }
     }
@@ -161,7 +162,7 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
                 continue;
             };
             for c in cands {
-                let Some(catalog_info) = catalog.get(c.pattern.name.as_str()) else {
+                let Some(catalog_info) = catalog.get(c.pattern_name()) else {
                     continue;
                 };
                 if catalog_info.effect.dearomatizes {
@@ -172,11 +173,7 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
                 if catalog_info.effect.cleaves {
                     continue;
                 }
-                let site_atoms: Vec<usize> = catalog_info
-                    .site_map
-                    .iter()
-                    .filter_map(|m| c.mapped.get(m).copied())
-                    .collect();
+                let site_atoms = c.site_atoms();
                 if site_atoms.is_empty() {
                     continue;
                 }
@@ -210,7 +207,7 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
                 if lost {
                     misses.push(format!(
                         "{name}/{} on {smi} site={:?}: clears aromaticity but catalog dearomatizes=false",
-                        c.pattern.name, site_atoms
+                        c.pattern_name(), site_atoms
                     ));
                 }
             }
@@ -246,20 +243,15 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
                 continue;
             };
             for c in cands {
-                if !capable.contains(&c.pattern.name.as_str()) {
+                if !capable.contains(&c.pattern_name()) {
                     continue;
                 }
-                let site_aromatic = c
-                    .pattern
-                    .site_map
-                    .iter()
-                    .filter_map(|m| c.mapped.get(m).copied())
-                    .any(|i| mol.atom(atom_idx(i)).aromatic);
+                let site_aromatic = c.site_atoms().iter().any(|&i| mol.atom(atom_idx(i)).aromatic);
                 // Candidate carries resolved effect (context mol).
                 assert_eq!(
-                    c.pattern.effect.dearomatizes, site_aromatic,
+                    c.effect().dearomatizes, site_aromatic,
                     "{name}/{} on {smi}: resolved dearomatizes={} but site_aromatic={site_aromatic}",
-                    c.pattern.name, c.pattern.effect.dearomatizes
+                    c.pattern_name(), c.effect().dearomatizes
                 );
             }
         }

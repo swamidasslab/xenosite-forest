@@ -188,6 +188,41 @@ fn site_atom(mapped: &BTreeMap<u16, usize>, pattern: &PatternInfo) -> Option<usi
     mapped.get(&pattern.primary_map()).copied()
 }
 
+/// Non-site mapped atoms when [`Effect::exclusive_partner`] is set.
+fn exclusive_partner_atoms(
+    mapped: &BTreeMap<u16, usize>,
+    pattern: &PatternInfo,
+) -> BTreeSet<usize> {
+    if !pattern.effect.exclusive_partner {
+        return BTreeSet::new();
+    }
+    let Some(site) = site_atom(mapped, pattern) else {
+        return BTreeSet::new();
+    };
+    mapped
+        .values()
+        .copied()
+        .filter(|&idx| idx != site)
+        .collect()
+}
+
+/// True when an exclusive partner atom appears on the other end's map.
+fn shared_exclusive_partner(
+    map1: &BTreeMap<u16, usize>,
+    info1: &PatternInfo,
+    map2: &BTreeMap<u16, usize>,
+    info2: &PatternInfo,
+) -> bool {
+    let exclusive1 = exclusive_partner_atoms(map1, info1);
+    let exclusive2 = exclusive_partner_atoms(map2, info2);
+    if exclusive1.is_empty() && exclusive2.is_empty() {
+        return false;
+    }
+    let other1: BTreeSet<usize> = map2.values().copied().collect();
+    let other2: BTreeSet<usize> = map1.values().copied().collect();
+    !exclusive1.is_disjoint(&other1) || !exclusive2.is_disjoint(&other2)
+}
+
 fn edit_end(
     mol: &mut Molecule,
     mapped: &BTreeMap<u16, usize>,
@@ -301,6 +336,12 @@ pub struct PairEmission {
 /// Carries merged [`crate::pattern::Effect`] so a search can filter without
 /// running the edit. [`PairCandidate::materialize`] finds alternating paths
 /// and applies end edits.
+///
+/// [`Self::rule_path`] is the same leaf-first namespace as [`crate::candidate::Candidate`].
+/// Prefer [`crate::ruleset::RuleSet::candidates`] /
+/// [`crate::ruleset::RuleSet::metabolites`] so the leaf name is stamped
+/// automatically. Bare [`pair_candidates`] is `pub(crate)` and leaves
+/// `rule_path` empty — RuleSet doors stamp via `stamp_pair_paths`.
 #[derive(Clone, Debug)]
 pub struct PairCandidate {
     pub site: usize,
@@ -309,6 +350,10 @@ pub struct PairCandidate {
     pub right: PatternInfo,
     /// Merged end effects (dearomatizes resolved against system aromaticity).
     pub effect: crate::pattern::Effect,
+    /// Leaf-first rule namespace (emitting set, then containers). Empty when
+    /// discovered via bare [`pair_candidates`] without a
+    /// [`crate::ruleset::RuleSet`] stamp.
+    pub rule_path: Vec<Option<String>>,
     map1: BTreeMap<u16, usize>,
     map2: BTreeMap<u16, usize>,
     start: usize,
@@ -317,6 +362,35 @@ pub struct PairCandidate {
 }
 
 impl PairCandidate {
+    /// Emitting (leaf) rule name when discovered under a named set.
+    pub fn leaf_rule(&self) -> Option<&str> {
+        self.rule_path.first().and_then(|n| n.as_deref())
+    }
+
+    /// Named segments of [`Self::rule_path`] (unnamed sets omitted).
+    pub fn namespace(&self) -> Vec<&str> {
+        self.rule_path
+            .iter()
+            .filter_map(|name| name.as_deref())
+            .collect()
+    }
+
+    /// Hop / emission rule label: leaf [`RuleSet`] name, else [`PatternInfo::name`]
+    /// on the first end (same fallback as [`crate::candidate::Candidate::rule_name`]).
+    pub fn rule_name(&self) -> &str {
+        self.leaf_rule().unwrap_or(self.left.name.as_str())
+    }
+
+    /// Stamp leaf-first namespace (replaces any prior path).
+    ///
+    /// Prefer [`crate::ruleset::RuleSet::stamp_pair_paths`] /
+    /// [`crate::ruleset::RuleSet::with_outer_path`] at discovery time so call
+    /// sites do not mint leaf names by hand.
+    pub fn with_rule_path(mut self, rule_path: Vec<Option<String>>) -> Self {
+        self.rule_path = rule_path;
+        self
+    }
+
     /// Discovery site atoms for each end (Python `end_atoms`).
     pub fn end_atoms(&self) -> Option<(usize, usize)> {
         let a = site_atom(&self.map1, &self.left)?;
@@ -356,16 +430,21 @@ impl PairCandidate {
                 if !flip_path(&mut rw, &path) {
                     continue;
                 }
-                if !accept_product(&rw) {
-                    continue;
-                }
+                // Do not valence-gate the possibly-disconnected whole mol —
+                // Python `split_fragments` and SMIRKS `fragments()` sanitize
+                // each piece. find_path bifurcation is `n_products > 1`.
                 let checked = aromatize(&rw);
                 if self.effect.dearomatizes && system_stayed_aromatic(mol, &checked, &self.system) {
                     continue;
                 }
-                let smiles = canon_smiles(&checked);
-                if local_csmi.insert(smiles) {
-                    products.push(checked);
+                for frag in checked.fragments() {
+                    if !accept_product(&frag) {
+                        continue;
+                    }
+                    let smiles = canon_smiles(&frag);
+                    if local_csmi.insert(smiles) {
+                        products.push(frag);
+                    }
                 }
             }
         }
@@ -446,6 +525,7 @@ fn merge_effect_fields(
         cleaves: left.effect.cleaves || right.effect.cleaves,
         leave_count: left.effect.leave_count.or(right.effect.leave_count),
         methide: left.effect.methide || right.effect.methide,
+        exclusive_partner: left.effect.exclusive_partner || right.effect.exclusive_partner,
         dearomatizes: merge_dearomatizes(left, right, system_aromatic),
         partner: left
             .effect
@@ -457,7 +537,11 @@ fn merge_effect_fields(
 }
 
 /// Discover pair sites without applying path flips.
-pub fn pair_candidates(
+///
+/// Crate-internal discovery primitive: returns pairs with empty
+/// [`PairCandidate::rule_path`]. Prefer [`crate::ruleset::RuleSet::candidates`]
+/// / [`crate::ruleset::RuleSet::metabolites`].
+pub(crate) fn pair_candidates(
     mol: &Molecule,
     endpoints: &[PatternInfo],
 ) -> Result<Vec<PairCandidate>, ForestError> {
@@ -539,6 +623,9 @@ pub fn pair_candidates(
                         if site_a == site_b {
                             continue;
                         }
+                        if shared_exclusive_partner(map1, info1, map2, info2) {
+                            continue;
+                        }
                         let (n1, n2) = if info1.name <= info2.name {
                             (info1.name.clone(), info2.name.clone())
                         } else {
@@ -557,6 +644,7 @@ pub fn pair_candidates(
                             left: (*info1).clone(),
                             right: (*info2).clone(),
                             effect: merge_effect_fields(info1, info2, system_aromatic),
+                            rule_path: Vec::new(),
                             map1: map1.clone(),
                             map2: map2.clone(),
                             start,
@@ -703,5 +791,169 @@ mod tests {
                 .iter()
                 .any(|p| canon_of(p).unwrap() == want)
         }));
+    }
+
+    #[test]
+    fn quinone_dealkylate_splits_fragments_like_find_path() {
+        // Python split_fragments: ['C', 'O=C1C=CC(=O)C=C1'] as two products.
+        // find_path bifurcation needs n_products >= 2 (not one C.quinone mol).
+        use crate::forest_mol::ForestMol;
+        use crate::product_graph::{ProductGraphConfig, product_layer};
+        use crate::rules::quinone_formation;
+
+        let set = quinone_formation();
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let layer = ProductGraphConfig {
+            target: None,
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+        };
+        let children = product_layer(&parent, &set, &layer).unwrap();
+        let want_q = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        let want_me = canon_of("C").unwrap();
+        let csmi: Vec<String> = children
+            .iter()
+            .map(|c| c.child.csmi().as_ref().to_string())
+            .collect();
+        assert!(
+            csmi.iter().any(|s| canon_of(s).unwrap() == want_q),
+            "quinone fragment missing: {csmi:?}"
+        );
+        assert!(
+            csmi.iter().any(|s| canon_of(s).unwrap() == want_me),
+            "methyl fragment missing: {csmi:?}"
+        );
+        assert!(
+            csmi.iter().all(|s| !s.contains('.')),
+            "disconnected CSMI should be split before yield: {csmi:?}"
+        );
+        let with_both = children.iter().any(|c| {
+            c.hop.rule == "QuinoneFormation"
+                && c.hop.cleaves
+                && c.hop.products.len() >= 2
+                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_q)
+                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+        });
+        assert!(
+            with_both,
+            "cleaving hop must name QuinoneFormation and list both fragments"
+        );
+    }
+
+    fn qf_pair_endpoints() -> Vec<PatternInfo> {
+        quinone_formation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn quinone_formation_declares_exclusive_partner_on_hetero_arms() {
+        let set = quinone_formation();
+        let by_name: std::collections::BTreeMap<_, _> = set
+            .patterns()
+            .into_iter()
+            .map(|p| (p.name.as_str(), p))
+            .collect();
+        for name in [
+            "single_to_double",
+            "replace_halogen",
+            "iminium",
+            "dealkylate",
+        ] {
+            let p = by_name.get(name).unwrap_or_else(|| panic!("missing {name}"));
+            assert!(
+                p.effect.exclusive_partner,
+                "{name} should set exclusive_partner"
+            );
+        }
+        let methide = by_name.get("methide_end").unwrap();
+        assert!(
+            !methide.effect.exclusive_partner,
+            "methide alkyl partner stays off exclusive_partner"
+        );
+        assert_eq!(methide.effect.partner.as_deref(), Some("C"));
+    }
+
+    #[test]
+    fn shared_exclusive_partner_detects_bridging_atom() {
+        let endpoints = qf_pair_endpoints();
+        let std = endpoints
+            .iter()
+            .find(|p| p.name == "single_to_double")
+            .unwrap();
+        assert!(std.effect.exclusive_partner);
+        // Site map 1 = ring C; map 2 = partner heteroatom. Same partner atom
+        // on both ends → refuse.
+        let mut map1 = BTreeMap::new();
+        map1.insert(1, 0);
+        map1.insert(2, 10);
+        let mut map2 = BTreeMap::new();
+        map2.insert(1, 5);
+        map2.insert(2, 10);
+        assert!(shared_exclusive_partner(&map1, std, &map2, std));
+        // Distinct partners (catechol-style) → allow.
+        map2.insert(2, 11);
+        assert!(!shared_exclusive_partner(&map1, std, &map2, std));
+    }
+
+    #[test]
+    fn bridging_n_pair_candidates_do_not_share_exclusive_partner() {
+        for smiles in [
+            "c1ccc(N(C)c2ccccc2)cc1",
+            "c1ccc2c(c1)Nc1ccccc1C2",
+            "c1ccc2c(c1)Nc1ccccc1O2",
+        ] {
+            let mol = parse_mol(smiles).unwrap();
+            let endpoints = qf_pair_endpoints();
+            let cands = pair_candidates(&mol, &endpoints).unwrap();
+            for c in &cands {
+                assert!(
+                    !shared_exclusive_partner(&c.map1, &c.left, &c.map2, &c.right),
+                    "{smiles}: survivor {} still shares exclusive partner",
+                    c.pattern_name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn catechol_identical_o_partners_still_emit() {
+        let mol = parse_mol("Oc1ccccc1O").unwrap();
+        let endpoints = qf_pair_endpoints();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let saw_phenol_pair = cands.iter().any(|c| {
+            c.left.effect.partner.as_deref() == Some("O")
+                && c.right.effect.partner.as_deref() == Some("O")
+                && c.left.effect.exclusive_partner
+                && c.right.effect.exclusive_partner
+        });
+        // Partner string may live only after resolve_effect — check PatternInfo
+        // on QF single_to_double: partner is None in Rust catalog (Python sets
+        // via possibilities). Distinct O atoms: maps differ on map 2.
+        let saw_distinct_o = cands.iter().any(|c| {
+            c.left.name == "single_to_double"
+                && c.right.name == "single_to_double"
+                && c.map1.get(&2) != c.map2.get(&2)
+                && c.map1.get(&2).is_some()
+                && c.map2.get(&2).is_some()
+        });
+        assert!(
+            saw_phenol_pair || saw_distinct_o,
+            "expected ortho catechol pair with distinct O partners; got {:?}",
+            cands
+                .iter()
+                .map(|c| (
+                    c.pattern_name.as_str(),
+                    c.map1.clone(),
+                    c.map2.clone(),
+                    c.left.effect.partner.clone(),
+                    c.right.effect.partner.clone(),
+                ))
+                .collect::<Vec<_>>()
+        );
+        assert!(!cands.is_empty(), "catechol should still emit pair candidates");
     }
 }

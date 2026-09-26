@@ -9,7 +9,7 @@ from __future__ import annotations
 from xenosite.forest.find_path import bfs
 from xenosite.forest.rdkit_api import MolFromSmiles
 from xenosite.forest.rdkitutil import run_reactants
-from xenosite.forest.rules import Dehydrogenation, SmirksReactionRule, describe
+from xenosite.forest.rules import Dehydrogenation, SmirksReactionRule, _describe
 from xenosite.forest.rulesets import PhaseOne
 
 DIPHENHYDRAMINE = "CN(C)CCOC(c1ccccc1)c1ccccc1"
@@ -47,8 +47,8 @@ def test_metabolites_continues_after_runreactants_runtime_error(monkeypatch):
     class TwoRxns(SmirksReactionRule):
         name = "TwoRxns"
         smirks = (
-            ("[#6H3:1]>>[*:1]F", describe(adds="F", removes="H", name="f")),
-            ("[#6H3:1]>>[*:1]O", describe(adds="O", removes="H", name="o")),
+            ("[#6H3:1]>>[*:1]F", _describe(adds="F", removes="H", name="f")),
+            ("[#6H3:1]>>[*:1]O", _describe(adds="O", removes="H", name="o")),
         )
 
     rule = TwoRxns()

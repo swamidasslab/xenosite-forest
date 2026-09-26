@@ -12,20 +12,29 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
+use crate::enumerate::{EnumConfig, bfs as enum_bfs, dfs as enum_dfs, enumerate_metabolites};
 use crate::find_path::{FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
 use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
-use crate::mol::Molecule;
+use crate::mol::{Molecule, ranks};
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
-use crate::rules::phase_one;
+use crate::rules::{catalog_names, default_ruleset, leaf_rule, phase_one};
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
 fn py_err(err: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(err.to_string())
 }
 
-/// One `RuleSet.metabolize` row: `(pattern_name, site, products, rule_path)`.
-type MetabolizeRow = (String, usize, Vec<String>, Vec<Option<String>>);
+/// One `RuleSet.metabolize` row:
+/// `(pattern_name, site, site_atoms, site_orbit, products, rule_path)`.
+type MetabolizeRow = (
+    String,
+    usize,
+    Vec<usize>,
+    Vec<usize>,
+    Vec<String>,
+    Vec<Option<String>>,
+);
 
 /// Python-visible formula. Nested `#[pyclass]` wrap of [`Formula`].
 #[pyclass(name = "Formula", frozen)]
@@ -130,6 +139,12 @@ impl PyForestMol {
             .iter()
             .map(|mapped| mapped.iter().map(|(&k, &v)| (k, v)).collect())
             .collect())
+    }
+
+    /// Topological equivalence ranks (one per atom index). Same role as
+    /// RDKit ``CanonicalRankAtoms(..., breakTies=False)`` for site identity.
+    fn ranks(&self) -> Vec<usize> {
+        ranks(self.inner.mol())
     }
 
     fn __repr__(&self) -> String {
@@ -271,6 +286,39 @@ impl PyRuleSet {
         }
     }
 
+    /// Named leaf catalog rule (`Hydroxylation`, `Dealkylation`, …).
+    #[staticmethod]
+    fn leaf(name: &str) -> PyResult<Self> {
+        leaf_rule(name)
+            .map(|inner| Self { inner })
+            .ok_or_else(|| PyValueError::new_err(format!("unknown leaf rule {name:?}")))
+    }
+
+    /// Leaf names in catalog order.
+    #[staticmethod]
+    fn catalog_names() -> Vec<String> {
+        catalog_names().iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[staticmethod]
+    fn phase_one() -> Self {
+        Self { inner: phase_one() }
+    }
+
+    #[staticmethod]
+    fn default_ruleset() -> Self {
+        Self {
+            inner: default_ruleset(),
+        }
+    }
+
+    #[staticmethod]
+    fn all_rules() -> Self {
+        Self {
+            inner: crate::rules::all_rules(),
+        }
+    }
+
     #[staticmethod]
     #[pyo3(signature = (sets, name=None))]
     fn compose(sets: Vec<PyRef<'_, PyRuleSet>>, name: Option<String>) -> Self {
@@ -282,6 +330,12 @@ impl PyRuleSet {
     #[getter]
     fn name(&self) -> Option<String> {
         self.inner.name.clone()
+    }
+
+    /// Cross-language parity excuse, if any (see Rust `RuleSet::parity_exception`).
+    #[getter]
+    fn parity_exception(&self) -> Option<String> {
+        self.inner.parity_exception.clone()
     }
 
     /// Direct member count (nested sets count as one member each).
@@ -302,8 +356,9 @@ impl PyRuleSet {
     /// Run the owned members. `filter_rules` / `filter_sites` are optional Python
     /// callables; omit them and Rust `accept_all_*` runs with no GIL per site.
     ///
-    /// Each row is `(pattern_name, site, products, rule_path)` where `rule_path`
-    /// is leaf-first namespace names (`None` for an unnamed set).
+    /// Each row is
+    /// `(pattern_name, site, site_atoms, site_orbit, products, rule_path)`
+    /// where `rule_path` is leaf-first namespace names (`None` for an unnamed set).
     #[pyo3(signature = (mol, filter_rules=None, filter_sites=None))]
     fn metabolize(
         slf: &Bound<'_, Self>,
@@ -322,7 +377,16 @@ impl PyRuleSet {
         };
         Ok(emissions
             .into_iter()
-            .map(|e| (e.pattern_name, e.site, e.products, e.rule_path))
+            .map(|e| {
+                (
+                    e.pattern_name,
+                    e.site,
+                    e.site_atoms,
+                    e.site_orbit,
+                    e.products,
+                    e.rule_path,
+                )
+            })
             .collect())
     }
 
@@ -421,16 +485,16 @@ fn metabolize_with_python(
     Ok(emissions)
 }
 
-/// Native chematic ``find_path`` (PhaseOne). Returns ``(hits, counters)``.
+/// Native chematic ``find_path``. Returns ``(hits, counters)``.
 ///
-/// Each hit is ``{"smiles": str, "steps": [{"rule": str, "site": [...]}]``.
-/// Counters is a plain dict of the billed fields. Separate from the Python
-/// RDKit ``xenosite.forest.find_path`` walk.
+/// Default catalog is PhaseOne; pass ``ruleset=`` to override. Each hit is
+/// ``{"smiles": str, "steps": [{"rule": str, "site": [...]}]}``.
 #[pyfunction]
 #[pyo3(signature = (
     reactant,
     target,
     *,
+    ruleset=None,
     max_paths=1,
     max_nodes=800,
     use_atom_diff=true,
@@ -443,6 +507,7 @@ fn find_path(
     py: Python<'_>,
     reactant: &str,
     target: &str,
+    ruleset: Option<PyRef<'_, PyRuleSet>>,
     max_paths: usize,
     max_nodes: usize,
     use_atom_diff: bool,
@@ -465,9 +530,16 @@ fn find_path(
         drop_skeleton_twins,
         diversity,
     };
-    let rules = phase_one();
+    let owned;
+    let rules: &RuleSet = match &ruleset {
+        Some(rs) => &rs.inner,
+        None => {
+            owned = phase_one();
+            &owned
+        }
+    };
     let mut counters = PathCounters::default();
-    let hits = find_path_with(reactant, target, &rules, &mut counters, config, |_| true)
+    let hits = find_path_with(reactant, target, rules, &mut counters, config, |_| true)
         .map_err(py_err)?
         .collect_all()
         .map_err(py_err)?;
@@ -482,7 +554,7 @@ fn find_path(
                     .site
                     .iter()
                     .map(|a| match a {
-                        crate::PlanAtom::Index(i) => i.to_string(),
+                        crate::PlanAtom::Label(t) => t.0.to_string(),
                         other => format!("{other:?}"),
                     })
                     .collect();
@@ -511,6 +583,120 @@ fn find_path(
     Ok((out, c.unbind().into_any()))
 }
 
+fn enum_hits_to_py(
+    py: Python<'_>,
+    iter: impl Iterator<Item = Result<crate::enumerate::Metabolite, crate::ForestError>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let mut out = Vec::new();
+    for hit in iter {
+        let hit = hit.map_err(py_err)?;
+        let hops: Vec<Py<PyAny>> = hit
+            .path
+            .hops
+            .iter()
+            .map(|hop| {
+                let d = pyo3::types::PyDict::new(py);
+                d.set_item("rule", hop.rule.as_str())?;
+                d.set_item("pattern", hop.pattern_name.as_str())?;
+                d.set_item("site", hop.site)?;
+                d.set_item("products", hop.products.clone())?;
+                d.set_item("cleaves", hop.cleaves)?;
+                Ok::<_, PyErr>(d.unbind().into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        let d = pyo3::types::PyDict::new(py);
+        d.set_item("smiles", hit.smiles())?;
+        d.set_item("depth", hit.path.depth())?;
+        d.set_item("hops", hops)?;
+        out.push(d.unbind().into_any());
+    }
+    Ok(out)
+}
+
+/// Breadth-first metabolites (default catalog: ``default_ruleset``).
+#[pyfunction]
+#[pyo3(signature = (reactant, max_depth, *, ruleset=None))]
+fn bfs(
+    py: Python<'_>,
+    reactant: &str,
+    max_depth: usize,
+    ruleset: Option<PyRef<'_, PyRuleSet>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let owned;
+    let rules: &RuleSet = match &ruleset {
+        Some(rs) => &rs.inner,
+        None => {
+            owned = default_ruleset();
+            &owned
+        }
+    };
+    let stream = enum_bfs(reactant, rules, max_depth).map_err(py_err)?;
+    enum_hits_to_py(py, stream)
+}
+
+/// Depth-first metabolites (default catalog: ``default_ruleset``).
+#[pyfunction]
+#[pyo3(signature = (reactant, max_depth, *, ruleset=None))]
+fn dfs(
+    py: Python<'_>,
+    reactant: &str,
+    max_depth: usize,
+    ruleset: Option<PyRef<'_, PyRuleSet>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let owned;
+    let rules: &RuleSet = match &ruleset {
+        Some(rs) => &rs.inner,
+        None => {
+            owned = default_ruleset();
+            &owned
+        }
+    };
+    let stream = enum_dfs(reactant, rules, max_depth).map_err(py_err)?;
+    enum_hits_to_py(py, stream)
+}
+
+/// Enumerate metabolites with explicit depth / order / dedup knobs.
+#[pyfunction]
+#[pyo3(signature = (
+    reactant,
+    *,
+    ruleset=None,
+    max_depth=1,
+    order="bfs",
+    max_nodes=0,
+    unique_csmi=true,
+))]
+fn enumerate(
+    py: Python<'_>,
+    reactant: &str,
+    ruleset: Option<PyRef<'_, PyRuleSet>>,
+    max_depth: usize,
+    order: &str,
+    max_nodes: usize,
+    unique_csmi: bool,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let owned;
+    let rules: &RuleSet = match &ruleset {
+        Some(rs) => &rs.inner,
+        None => {
+            owned = default_ruleset();
+            &owned
+        }
+    };
+    let mut config = match order {
+        "bfs" => EnumConfig::bfs(max_depth),
+        "dfs" => EnumConfig::dfs(max_depth),
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown order {other:?}; use bfs or dfs"
+            )));
+        }
+    };
+    config = config.with_max_nodes(max_nodes).with_unique_csmi(unique_csmi);
+    let stream = enumerate_metabolites(reactant, rules, config).map_err(py_err)?;
+    enum_hits_to_py(py, stream)
+}
+
 #[pymodule]
 fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyForestMol>()?;
@@ -518,6 +704,9 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPatternInfo>()?;
     m.add_class::<PyRuleSet>()?;
     m.add_function(wrap_pyfunction!(find_path, m)?)?;
+    m.add_function(wrap_pyfunction!(bfs, m)?)?;
+    m.add_function(wrap_pyfunction!(dfs, m)?)?;
+    m.add_function(wrap_pyfunction!(enumerate, m)?)?;
     Ok(())
 }
 
@@ -592,7 +781,7 @@ mod tests {
             let products: Vec<MetabolizeRow> = products.extract().unwrap();
             assert_eq!(products.len(), 1);
             assert_eq!(products[0].0, "h");
-            assert_eq!(products[0].3, vec![Some("Hydroxylation".into())]);
+            assert_eq!(products[0].5, vec![Some("Hydroxylation".into())]);
             let filt = py
                 .eval(c"lambda m, rule, p: p.name == 'h2'", None, None)
                 .unwrap();

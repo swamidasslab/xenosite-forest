@@ -14,11 +14,10 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::ForestError;
-use crate::atom_diff::{atom_diff, candidate_could_help_on, pair_could_help};
+use crate::atom_diff::atom_diff;
 use crate::forest_mol::ForestMol;
 use crate::labels::Tag;
 use crate::mol::{Molecule, canon_of};
-use crate::pair_edit::PairCandidate;
 use crate::ruleset::RuleSet;
 
 /// One parent→child hop recorded on the product graph.
@@ -128,7 +127,11 @@ pub struct ProductChild {
     pub expand: bool,
 }
 
-/// One-hop product layer from a tagged parent (candidates + pairs).
+/// One-hop product layer from a tagged parent.
+///
+/// One walk: [`RuleSet::metabolites`] (SMIRKS + pairs). Rule names come from
+/// emission `rule_path` (leaf RuleSet stamped by that door), same as find_path —
+/// no pair branch and no pattern-name aliases.
 pub fn product_layer(
     parent: &ForestMol,
     ruleset: &RuleSet,
@@ -150,40 +153,22 @@ pub fn product_layer(
     });
     let parent_diff = target_mol.as_ref().map(|t| atom_diff(mol, t));
     let parent_ha = parent.heavy_atom_count();
+    let have_target = config.target.is_some();
 
     let mut out = Vec::new();
 
-    for c in ruleset.candidates(mol) {
-        let c = c?;
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !candidate_could_help_on(&c, diff, Some(mol), Some(t)) {
-                continue;
-            }
-        }
-        let pieces = c.materialize_mols(mol)?;
-        if pieces.is_empty() {
+    for emission in ruleset.metabolites(mol, false) {
+        let emission = emission?;
+        if emission.mols.is_empty() {
             continue;
         }
-        let products: Vec<String> = pieces.iter().map(crate::mol::canon_smiles).collect();
-        let mut products_sorted = products.clone();
+        let mut products_sorted = emission.products.clone();
         products_sorted.sort();
-        let site_atoms: Vec<usize> = {
-            let mut atoms: BTreeSet<usize> = c
-                .pattern
-                .site_map
-                .iter()
-                .filter_map(|m| c.mapped.get(m).copied())
-                .collect();
-            if atoms.is_empty() {
-                atoms.insert(c.site);
-            }
-            atoms.into_iter().collect()
-        };
-        let site_tags = site_tags_of(parent, &site_atoms);
-        let rule = c.leaf_rule().unwrap_or(c.pattern.name.as_str()).to_string();
-        let cleaves = c.pattern.effect.cleaves && pieces.len() >= 2;
+        let cleaves = emission.cleaves && emission.mols.len() >= 2;
+        let rule = emission.rule_name().to_string();
+        let site_tags = site_tags_of(parent, &emission.site_atoms);
 
-        for piece in pieces {
+        for piece in emission.mols {
             let child = parent.adopt_product(piece);
             let child_csmi = child.csmi().as_ref().to_string();
             let expand = child_worth_expanding(
@@ -195,122 +180,31 @@ pub fn product_layer(
                 target_csmi.as_deref(),
                 target_ha,
             );
-            if config.target.is_some() && !expand && !cleaves {
-                // Non-cleaving dead-ends toward the target are not recorded.
+            if have_target && !expand && !cleaves {
                 continue;
             }
-            if cleaves {
-                // Cleavage: keep fragment as a node only if expandable or no target.
-                if config.target.is_some() && !expand {
-                    continue;
-                }
+            if cleaves && have_target && !expand {
+                continue;
             }
             let added_tags = added_tags_of(parent, &child);
             out.push(ProductChild {
                 hop: ProductHop {
                     rule: rule.clone(),
-                    pattern_name: c.pattern.name.clone(),
-                    site: c.site,
-                    site_orbit: c.orbit.clone(),
+                    pattern_name: emission.pattern_name.clone(),
+                    site: emission.site,
+                    site_orbit: emission.site_orbit.clone(),
                     site_tags: site_tags.clone(),
                     added_tags,
                     products: products_sorted.clone(),
                     cleaves,
                 },
                 child,
-                expand: config.target.is_none() || expand,
+                expand: !have_target || expand,
             });
         }
     }
 
-    for pair in ruleset.pair_candidates(mol) {
-        let pair = pair?;
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair_could_help(&pair, diff, mol, t) {
-                continue;
-            }
-        }
-        push_pair_children(
-            parent,
-            &pair,
-            parent_diff.as_ref(),
-            parent_ha,
-            target_mol.as_ref(),
-            target_csmi.as_deref(),
-            target_ha,
-            config.target.is_some(),
-            &mut out,
-        )?;
-    }
-
     Ok(out)
-}
-
-#[allow(clippy::too_many_arguments)] // target gate + parent walk; keep flat
-fn push_pair_children(
-    parent: &ForestMol,
-    pair: &PairCandidate,
-    parent_diff: Option<&crate::atom_diff::AtomDiff>,
-    parent_ha: usize,
-    target_mol: Option<&Molecule>,
-    target_csmi: Option<&str>,
-    target_ha: Option<usize>,
-    have_target: bool,
-    out: &mut Vec<ProductChild>,
-) -> Result<(), ForestError> {
-    let mol = parent.mol();
-    let pieces = pair.materialize_mols(mol)?;
-    if pieces.is_empty() {
-        return Ok(());
-    }
-    let products: Vec<String> = pieces.iter().map(crate::mol::canon_smiles).collect();
-    let mut products_sorted = products;
-    products_sorted.sort();
-    let site_atoms = pair.plan_site_atoms();
-    let site_tags = site_tags_of(parent, &site_atoms);
-    let rule = pair
-        .pattern_name
-        .split('+')
-        .next()
-        .unwrap_or("Pair")
-        .to_string();
-    let cleaves = pair.effect.cleaves && pieces.len() >= 2;
-
-    for piece in pieces {
-        let child = parent.adopt_product(piece);
-        let child_csmi = child.csmi().as_ref().to_string();
-        let expand = child_worth_expanding(
-            parent_diff,
-            parent_ha,
-            &child,
-            &child_csmi,
-            target_mol,
-            target_csmi,
-            target_ha,
-        );
-        if have_target && !expand && !cleaves {
-            continue;
-        }
-        if cleaves && have_target && !expand {
-            continue;
-        }
-        let added_tags = added_tags_of(parent, &child);
-        out.push(ProductChild {
-            hop: ProductHop {
-                rule: rule.clone(),
-                pattern_name: pair.pattern_name.clone(),
-                site: pair.site,
-                site_orbit: vec![pair.site],
-                site_tags: site_tags.clone(),
-                added_tags,
-                products: products_sorted.clone(),
-                cleaves,
-            },
-            child,
-            expand: !have_target || expand,
-        });
-    }
-    Ok(())
 }
 
 fn site_tags_of(parent: &ForestMol, site_atoms: &[usize]) -> Vec<Tag> {
@@ -437,6 +331,15 @@ pub fn product_graph(
     Ok(ProductGraph { nodes })
 }
 
+/// [`product_graph`] with [`crate::rules::default_ruleset`]. Override via
+/// [`product_graph`].
+pub fn product_graph_default(
+    start: &str,
+    config: &ProductGraphConfig,
+) -> Result<ProductGraph, ForestError> {
+    product_graph(start, crate::rules::default_ruleset_ref(), config)
+}
+
 /// Compact stats for benches.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProductGraphStats {
@@ -475,6 +378,23 @@ pub fn product_graph_stats(
         },
         graph,
     ))
+}
+
+/// [`product_graph_stats`] with [`crate::rules::default_ruleset`]. Override via
+/// [`product_graph_stats`].
+pub fn product_graph_stats_default(
+    start: &str,
+    target: Option<&str>,
+    max_nodes: usize,
+    max_depth: usize,
+) -> Result<(ProductGraphStats, ProductGraph), ForestError> {
+    product_graph_stats(
+        start,
+        target,
+        crate::rules::default_ruleset_ref(),
+        max_nodes,
+        max_depth,
+    )
 }
 
 #[cfg(test)]

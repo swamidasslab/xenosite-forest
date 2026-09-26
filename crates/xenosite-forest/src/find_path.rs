@@ -4,7 +4,8 @@
 //! atom tags through edits). Expands via [`RuleSet::candidates`]: site–pattern–
 //! parent triples. A search reads [`PatternInfo`] / effect fields to decide,
 //! then materializes only for survivors. Nested sets stay namespaces on each
-//! step's leaf-first `rule_path`.
+//! step's leaf-first `rule_path` (stamped by RuleSet doors;
+//! [`RuleSet::with_outer_path`] appends ancestors — do not mint leaf names here).
 //!
 //! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
 //! precedes + [`crate::canonical_plan::Maybe`] cleavage bags). Composite leaves
@@ -1204,6 +1205,8 @@ fn child_oxygen_lists(
 /// Pull iterator (Python generator parity): each [`Iterator::next`] resumes the
 /// search until the next [`PathOutcome`]. Nested sets keep step namespaces on
 /// each `rule_path`. Callers that want a list use `.collect()`.
+///
+/// Pass any [`RuleSet`] to override the catalog. See [`find_path_default`].
 pub fn find_path<'a, 'b>(
     reactant: &str,
     target: &str,
@@ -1220,23 +1223,24 @@ pub fn find_path<'a, 'b>(
     )
 }
 
-/// [`find_path`] with the Phase-I default catalog.
+/// [`find_path`] with [`crate::rules::default_ruleset`]. Override via
+/// [`find_path`].
 pub fn find_path_default<'b>(
     reactant: &str,
     target: &str,
     counters: &'b mut PathCounters,
 ) -> Result<OpenFindPath<'static, 'b>, ForestError> {
-    // Leak-free: borrow the process-wide default via once / static ruleset.
-    find_path(reactant, target, default_ruleset_ref(), counters)
-}
-
-fn default_ruleset_ref() -> &'static RuleSet {
-    use std::sync::OnceLock;
-    static DEFAULT: OnceLock<RuleSet> = OnceLock::new();
-    DEFAULT.get_or_init(default_ruleset)
+    find_path(
+        reactant,
+        target,
+        crate::rules::default_ruleset_ref(),
+        counters,
+    )
 }
 
 /// [`find_path`] with atom-diff candidate gating (no filter closures).
+///
+/// Pass any [`RuleSet`] to override the catalog. See [`find_path_diff_default`].
 pub fn find_path_diff<'a, 'b>(
     reactant: &str,
     target: &str,
@@ -1253,6 +1257,21 @@ pub fn find_path_diff<'a, 'b>(
             ..FindPathConfig::default()
         },
         accept_all_candidates,
+    )
+}
+
+/// [`find_path_diff`] with [`crate::rules::default_ruleset`]. Override via
+/// [`find_path_diff`].
+pub fn find_path_diff_default<'b>(
+    reactant: &str,
+    target: &str,
+    counters: &'b mut PathCounters,
+) -> Result<OpenFindPath<'static, 'b>, ForestError> {
+    find_path_diff(
+        reactant,
+        target,
+        crate::rules::default_ruleset_ref(),
+        counters,
     )
 }
 
@@ -1689,29 +1708,7 @@ fn accumulate_maybe(
 }
 
 fn candidate_site_atoms(candidate: &Candidate) -> BTreeSet<usize> {
-    let mut atoms: BTreeSet<usize> = candidate
-        .pattern
-        .site_map
-        .iter()
-        .filter_map(|m| candidate.mapped.get(m).copied())
-        .collect();
-    if atoms.is_empty() {
-        atoms.insert(candidate.site);
-    }
-    atoms
-}
-
-/// One DFS frame while streaming ResonancePair emissions.
-struct PairFrame<'a> {
-    set: &'a RuleSet,
-    member_i: usize,
-}
-
-/// Pending pair after filter + order_key sort (discovery only).
-struct PendingPair<'a> {
-    pair: crate::pair_edit::PairCandidate,
-    set: &'a RuleSet,
-    rule_path: Vec<Option<String>>,
+    candidate.site_atoms().into_iter().collect()
 }
 
 /// Inputs for one expand (bundled so `Expand::new` stays under clippy's arity cap).
@@ -1727,21 +1724,17 @@ struct ExpandInput<'a, K> {
 
 /// Pull tagged emissions one at a time.
 ///
-/// Candidate survivors may be buffered for `order_key` sort (discovery, no
-/// edit). Materialize runs per `next`. Pair leaves are walked depth-first the
-/// same way — never a full emission `Vec`.
+/// One walk: [`RuleSet::candidates`] yields SMIRKS + ResonancePair under
+/// [`Candidate`]. Survivors may be buffered for `order_key` sort (discovery,
+/// no edit). Materialize runs per `next` via [`Candidate`] methods.
 struct Expand<'a, K> {
     parent: &'a ForestMol,
     target: &'a crate::Molecule,
     counters: &'a mut PathCounters,
-    keep: &'a K,
     diff: Option<&'a crate::atom_diff::AtomDiff>,
-    o_added: &'a [OxygenSite],
-    o_removed: &'a [OxygenSite],
     deferred: std::vec::IntoIter<Candidate>,
-    pair_stack: Vec<PairFrame<'a>>,
-    pair_pending: std::vec::IntoIter<PendingPair<'a>>,
     done: bool,
+    _keep: std::marker::PhantomData<&'a K>,
 }
 
 impl<'a, K> Expand<'a, K>
@@ -1759,13 +1752,13 @@ where
             o_removed,
         } = input;
         let mol = parent.mol();
-        // Pull candidates; buffer only survivors for order_key sort.
+        // Pull candidates (edits + pairs); buffer only survivors for order_key sort.
         let mut deferred = Vec::new();
         for c in ruleset.candidates(mol) {
             let c = c?;
             let atoms = candidate_site_atoms(&c);
-            let oxy = oxygen_site_from_parts(c.site, &c.orbit, atoms);
-            if undoes_oxygen_edit(&c.pattern.effect, &oxy, o_added, o_removed) {
+            let oxy = oxygen_site_from_parts(c.site(), c.orbit(), atoms);
+            if undoes_oxygen_edit(c.effect(), &oxy, o_added, o_removed) {
                 counters.blocked_circular_oxygen += 1;
                 continue;
             }
@@ -1785,24 +1778,17 @@ where
                     crate::atom_diff::candidate_order_key_on(cand, d, Some(mol), Some(target));
                 // Higher search_bias first (negated so sort ascending prefers high).
                 // Then site H-progress (already negated in key: applying helps).
-                (a, b, cname, -cand.pattern.search_bias, h_prog, pname)
+                (a, b, cname, -cand.search_bias(), h_prog, pname)
             });
         }
         Ok(Self {
             parent,
             target,
             counters,
-            keep,
             diff,
-            o_added,
-            o_removed,
             deferred: deferred.into_iter(),
-            pair_stack: vec![PairFrame {
-                set: ruleset,
-                member_i: 0,
-            }],
-            pair_pending: Vec::new().into_iter(),
             done: false,
+            _keep: std::marker::PhantomData,
         })
     }
 
@@ -1810,15 +1796,21 @@ where
         &mut self,
         candidate: &Candidate,
     ) -> Result<Option<ForestEmission>, ForestError> {
-        let pieces = candidate.materialize_mols(self.parent.mol())?;
+        let mol = self.parent.mol();
+        // Pairs: Python ResonancePair bumps mol_edits only after paths exist.
+        // Edits: caller already counted mol_edits before emit.
+        let pieces = candidate.materialize_mols(mol)?;
         if pieces.is_empty() {
             return Ok(None);
         }
+        if candidate.is_pair() {
+            self.counters.mol_edits += 1;
+        }
         if let Some(detail) = crate::formula_check::check_effect_delta_formula(
-            self.parent.mol(),
-            &candidate.pattern.effect,
+            mol,
+            candidate.effect(),
             &pieces,
-            &candidate.pattern.name,
+            candidate.pattern_name(),
         ) {
             self.counters.record_formula_delta_mismatch(detail);
         }
@@ -1828,230 +1820,44 @@ where
             .collect();
         let site_atoms = candidate_site_atoms(candidate);
         let atoms: Vec<usize> = site_atoms.iter().copied().collect();
+        let path_ends = candidate.path_ends();
         let site_progress = self
             .diff
             .map(|d| {
                 crate::atom_diff::site_h_progress_best_placement(
-                    &candidate.pattern.effect,
+                    candidate.effect(),
                     &atoms,
-                    &[],
+                    &path_ends,
                     d,
-                    self.parent.mol(),
+                    mol,
                     self.target,
                 )
             })
             .unwrap_or(0);
-        let plan = match candidate
-            .leaf_rule()
-            .and_then(crate::rules::leaf_rule)
-            .filter(|leaf| leaf.has_plan_hook())
-        {
-            Some(leaf) => leaf.canonical_plan(self.parent.mol(), &atoms, None),
-            None => candidate.identity_plan_with_gens(
-                &self.parent.atom_bond_generators(),
-                self.parent.mol().atom_count(),
-            ),
-        };
-        Ok(Some(ForestEmission {
-            site: candidate.site,
-            site_orbit: candidate.orbit.clone(),
-            site_atoms: site_atoms.clone(),
-            cleaves: candidate.pattern.effect.cleaves,
-            cleave_side_sig: candidate.pattern.cleave_side_sig(),
-            adds_oxygen: crate::atom_diff::effect_adds_oxygen(&candidate.pattern.effect),
-            removes_oxygen: crate::atom_diff::effect_removes_oxygen(&candidate.pattern.effect),
-            oxygen_site: oxygen_site_from_parts(candidate.site, &candidate.orbit, site_atoms),
-            pattern_name: candidate.pattern.name.clone(),
-            search_bias: candidate.pattern.search_bias,
-            site_progress,
-            dh_ends: None,
-            rule_path: candidate.rule_path.clone(),
-            products,
-            plan,
-        }))
-    }
-
-    fn emit_pair(
-        &mut self,
-        pending: &PendingPair<'a>,
-    ) -> Result<Option<ForestEmission>, ForestError> {
-        let mol = self.parent.mol();
-        let pair = &pending.pair;
-        // Python ResonancePair bumps mol_edits only after alternating paths exist.
-        let pieces = pair.materialize_mols(mol)?;
-        if pieces.is_empty() {
-            return Ok(None);
-        }
-        self.counters.mol_edits += 1;
-        if let Some(detail) = crate::formula_check::check_effect_delta_formula(
+        let plan = candidate.plan_with_gens(
+            &self.parent.atom_bond_generators(),
+            mol.atom_count(),
             mol,
-            &pair.effect,
-            &pieces,
-            &pair.pattern_name,
-        ) {
-            self.counters.record_formula_delta_mismatch(detail);
-        }
-        let products: Vec<ForestMol> = pieces
-            .into_iter()
-            .map(|piece| self.parent.adopt_product(piece))
-            .collect();
-        let site_atoms = pair.plan_site_atoms();
-        let site_atoms_set: BTreeSet<usize> = site_atoms.iter().copied().collect();
-        let ends = [&pair.left.effect, &pair.right.effect];
-        let plan = pending.set.canonical_plan(mol, &site_atoms, Some(&ends));
-        let site_progress = self
-            .diff
-            .map(|d| crate::atom_diff::pair_site_h_progress(pair, d, mol, self.target))
-            .unwrap_or(0);
-        let dh_ends = if crate::atom_diff::is_dehydrogenation_effect(&pair.effect) {
-            pair.end_atoms()
-        } else {
-            None
-        };
+        );
+        let effect = candidate.effect();
         Ok(Some(ForestEmission {
-            site: pair.site,
-            site_orbit: vec![pair.site],
-            site_atoms: site_atoms_set.clone(),
-            cleaves: pair.effect.cleaves,
-            cleave_side_sig: {
-                let left = pair.left.cleave_side_sig();
-                let right = pair.right.cleave_side_sig();
-                if left == right {
-                    left
-                } else {
-                    CleaveSideSig::Ungrouped
-                }
-            },
-            adds_oxygen: crate::atom_diff::effect_adds_oxygen(&pair.effect),
-            removes_oxygen: crate::atom_diff::effect_removes_oxygen(&pair.effect),
-            oxygen_site: oxygen_site_from_parts(pair.site, &[pair.site], site_atoms_set),
-            pattern_name: pair.pattern_name.clone(),
-            search_bias: pair.left.search_bias.min(pair.right.search_bias),
+            site: candidate.site(),
+            site_orbit: candidate.orbit().to_vec(),
+            site_atoms: site_atoms.clone(),
+            cleaves: effect.cleaves,
+            cleave_side_sig: candidate.cleave_side_sig(),
+            adds_oxygen: crate::atom_diff::effect_adds_oxygen(effect),
+            removes_oxygen: crate::atom_diff::effect_removes_oxygen(effect),
+            oxygen_site: oxygen_site_from_parts(candidate.site(), candidate.orbit(), site_atoms),
+            pattern_name: candidate.pattern_name().to_string(),
+            search_bias: candidate.search_bias(),
             site_progress,
-            dh_ends,
-            rule_path: pending.rule_path.clone(),
+            dh_ends: candidate.dh_ends(),
+            rule_path: candidate.rule_path().to_vec(),
             products,
             plan,
         }))
     }
-
-    fn load_leaf_pairs(&mut self, set: &'a RuleSet) -> Result<(), ForestError> {
-        let mol = self.parent.mol();
-        let mut pairs = set.pair_candidates_leaf(mol)?;
-        if let Some(d) = self.diff {
-            let mut blocked = 0usize;
-            pairs.retain(|pair| {
-                if !keep_pair(pair, self.keep) {
-                    return false;
-                }
-                let atoms: BTreeSet<usize> = pair.plan_site_atoms().into_iter().collect();
-                let oxy = oxygen_site_from_parts(pair.site, &[pair.site], atoms);
-                if undoes_oxygen_edit(&pair.effect, &oxy, self.o_added, self.o_removed) {
-                    blocked += 1;
-                    return false;
-                }
-                crate::atom_diff::pair_could_help(pair, d, mol, self.target)
-            });
-            self.counters.blocked_circular_oxygen += blocked;
-            pairs.sort_by_key(|p| {
-                let cleave = if p.effect.cleaves { 0u8 } else { 1 };
-                let dear = if p.effect.dearomatizes { 0u8 } else { 1 };
-                let oxy = if p.effect.adds.as_deref().is_some_and(|a| a.contains('O')) {
-                    0u8
-                } else {
-                    1
-                };
-                let want_cleave = d.target_smaller() || d.has_cleavage();
-                let want_dear = !d.loses_aromaticity.is_empty();
-                let want_oxy = crate::atom_diff::any_needs_oxygen(self.target, d);
-                (
-                    if want_cleave { cleave } else { 0 },
-                    if want_dear { dear } else { 0 },
-                    if want_oxy { oxy } else { 0 },
-                    p.pattern_name.clone(),
-                )
-            });
-        } else {
-            let mut blocked = 0usize;
-            pairs.retain(|p| {
-                if !keep_pair(p, self.keep) {
-                    return false;
-                }
-                let atoms: BTreeSet<usize> = p.plan_site_atoms().into_iter().collect();
-                let oxy = oxygen_site_from_parts(p.site, &[p.site], atoms);
-                if undoes_oxygen_edit(&p.effect, &oxy, self.o_added, self.o_removed) {
-                    blocked += 1;
-                    return false;
-                }
-                true
-            });
-            self.counters.blocked_circular_oxygen += blocked;
-        }
-        // Leaf-first path: this set, then ancestors still on the stack (root last).
-        let mut rule_path = vec![set.name.clone()];
-        for frame in self.pair_stack.iter().rev() {
-            rule_path.push(frame.set.name.clone());
-        }
-        let pending: Vec<PendingPair<'a>> = pairs
-            .into_iter()
-            .map(|pair| PendingPair {
-                pair,
-                set,
-                rule_path: rule_path.clone(),
-            })
-            .collect();
-        self.pair_pending = pending.into_iter();
-        Ok(())
-    }
-
-    fn advance_pairs(&mut self) -> Result<(), ForestError> {
-        loop {
-            if !self.pair_pending.as_slice().is_empty() {
-                return Ok(());
-            }
-            let action = {
-                let Some(frame) = self.pair_stack.last_mut() else {
-                    return Ok(());
-                };
-                let members = frame.set.members();
-                if frame.member_i < members.len() {
-                    let member = &members[frame.member_i];
-                    frame.member_i += 1;
-                    match member {
-                        crate::ruleset::RuleMember::Set(child) => {
-                            // `'a` outlives the frame; child lives in the ruleset tree.
-                            let child: &'a RuleSet = child;
-                            Some(PairAction::Push(child))
-                        }
-                        crate::ruleset::RuleMember::Pattern(_) => Some(PairAction::Continue),
-                    }
-                } else {
-                    let set = frame.set;
-                    Some(PairAction::LoadLeaf(set))
-                }
-            };
-            match action {
-                None => return Ok(()),
-                Some(PairAction::Continue) => {}
-                Some(PairAction::Push(child)) => {
-                    self.pair_stack.push(PairFrame {
-                        set: child,
-                        member_i: 0,
-                    });
-                }
-                Some(PairAction::LoadLeaf(set)) => {
-                    self.pair_stack.pop();
-                    self.load_leaf_pairs(set)?;
-                }
-            }
-        }
-    }
-}
-
-enum PairAction<'a> {
-    Continue,
-    Push(&'a RuleSet),
-    LoadLeaf(&'a RuleSet),
 }
 
 impl<K> Iterator for Expand<'_, K>
@@ -2064,61 +1870,22 @@ where
         if self.done {
             return None;
         }
-        loop {
-            while let Some(candidate) = self.deferred.next() {
+        while let Some(candidate) = self.deferred.next() {
+            if !candidate.is_pair() {
                 self.counters.mol_edits += 1;
-                match self.emit_candidate(&candidate) {
-                    Ok(Some(emission)) => return Some(Ok(emission)),
-                    Ok(None) => {}
-                    Err(e) => {
-                        self.done = true;
-                        return Some(Err(e));
-                    }
-                }
             }
-
-            if let Some(pending) = self.pair_pending.next() {
-                match self.emit_pair(&pending) {
-                    Ok(Some(emission)) => return Some(Ok(emission)),
-                    Ok(None) => continue,
-                    Err(e) => {
-                        self.done = true;
-                        return Some(Err(e));
-                    }
-                }
-            }
-
-            match self.advance_pairs() {
-                Ok(()) => {
-                    if self.pair_pending.as_slice().is_empty() && self.pair_stack.is_empty() {
-                        self.done = true;
-                        return None;
-                    }
-                }
+            match self.emit_candidate(&candidate) {
+                Ok(Some(emission)) => return Some(Ok(emission)),
+                Ok(None) => {}
                 Err(e) => {
                     self.done = true;
                     return Some(Err(e));
                 }
             }
         }
+        self.done = true;
+        None
     }
-}
-
-fn keep_pair<K>(pair: &crate::pair_edit::PairCandidate, keep: &K) -> bool
-where
-    K: Fn(&Candidate) -> bool,
-{
-    let mut stand_in = Candidate {
-        site: pair.site,
-        orbit: vec![pair.site],
-        pattern: pair.left.clone(),
-        rule_path: Vec::new(),
-        mapped: Default::default(),
-        parent: crate::candidate::ParentRef::Context,
-    };
-    stand_in.pattern.effect = pair.effect.clone();
-    stand_in.pattern.name = pair.pattern_name.clone();
-    keep(&stand_in)
 }
 
 /// Python-style filter closures (optional). Prefer [`find_path_with`] + reading
@@ -2953,6 +2720,46 @@ mod tests {
     }
 
     #[test]
+    fn quinone_formation_cleavage_records_side_and_maybe() {
+        // Anisole → methane via QF dealkylate: bifurcation (n_products≥2),
+        // not ring-open. Leaf is QuinoneFormation; quinone sits in maybe/sides.
+        use crate::rules::quinone_formation;
+
+        let mut counters = PathCounters::default();
+        let hits = find_path("COc1ccccc1", "C", &quinone_formation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        let outcome = &hits[0];
+        assert_eq!(outcome.smiles, canon_of("C").unwrap());
+        assert_eq!(outcome.steps[0].leaf_rule(), Some("QuinoneFormation"));
+        assert!(
+            !outcome.steps[0].sides.is_empty(),
+            "QF cleavage must record the quinone side: {:?}",
+            outcome.steps[0].sides
+        );
+        assert!(
+            !outcome.maybe().is_empty(),
+            "maybe bags on the plan for discarded quinone"
+        );
+        let want_para = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        let want_ortho = canon_of("O=C1C=CC=CC1=O").unwrap();
+        let is_quinone = |s: &str| {
+            let c = canon_of(s).unwrap();
+            c == want_para || c == want_ortho
+        };
+        let in_sides = outcome.steps[0].sides.iter().any(|s| is_quinone(s));
+        let in_maybe = outcome.maybe().sides().iter().any(|s| is_quinone(s));
+        assert!(
+            in_sides || in_maybe,
+            "quinone in sides/maybe; sides={:?} maybe={:?}",
+            outcome.steps[0].sides,
+            outcome.maybe().sides()
+        );
+    }
+
+    #[test]
     fn composed_ruleset_path_keeps_leaf_and_outer_namespace() {
         let set = RuleSet::compose(Some("Forest".into()), [hydroxylation(), o_dealkylation()]);
         let mut counters = PathCounters::default();
@@ -3001,7 +2808,7 @@ mod tests {
     #[test]
     fn keep_predicate_skips_materialize() {
         let mut counters = PathCounters::default();
-        let refuse_h2 = |c: &Candidate| c.pattern.name != "h2";
+        let refuse_h2 = |c: &Candidate| c.pattern_name() != "h2";
         let hits = find_path_with(
             "CC",
             "CCO",
@@ -3210,6 +3017,8 @@ mod tests {
             .unwrap();
         let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
         let child = parent.adopt_product(pieces[0].clone());
+        // Surviving carbon tags are stable; born O is remapped via labels.
+        // adopt_product keeps the shared tag_gen with the parent.
         assert!(child.shares_tag_gen(&parent));
         assert_eq!(child.tag_of(child.index_of(t0).unwrap()), Some(t0));
         assert_eq!(child.tag_of(child.index_of(t1).unwrap()), Some(t1));
@@ -3528,10 +3337,10 @@ mod tests {
         assert_eq!(ethanol.csmi().as_ref(), canon_of("CCO").unwrap());
         let oh_carbon = ethanol.index_of(ethane_c0).expect("tagged carbon");
         assert!(
-            oh.site == oh_carbon || oh.orbit.contains(&oh_carbon),
+            oh.site() == oh_carbon || oh.orbit().contains(&oh_carbon),
             "OH site {} orbit {:?} should name tagged carbon {}",
-            oh.site,
-            oh.orbit,
+            oh.site(),
+            oh.orbit(),
             oh_carbon
         );
 

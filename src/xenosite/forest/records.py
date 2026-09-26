@@ -215,6 +215,11 @@ class Effect(TypedDict, total=False):
     breaks_ring: bool
     dearomatizes: bool
     methide: bool
+    # Partner atom (non-site mapped) is exclusive to this end in a ResonancePair
+    # couple — e.g. bridging N/O used by iminium / hetero single_to_double /
+    # dealkylate. Not a global shared-map refuse; set only when chemistry
+    # consumes that partner. Methide alkyl (partner C) does not set this.
+    exclusive_partner: bool
     needs: str
     partner: str
     partner_h: int
@@ -234,7 +239,7 @@ _LeaveSpan: TypeAlias = int | None | tuple[int | None, ...]
 class _SpanCore(TypedDict):
     """Effect fields :func:`~xenosite.forest.rules._span` always writes.
 
-    Every possibility from :func:`~xenosite.forest.rules.describe` carries
+    Every possibility from :func:`~xenosite.forest.rules._describe` carries
     these keys, so the collapsed span does too. A certain value stays bare;
     disagreeing branches become a tuple of the distinct values.
     """
@@ -248,6 +253,7 @@ class _SpanCore(TypedDict):
     breaks_ring: _BoolSpan
     dearomatizes: _BoolSpan
     methide: _BoolSpan
+    exclusive_partner: _BoolSpan
     needs: _StrSpan
 
 
@@ -374,7 +380,7 @@ SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
 # ``"atom_pair"`` ResonancePair path/ends only — never on plain SMARTS rules.
 RuleSiteKind: TypeAlias = Literal["atom", "bond", "directed_bond", "atom_pair"]
 
-# Keyword values :func:`~xenosite.forest.rules.describe` / ``branches`` accept.
+# Keyword values :func:`~xenosite.forest.rules._describe` / ``branches`` accept.
 EffectField: TypeAlias = str | bool | int | When | dict[str, int] | None
 
 
