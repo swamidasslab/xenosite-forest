@@ -9,6 +9,7 @@ import re
 import warnings
 from collections import defaultdict, deque
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
+from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
@@ -49,6 +50,7 @@ from xenosite.forest.rdkitutil import (
     TracingMol,
     _bond_key,
     _current_bond_map,
+    _dedup_smi_of,
     aromatic_parent_atoms,
     copy_mol,
     ensure_kekule_parents,
@@ -67,6 +69,7 @@ from xenosite.forest.records import (
     Effect,
     EffectField,
     Formula,
+    FormulaDeltaMismatch,
     InitializedAtomTrace,
     KekuleParents,
     PairSiteInfo,
@@ -245,9 +248,12 @@ class ReactionRule:
           either piece. The change in formula lives under
           ``atom_trace["delta_formula"][id]``.
         - Product SMILES live on each mol via ``product.xf.csmi`` (not on
-          ``info``). Emission identity for **check** / **yield** is
-          ``frozenset(p.xf.csmi for p in products)`` computed at yield from
-          those cached values — no ``csmi`` key on the info bag. **check**
+          ``info``). Emission identity for **check** / **yield** is the
+          ``frozenset`` of ``atom_trace["dedup_smi"][depth]``
+          (``xf.tracing.dedup_smi``) per fragment — cached at stamp / each
+          hop, survives ``clear_structure``. ``None`` on any fragment skips
+          CSMI collapse for that emission (fail-closed). No ``csmi`` key on
+          the info bag. **check**
           (always, while site unique-edit is on) warns
           ``SiteDeduplicationWarning`` when a later emission under the
           same ``(rule, pattern)`` repeats an earlier emission's frozenset
@@ -343,31 +349,51 @@ class ReactionRule:
                     # of_products cleared product cache — lex reps live on parent.
                     restamp_product_forest_last_layer(p, parent=mol)
 
-            # Cached xf.csmi after of_products — one read per fragment.
-            fragment_csmis = [p.xf.csmi for p in finished]
-            emission_csmi = frozenset(fragment_csmis)
+            # Trace-cached dedup_smi (set in _apply_forest_trace before
+            # clear_structure). Skip CSMI collapse when any fragment is None.
+            fragment_csmis: list[str] = []
+            emission_unstable = False
+            for p in finished:
+                key = p.xf.tracing.dedup_smi
+                if key is None:
+                    emission_unstable = True
+                    break
+                fragment_csmis.append(key)
+            if emission_unstable:
+                emission_csmi: frozenset[str] | None = None
+            else:
+                emission_csmi = frozenset(fragment_csmis)
             site_ranks = _site_ranks_for_csmi_warn(info, mol)
             rule_pat = (
                 _rule_dedup_name(_emitting_rule(info)),
                 _pattern_dedup_token(info),
             )
-            prior = seen_emissions.setdefault(rule_pat, [])
-            if any(
-                emission_csmi == kept_s and site_ranks == kept_r
-                for kept_s, kept_r in prior
-            ):
-                # Unique-edit miss: same emission set + ranks as a keeper.
-                _report_csmi_dedup_drop(
-                    mol, info, next(iter(emission_csmi))
-                )
-            else:
-                # Quiet unequal-rank iso / leaving-group / cleavage siblings.
-                prior.append((emission_csmi, site_ranks))
+            if emission_csmi is not None:
+                prior = seen_emissions.setdefault(rule_pat, [])
+                if any(
+                    emission_csmi == kept_s and site_ranks == kept_r
+                    for kept_s, kept_r in prior
+                ):
+                    # Unique-edit miss: same emission set + ranks as a keeper.
+                    _report_csmi_dedup_drop(
+                        mol, info, next(iter(emission_csmi))
+                    )
+                else:
+                    # Quiet unequal-rank iso / leaving-group / cleavage siblings.
+                    prior.append((emission_csmi, site_ranks))
 
             for p in finished:
                 assert p.xf.tracing.active
 
-            if unique_csmi:
+            # Cycle kill: product identical to any ancestor by dedup_smi.
+            if any(_repeats_ancestor_dedup_smi(p) for p in finished):
+                continue
+
+            _report_formula_delta_mismatch(
+                mol, info, finished, kwargs.get("counters")
+            )
+
+            if unique_csmi and emission_csmi is not None:
                 key = _unique_csmi_key(info, emission_csmi)
                 if key in seen_yield:
                     continue
@@ -453,6 +479,78 @@ def formula_delta(before: Formula, after: Formula) -> Formula:
     }
 
 
+_ELEMENT_SYMBOLS = (
+    "At",
+    "Br",
+    "Cl",
+    "I",
+    "F",
+    "O",
+    "N",
+    "S",
+    "P",
+    "C",
+    "H",
+)
+
+
+def bag_counts(bag: str) -> dict[str, int]:
+    """Parse an ``adds`` / ``removes`` bag into element → count."""
+
+    counts: dict[str, int] = {}
+    i = 0
+    while i < len(bag):
+        matched = None
+        for sym in _ELEMENT_SYMBOLS:
+            if bag.startswith(sym, i):
+                matched = sym
+                break
+        if matched is None:
+            i += 1
+            continue
+        counts[matched] = counts.get(matched, 0) + 1
+        i += len(matched)
+    return counts
+
+
+def bag_delta_formula(adds: str | None = "", removes: str | None = "") -> dict[str, int]:
+    """Net formula change from bag strings. Zero-count keys omitted."""
+
+    delta: dict[str, int] = {}
+    for el, n in bag_counts(adds or "").items():
+        delta[el] = delta.get(el, 0) + n
+    for el, n in bag_counts(removes or "").items():
+        delta[el] = delta.get(el, 0) - n
+    return {el: n for el, n in delta.items() if n}
+
+
+def compose_delta_formula(
+    adds: str | None = "",
+    removes: str | None = "",
+    leave_formula: Mapping[str, int] | None = None,
+) -> dict[str, int]:
+    """Junction bags minus named leave. Zeros omitted."""
+
+    delta = bag_delta_formula(adds, removes)
+    for el, n in (leave_formula or {}).items():
+        delta[el] = delta.get(el, 0) - int(n)
+    return {el: n for el, n in delta.items() if n}
+
+
+LEAVE_ME: dict[str, int] = {"C": 1, "H": 3}
+LEAVE_CH2: dict[str, int] = {"C": 1, "H": 2}
+LEAVE_O: dict[str, int] = {"O": 1}
+LEAVE_OO: dict[str, int] = {"O": 2}
+
+
+def named_leave_formula(leave: str) -> dict[str, int] | None:
+    """Resolve a ``cleave_side_group`` leave label into a formula bag."""
+
+    if leave == "Me":
+        return dict(LEAVE_ME)
+    return None
+
+
 def _rule_name(rule: ReactionRule | str | None) -> str | None:
     if rule is None:
         return None
@@ -513,6 +611,8 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     effect: Effect = {
         "adds": "",
         "removes": "",
+        "delta_formula": {},
+        "leave_formula": {},
         "cleaves": False,
         "leave_count": None,
         "breaks_ring": False,
@@ -564,6 +664,26 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     when = value.get("when")
     if isinstance(when, dict):
         effect["when"] = _copy_when(when)
+    raw_leave = value.get("leave_formula")
+    if isinstance(raw_leave, dict) and raw_leave:
+        effect["leave_formula"] = {
+            str(k): n
+            for k, v in raw_leave.items()
+            if type(v) is int and (n := v) != 0
+        }
+    raw_delta = value.get("delta_formula")
+    if isinstance(raw_delta, dict) and raw_delta:
+        effect["delta_formula"] = {
+            str(k): n
+            for k, v in raw_delta.items()
+            if type(v) is int and (n := v) != 0
+        }
+    else:
+        effect["delta_formula"] = compose_delta_formula(
+            effect.get("adds") or "",
+            effect.get("removes") or "",
+            effect.get("leave_formula") or {},
+        )
     return effect
 
 
@@ -605,6 +725,15 @@ def _apply_forest_trace(
     after = held.xf.formula
     trace["formula"] = after
     trace["delta_formula"][transform_id] = formula_delta(before, after)
+    # Dedup key for this product's depth frame (survives clear_structure).
+    frames = list(trace.get("dedup_smi") or [])
+    while len(frames) < depth:
+        frames.append(None)
+    if len(frames) == depth:
+        frames.append(_dedup_smi_of(held))
+    else:
+        frames[depth] = _dedup_smi_of(held)
+    trace["dedup_smi"] = frames
     # PatternInfo is stored on info as the same dict the rule holds.
     pattern: PatternInfo | None
     if "pattern" in info:
@@ -662,6 +791,8 @@ def _apply_forest_trace(
 _EFFECT_DEFAULTS: Effect = {
     "adds": "",
     "removes": "",
+    "delta_formula": {},
+    "leave_formula": {},
     "cleaves": False,
     "leave_count": None,
     "breaks_ring": False,
@@ -732,7 +863,18 @@ def branches(
             if symbol:
                 item["partner"] = symbol
                 if removes_partner:
-                    item["removes"] = symbol
+                    # Cleaving: partner stays as a product fragment → leave.
+                    # Non-cleaving: partner is eliminated → junction removes.
+                    if item.get("cleaves"):
+                        item["leave_formula"] = {symbol: 1}
+                        item["leave_count"] = 1
+                    else:
+                        item["removes"] = symbol
+                    item["delta_formula"] = compose_delta_formula(
+                        item.get("adds") or "",
+                        item.get("removes") or "",
+                        item.get("leave_formula") or {},
+                    )
             if "h" in when:
                 item["partner_h"] = when["h"]
         out.append(item)
@@ -899,9 +1041,25 @@ def merge_effects(
 
     needs = (left.get("needs") or "") + (right.get("needs") or "")
     can = left.get("dearomatizes") or right.get("dearomatizes")
+    adds = (left.get("adds") or "") + (right.get("adds") or "")
+    removes = (left.get("removes") or "") + (right.get("removes") or "")
+    leave: dict[str, int] = {}
+    for end in (left, right):
+        for el, n in (end.get("leave_formula") or {}).items():
+            leave[el] = leave.get(el, 0) + int(n)
+    leave = {el: n for el, n in leave.items() if n}
+    leave_count = left.get("leave_count")
+    right_leave = right.get("leave_count")
+    if leave_count is None:
+        leave_count = right_leave
+    elif isinstance(leave_count, int) and isinstance(right_leave, int):
+        leave_count = leave_count + right_leave
     return {
-        "adds": left.get("adds", "") + right.get("adds", ""),
-        "removes": left.get("removes", "") + right.get("removes", ""),
+        "adds": adds,
+        "removes": removes,
+        "leave_formula": leave,
+        "leave_count": leave_count,
+        "delta_formula": compose_delta_formula(adds, removes, leave),
         "cleaves": bool(left.get("cleaves") or right.get("cleaves")),
         "dearomatizes": bool(can and system_aromatic),
         "methide": bool(left.get("methide") or right.get("methide")),
@@ -1467,6 +1625,191 @@ def _site_ranks_for_csmi_warn(info: SiteInfo, mol: Mol) -> tuple[int, ...]:
 
 class SiteDeduplicationWarning(UserWarning):
     """Unique-edit miss: later emission repeats a keeper's CSMI set + site ranks."""
+
+
+class FormulaDeltaMismatchWarning(UserWarning):
+    """Observed product formula change disagrees with PatternInfo ``delta_formula``."""
+
+
+# Suite / callers install a shared list; metabolize and find_path append
+# structured :class:`FormulaDeltaMismatch` records (no warning-string parse).
+_formula_delta_mismatch_bag: ContextVar[list[FormulaDeltaMismatch] | None] = ContextVar(
+    "formula_delta_mismatch_bag", default=None
+)
+
+
+def begin_formula_delta_mismatch_collector(
+    bag: list[FormulaDeltaMismatch] | None = None,
+) -> tuple[list[FormulaDeltaMismatch], Token[list[FormulaDeltaMismatch] | None]]:
+    """Install a shared mismatch list for this context; return ``(bag, token)``."""
+
+    installed = bag if bag is not None else []
+    return installed, _formula_delta_mismatch_bag.set(installed)
+
+
+def end_formula_delta_mismatch_collector(
+    token: Token[list[FormulaDeltaMismatch] | None],
+) -> None:
+    """Restore the previous collector (pass the token from :func:`begin_...`)."""
+
+    _formula_delta_mismatch_bag.reset(token)
+
+
+def formula_delta_mismatch_collector() -> list[FormulaDeltaMismatch] | None:
+    """Active suite/call collector, if any."""
+
+    return _formula_delta_mismatch_bag.get()
+
+
+def _record_formula_delta_mismatch(
+    detail: FormulaDeltaMismatch,
+    counters: EditCounters | None,
+) -> None:
+    """Append ``detail`` to counters and/or the context collector; bump count."""
+
+    bag = _formula_delta_mismatch_bag.get()
+    if bag is not None:
+        bag.append(detail)
+    if counters is not None:
+        mismatches = getattr(counters, "formula_delta_mismatches", None)
+        if isinstance(mismatches, list) and mismatches is not bag:
+            mismatches.append(detail)
+        _bump(counters, "formula_delta_mismatch")
+
+
+def _repeats_ancestor_dedup_smi(product: Mol) -> bool:
+    """True when this product's dedup key equals an ancestor frame.
+
+    ``atom_trace["dedup_smi"][depth]`` is self; ``[:depth]`` are parents.
+    Unstable (``None``) keys do not trigger — fail-closed skip, not a cycle.
+    """
+
+    tracing = product.xf.tracing
+    if not tracing.active:
+        return False
+    key = tracing.dedup_smi
+    if key is None:
+        return False
+    depth = tracing.depth
+    if depth is None or depth <= 0:
+        return False
+    # ``active`` guarantees an initialized atom_trace.
+    frames = list(product._forest["atom_trace"].get("dedup_smi") or ())  # type: ignore[index]
+    return key in frames[:depth]
+
+
+def _heavy_formula_counts(counts: Mapping[str, int] | None) -> dict[str, int]:
+    """Drop H — edit bags and sanitized mols disagree on H for hydroxyl."""
+
+    return {
+        str(el): int(n)
+        for el, n in (counts or {}).items()
+        if el != "H" and int(n)
+    }
+
+
+def _sum_product_formula(products: Sequence[Mol]) -> Formula:
+    counts: dict[str, int] = {}
+    charge = 0
+    for product in products:
+        formula = product.xf.formula
+        for el, n in (formula.get("counts") or {}).items():
+            counts[el] = counts.get(el, 0) + int(n)
+        charge += int(formula.get("charge", 0))
+    return {"counts": counts, "charge": charge}
+
+
+def _report_formula_delta_mismatch(
+    parent: Mol,
+    info: SiteInfo,
+    products: Sequence[Mol],
+    counters: EditCounters | None = None,
+) -> bool:
+    """Warn + record when heavy-atom product Δformula ≠ declared effect delta.
+
+    Returns ``True`` when the check matches or is skipped; ``False`` on a
+    mismatch (warning issued, ``FormulaDeltaMismatch`` appended / counter
+    bumped when collectors or counters are given). Soft only — never drops
+    chemistry.
+    """
+
+    if not products:
+        return True
+    options = info.get("options") or {}
+    pattern = info.get("pattern") or {}
+    name = pattern.get("name") or _pattern_dedup_token(info) or "?"
+    parent_formula = parent.xf.formula
+    adds = options.get("adds") or ""
+    removes = options.get("removes") or ""
+    leave_formula = options.get("leave_formula") or {}
+    if not isinstance(adds, str):
+        adds = ""
+    if not isinstance(removes, str):
+        removes = ""
+    if not isinstance(leave_formula, dict):
+        leave_formula = {}
+    cleaves = bool(options.get("cleaves"))
+
+    if len(products) == 1:
+        actual = formula_delta(parent_formula, products[0].xf.formula)
+        declared = options.get("delta_formula")
+        if not isinstance(declared, dict):
+            declared = compose_delta_formula(adds, removes, leave_formula)
+        expected_heavy = _heavy_formula_counts(declared)
+        actual_heavy = _heavy_formula_counts(actual.get("counts"))
+    else:
+        # Leave stays in a fragment (cancels). Eliminated removes (halide) do not.
+        expected_heavy = _heavy_formula_counts(bag_delta_formula(adds, removes))
+        actual = formula_delta(parent_formula, _sum_product_formula(products))
+        actual_heavy = _heavy_formula_counts(actual.get("counts"))
+
+    # Star conjugates use dummy ``*`` — bag stoichiometry ≠ mol formula.
+    if "*" in expected_heavy or "*" in actual_heavy:
+        return True
+    # Open leave: cleaves with empty leave_formula and unexplained heavy loss.
+    if (
+        cleaves
+        and not leave_formula
+        and not expected_heavy
+        and any(n < 0 for n in actual_heavy.values())
+    ):
+        return True
+    # Ring-retained leave: cleaves with a named leave, but one product still
+    # holds those atoms (isoxazole N–O open, etc.). Not a sealed leave fragment.
+    if (
+        cleaves
+        and leave_formula
+        and len(products) == 1
+        and not actual_heavy
+        and expected_heavy
+        == _heavy_formula_counts(
+            {el: -int(n) for el, n in leave_formula.items() if int(n)}
+        )
+    ):
+        return True
+
+    if expected_heavy == actual_heavy:
+        return True
+    detail = FormulaDeltaMismatch(
+        pattern=str(name),
+        declared_heavy=dict(expected_heavy),
+        observed_heavy=dict(actual_heavy),
+        cleaves=cleaves,
+        adds=adds,
+        removes=removes,
+        leave={str(k): int(v) for k, v in leave_formula.items()},
+        pair="ends" in info,
+    )
+    warnings.warn(
+        f"Formula delta mismatch for pattern {detail.pattern}: declared heavy "
+        f"{detail.declared_heavy!r} ≠ observed {detail.observed_heavy!r} "
+        f"(cleaves={detail.cleaves}, adds={detail.adds!r}, "
+        f"removes={detail.removes!r}, leave={detail.leave!r})",
+        FormulaDeltaMismatchWarning,
+        stacklevel=3,
+    )
+    _record_formula_delta_mismatch(detail, counters)
+    return False
 
 
 def _rule_dedup_name(rule: object) -> str:
@@ -2598,7 +2941,13 @@ class Dealkylation(ResonanceRule):
         (
             Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)"),
             describe(
-                *branches(_whens(2, (7, 8, 16)), adds="OO", cleaves=True),
+                *branches(
+                    _whens(2, (7, 8, 16)),
+                    adds="OO",
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_ME),
+                ),
                 site_map=(1, 2),
                 name="methyl_carboxylic",
             ),
@@ -2606,7 +2955,13 @@ class Dealkylation(ResonanceRule):
         (
             Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)"),
             describe(
-                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                *branches(
+                    _whens(2, (7, 8, 16)),
+                    adds="O",
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_ME),
+                ),
                 site_map=(1, 2),
                 name="methyl_carbonyl",
             ),
@@ -2614,7 +2969,13 @@ class Dealkylation(ResonanceRule):
         (
             Smirks("[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)"),
             describe(
-                *branches(_whens(2, (7, 8, 16)), adds="O", cleaves=True),
+                *branches(
+                    _whens(2, (7, 8, 16)),
+                    adds="O",
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_ME),
+                ),
                 site_map=(1, 2),
                 name="methyl_alcohol",
             ),
@@ -2729,6 +3090,8 @@ def _ndealk(
 ) -> tuple[Smirks, PatternInfo]:
     """One N-dealkylation pattern. ``leave_count`` is the named leaving atoms."""
 
+    if leave_count == 1 and "leave_formula" not in effect:
+        effect["leave_formula"] = dict(LEAVE_ME)
     return (
         smirks,
         describe(
@@ -2841,6 +3204,7 @@ class BenzodioxoleReduction(SmirksReactionRule):
                 cleaves=True,
                 partner="O",
                 leave_count=1,
+                leave_formula=dict(LEAVE_CH2),
                 site_map=(2, 3),
                 name="dioxole_methylene",
             ),
@@ -2867,6 +3231,7 @@ class NitroaromaticReduction(SmirksReactionRule):
                 cleaves=True,
                 partner="N",
                 leave_count=1,
+                leave_formula=dict(LEAVE_O),
                 site_map=(1, 2),
                 name="nitro_charged",
             ),
@@ -2877,6 +3242,7 @@ class NitroaromaticReduction(SmirksReactionRule):
                 cleaves=True,
                 partner="N",
                 leave_count=1,
+                leave_formula=dict(LEAVE_O),
                 site_map=(1, 2),
                 name="nitro_neutral",
             ),
@@ -3004,25 +3370,33 @@ class Dehydration(SmirksReactionRule):
             describe(
                 *branches(
                     ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
-                    removes="OH",
                     cleaves=True,
                     partner="O",
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_O),
                 ),
                 name="alcohol",
             ),
         ),
         (
             Smirks("[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]"),
-            describe(removes="OH", cleaves=True, partner="O", name="beta_elimination"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="beta_elimination",
+            ),
         ),
         (
             Smirks("[#6,#7:1]=[#8:2]>>[*:1].[*:2]"),
             describe(
                 *branches(
                     ({"map": 1, "z": 6}, {"map": 1, "z": 7}),
-                    removes="O",
                     cleaves=True,
                     partner="O",
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_O),
                 ),
                 name="carbonyl",
             ),
@@ -3137,35 +3511,83 @@ class NitrogenReduction(ResonanceRule):
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
             Smirks("[#8:3]=[#7+1:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitro_charged"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitro_charged",
+            ),
         ),
         (
             Smirks("[#8:3]=[#7:1]-[#8-1:2]>>([*:3]=[*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitro_anion"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitro_anion",
+            ),
         ),
         (
             Smirks("[#8:3]=[#7:1]-[#8:2]>>([*:3]=[*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitro_neutral"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitro_neutral",
+            ),
         ),
         (
             Smirks("[#7:1](=[#8:2])-[#8:3]>>([*:1].[*:2].[*:3])"),
-            describe(removes="OO", cleaves=True, partner="O", name="nitro_to_amine"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=2,
+                leave_formula=dict(LEAVE_OO),
+                name="nitro_to_amine",
+            ),
         ),
         (
             Smirks("[#8:3]=[#7:1]-[#8:2]>>([*:1].[*:2].[*:3])"),
-            describe(removes="OO", cleaves=True, partner="O", name="nitro_both"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=2,
+                leave_formula=dict(LEAVE_OO),
+                name="nitro_both",
+            ),
         ),
         (
             Smirks("[#7:1]-,:[#8:2]>>([*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="hydroxylamine"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="hydroxylamine",
+            ),
         ),
         (
             Smirks("[#7D2:1]=[#8:2]>>([*:1].[*:2])"),
-            describe(removes="O", cleaves=True, partner="O", name="nitroso"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="nitroso",
+            ),
         ),
         (
             Smirks("[#7:1](~[#8:2])~[#8:3]>>([*:1].[*:2].[*:3])"),
-            describe(removes="OO", cleaves=True, partner="O", name="nitro_both_any"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=2,
+                leave_formula=dict(LEAVE_OO),
+                name="nitro_both_any",
+            ),
         ),
     )
 
@@ -3243,7 +3665,13 @@ class SulfurReduction(SmirksReactionRule):
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
             Smirks("[#16:1]=[#8:2]>>[*:1].[*:2]"),
-            describe(removes="O", cleaves=True, partner="O", name="sulfoxide"),
+            describe(
+                cleaves=True,
+                partner="O",
+                leave_count=1,
+                leave_formula=dict(LEAVE_O),
+                name="sulfoxide",
+            ),
         ),
         (
             Smirks("[#16:1]-[#16:2]>>[*:1].[*:2]"),
@@ -3253,7 +3681,12 @@ class SulfurReduction(SmirksReactionRule):
             Smirks("[#16:1]-[#6,#8:2]>>[*:1].[*:2]"),
             describe(
                 *branches(({"map": 2, "z": 6},), cleaves=True),
-                *branches(({"map": 2, "z": 8},), cleaves=True, removes="O"),
+                *branches(
+                    ({"map": 2, "z": 8},),
+                    cleaves=True,
+                    leave_count=1,
+                    leave_formula=dict(LEAVE_O),
+                ),
                 name="thioether",
             ),
         ),
@@ -3288,6 +3721,7 @@ class Epoxidation(ResonanceRule):
                 *branches(
                     ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
                     adds="O",
+                    dearomatizes=True,
                 ),
                 name="epoxide",
                 site_map=(1, 2),
@@ -3645,7 +4079,7 @@ class Sulfation(ConjugationRule):
                 "[#6:1]1=[#6:2][#6:3]2[#8:7][#6:4]2[#6:5]=[#6:6]1>>"
                 "[*:1]1=[*:2][*:3]=[*:4](-S(C)(=O)(=O))[*:5]=[*:6]1"
             ),
-            describe(adds="CSO", removes="O", site_map=4, name="epoxide_methyl_sulfone"),
+            describe(adds="CSO", site_map=4, name="epoxide_methyl_sulfone"),
         ),
     )
 

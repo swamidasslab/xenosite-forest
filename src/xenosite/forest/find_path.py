@@ -33,6 +33,7 @@ from xenosite.forest.rdkitutil import (
 from xenosite.forest.records import (
     AtomRef,
     Effect,
+    FormulaDeltaMismatch,
     PatternInfo,
     ProductInfo,
     Site,
@@ -51,6 +52,7 @@ from xenosite.forest.rules import (
     _accept_all_rules,
     _accept_all_sites,
     _as_site,
+    _report_formula_delta_mismatch,
 )
 from xenosite.forest.rulesets import RuleSet
 
@@ -74,6 +76,8 @@ class PathCounters:
         self.sites_skipped = 0
         self.mol_edits = 0
         self.sanitize_dropped = 0
+        self.formula_delta_mismatch = 0
+        self.formula_delta_mismatches: list[FormulaDeltaMismatch] = []
         self.nodes = 0
 
     @property
@@ -571,6 +575,8 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
     span: Span = info.get("span") or {
         "adds": "",
         "removes": "",
+        "delta_formula": {},
+        "leave_formula": {},
         "cleaves": False,
         "leave_count": None,
         "breaks_ring": False,
@@ -602,12 +608,17 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
         return False
     # Bare span.dearomatizes=True means every possibility *claims* capability
     # to dearomatize. That is not "always dearomatizes after resolve" — path
-    # Hydrogenation declares capability while still reducing aliphatic C=O.
-    # Patterns that also add H are gated by adds_h_only below / filter_sites;
-    # do not refuse them here when the target keeps aromaticity.
+    # Hydrogenation (adds H) and Epoxidation (adds O) declare capability while
+    # still editing aliphatic sites. Those are gated by adds-H / site resolve
+    # below; do not refuse them here when the target keeps aromaticity.
     if (
         _all_span(span, "dearomatizes", bool, False)
-        and not _any_span(span, "adds", lambda value: bool(value) and "H" in value, "")
+        and not _any_span(
+            span,
+            "adds",
+            lambda value: bool(value) and ("H" in value or "O" in value),
+            "",
+        )
         and not diff.loses_aromaticity
     ):
         return False
@@ -643,6 +654,117 @@ def _alkyl_bond_raises(mol: Mol, atom_idx: int, diff: AtomDiff) -> bool:
     return False
 
 
+def _is_dehydrogenation_effect(effect: Effect) -> bool:
+    """Dearomatizing removes-H edit (DH / QF path ends) — not cleavage or OH."""
+
+    removes = effect.get("removes") or ""
+    return (
+        isinstance(removes, str)
+        and "H" in removes
+        and bool(effect.get("dearomatizes"))
+        and not effect.get("cleaves")
+        and not _effect_adds_oxygen(effect)
+    )
+
+
+def _heavy_neighbor_idxs(mol: Mol, atom_idx: int) -> frozenset[int]:
+    """Heavy-atom neighbor indexes of ``atom_idx`` (H dropped)."""
+
+    atom = mol.GetAtomWithIdx(atom_idx)
+    return frozenset(
+        n.GetIdx() for n in atom.GetNeighbors() if n.GetAtomicNum() > 1
+    )
+
+
+def _dh_site_neighbors_match_target(
+    mol: Mol, atom_idx: int, mapping: Mapping[int, int], target: Mol
+) -> bool:
+    """Heavy neighbors of ``atom_idx`` map onto exactly the target's heavy neighbors."""
+
+    t_idx = mapping.get(atom_idx)
+    if t_idx is None:
+        return False
+    imaged: set[int] = set()
+    for n in _heavy_neighbor_idxs(mol, atom_idx):
+        t_n = mapping.get(n)
+        if t_n is None:
+            return False
+        imaged.add(int(t_n))
+    return imaged == set(_heavy_neighbor_idxs(target, int(t_idx)))
+
+
+def _dh_neighbors_match_any_view(
+    mol: Mol, atom_idx: int, diff: AtomDiff
+) -> bool:
+    """True when some MCS view has matching heavy neighbors for this site atom."""
+
+    target = diff.target
+    for mapping in diff.mappings:
+        if atom_idx not in mapping:
+            continue
+        if _dh_site_neighbors_match_target(mol, atom_idx, mapping, target):
+            return True
+    return False
+
+
+def _dh_ends_match_under_mapping(
+    mol: Mol,
+    end_idxs: Sequence[int],
+    mapping: Mapping[int, int],
+    target: Mol,
+) -> bool:
+    """True when **all** ends match heavy neighbors under this one MCS mapping."""
+
+    for atom_idx in end_idxs:
+        if atom_idx not in mapping:
+            return False
+        if not _dh_site_neighbors_match_target(mol, int(atom_idx), mapping, target):
+            return False
+    return True
+
+
+def _parent_to_product_idx(parent: Mol, product: Mol, parent_idx: int) -> int | None:
+    """Product index of the atom that carried ``parent_idx``'s forest label."""
+
+    atom = parent.GetAtomWithIdx(parent_idx)
+    if not atom.HasProp("forestLabel"):
+        return None
+    tag = atom.GetProp("forestLabel")
+    for product_atom in product.GetAtoms():
+        if product_atom.HasProp("forestLabel") and product_atom.GetProp("forestLabel") == tag:
+            return int(product_atom.GetIdx())
+    return None
+
+
+def _dh_product_ends_match_target(
+    parent: Mol,
+    product: Mol,
+    end_atoms: Sequence[int],
+    target: Mol,
+) -> bool:
+    """After DH: product ends' heavy neighbors match the target under one MCS map.
+
+    Parent ``end_atoms`` are mapped onto the product via forest labels, then
+    checked against ``atom_diff(product, target)``. Both ends must succeed under
+    the **same** placement — not each end's best top-group / view match
+    independently (that optimistic split can disagree with pair topology).
+    """
+
+    if not end_atoms:
+        return True
+    diff = atom_diff(product, target)
+    product_ends: list[int] = []
+    for end in end_atoms:
+        product_idx = _parent_to_product_idx(parent, product, int(end))
+        if product_idx is None:
+            return False
+        product_ends.append(product_idx)
+    return any(
+        _dh_ends_match_under_mapping(product, product_ends, mapping, target)
+        for mapping in diff.mappings
+    )
+
+
 def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
     """Heavy-atom sizes of the two sides of a two-atom cleavage site."""
 
@@ -671,6 +793,71 @@ def _leaving_heavy_counts(mol: Mol, atoms: set[int]) -> tuple[int, ...] | None:
     return (_side(left, right), _side(right, left))
 
 
+def _site_could_help_on_view(
+    site: Site,
+    info: SiteInfo,
+    view: AtomDiff,
+    mol: TracingMol | Mol,
+) -> bool:
+    """Site gates against one MCS placement (whole site, one topology).
+
+    Multi-atom sites (bonds, pairs) must all help under this view — not each
+    atom's best match from a merged top-rank union across placements.
+    """
+
+    effect = info["options"]
+    atoms = _flat_ints(site)
+    path_ends: frozenset[int] | tuple[()] = (
+        info["path_ends"] if "path_ends" in info else ()
+    )
+
+    if "ends" in info:
+        # Per-end effect bags (oxygen / methide partner) — data on the pair.
+        for atom, end in zip(info["end_atoms"], info["ends"]):
+            if _effect_adds_oxygen(end) and atom not in view.needs_oxygen:
+                return False
+            if (end.get("partner") or "") == "C" and not _alkyl_bond_raises(
+                mol, atom, view
+            ):
+                return False
+    elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
+        oxygen_sites = [atom for atom in atoms if atom in view.needs_oxygen]
+        if not oxygen_sites:
+            return False
+        if all(
+            atom in view.needs_carbonyl and atom in view.loses_aromaticity
+            for atom in oxygen_sites
+        ):
+            return False
+
+    scope = atoms | set(path_ends)
+    if effect.get("dearomatizes"):
+        if not (scope & set(view.loses_aromaticity)):
+            return False
+
+    removes = effect.get("removes") or ""
+    if (
+        isinstance(removes, str)
+        and "H" in removes
+        and not _effect_adds_oxygen(effect)
+        and not effect.get("cleaves")
+    ):
+        loses_h = any(view.h_delta.get(atom, 0) < 0 for atom in scope)
+        if not loses_h and not (scope & set(view.loses_aromaticity)):
+            return False
+    adds = effect.get("adds") or ""
+    if (
+        isinstance(adds, str)
+        and "H" in adds
+        and not _effect_adds_oxygen(effect)
+        and not effect.get("cleaves")
+    ):
+        gains_h = any(view.h_delta.get(atom, 0) > 0 for atom in scope)
+        if not gains_h:
+            return False
+    return True
+
+
 def _site_could_help(
     site: Site, info: SiteInfo, diff: AtomDiff, mol: TracingMol | Mol
 ) -> bool:
@@ -690,64 +877,15 @@ def _site_could_help(
                 return False
         return True
 
-    if "ends" in info:
-        ends = info["ends"]
-        end_atoms = info["end_atoms"]
-        for atom, end in zip(end_atoms, ends):
-            if _effect_adds_oxygen(end) and atom not in diff.needs_oxygen:
-                return False
-            # An alkyl partner turns the ring bond into an exocyclic double
-            # bond (methide). Skip it unless that C-C bond is higher in the target.
-            if (end.get("partner") or "") == "C" and not _alkyl_bond_raises(
-                mol, atom, diff
-            ):
-                return False
-    elif _effect_adds_oxygen(effect) and not effect.get("dearomatizes"):
-        oxygen_sites = [atom for atom in atoms if atom in diff.needs_oxygen]
-        if not oxygen_sites:
-            return False
-        # The local change is a carbonyl on a ring that stops being aromatic.
-        # A bare hydroxylation does not do that; the dearomatizing edit does.
-        if all(
-            atom in diff.needs_carbonyl and atom in diff.loses_aromaticity
-            for atom in oxygen_sites
-        ):
-            return False
-
-    path_ends: frozenset[int] | tuple[()] = (
-        info["path_ends"] if "path_ends" in info else ()
+    # Whole site under one MCS placement (pair / bond / atom). Merged
+    # top-rank unions across placements are optimistic for multi-atom sites.
+    mappings = diff.mappings or (diff.mapping,)
+    return any(
+        _site_could_help_on_view(
+            site, info, _diff_for(diff.reactant, diff.target, mapping), mol
+        )
+        for mapping in mappings
     )
-    if effect.get("dearomatizes"):
-        scope = atoms | set(path_ends)
-        if not (scope & set(diff.loses_aromaticity)):
-            return False
-
-    removes = effect.get("removes") or ""
-    if (
-        isinstance(removes, str)
-        and "H" in removes
-        and not _effect_adds_oxygen(effect)
-        and not effect.get("cleaves")
-    ):
-        scope = atoms | set(path_ends)
-        loses_h = any(diff.h_delta.get(atom, 0) < 0 for atom in scope)
-        if not loses_h and not (scope & set(diff.loses_aromaticity)):
-            return False
-    # Symmetric to removes-H: adding H is only helpful where h_delta > 0.
-    # Do not use loses_aromaticity as an escape — reductive dearomatization
-    # clears that term in cost() while moving away from oxidative targets.
-    adds = effect.get("adds") or ""
-    if (
-        isinstance(adds, str)
-        and "H" in adds
-        and not _effect_adds_oxygen(effect)
-        and not effect.get("cleaves")
-    ):
-        scope = atoms | set(path_ends)
-        gains_h = any(diff.h_delta.get(atom, 0) > 0 for atom in scope)
-        if not gains_h:
-            return False
-    return True
 
 
 def _filters(diff: AtomDiff, enabled: bool) -> tuple[FilterRules, FilterSites]:
@@ -1028,6 +1166,8 @@ def find_path(
             finished = _finish(walk.mol, por.products, por.info, counters)
             if not finished:
                 continue
+            # metabolites bypass ReactionRule.metabolize — still warn+count.
+            _report_formula_delta_mismatch(walk.mol, por.info, finished, counters)
             kept, discarded = _keep_fragment(finished, target_mol, target_smiles)
             if kept is None:
                 continue
@@ -1037,11 +1177,21 @@ def find_path(
             closer = target_hit or atom_diff(child, target_mol).cost() < parent_cost
             if not closer:
                 continue
+            options = por.info["options"]
+            # DH / QF path ends: each end must match target neighbors **after**
+            # the edit (product), not on the reactant before application.
+            if (
+                _is_dehydrogenation_effect(options)
+                and "end_atoms" in por.info
+                and not _dh_product_ends_match_target(
+                    walk.mol, child, por.info["end_atoms"], target_mol
+                )
+            ):
+                continue
             if child_smiles in seen and not target_hit:
                 continue
             seen.add(child_smiles)
 
-            options = por.info["options"]
             cleaves = bool(options.get("cleaves"))
             if len(finished) == 1 and cleaves:
                 opens = walk.opens + (_cleavage_site(por.info["site"]),)

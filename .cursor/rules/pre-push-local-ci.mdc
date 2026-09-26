@@ -1,0 +1,14 @@
+# Pre-push local CI
+
+Before `git push` on this repo, run the same checks CI will run and fix failures first. Do not push a commit that fails them.
+
+Mirror `.github/workflows/test.yml`:
+
+1. **Format (Rust):** `cargo fmt --all --manifest-path crates/xenosite-forest/Cargo.toml -- --check` (run `cargo fmt --all` first if dirty)
+2. **Clippy:** `cargo clippy -p xenosite-forest --all-targets --no-deps -- -D warnings`
+3. **Rust tests:** `cargo test -p xenosite-forest` (add `--features python` when touching the PyO3 door)
+4. **Ruff:** `uv run ruff check src/xenosite/forest tests/forest`
+5. **Pyright:** `uv run pyright src/xenosite/forest`
+6. **Pytest (forest):** `uv run pytest tests/forest src/xenosite/forest -n auto`
+
+Skip only steps that are clearly unrelated to the change (e.g. no Rust edit → skip cargo). Prefer running the full forest pytest job when search/rules/find_path changed. A rustfmt-only push without `--check` first is not enough.

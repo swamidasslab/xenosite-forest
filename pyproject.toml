@@ -153,6 +153,11 @@ filterwarnings = [
     "error",
     # Intentional archive chemotype noise; not a live-forest contract.
     "ignore::xenosite._archive_forest.unstable.UnstableWarning",
+    # Formula-delta check is soft (never drops). Suite asserts the shared
+    # mismatch *collector* is empty (see tests/conftest.py); intentional
+    # mismatch tests use @pytest.mark.allow_formula_delta_mismatch. Warnings
+    # stay ignored so WAE does not double-fail beside the counter gate.
+    "ignore::xenosite.forest.rules.FormulaDeltaMismatchWarning",
     # Deprecated AtomTracker facade: tests that call it use pytest.warns /
     # catch_warnings(ignore). Do not blanket-ignore DeprecationWarning.
     # Cross-rule overlaps log INFO only (no RedundantRulesWarning); SiteDeduplicationWarning
@@ -162,6 +167,7 @@ markers = [
     "profile: opt-in AtomTracker / metabolize timing benches (not a CI gate)",
     "regression: deferred bug, not correct behavior or out of scope",
     "cleared_0_7: former hard xfail that now passes on live forest (since v0.6)",
+    "allow_formula_delta_mismatch: intentional FormulaDeltaMismatch records (skip suite zero-assert)",
 ]
 
 [tool.coverage.run]

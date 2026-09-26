@@ -156,3 +156,41 @@ MS1 / MS2 path finding (if pursued) stays on `find_path`-style
 APIs, not a revived `xenosite.net` package.
 
 Old code: `src/xenosite/_archive_forest/net.py`.
+
+## find_path `cleavage_first` expand gate
+
+Status: approved.
+
+Tried an in-path phase: while expand still emitted cleaving edits, take only
+those; otherwise exclude later cleaves (`FindPathConfig.cleavage_first`, briefly
+also a depth cap). Ad hoc relative to data-not-branches — cleaved sites already
+run through the same expand / `order_key` / atom_diff / leave_count path as other
+reactions. Redundancy collapse belongs in plan yield keys / Or-Maybe fold / a
+richer heap key, not a second cleavage predicate in the expansion loop.
+
+## find_path novel_site soft-demote + target_hit heap tier
+
+Status: approved.
+
+After a yield, expand soft-demoted hops whose pattern+site already appeared in a
+yielded path (`deprioritize_known_site`, heap `novel_site`, expand `order_key`
+bit, `PathCounters::deprioritized_known_site`). Ablation: demotion on roughly
+doubled hard multipath bill with no miss gain. Removed entirely — not an opt-in.
+
+Also dropped the separate `target_hit` bool on the heap key and the hit sentinel
+in `hop_match_score` / `hop_cost_gain`. A target hit is atom_diff cost 0 /
+formula distance 0; closeness already prefers it. Local `target_hit` remains for
+closer / seen / yield early-stop only.
+
+## find_path expand `mcs_extend` opt-in
+
+Status: approved.
+
+Tried process-wide `USE_MCS_EXTEND` / `find_path_bench --mcs-extend` and a
+PatternInfo-gated `FindPathConfig.mcs_extend` so every expand `atom_diff` used
+MCS then placeable grow. Full extend on PhaseOne+EpoxideHydration regressed hard
+filter bill **273→449** (veratrole 60→216). Cut entirely — not an opt-in.
+Expand and failed-lift rematch stay bare MCS. Lift seeds still call
+`extend_mapping_where_possible`; [`mcs_extend`](../../crates/xenosite-forest/src/atom_diff.rs)
+/`atom_diff_mcs_extend` remain for lift/gold/tests only.
+

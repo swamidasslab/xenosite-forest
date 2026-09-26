@@ -158,7 +158,18 @@ class RuleSet(ReactionRule):
                     addition = trace["additions"][trace["transforms"][-1]]
                     addition["rules"] = tuple(addition["rules"]) + (self,)
                 if unique_csmi:
-                    emission_csmi = frozenset(p.xf.csmi for p in products)
+                    keys: list[str] = []
+                    unstable = False
+                    for p in products:
+                        key = p.xf.tracing.dedup_smi
+                        if key is None:
+                            unstable = True
+                            break
+                        keys.append(key)
+                    if unstable:
+                        yield products, info
+                        continue
+                    emission_csmi = frozenset(keys)
                     rule_name = _rule_dedup_name(info["rule"][0])
                     kept = seen_csmi.get(emission_csmi)
                     if kept is not None and kept != rule_name:

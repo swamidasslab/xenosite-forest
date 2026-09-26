@@ -1,0 +1,388 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 8689a423..3398cdda 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,40 +1,2 @@
+-[workspace]
+-members = [
+-    "crates/chematic-core",
+-    "crates/chematic-smiles",
+-    "crates/chematic-perception",
+-    "crates/chematic-mol",
+-    "crates/chematic-depict",
+-    "crates/chematic-chem",
+-    "crates/chematic-cip",
+-    "crates/chematic-fp",
+-    "crates/chematic-smarts",
+-    "crates/chematic-3d",
+-    "crates/chematic-rxn",
+-    "crates/chematic-ff",
+-    "crates/chematic-ewald",
+-    "crates/chematic-crystal",
+-    "crates/chematic-inchi",
+-    "crates/chematic-wasm",
+-    "crates/chematic",
+-    "crates/chematic-iupac",
+-    "crates/chematic-mcp",
+-    "crates/chematic-cli",
+-    "crates/chematic-py",
+-    "tools/gen_sa_table",
+-]
+-resolver = "2"
+-
+-[profile.release]
+-opt-level = 3        # optimize for speed (was "z" for size)
+-lto = true           # whole-program link-time optimization
+-codegen-units = 1    # required for LTO; also enables more cross-crate inlining
+-
+-[workspace.package]
+-version = "1.0.21"
+-edition = "2024"
+-rust-version = "1.88"
+-authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
+-license = "MIT OR Apache-2.0"
+-repository = "https://github.com/kent-tokyo/chematic"
+-homepage = "https://kent-tokyo.github.io/chematic/"
++# Vendored into xenosite-forest: not a Cargo workspace.
++# Sparse crates under crates/ are members of the parent repo workspace.
+diff --git a/crates/chematic-core/src/atom.rs b/crates/chematic-core/src/atom.rs
+index 5fc75740..e67595bf 100644
+--- a/crates/chematic-core/src/atom.rs
++++ b/crates/chematic-core/src/atom.rs
+@@ -124,6 +124,8 @@ impl RGroupLabel {
+ ///   or connected via `:` bonds.
+ /// - `wildcard`: `true` for the SMILES `*` atom (any element, query context).
+ /// - `atom_map`: atom-mapping number used in reaction SMILES.
++/// - `tag`: non-chemical caller id. Copied by clone / apply / fragments;
++///   ignored by SMILES write and canonical invariants; not emitted as `:n`.
+ /// - `cip_code`: CIP stereodescriptor (R/S/E/Z). Populated by
+ ///   `chematic_chem::assign_cip`; `None` until then.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+@@ -138,6 +140,8 @@ pub struct Atom {
+     /// True for the wildcard atom `*` or `[*]`.
+     pub wildcard: bool,
+     pub atom_map: Option<u16>,
++    /// Non-chemical identity. Survives graph rewrite; not written to SMILES.
++    pub tag: Option<u32>,
+     /// CIP stereodescriptor assigned by `chematic_chem::assign_cip`.
+     /// `None` until explicitly computed.
+     pub cip_code: Option<CipCode>,
+@@ -155,6 +159,7 @@ impl Atom {
+             chirality: Chirality::None,
+             wildcard: false,
+             atom_map: None,
++            tag: None,
+             cip_code: None,
+         }
+     }
+@@ -190,6 +195,7 @@ impl Atom {
+             chirality,
+             wildcard: false,
+             atom_map,
++            tag: None,
+             cip_code: None,
+         }
+     }
+diff --git a/crates/chematic-core/src/molecule.rs b/crates/chematic-core/src/molecule.rs
+index d5dd9727..d19be2b6 100644
+--- a/crates/chematic-core/src/molecule.rs
++++ b/crates/chematic-core/src/molecule.rs
+@@ -774,6 +774,12 @@ impl Molecule {
+         self.atoms[idx.0 as usize].isotope = isotope;
+     }
+ 
++    /// Set a non-chemical tag on atom `idx`. Copied by clone / apply /
++    /// fragments; ignored by SMILES write and canonicalization.
++    pub fn set_tag(&mut self, idx: AtomIdx, tag: Option<u32>) {
++        self.atoms[idx.0 as usize].tag = tag;
++    }
++
+     /// Mark an atom as an R-group wildcard while preserving its atom index.
+     pub fn set_r_group(&mut self, idx: AtomIdx, label: crate::atom::RGroupLabel) {
+         let atom = &mut self.atoms[idx.0 as usize];
+diff --git a/crates/chematic-rxn/Cargo.toml b/crates/chematic-rxn/Cargo.toml
+index e1f478df..e69a9949 100644
+--- a/crates/chematic-rxn/Cargo.toml
++++ b/crates/chematic-rxn/Cargo.toml
+@@ -34,7 +34,6 @@ serde_json = "1.0"
+ [dev-dependencies]
+ # Path-only (no `version`): mutual dev-dependency, matching the pattern in
+ # chematic-smiles/Cargo.toml (avoids a cargo-publish version deadlock).
+-chematic-chem = { path = "../chematic-chem" }
+ criterion = { version = "0.8", features = ["html_reports"] }
+ 
+ [[bench]]
+diff --git a/crates/chematic-smiles/Cargo.toml b/crates/chematic-smiles/Cargo.toml
+index 9e5af0f5..1aea2d9f 100644
+--- a/crates/chematic-smiles/Cargo.toml
++++ b/crates/chematic-smiles/Cargo.toml
+@@ -40,7 +40,6 @@ canonical-search-instrumentation = []
+ [dev-dependencies]
+ criterion = { version = "0.8", features = ["html_reports"] }
+ serde_json = "1.0"
+-chematic-fp = { path = "../chematic-fp" }
+ 
+ [[bench]]
+ name = "parse_bench"
+diff --git a/crates/chematic-smiles/src/canonical.rs b/crates/chematic-smiles/src/canonical.rs
+index 3a9edd02..f39b12f3 100644
+--- a/crates/chematic-smiles/src/canonical.rs
++++ b/crates/chematic-smiles/src/canonical.rs
+@@ -318,6 +318,19 @@ pub fn canonical_smiles(mol: &Molecule) -> String {
+     winning_string
+ }
+ 
++/// Canonical SMILES plus the atom visit order used to emit it.
++///
++/// `order[k]` is the mol index of the `k`-th atom in the string. Visit order
++/// follows the winning rank DFS; E/Z token choice does not change it.
++pub fn canonical_smiles_with_order(mol: &Molecule) -> (String, Vec<AtomIdx>) {
++    if mol.atom_count() == 0 {
++        return (String::new(), Vec::new());
++    }
++    let (ranks, smi) = winning_individualized_ranks(mol);
++    let order = CanonicalWriter::new(mol, &ranks).dfs_visit_order();
++    (smi, order)
++}
++
+ /// Return a canonical SMILES only when its representation is self-stable.
+ ///
+ /// Canonical E/Z carrier placement remains fail-closed for coupled systems
+@@ -634,6 +647,8 @@ pub(crate) struct CanonicalWriter<'a> {
+     ring_marker_on_close: HashSet<BondIdx>,
+     next_ring: u32,
+     out: String,
++    /// Mol indexes in emission order when collecting visit order.
++    visit_order: Vec<AtomIdx>,
+     /// Union-find groups of directional (`/`/`\`) bonds that jointly encode
+     /// one connected E/Z system — flipping every member preserves geometry,
+     /// flipping a subset does not. Keyed/rooted by `BondIdx`.
+@@ -788,6 +803,7 @@ impl<'a> CanonicalWriter<'a> {
+             ring_marker_on_close: HashSet::new(),
+             next_ring: 1,
+             out: String::with_capacity(n.saturating_mul(4) + mol.bond_count().saturating_mul(2)),
++            visit_order: Vec::with_capacity(n),
+             ez_group: HashMap::new(),
+             ez_flip: HashMap::new(),
+             forced_ez_flip: None,
+@@ -2007,8 +2023,13 @@ impl<'a> CanonicalWriter<'a> {
+         })
+     }
+ 
+-    fn serialize_prepared(mut self) -> String {
++    fn serialize_prepared(self) -> String {
++        self.serialize_prepared_with_order().0
++    }
++
++    fn serialize_prepared_with_order(mut self) -> (String, Vec<AtomIdx>) {
+         // Phase 2: canonical DFS serialization.
++        self.visit_order.clear();
+         let mut first = true;
+         for start in self.canonical_atom_list() {
+             if self.written[start.0 as usize] {
+@@ -2021,7 +2042,14 @@ impl<'a> CanonicalWriter<'a> {
+             self.write_chain(start, None, None);
+         }
+ 
+-        self.out
++        (self.out, self.visit_order)
++    }
++
++    /// Ring discovery + DFS visit order under these ranks (no E/Z search).
++    fn dfs_visit_order(mut self) -> Vec<AtomIdx> {
++        let starts = self.canonical_atom_list();
++        self.find_ring_closures(&starts);
++        self.serialize_prepared_with_order().1
+     }
+ 
+     /// Return all atoms sorted in canonical order: highest rank first, ties
+@@ -2158,6 +2186,7 @@ impl<'a> CanonicalWriter<'a> {
+         incoming_bond: Option<&'static str>,
+     ) {
+         self.written[atom.0 as usize] = true;
++        self.visit_order.push(atom);
+ 
+         if let Some(token) = incoming_bond {
+             self.out.push_str(token);
+@@ -5917,6 +5946,7 @@ mod explicit_implicit_h_invariance {
+                     chirality: Chirality::None,
+                     wildcard: false,
+                     atom_map: None,
++                    tag: None,
+                     cip_code: None,
+                 })
+                 .chain(std::iter::once(Atom {
+@@ -5928,6 +5958,7 @@ mod explicit_implicit_h_invariance {
+                     chirality: Chirality::None,
+                     wildcard: false,
+                     atom_map: None,
++                    tag: None,
+                     cip_code: None,
+                 }))
+                 .collect();
+diff --git a/crates/chematic-smiles/src/lib.rs b/crates/chematic-smiles/src/lib.rs
+index c150223a..2951b2ac 100644
+--- a/crates/chematic-smiles/src/lib.rs
++++ b/crates/chematic-smiles/src/lib.rs
+@@ -45,8 +45,8 @@ pub use batch::{
+ };
+ pub use canonical::are_atoms_equivalent;
+ pub use canonical::{
+-    canonical_atom_order, canonical_smiles, canonical_smiles_stable_key, equivalent_atom_classes,
+-    morgan_ranks,
++    canonical_atom_order, canonical_smiles, canonical_smiles_stable_key,
++    canonical_smiles_with_order, equivalent_atom_classes, morgan_ranks,
+ };
+ pub use canonical_partition::topological_equivalence_classes;
+ pub use canonical_search::{
+@@ -60,4 +60,4 @@ pub use random_smiles::{random_smiles, random_smiles_vect};
+ pub use smi_file::{
+     SmiFileParseLimits, parse_smi_file, parse_smi_file_with_limits, write_smi_file,
+ };
+-pub use writer::write;
++pub use writer::{write, write_with_order};
+diff --git a/crates/chematic-smiles/src/writer.rs b/crates/chematic-smiles/src/writer.rs
+index 12880792..c4fc8121 100644
+--- a/crates/chematic-smiles/src/writer.rs
++++ b/crates/chematic-smiles/src/writer.rs
+@@ -177,8 +177,16 @@ pub(crate) fn square_planar_token(p: chematic_core::SquarePlanarPermutation) ->
+ /// Disconnected fragments are joined with `.`.
+ /// Aromatic atoms are written in lowercase.
+ pub fn write(mol: &Molecule) -> String {
++    write_with_order(mol).0
++}
++
++/// Write SMILES and the atom visit order used to emit it.
++///
++/// `order[k]` is the mol index of the `k`-th atom written into the string.
++/// After `parse(write(mol))`, the new mol's indexes match this visit order.
++pub fn write_with_order(mol: &Molecule) -> (String, Vec<AtomIdx>) {
+     if mol.atom_count() == 0 {
+-        return String::new();
++        return (String::new(), Vec::new());
+     }
+     SmilesWriter::new(mol).write_all()
+ }
+@@ -196,6 +204,8 @@ struct SmilesWriter<'a> {
+     written: Vec<bool>,
+     next_ring: u16,
+     out: String,
++    /// Mol indexes in the order atoms were emitted into `out`.
++    visit_order: Vec<AtomIdx>,
+ }
+ 
+ impl<'a> SmilesWriter<'a> {
+@@ -208,10 +218,11 @@ impl<'a> SmilesWriter<'a> {
+             written: vec![false; n],
+             next_ring: 1,
+             out: String::new(),
++            visit_order: Vec::with_capacity(n),
+         }
+     }
+ 
+-    fn write_all(mut self) -> String {
++    fn write_all(mut self) -> (String, Vec<AtomIdx>) {
+         // Phase 1: find all back-edges and assign ring-closure numbers.
+         self.find_ring_closures();
+ 
+@@ -227,7 +238,7 @@ impl<'a> SmilesWriter<'a> {
+             }
+         }
+ 
+-        self.out
++        (self.out, self.visit_order)
+     }
+ 
+     fn find_ring_closures(&mut self) {
+@@ -317,6 +328,7 @@ impl<'a> SmilesWriter<'a> {
+         incoming_bond: Option<&'static str>,
+     ) {
+         self.written[atom.0 as usize] = true;
++        self.visit_order.push(atom);
+ 
+         // Write the incoming bond (if explicit / non-default).
+         if let Some(token) = incoming_bond {
+diff --git a/crates/chematic/Cargo.toml b/crates/chematic/Cargo.toml
+index f53907f0..3955f892 100644
+--- a/crates/chematic/Cargo.toml
++++ b/crates/chematic/Cargo.toml
+@@ -17,36 +17,8 @@ documentation = "https://docs.rs/chematic"
+ default = []
+ smiles      = ["dep:chematic-core", "dep:chematic-smiles"]
+ perception  = ["smiles", "dep:chematic-perception"]
+-mol         = ["dep:chematic-core", "dep:chematic-mol"]
+-depict      = ["perception", "dep:chematic-depict"]
+-fp          = ["perception", "dep:chematic-smarts", "dep:chematic-fp"]
+-chem        = ["perception", "dep:chematic-chem"]
+ smarts      = ["perception", "dep:chematic-smarts"]
+ rxn         = ["smiles", "dep:chematic-rxn"]
+-threed      = ["perception", "dep:chematic-3d"]
+-inchi       = ["chem", "dep:chematic-inchi"]
+-iupac       = ["dep:chematic-iupac"]
+-crystal     = ["dep:chematic-crystal", "chematic-mol?/crystal"]
+-# `full` is the aggregate of every optional facade capability (not scoped
+-# to Molecule-only features) -- a user who writes `features = ["full"]`
+-# expects everything, `crystal` included. `chematic-crystal`'s
+-# architectural independence from `Molecule` is why it's its own crate,
+-# not a reason to exclude it from this aggregate. New optional facade
+-# features should default to joining `full` too unless there's a specific
+-# reason not to (see docs/rfcs/chematic_crystal_foundation.md's
+-# facade-feature section for the crystal-specific decision record).
+-#
+-# `crystal`'s weak-dependency forward (`chematic-mol?/crystal`) activates
+-# chematic-mol's own `crystal` feature (the CIF <-> PeriodicStructure
+-# adapter, `parse_cif_periodic_structure`/`write_cif_periodic_structure`)
+-# whenever `chematic-mol` is *also* already a dependency (i.e. `mol` is
+-# enabled too) -- a no-op otherwise, per Cargo's `?` weak-feature syntax.
+-# Found and fixed as a release-readiness check: `full` previously enabled
+-# both `mol` and `crystal` without this forward, so a `full` user got
+-# `chematic::crystal` and `chematic::mol` but never the adapter bridging
+-# them -- exactly the "enabled full but one thing doesn't work" surprise
+-# this facade's own `full` contract is meant to rule out.
+-full        = ["smiles", "perception", "mol", "depict", "fp", "chem", "smarts", "rxn", "threed", "inchi", "iupac", "crystal"]
+ 
+ [package.metadata.docs.rs]
+ all-features = true
+@@ -57,13 +29,5 @@ targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+ chematic-core       = { path = "../chematic-core",       version = "1.0.21", optional = true }
+ chematic-smiles     = { path = "../chematic-smiles",     version = "1.0.21", optional = true }
+ chematic-perception = { path = "../chematic-perception", version = "1.0.21", optional = true }
+-chematic-mol        = { path = "../chematic-mol",        version = "1.0.21", optional = true }
+-chematic-depict     = { path = "../chematic-depict",     version = "1.0.21", optional = true }
+-chematic-chem       = { path = "../chematic-chem",       version = "1.0.21", optional = true }
+-chematic-fp         = { path = "../chematic-fp",         version = "1.0.21", optional = true }
+ chematic-smarts     = { path = "../chematic-smarts",     version = "1.0.21", optional = true }
+ chematic-rxn        = { path = "../chematic-rxn",        version = "1.0.21", optional = true }
+-chematic-3d         = { path = "../chematic-3d",         version = "1.0.21", optional = true }
+-chematic-inchi      = { path = "../chematic-inchi",      version = "1.0.21", optional = true }
+-chematic-iupac      = { path = "../chematic-iupac",      version = "1.0.21", optional = true }
+-chematic-crystal    = { path = "../chematic-crystal",    version = "1.0.21", optional = true }
+diff --git a/crates/chematic/src/lib.rs b/crates/chematic/src/lib.rs
+index 46644a72..4c65ea2b 100644
+--- a/crates/chematic/src/lib.rs
++++ b/crates/chematic/src/lib.rs
+@@ -72,24 +72,8 @@
+ //! | `crystal` | Periodic crystal structures (lattice, PBC, neighbors, supercells, POSCAR/CONTCAR I/O) -- see `chematic-crystal`'s README |
+ //! | `full` | All of the above |
+ 
+-#[cfg(feature = "threed")]
+-pub use chematic_3d as threed;
+-#[cfg(feature = "chem")]
+-pub use chematic_chem as chem;
+ #[cfg(feature = "smiles")]
+ pub use chematic_core as core;
+-#[cfg(feature = "crystal")]
+-pub use chematic_crystal as crystal;
+-#[cfg(feature = "depict")]
+-pub use chematic_depict as depict;
+-#[cfg(feature = "fp")]
+-pub use chematic_fp as fp;
+-#[cfg(feature = "inchi")]
+-pub use chematic_inchi as inchi;
+-#[cfg(feature = "iupac")]
+-pub use chematic_iupac as iupac;
+-#[cfg(feature = "mol")]
+-pub use chematic_mol as mol;
+ #[cfg(feature = "perception")]
+ pub use chematic_perception as perception;
+ #[cfg(feature = "rxn")]

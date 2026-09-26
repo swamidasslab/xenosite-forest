@@ -1,0 +1,40 @@
+[package]
+name = "xenosite-forest"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+description = "Derisk crate: Metabolic Forest on chematic + canonaut, WASM-clean"
+repository = "https://github.com/swamidasslab/xenosite-forest"
+publish = false
+
+[lib]
+name = "xenosite_forest"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# JS bindings. wasm32 getrandom backend is in the target-specific dep below.
+wasm = ["dep:wasm-bindgen"]
+# CPython class wrap (`#[pyclass]`). Native only; not wasm32-unknown-unknown.
+python = ["dep:pyo3"]
+# Wheel/cdylib: do not link libpython. cargo test --features python omits this.
+extension-module = ["python", "pyo3/extension-module"]
+
+[dependencies]
+chematic = { path = "../../vendor/chematic/crates/chematic", default-features = false, features = [
+    "smiles",
+    "smarts",
+    "rxn",
+    "perception",
+] }
+canonaut = "1.0.0"
+log = "0.4"
+wasm-bindgen = { version = "0.2", optional = true }
+pyo3 = { version = "0.26", optional = true }
+
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[dev-dependencies]
+proptest = "1.11"

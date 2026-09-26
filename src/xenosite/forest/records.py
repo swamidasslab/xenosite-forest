@@ -199,10 +199,17 @@ class Effect(TypedDict, total=False):
     Small-ion cleavage and N-dealkylation are the same ``cleaves`` bit plus
     different ``leave_count``. Ring opening is ``breaks_ring``, not a separate
     rule class in the search.
+
+    ``delta_formula`` is the declared net change as element → signed count
+    (zeros omitted). Derived from junction ``adds`` / ``removes`` bags minus
+    ``leave_formula``; When branches that disagree (halogen removal) each
+    carry their own map. Cleavage: named leave as negative, plus O/H at the cut.
     """
 
     adds: str
     removes: str
+    delta_formula: dict[str, int]
+    leave_formula: dict[str, int]
     cleaves: bool
     leave_count: int | None
     breaks_ring: bool
@@ -234,6 +241,8 @@ class _SpanCore(TypedDict):
 
     adds: _StrSpan
     removes: _StrSpan
+    delta_formula: dict[str, int] | tuple[dict[str, int], ...]
+    leave_formula: dict[str, int] | tuple[dict[str, int], ...]
     cleaves: _BoolSpan
     leave_count: _LeaveSpan
     breaks_ring: _BoolSpan
@@ -332,7 +341,7 @@ class PairSiteInfo(_SiteInfoCore):
 SiteInfo: TypeAlias = SmirksSiteInfo | PairSiteInfo
 
 # metabolize yields SiteInfo unchanged. Product SMILES: ``product.xf.csmi``
-# (emission identity: ``frozenset(p.xf.csmi for p in products)``).
+# (emission identity: ``frozenset`` of ``xf.tracing.dedup_smi`` per fragment).
 ProductInfo: TypeAlias = SiteInfo
 
 
@@ -366,7 +375,30 @@ SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
 RuleSiteKind: TypeAlias = Literal["atom", "bond", "directed_bond", "atom_pair"]
 
 # Keyword values :func:`~xenosite.forest.rules.describe` / ``branches`` accept.
-EffectField: TypeAlias = str | bool | int | When | None
+EffectField: TypeAlias = str | bool | int | When | dict[str, int] | None
+
+
+class FormulaDeltaMismatch(NamedTuple):
+    """One soft formula-delta disagreement (declared vs observed heavy).
+
+    Appended to :class:`~xenosite.forest.find_path.PathCounters` /
+    ``EditCounters`` lists and to the suite collector — recover details
+    without catching warnings or parsing message strings.
+
+    ``pair`` is true when the emission came from a ResonancePair (``ends`` on
+    SiteInfo). Pair topology / optimistic site scoring can disagree with
+    sealed end bags; the suite zero-assert ignores those until that gap is
+    fixed. Non-pair mismatches still fail the suite.
+    """
+
+    pattern: str
+    declared_heavy: dict[str, int]
+    observed_heavy: dict[str, int]
+    cleaves: bool
+    adds: str
+    removes: str
+    leave: dict[str, int]
+    pair: bool = False
 
 
 class EditCounters(Protocol):
@@ -377,6 +409,8 @@ class EditCounters(Protocol):
     sites_considered: int
     sites_skipped: int
     sanitize_dropped: int
+    formula_delta_mismatch: int
+    formula_delta_mismatches: list[FormulaDeltaMismatch]
 
 
 class Addition(NamedTuple):
@@ -452,6 +486,9 @@ class AtomTrace(TypedDict):
     ``transforms`` is the id order. ``next_transform`` is the next ``R`` number.
     ``depth`` is how many transforms this molecule is from the root.
     ``last_tag`` is the last tag integer issued.
+    ``dedup_smi`` is the CSMI dedup key at each depth frame (index ``d`` is
+    the molecule at depth ``d``). Survives ``clear_structure``. ``None`` at a
+    frame means fail-closed unstable (do not CSMI-dedup that state).
     """
 
     records: dict[str, AtomRecord]
@@ -460,6 +497,7 @@ class AtomTrace(TypedDict):
     additions: dict[str, TraceAddition]
     formula: Formula
     delta_formula: dict[str, Formula]
+    dedup_smi: list[str | None]
     depth: int
     last_tag: int
     next_transform: int
@@ -477,6 +515,7 @@ class InitializedAtomTrace(TypedDict):
     additions: dict[str, TraceAddition]
     formula: Formula
     delta_formula: dict[str, Formula]
+    dedup_smi: list[str | None]
     depth: int
     last_tag: int
     next_transform: int
