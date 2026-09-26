@@ -399,6 +399,8 @@ where
 
             if !self.pairs_loaded {
                 self.pairs_loaded = true;
+                // Stamp leaf name like find_path; filter endpoints via pair_candidates_leaf
+                // after filter_rules on the leaf's endpoint patterns.
                 let endpoints: Vec<PatternInfo> = self
                     .set
                     .leaf_pair_endpoints()
@@ -408,7 +410,13 @@ where
                 self.pair_patterns = endpoints.clone();
                 if !endpoints.is_empty() {
                     match discover_pairs(self.mol, &endpoints) {
-                        Ok(pairs) => self.pairs = pairs.into_iter(),
+                        Ok(mut pairs) => {
+                            let path = vec![self.set.name.clone()];
+                            for pair in &mut pairs {
+                                pair.rule_path = path.clone();
+                            }
+                            self.pairs = pairs.into_iter();
+                        }
                         Err(e) => {
                             self.done = true;
                             return Some(Err(e));
@@ -436,27 +444,37 @@ where
                 if !(self.filter_sites)(self.mol, pair.site, &info) {
                     continue;
                 }
-                match pair.emit(self.mol) {
-                    Ok(Some(emission)) => {
+                match pair.materialize_mols(self.mol) {
+                    Ok(mols) if !mols.is_empty() => {
                         let site_atoms = pair.plan_site_atoms();
                         let ends = [&pair.left.effect, &pair.right.effect];
                         let plan = self.set.canonical_plan(self.mol, &site_atoms, Some(&ends));
+                        let products = mols.iter().map(crate::mol::canon_smiles).collect();
+                        let left_sig = pair.left.cleave_side_sig();
+                        let right_sig = pair.right.cleave_side_sig();
+                        let cleave_side_sig = if left_sig == right_sig {
+                            left_sig
+                        } else {
+                            crate::pattern::CleaveSideSig::Ungrouped
+                        };
                         let emission = Emission {
-                            site: emission.site,
-                            site_orbit: vec![emission.site],
+                            site: pair.site,
+                            site_orbit: vec![pair.site],
                             site_atoms: site_atoms.clone(),
                             cleaves: pair.effect.cleaves,
-                            pattern_name: emission.pattern_name,
+                            pattern_name: pair.pattern_name.clone(),
                             search_bias: pair.left.search_bias.min(pair.right.search_bias),
                             rule_path: vec![self.set.name.clone()],
-                            products: emission.products,
+                            mols,
+                            products,
+                            cleave_side_sig,
                             plan,
                         };
                         if let Some(e) = self.take_emission(emission, false) {
                             return Some(Ok(e));
                         }
                     }
-                    Ok(None) => {}
+                    Ok(_) => {}
                     Err(e) => {
                         self.done = true;
                         return Some(Err(e));
@@ -518,11 +536,9 @@ impl Iterator for PairCandidates<'_> {
             }
             let set = self.sets[self.set_i];
             self.set_i += 1;
-            let endpoints = set.leaf_pair_endpoints();
-            if endpoints.is_empty() {
-                continue;
-            }
-            match discover_pairs(self.mol, &endpoints) {
+            // Same door as find_path: stamp leaf RuleSet name onto each pair.
+            match set.pair_candidates_leaf(self.mol) {
+                Ok(pairs) if pairs.is_empty() => continue,
                 Ok(pairs) => self.pending = pairs.into_iter(),
                 Err(e) => {
                     self.done = true;
@@ -633,30 +649,40 @@ impl Iterator for PairEmissions<'_> {
         }
         loop {
             if let Some(pending) = self.pending.next() {
-                match pending.pair.emit(self.mol) {
-                    Ok(Some(emission)) => {
+                match pending.pair.materialize_mols(self.mol) {
+                    Ok(mols) if !mols.is_empty() => {
                         let site_atoms = pending.pair.plan_site_atoms();
                         let ends = [&pending.pair.left.effect, &pending.pair.right.effect];
                         let plan = pending
                             .set
                             .canonical_plan(self.mol, &site_atoms, Some(&ends));
+                        let products = mols.iter().map(crate::mol::canon_smiles).collect();
+                        let left_sig = pending.pair.left.cleave_side_sig();
+                        let right_sig = pending.pair.right.cleave_side_sig();
+                        let cleave_side_sig = if left_sig == right_sig {
+                            left_sig
+                        } else {
+                            crate::pattern::CleaveSideSig::Ungrouped
+                        };
                         return Some(Ok(Emission {
-                            site: emission.site,
-                            site_orbit: vec![emission.site],
+                            site: pending.pair.site,
+                            site_orbit: vec![pending.pair.site],
                             site_atoms: site_atoms.clone(),
                             cleaves: pending.pair.effect.cleaves,
-                            pattern_name: emission.pattern_name,
+                            pattern_name: pending.pair.pattern_name.clone(),
                             search_bias: pending
                                 .pair
                                 .left
                                 .search_bias
                                 .min(pending.pair.right.search_bias),
                             rule_path: pending.rule_path,
-                            products: emission.products,
+                            mols,
+                            products,
+                            cleave_side_sig,
                             plan,
                         }));
                     }
-                    Ok(None) => continue,
+                    Ok(_) => continue,
                     Err(e) => {
                         self.done = true;
                         return Some(Err(e));

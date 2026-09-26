@@ -447,6 +447,45 @@ mod tests {
     }
 
     #[test]
+    fn quinone_formation_cleavage_streams_both_fragments() {
+        use crate::mol::canon_of;
+        use crate::rules::quinone_formation;
+
+        let set = quinone_formation();
+        let hits: Vec<_> = bfs("COc1ccccc1", &set, 1)
+            .unwrap()
+            .map(|h| h.unwrap())
+            .collect();
+        let want_q = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        let want_me = canon_of("C").unwrap();
+        let smis: Vec<_> = hits.iter().map(smiles).collect();
+        assert!(
+            smis.iter().any(|s| canon_of(s).unwrap() == want_q),
+            "quinone missing: {smis:?}"
+        );
+        assert!(
+            smis.iter().any(|s| canon_of(s).unwrap() == want_me),
+            "methyl missing: {smis:?}"
+        );
+        assert!(
+            smis.iter().all(|s| !s.contains('.')),
+            "disconnected CSMI must be split: {smis:?}"
+        );
+        let cleave_hop = hits.iter().any(|h| {
+            let last = h.path.last().unwrap();
+            last.rule == "QuinoneFormation"
+                && last.cleaves
+                && last.products.len() >= 2
+                && last.products.iter().any(|p| canon_of(p).unwrap() == want_q)
+                && last.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+        });
+        assert!(
+            cleave_hop,
+            "enumerate hop must name QuinoneFormation with both products"
+        );
+    }
+
+    #[test]
     fn max_nodes_caps_enumeration() {
         let set = phase_one();
         let hits: Vec<_> = enumerate_metabolites(

@@ -223,6 +223,10 @@ impl RuleSet {
     }
 
     /// Pair candidates from this leaf's own endpoint patterns only.
+    ///
+    /// Stamps [`PairCandidate::rule_path`] with this set's name so
+    /// [`PairCandidate::rule_name`] / [`PairCandidate::leaf_rule`] match
+    /// [`crate::candidate::Candidate`] (find_path, product_layer, ms1).
     pub fn pair_candidates_leaf(
         &self,
         mol: &Molecule,
@@ -231,7 +235,12 @@ impl RuleSet {
         if endpoints.is_empty() {
             return Ok(Vec::new());
         }
-        pair_candidates(mol, &endpoints)
+        let mut pairs = pair_candidates(mol, &endpoints)?;
+        let path = vec![self.name.clone()];
+        for pair in &mut pairs {
+            pair.rule_path = path.clone();
+        }
+        Ok(pairs)
     }
 
     /// ResonancePair path emissions for this set and nested children.

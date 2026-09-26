@@ -56,6 +56,11 @@ impl Candidate {
         self.rule_path.first().and_then(|n| n.as_deref())
     }
 
+    /// Hop / emission rule label: leaf set name, else [`PatternInfo::name`].
+    pub fn rule_name(&self) -> &str {
+        self.leaf_rule().unwrap_or(self.pattern.name.as_str())
+    }
+
     pub fn namespace(&self) -> Vec<&str> {
         self.rule_path
             .iter()
@@ -117,7 +122,9 @@ impl Candidate {
             pattern_name: self.pattern.name.clone(),
             search_bias: self.pattern.search_bias,
             rule_path: self.rule_path.clone(),
+            mols,
             products,
+            cleave_side_sig: self.pattern.cleave_side_sig(),
             plan: self.identity_plan(context),
         }))
     }

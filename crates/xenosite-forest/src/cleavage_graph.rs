@@ -16,11 +16,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
 use crate::ForestError;
-use crate::atom_diff::{AtomDiff, atom_diff, candidate_could_help, pair_could_help};
+use crate::atom_diff::{AtomDiff, atom_diff};
 use crate::canonical_plan::{CleavageSide, Maybe};
 use crate::forest_mol::ForestMol;
 use crate::mol::{Molecule, canon_of};
-use crate::pair_edit::PairCandidate;
 use crate::pattern::{CleaveFoldKey, CleaveSideSig};
 use crate::ruleset::RuleSet;
 
@@ -256,31 +255,13 @@ pub(crate) fn fragment_worth_expanding(
     }
 }
 
-/// A split is recorded if it bifurcates and at least one fragment is worth
-/// expanding (when a target is set). Both fragment CSMIs stay on the Or.
-fn split_usable(
-    products: &[String],
-    parent_diff: Option<&AtomDiff>,
-    target: Option<&Molecule>,
-    target_csmi: Option<&str>,
-    target_ha: Option<usize>,
-) -> bool {
-    if products.len() < 2 {
-        return false;
-    }
-    match (parent_diff, target, target_csmi, target_ha) {
-        (diff, Some(t), Some(tc), Some(tha)) => products
-            .iter()
-            .any(|p| fragment_worth_expanding(diff, p, t, tc, tha)),
-        _ => true,
-    }
-}
-
 /// One-hop cleavage layer from `mol`, folding arms by sorted fragment multiset.
 ///
 /// Both sides of every bifurcation are retained on [`CleavageArm::products`] /
 /// [`CleavageOr::fragments`]. When `config.target` is set, a split is kept if
 /// at least one fragment is worth expanding; both CSMIs stay on the Or either way.
+///
+/// One walk via [`RuleSet::metabolites`] (no pair branch).
 pub fn cleavage_layer(
     mol: &Molecule,
     ruleset: &RuleSet,
@@ -303,20 +284,9 @@ pub fn cleavage_layer(
 
     let mut raw: Vec<CleavageArm> = Vec::new();
 
-    for c in ruleset.candidates(mol) {
-        let c = c?;
-        if !c.pattern.effect.cleaves {
-            continue;
-        }
-        if let Some(diff) = &parent_diff {
-            if !candidate_could_help(&c, diff) {
-                continue;
-            }
-        }
-        let Some(emission) = c.emit(mol)? else {
-            continue;
-        };
-        if !emission.cleaves {
+    for emission in ruleset.metabolites(mol, false) {
+        let emission = emission?;
+        if !emission.cleaves || emission.mols.len() < 2 {
             continue;
         }
         let products = sorted_fragments(&emission.products);
@@ -329,85 +299,35 @@ pub fn cleavage_layer(
         ) {
             continue;
         }
-        let rule = emission
-            .leaf_rule()
-            .unwrap_or(emission.pattern_name.as_str())
-            .to_string();
         raw.push(CleavageArm {
-            rule,
+            rule: emission.rule_name().to_string(),
             pattern_name: emission.pattern_name,
             site: emission.site,
             site_orbit: emission.site_orbit,
             site_atoms: emission.site_atoms,
             products,
-            side_sig: c.pattern.cleave_side_sig(),
+            side_sig: emission.cleave_side_sig,
         });
-    }
-
-    for pair in ruleset.pair_candidates(mol) {
-        let pair = pair?;
-        if !pair.effect.cleaves {
-            continue;
-        }
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair_could_help(&pair, diff, mol, t) {
-                continue;
-            }
-        }
-        push_pair_arm(
-            mol,
-            &pair,
-            parent_diff.as_ref(),
-            target_mol.as_ref(),
-            target_csmi.as_deref(),
-            target_ha,
-            &mut raw,
-        )?;
     }
 
     Ok(fold_layer(raw))
 }
 
-fn push_pair_arm(
-    mol: &Molecule,
-    pair: &PairCandidate,
+fn split_usable(
+    products: &[String],
     parent_diff: Option<&AtomDiff>,
-    target_mol: Option<&Molecule>,
+    target: Option<&Molecule>,
     target_csmi: Option<&str>,
     target_ha: Option<usize>,
-    raw: &mut Vec<CleavageArm>,
-) -> Result<(), ForestError> {
-    let Some(emission) = pair.emit(mol)? else {
-        return Ok(());
-    };
-    let products = sorted_fragments(&emission.products);
-    if !split_usable(&products, parent_diff, target_mol, target_csmi, target_ha) {
-        return Ok(());
+) -> bool {
+    if products.len() < 2 {
+        return false;
     }
-    raw.push(CleavageArm {
-        rule: pair
-            .pattern_name
-            .split('+')
-            .next()
-            .unwrap_or("Pair")
-            .to_string(),
-        pattern_name: emission.pattern_name,
-        site: emission.site,
-        site_orbit: vec![emission.site],
-        site_atoms: pair.plan_site_atoms(),
-        products,
-        side_sig: pair_cleave_side_sig(pair),
-    });
-    Ok(())
-}
-
-fn pair_cleave_side_sig(pair: &PairCandidate) -> CleaveSideSig {
-    let left = pair.left.cleave_side_sig();
-    let right = pair.right.cleave_side_sig();
-    if left == right {
-        left
-    } else {
-        CleaveSideSig::Ungrouped
+    match (parent_diff, target, target_csmi, target_ha) {
+        (diff, Some(t), Some(tc), Some(tha)) => products
+            .iter()
+            .any(|p| fragment_worth_expanding(diff, p, t, tc, tha)),
+        _ => true,
     }
 }
 
@@ -602,19 +522,19 @@ pub fn cleavage_first_seeds(
 
         let mut expandable: Vec<(ForestMol, AtomDiff, CleavageArm)> = Vec::new();
 
-        for c in ruleset.candidates(parent.mol.mol()) {
-            let c = c?;
-            if !c.pattern.effect.cleaves {
+        for emission in ruleset.metabolites(parent.mol.mol(), false) {
+            let emission = emission?;
+            if !emission.cleaves || emission.mols.len() < 2 {
                 continue;
             }
-            if !candidate_could_help(&c, &parent.diff) {
-                continue;
-            }
-            let pieces = c.materialize_mols(parent.mol.mol())?;
-            if pieces.len() < 2 {
-                continue;
-            }
-            let mut adopted: Vec<ForestMol> = pieces
+            let rule = emission.rule_name().to_string();
+            let pattern_name = emission.pattern_name;
+            let site = emission.site;
+            let site_orbit = emission.site_orbit;
+            let site_atoms = emission.site_atoms;
+            let side_sig = emission.cleave_side_sig;
+            let mut adopted: Vec<ForestMol> = emission
+                .mols
                 .into_iter()
                 .map(|p| parent.mol.adopt_product(p))
                 .collect();
@@ -643,86 +563,14 @@ pub fn cleavage_first_seeds(
             if child_rows.is_empty() {
                 continue;
             }
-            let rule = c.leaf_rule().unwrap_or(c.pattern.name.as_str()).to_string();
             let arm = CleavageArm {
                 rule,
-                pattern_name: c.pattern.name.clone(),
-                site: c.site,
-                site_orbit: c.orbit.clone(),
-                site_atoms: {
-                    let mut atoms: Vec<usize> = c
-                        .pattern
-                        .site_map
-                        .iter()
-                        .filter_map(|m| c.mapped.get(m).copied())
-                        .collect();
-                    if atoms.is_empty() {
-                        atoms.push(c.site);
-                    }
-                    atoms
-                },
+                pattern_name,
+                site,
+                site_orbit,
+                site_atoms,
                 products,
-                side_sig: c.pattern.cleave_side_sig(),
-            };
-            for (child, child_diff) in child_rows {
-                expandable.push((child, child_diff, arm.clone()));
-            }
-        }
-
-        for pair in ruleset.pair_candidates(parent.mol.mol()) {
-            let pair = pair?;
-            if !pair.effect.cleaves {
-                continue;
-            }
-            if !pair_could_help(&pair, &parent.diff, parent.mol.mol(), target_mol) {
-                continue;
-            }
-            let pieces = pair.materialize_mols(parent.mol.mol())?;
-            if pieces.len() < 2 {
-                continue;
-            }
-            let mut adopted: Vec<ForestMol> = pieces
-                .into_iter()
-                .map(|p| parent.mol.adopt_product(p))
-                .collect();
-            adopted.sort_by_key(|m| m.csmi().as_ref().to_string());
-            let products: Vec<String> = adopted
-                .iter()
-                .map(|m| m.csmi().as_ref().to_string())
-                .collect();
-            let mut child_rows = Vec::new();
-            for child in adopted {
-                let csmi = child.csmi().as_ref().to_string();
-                let is_hit = csmi == target_csmi;
-                if !is_hit && child.heavy_atom_count() < target_ha {
-                    continue;
-                }
-                let child_diff = crate::atom_diff::atom_diff_after_cleavage(
-                    &parent.mol,
-                    &parent.diff,
-                    &child,
-                    target_mol,
-                );
-                if is_hit || child_diff.cost() < parent.diff.cost() {
-                    child_rows.push((child, child_diff));
-                }
-            }
-            if child_rows.is_empty() {
-                continue;
-            }
-            let arm = CleavageArm {
-                rule: pair
-                    .pattern_name
-                    .split('+')
-                    .next()
-                    .unwrap_or("Pair")
-                    .to_string(),
-                pattern_name: pair.pattern_name.clone(),
-                site: pair.site,
-                site_orbit: vec![pair.site],
-                site_atoms: pair.plan_site_atoms(),
-                products,
-                side_sig: pair_cleave_side_sig(&pair),
+                side_sig,
             };
             for (child, child_diff) in child_rows {
                 expandable.push((child, child_diff, arm.clone()));

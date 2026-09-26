@@ -297,7 +297,7 @@ pub fn find_path_ms1(
         let gens = walk.mol.atom_bond_generators();
         for cand in ruleset.candidates(mol) {
             let cand = cand?;
-            let rule_name = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
+            let rule_name = cand.rule_name();
 
             let pool_idx = if pools.is_empty() {
                 None

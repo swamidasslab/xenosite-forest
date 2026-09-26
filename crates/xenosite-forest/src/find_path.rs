@@ -1711,7 +1711,6 @@ struct PairFrame<'a> {
 struct PendingPair<'a> {
     pair: crate::pair_edit::PairCandidate,
     set: &'a RuleSet,
-    rule_path: Vec<Option<String>>,
 }
 
 /// Inputs for one expand (bundled so `Expand::new` stays under clippy's arity cap).
@@ -1930,7 +1929,7 @@ where
             search_bias: pair.left.search_bias.min(pair.right.search_bias),
             site_progress,
             dh_ends,
-            rule_path: pending.rule_path.clone(),
+            rule_path: pending.pair.rule_path.clone(),
             products,
             plan,
         }))
@@ -1995,10 +1994,9 @@ where
         }
         let pending: Vec<PendingPair<'a>> = pairs
             .into_iter()
-            .map(|pair| PendingPair {
-                pair,
-                set,
-                rule_path: rule_path.clone(),
+            .map(|pair| {
+                let pair = pair.with_rule_path(rule_path.clone());
+                PendingPair { pair, set }
             })
             .collect();
         self.pair_pending = pending.into_iter();
@@ -2951,6 +2949,46 @@ mod tests {
             "allows discarded side"
         );
         assert_eq!(outcome.plan[0].rule, "Dealkylation");
+    }
+
+    #[test]
+    fn quinone_formation_cleavage_records_side_and_maybe() {
+        // Anisole → methane via QF dealkylate: bifurcation (n_products≥2),
+        // not ring-open. Leaf is QuinoneFormation; quinone sits in maybe/sides.
+        use crate::rules::quinone_formation;
+
+        let mut counters = PathCounters::default();
+        let hits = find_path("COc1ccccc1", "C", &quinone_formation(), &mut counters)
+            .unwrap()
+            .collect_all()
+            .unwrap();
+        assert!(!hits.is_empty(), "billed={}", counters.billed());
+        let outcome = &hits[0];
+        assert_eq!(outcome.smiles, canon_of("C").unwrap());
+        assert_eq!(outcome.steps[0].leaf_rule(), Some("QuinoneFormation"));
+        assert!(
+            !outcome.steps[0].sides.is_empty(),
+            "QF cleavage must record the quinone side: {:?}",
+            outcome.steps[0].sides
+        );
+        assert!(
+            !outcome.maybe().is_empty(),
+            "maybe bags on the plan for discarded quinone"
+        );
+        let want_para = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        let want_ortho = canon_of("O=C1C=CC=CC1=O").unwrap();
+        let is_quinone = |s: &str| {
+            let c = canon_of(s).unwrap();
+            c == want_para || c == want_ortho
+        };
+        let in_sides = outcome.steps[0].sides.iter().any(|s| is_quinone(s));
+        let in_maybe = outcome.maybe().sides().iter().any(|s| is_quinone(s));
+        assert!(
+            in_sides || in_maybe,
+            "quinone in sides/maybe; sides={:?} maybe={:?}",
+            outcome.steps[0].sides,
+            outcome.maybe().sides()
+        );
     }
 
     #[test]

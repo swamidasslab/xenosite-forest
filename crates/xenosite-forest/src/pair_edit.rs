@@ -301,6 +301,10 @@ pub struct PairEmission {
 /// Carries merged [`crate::pattern::Effect`] so a search can filter without
 /// running the edit. [`PairCandidate::materialize`] finds alternating paths
 /// and applies end edits.
+///
+/// [`Self::rule_path`] is the same leaf-first namespace as [`crate::candidate::Candidate`]:
+/// stamp it when discovering under a named [`crate::ruleset::RuleSet`] so
+/// [`Self::rule_name`] / [`Self::leaf_rule`] match find_path / metabolize.
 #[derive(Clone, Debug)]
 pub struct PairCandidate {
     pub site: usize,
@@ -309,6 +313,9 @@ pub struct PairCandidate {
     pub right: PatternInfo,
     /// Merged end effects (dearomatizes resolved against system aromaticity).
     pub effect: crate::pattern::Effect,
+    /// Leaf-first rule namespace (emitting set, then containers). Empty when
+    /// discovered via bare [`pair_candidates`] without a [`RuleSet`].
+    pub rule_path: Vec<Option<String>>,
     map1: BTreeMap<u16, usize>,
     map2: BTreeMap<u16, usize>,
     start: usize,
@@ -317,6 +324,31 @@ pub struct PairCandidate {
 }
 
 impl PairCandidate {
+    /// Emitting (leaf) rule name when discovered under a named set.
+    pub fn leaf_rule(&self) -> Option<&str> {
+        self.rule_path.first().and_then(|n| n.as_deref())
+    }
+
+    /// Named segments of [`Self::rule_path`] (unnamed sets omitted).
+    pub fn namespace(&self) -> Vec<&str> {
+        self.rule_path
+            .iter()
+            .filter_map(|name| name.as_deref())
+            .collect()
+    }
+
+    /// Hop / emission rule label: leaf [`RuleSet`] name, else [`PatternInfo::name`]
+    /// on the first end (same fallback as [`crate::candidate::Candidate::rule_name`]).
+    pub fn rule_name(&self) -> &str {
+        self.leaf_rule().unwrap_or(self.left.name.as_str())
+    }
+
+    /// Stamp leaf-first namespace (replaces any prior path).
+    pub fn with_rule_path(mut self, rule_path: Vec<Option<String>>) -> Self {
+        self.rule_path = rule_path;
+        self
+    }
+
     /// Discovery site atoms for each end (Python `end_atoms`).
     pub fn end_atoms(&self) -> Option<(usize, usize)> {
         let a = site_atom(&self.map1, &self.left)?;
@@ -562,6 +594,7 @@ pub fn pair_candidates(
                             left: (*info1).clone(),
                             right: (*info2).clone(),
                             effect: merge_effect_fields(info1, info2, system_aromatic),
+                            rule_path: Vec::new(),
                             map1: map1.clone(),
                             map2: map2.clone(),
                             start,
@@ -745,14 +778,15 @@ mod tests {
             "disconnected CSMI should be split before yield: {csmi:?}"
         );
         let with_both = children.iter().any(|c| {
-            c.hop.cleaves
+            c.hop.rule == "QuinoneFormation"
+                && c.hop.cleaves
                 && c.hop.products.len() >= 2
                 && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_q)
                 && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_me)
         });
         assert!(
             with_both,
-            "cleaving hop.products should list both fragments (find_path sides)"
+            "cleaving hop must name QuinoneFormation and list both fragments"
         );
     }
 }
