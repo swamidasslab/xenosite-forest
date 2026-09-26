@@ -248,9 +248,9 @@ Status: **not approved**. Materializing every Kekulé form inside plain `SmirksR
 
 Status: **not approved** to *replace* path discovery with *blind* global
 re-kekulize / “pick a ResonanceMolSupplier form”;
-**not decided** for (1) materializing the intentional flip via Kekulé parents
-constrained by a discovered path, or (2) **skipping path discovery** when end
-edits are expressible as π-matching constraints (below).
+**approved** to pursue constraint-directed pair materialization (below) —
+that *does* retire path discovery for ResonancePair, without a path-flip
+fallback.
 
 **Chematic** exposes aromatic kekulization (`chematic_core::kekulize` /
 `kekulize_inplace`) and low-level `set_bond_order`. **RDKit**
@@ -267,74 +267,143 @@ dearomatization.
 
 ### Edit-as-π-constraints (may make path finding unnecessary)
 
-Status: **not decided**. Source:
+Status: **approved** to pursue for ResonancePair materialization (derisk /
+parity); replace path flip — **no path-flip fallback**. Constraints from
+**perception** of the post-edit graph (best) or PatternInfo when perception
+cannot see intent (e.g. `keep` + adds H). Residual **aromaticity** from
+Hückel + whether multiple resonance forms remain — not sanitize guesswork.
+
+Source:
 [dearomatization patterns](https://chatgpt.com/share/6ab82fa4-1ce8-83ea-8a70-df7abcb443ce)
 on top of [`kekule_components`](https://chatgpt.com/share/6ab82ebc-87d0-83e9-9de5-de28edc0c0ea).
 
-Idea: ResonancePair end edits are **π-graph constraints**; valid matchings
-*are* the dearomatized product writings. No alternating-path search, no
-`flip_path` — enumerate assignments under the constraints, stamp bond orders
-(+ the same `move_charge_with_bonds` as reactant overlays).
+**Flow (no `alternating_paths` / `flip_path`):**
+
+1. Apply both end edits on a clear-aromatic copy.
+2. **Perceive π constraints** from before→after (forced doubles / new leaves /
+   consumed edges). PatternInfo fills gaps perception cannot see (`edit=keep`
+   + `adds` contains H → saturate those site atoms: leave must-match, +H).
+3. **Complete matching** on the residual π system under those constraints
+   (forced doubles seed the matching; incompatible ⇒ no product).
+4. **Perceive residual aromaticity** on the **cyclic 2-core** of the residual
+   π graph (not “is the original fused system still aromatic?”):
+   1. After dearomatizing edits, build the residual π graph: epoxidation
+      removes the two sp³ atoms (and incident π edges); quinone/carbonyl
+      removes that ring atom from the aromatic candidate **or** treats its
+      demand as consumed by forced C=O (same effect on the candidate graph).
+   2. **2-core:** iteratively drop atoms with π-degree &lt; 2 (strips dangling
+      alkenes / acyclic conjugated tails).
+   3. Decompose the core into components. A component **remains aromatic**
+      iff it is cyclic, still has ≥ 1 valid Kekulé assignment, and its
+      π-electron count meets the aromaticity rule in use (usually **4n+2**).
+      For all-carbon benzenoids the shortcut is: cyclic + valid perfect
+      matching + 4n+2.
+   Example: naphthalene epoxidized on one outer left-ring bond → left ring
+   collapses; right six-membered 2-core survives aromatic. Partial collapse
+   is the point.
+5. `move_charge_with_bonds`, fragment, `accept_product`.
+
+`Effect.dearomatizes` stays capability. Refuse when the pattern claimed
+dearomatization but every edited-system atom still sits in a surviving
+aromatic 2-core component — capability unmet. Do not use
+`system_stayed_aromatic` / sanitize flags as the gate.
 
 The primitive is **not** “carbonyl chemistry.” Carbonyl is one instance of a
 small constraint vocabulary. Name these on `Edit` / Effect / PatternInfo data
-(generic solver reads them — no leaf-named branches):
+when needed; prefer perceiving them from the edited graph:
 
 | π constraint | Meaning | Examples (not exhaustive) |
 |---|---|---|
 | **Forced leaf** | Attach demand-1 exocyclic atom; the new edge must be selected (consumes the ring atom’s demand) | `add_carbonyl_o` (O); imine / `=N` / `=S` leaves; methide `=CH2`; any exocyclic double |
 | **Forced edge** | An existing conjugated edge must be selected as double | Phenol/enol `single_to_double` (ring C–O/N → C=O/N); iminium; aromatic bond that must be the alkene |
-| **Consumed edge** | Edge must be selected in the pre-edit matching, then **removed** from the residual π system (no longer a double) | Epoxidation (C=C → C–C + O bridge); other saturations of one π bond |
-| **Demand / charge state** | Atom’s allowed `(demand, formal_charge)` set changes | Pyrrole-like demand 0; charged N; mobile skipped site; post-edit heteroatom state |
-| **Conjunction** | Several of the above in one assignment; empty ⇒ incompatible couple | Para/ortho quinone-like pairs solve; meta on benzene fails; two epoxides only if one matching contains both edges |
+| **Consumed edge** | Edge must be selected in the pre-edit matching, then **removed** from the residual π system | Epoxidation (C=C → C–C + O bridge); other saturations of one π bond |
+| **Saturate site** | Atom leaves must-match (demand 0) and gains H — PatternInfo when edit does not change the graph | `keep` + adds H (Hydrogenation path ends) |
+| **Demand / charge state** | Atom’s allowed `(demand, formal_charge)` set changes | Pyrrole-like demand 0; charged N; mobile skipped site |
+| **Conjunction** | Several of the above in one assignment; empty ⇒ incompatible couple | Para/ortho quinone-like pairs solve; meta on benzene fails |
 
 Carbonyls, imines, methides, and halogen→oxo replacements are the same
 **forced leaf / forced edge** shape with different element and SMARTS — not
-separate algorithms. Epoxidation is **forced then consumed** edge. Cleaving
-QF dealkylate (C16) is leave split plus forced imine/carbonyl demand on the
-ring fragment, then match — not a path through the leave.
+separate algorithms. Cleaving QF dealkylate (C16) is leave split plus forced
+imine/carbonyl demand on the ring fragment, then match.
 
-**Why this can retire path discovery for constraint-shaped pairs:** today’s
-flow (find odd path between ends → edit ends → flip along path) procedurally
-builds a matching that the end constraints already determine. Constraint
-solving yields the same product bond sets (often fewer duplicates than
-path×parent cartesian).
+**Dearomatize gate:** `Effect.dearomatizes` remains capability on the pattern.
+Refusal uses the cyclic 2-core test above (which components survive), not
+“any atom still flagged aromatic after RDKit-parity aromatize” and not
+multi-resonance count alone on the pre-collapse graph.
 
-**Where path discovery may still earn its keep (do not delete yet):**
+### What to cache (reuse + edit inheritance)
 
-- `Hydrogenation` `path_end` / `keep`: ends do not yet mint an obvious forced
-  leaf/edge; the flip *is* the reduction (H at ends where double→single).
-  Encode as demand/edge constraints (or keep path) before path search goes
-  away — same vocabulary, not a special case forever.
-- Edits whose chemistry is “along a specific walk” rather than “global
-  matching under end constraints” (long-range tautomer stub), until that
-  walk is also constraint data.
-- Until atom-demand / charge states are shared schema on both doors, bags
-  still diverge (parity judgment below) — constraint solving on the wrong
-  parent bag still misses products.
+Stay on [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs)’s pattern:
+`copy_mol` shares structure + kekulé `Rc`; `edit_copy` / product gets a
+**new structure bag** and **keeps** the kekulé `Rc`. Do not cache baked
+product mols — stamp bond orders / aromatic flags on demand from maps.
 
-**Possible refactor (not decided), two tiers:**
+**Primary object (per conjugated system, keyed like today’s `SystemKey`):**
 
-1. **Path keep + constrained overlay:** discover path as today; materialize by
-   overlaying a matching constrained by the path’s single/double pattern
-   (same `move_charge_with_bonds`). Cleanup only.
-2. **Path drop for constraint-shaped pairs:** PatternInfo/Edit data declares
-   π constraints from the table above; solve matchings; no
-   `alternating_paths` / `flip_path`. Prefer this when the edit record covers
-   the rule. Do not invent a silent branch per leaf name or per element
-   (carbonyl vs imine) — name the constraint kind on the record.
+| Field | Why |
+|---|---|
+| `atoms`, `bonds`, adjacency | π topology once |
+| `assignments` (+ `by_order`) | unconstrained Kekulé maps (ResonanceRule `reactant_parent`) |
+| optional BCC component tables | when factorization lands — local 2–3-state bags |
+| optional full-system 2-core aromatic atom set | pristine aromatic cores |
+
+Fill on demand when a match first touches the system. Untouched systems on
+an edited child **keep hitting** the same keys on the shared `Rc`.
+
+**Secondary object (constraint / residual views — derive, don’t duplicate topology):**
+
+Key: `(parent SystemKey, removed_atoms, forced_doubles)` (saturate / sp³ /
+demand-consumed carbons; perceived forced doubles).
+
+| Field | Why |
+|---|---|
+| residual atom/bond sets | parent edges minus removed atoms |
+| 2-core `(atoms, bonds)` | strip degree &lt; 2 once per residual |
+| `aromatic_2core_atoms` | cyclic ∩ valid Kekulé ∩ 4n+2 survivors |
+| constrained `assignments` | complete-matching under forced doubles + saturate |
+
+**Inheritance rules for an edited mol:**
+
+1. **Shared `Rc` cache map** (already): child sees all parent-filled system
+   bags whose `SystemKey` still matches.
+2. **Untouched systems:** key unchanged → reuse assignments / 2-core as-is.
+3. **Same topology, new constraints only** (forced leaf/edge on an existing
+   system): do **not** refill unconstrained bag — filter or re-complete from
+   the parent system’s topology (+ forced set). Secondary key misses →
+   compute residual view; parent `assignments` may seed compatible writings.
+4. **Atoms leave the π graph** (epoxide sp³, saturate, carbonyl demand
+   consumed): `SystemKey` for the *full* system may change; prefer a
+   **residual key** off the parent system (set-difference edges) over a
+   cold conjugate flood-fill. 2-core and aromatic survivors are functions of
+   that residual — cache under the residual key.
+5. **Shape-changing edits** (new conjugation, ring open/close that joins
+   systems): miss all related keys → new primary bag. Neighbor systems that
+   still fingerprint equal stay shared.
+6. Structure answers (CSMI, ranks, SMARTS, generators) always start empty on
+   `edit_copy` — never inherit those across chemistry edits.
+
+Until BCC tables exist, primary bag = today’s `SystemKekule` maps; add
+residual/2-core entries beside them on the same `KekuleCache` (or rename to
+`PiSystemCache` when the residual map lands). Status: **approved** as the
+cache plan for constraint-directed pair materialize.
+
+Until atom-demand / charge states are fully shared schema on both doors,
+parent-bag parity for ResonanceRule SMIRKS can still diverge; pair
+materialization no longer depends on parent×path cartesian.
 
 Kekulé matching must place doubles on must-match atoms (C and pyridine-type /
-charged N — `atom_must_be_matched`), not carbons alone. Until a tier lands,
-hand `flip_path` / `swap_bonds_along_path` plus post-flip H adjust and
-charge-follow stay. Sanitize / C10 failures are usually end-edit / SMIRKS
-products, not missing a library flip.
+charged N — `atom_must_be_matched`), not carbons alone. Pair door uses
+constraint complete-matching + Hückel/multi-resonance aromaticity (above).
+Sanitize / C10 failures remain mostly end-edit / SMIRKS products.
 
 **Parity judgment (examined Kekulé parents both sides):** path-constrained
-overlay is a **weak** parity lever until parent bags match door-by-door.
-Python already discovers paths on parents, then copies that parent and
-`swap_bonds_along_path`; swapping only the flip step for an overlay does not
-fix the bag. Observed parent sources diverge:
+overlay was a **weak** lever while materialize still walked parent×path.
+Constraint-directed pair materialization does not need RMS parent bags for
+the flip step — edits + residual matching replace that. ResonanceRule
+SMIRKS reactant parents can still diverge door-by-door (below); fix those
+bags separately from pair materialize.
+
+Historical parent-source notes (still relevant to ResonanceRule / inventory):
 
 - **Pair conjugated** (e.g. QuinoneFormation): Python
   `ResonanceMolSupplier` / `resonance_bond_maps` — APAP and aminophenol stay
@@ -352,10 +421,9 @@ fix the bag. Observed parent sources diverge:
 - **Indole (5,6):** neither side has a single-bond parent (both keep
   aromatic fallback). Overlay cannot invent that assignment.
 
-Align bags first (pair conjugated ↔ RMS-equivalent maps; pair aromatic ↔
-aromatic scope; rule ↔ full-conj + must-match + correct `move_charge`). Then
-path-overlay is a materialization cleanup that unifies charge-follow with
-reactant overlays — not the product-set fix.
+Align ResonanceRule bags (full-conj + must-match + correct `move_charge`)
+separately. Pair products come from constraints + residual matching, not
+path-overlay cleanup.
 
 ## BCC / small-component Kekulé factorization (share crate)
 
