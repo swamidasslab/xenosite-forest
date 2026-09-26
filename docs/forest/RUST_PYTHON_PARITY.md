@@ -63,14 +63,14 @@ list; do not drop inventory rows. Each inventory possibility has a designated
 ``CoverIntent`` on a corpus mol (verified by meta-tests).
 Status: **approved**.
 
-### C5 — Full rule×mol cartesian by default; focused CoverIntent opt-out
+### C5 — Full rule×mol cartesian by default (CI keeps it when fast)
 
 Default parametric parity / CSMI uses full ``paired/leaf × corpus`` cartesian
 via ``parity_param_cases`` — ``pytest.mark.parametrize``, not Hypothesis.
-Focused CoverIntent-only (one designated cover per inventory possibility) is
-available for faster CI via ``XENOSITE_PARITY_FULL=0`` or
-``pytest --parity-focused``. Hypothesis sampling over that grid is redundant.
-Status: **approved**.
+Focused CoverIntent-only remains available via ``XENOSITE_PARITY_FULL=0`` /
+``pytest --parity-focused`` for local speed experiments; CI should keep full
+on while the suite stays fast enough (~seconds). Hypothesis sampling over
+that grid is redundant. Status: **approved**.
 
 ### C6 — Attribute exceptions recorded to date
 
@@ -278,7 +278,7 @@ when chematic saturates ``[SH+]``. Hydroxy S-ox product is organic ``O``
 | 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **done** | specialize nested ``$()``; phosphate ester apply green |
 | 7 | AzoSplitting / ThiopheneSulfurOxidation: Rust empty on aromatic examples | **done** | specialize bond or-queries ``=,:`` / ``-,:``; charge wildcards |
 | 8 | NitrogenReduction: Rust empty on ``CCNO`` (hydroxylamine) | **done** | specialize ``-,:`` → live bond; hydroxylamine apply green |
-| 9 | BenzodioxoleReduction: wrong products | **open** | catechol vs ring-opened; C8; watch C10 |
+| 9 | BenzodioxoleReduction: wrong products | **done** | CH2-leave atom-remove edit (chematic SMIRKS drops ring bonds) |
 | 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **done** | hydroxy ``[O]``→``O``; enforce H0 on charged S-oxide |
 | 11 | Dehydration: site-count mismatch with matching products | **done** | beta_elim site_map=1 matches Python |
 | 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |

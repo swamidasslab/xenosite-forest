@@ -388,12 +388,59 @@ pub(crate) fn apply_edit_mols(
             }
         }
         Edit::Smirks(smirks) => {
+            // CH2 leave (dioxole methylene, …): chematic SMIRKS disconnect
+            // drops ring bonds and opens the aromatic system. Removing the
+            // leave carbon on the live mol preserves the ring (catechol).
+            if pattern.effect.leave_count == Some(1)
+                && pattern.effect.leave_formula == crate::pattern::leave_ch2()
+            {
+                if let Some(products) = remove_mapped_ch2_leave(mol, mapped) {
+                    return Ok(products);
+                }
+            }
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
             apply_smirks_at(smirks, &work, mapped)
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
     }
+}
+
+/// Remove a mapped dioxole-style methylene (C with two O neighbors).
+///
+/// Returns the aromatized heavy fragment plus a methane leave piece — matching
+/// Python's catechol + C split for benzodioxole reduction.
+fn remove_mapped_ch2_leave(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+) -> Option<Vec<Molecule>> {
+    use chematic::core::Element;
+    let mut leave_idx: Option<usize> = None;
+    for &idx in mapped.values() {
+        let atom = mol.atom(atom_idx(idx));
+        if atom.element != Element::C {
+            continue;
+        }
+        let nbrs: Vec<_> = mol
+            .neighbors(atom_idx(idx))
+            .map(|(n, _)| mol.atom(n).element)
+            .collect();
+        if nbrs.len() == 2 && nbrs.iter().all(|e| *e == Element::O) {
+            leave_idx = Some(idx);
+            break;
+        }
+    }
+    let leave_idx = leave_idx?;
+    let (product, _remap) = mol.with_atom_removed(atom_idx(leave_idx));
+    let product = crate::mol::aromatize(&product);
+    if !accept_product(&product) {
+        return None;
+    }
+    let leave = crate::mol::parse_mol("C").ok()?;
+    if !accept_product(&leave) {
+        return None;
+    }
+    Some(vec![product, leave])
 }
 
 /// O-dealkylation of a methyl ether (anisole-shaped SMARTS / SMIRKS).
