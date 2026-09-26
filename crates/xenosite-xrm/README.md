@@ -60,7 +60,9 @@ Regenerate the proposed-term panel after ontology/assignment edits:
 cargo run -p xenosite-xrm --example sample_terms -- --write
 ```
 
-Output: [`data/samples/round-001.md`](data/samples/round-001.md). Comment on that file (or open an issue citing the case label) to steer the next round.
+Output: [`data/samples/round-002.md`](data/samples/round-002.md) (and prior rounds under `data/samples/`). Comment on that file (or open an issue citing the case label) to steer the next round.
+
+Forest-mapped Phase I class parents use **unabbreviated** labels (`stable oxygenation`, `unstable oxygenation`, `dehydrogenation`, `hydrolysis`, `reduction`). Localized abbreviations appear only as opaque `forest.ruleset:*` CURIE object ids in SSSOM.
 
 ## Tests
 

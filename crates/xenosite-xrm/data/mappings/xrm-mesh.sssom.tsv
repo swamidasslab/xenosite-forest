@@ -2,3 +2,5 @@ subject_id	predicate_id	object_id	mapping_justification	subject_label	object_lab
 xrm:0000000	skos:closeMatch	mesh:D001711	semapv:ManualMappingCuration	xenobiotic biotransformation	Biotransformation
 xrm:0000001	skos:broadMatch	mesh:D050216	semapv:ManualMappingCuration	phase I	Metabolic Detoxication, Phase I
 xrm:0000002	skos:broadMatch	mesh:D050217	semapv:ManualMappingCuration	phase II	Metabolic Detoxication, Phase II
+xrm:0003000	skos:relatedMatch	mesh:D001711	semapv:ManualMappingCuration	bioactivation	Biotransformation
+xrm:0003001	skos:relatedMatch	mesh:D050216	semapv:ManualMappingCuration	detoxication	Metabolic Detoxication, Phase I

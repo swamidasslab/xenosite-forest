@@ -1,8 +1,6 @@
-//! Dump proposed terms for a fixed panel. Re-run when changing ontology/assignments
-//! so reviewers can inject feedback between rounds.
+//! Dump proposed terms for feedback rounds.
 //!
 //! ```text
-//! cargo run -p xenosite-xrm --example sample_terms
 //! cargo run -p xenosite-xrm --example sample_terms -- --write
 //! ```
 
@@ -20,16 +18,28 @@ struct Case {
 
 const CASES: &[Case] = &[
     Case {
-        label: "ethane → ethanol",
+        label: "ethane → ethanol (aliphatic hydroxylation)",
         reactant: "CC",
         product: "CCO",
         tags: &[],
     },
     Case {
-        label: "benzene → phenol",
+        label: "benzene → phenol (aromatic hydroxylation)",
         reactant: "c1ccccc1",
         product: "Oc1ccccc1",
         tags: &[],
+    },
+    Case {
+        label: "chem:para-hydroxylation",
+        reactant: "CCc1ccccc1",
+        product: "CCc1ccc(O)cc1",
+        tags: &["chem:para-hydroxylation", "chem:aromatic-hydroxylation"],
+    },
+    Case {
+        label: "chem:benzylic-hydroxylation",
+        reactant: "CCc1ccccc1",
+        product: "CC(O)c1ccccc1",
+        tags: &["chem:benzylic-hydroxylation"],
     },
     Case {
         label: "ethene → oxirane",
@@ -38,43 +48,125 @@ const CASES: &[Case] = &[
         tags: &[],
     },
     Case {
+        label: "chem:arene-oxide + NIH-shift facets",
+        reactant: "c1ccccc1",
+        product: "Oc1ccccc1",
+        tags: &["chem:arene-oxide", "chem:NIH-shift"],
+    },
+    Case {
         label: "ethanol → acetaldehyde",
         reactant: "CCO",
         product: "CC=O",
         tags: &[],
     },
     Case {
-        label: "tag: glucuronidation",
-        reactant: "CCO",
-        product: "CCO",
-        tags: &["forest.rule:Glucuronidation"],
+        label: "chem:N-demethylation",
+        reactant: "CN(C)C",
+        product: "CNC",
+        tags: &["chem:N-demethylation"],
     },
     Case {
-        label: "tag: GSH Michael",
+        label: "chem:oxidative-deamination",
+        reactant: "CCN",
+        product: "CC=O",
+        tags: &["chem:oxidative-deamination"],
+    },
+    Case {
+        label: "chem:O-demethylation",
+        reactant: "COc1ccccc1",
+        product: "Oc1ccccc1",
+        tags: &["chem:O-demethylation"],
+    },
+    Case {
+        label: "chem:acyl-glucuronidation",
+        reactant: "CC(=O)O",
+        product: "CC(=O)O",
+        tags: &["chem:acyl-glucuronidation"],
+    },
+    Case {
+        label: "chem:phenolic-glucuronidation",
+        reactant: "Oc1ccccc1",
+        product: "Oc1ccccc1",
+        tags: &["chem:phenolic-glucuronidation"],
+    },
+    Case {
+        label: "chem:GSH-Michael + conjugate-addition facet",
         reactant: "C=CC=O",
         product: "C=CC=O",
-        tags: &["forest.pattern:Glutathionation/michael"],
+        tags: &["chem:GSH-Michael"],
     },
     Case {
-        label: "tag: N-dealkylation",
-        reactant: "CCN(C)C",
-        product: "CCNC",
-        tags: &["forest.rule:NDealkylation"],
-    },
-    Case {
-        label: "tag: quinone formation",
+        label: "chem:quinone-formation (dearomatization + bioactivation)",
         reactant: "c1ccccc1",
         product: "O=C1C=CC(=O)C=C1",
-        tags: &["forest.rule:QuinoneFormation"],
+        tags: &["chem:quinone-formation"],
+    },
+    Case {
+        label: "chem:quinone-imine + one-step quinone formation",
+        reactant: "CC(=O)Nc1ccc(O)cc1",
+        product: "CC(=O)N=C1C=CC(=O)C=C1",
+        tags: &["chem:quinone-imine", "chem:one-step-quinone-formation"],
+    },
+    Case {
+        label: "chem:two-step-quinone-formation",
+        reactant: "c1ccccc1",
+        product: "O=C1C=CC(=O)C=C1",
+        tags: &["chem:two-step-quinone-formation"],
+    },
+    Case {
+        label: "chem:imine-methide",
+        reactant: "Nc1ccc(C)cc1",
+        product: "N=C1C=CC(=C)C=C1",
+        tags: &["chem:imine-methide"],
+    },
+    Case {
+        label: "chem:dearomatization alone",
+        reactant: "c1ccccc1",
+        product: "C1=CC=CC=C1",
+        tags: &["chem:dearomatization"],
+    },
+    Case {
+        label: "chem:nitroaromatic-reduction",
+        reactant: "O=[N+]([O-])c1ccccc1",
+        product: "Nc1ccccc1",
+        tags: &["chem:nitroaromatic-reduction"],
+    },
+    Case {
+        label: "chem:cyanide-hydrolysis",
+        reactant: "CC#N",
+        product: "CC(=O)O",
+        tags: &["chem:cyanide-hydrolysis"],
+    },
+    Case {
+        label: "chem:carbonyl-reduction",
+        reactant: "CC(=O)C",
+        product: "CC(O)C",
+        tags: &["chem:carbonyl-reduction"],
+    },
+    Case {
+        label: "chem:glycine-conjugation",
+        reactant: "c1ccccc1C(=O)O",
+        product: "c1ccccc1C(=O)O",
+        tags: &["chem:glycine-conjugation"],
+    },
+    Case {
+        label: "chem:tautomerization",
+        reactant: "CC(=O)C",
+        product: "CC(O)=C",
+        tags: &["chem:tautomerization"],
     },
 ];
 
 fn main() {
     let write = env::args().any(|a| a == "--write");
     let namer = Namer::from_manifest(DEFAULT_MANIFEST).expect("manifest");
-    let mut out = String::from("# Proposed terms — feedback round\n\n");
+    let mut out = String::from("# Proposed terms — feedback round 002\n\n");
+    out.push_str("Forest-mapped Phase I class parents use full names ");
+    out.push_str("(stable/unstable oxygenation, dehydrogenation, hydrolysis, reduction). ");
+    out.push_str("Leaves and facets from Rainbow (21 types), Metabolic Forest ");
+    out.push_str("(conjugation / quinone / tautomerization), and the quinone-formation ");
+    out.push_str("paper (species + one-/two-step). No SO/UO/DH/HD/RD as XRM labels.\n\n");
     out.push_str("Regenerate: `cargo run -p xenosite-xrm --example sample_terms -- --write`\n\n");
-    out.push_str("Comment inline or open an issue noting the case label + wanted change.\n\n");
 
     for case in CASES {
         let terms = namer
@@ -86,7 +178,7 @@ fn main() {
     }
 
     if write {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/samples/round-001.md");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/samples/round-002.md");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &out).unwrap();
         eprintln!("wrote {}", path.display());

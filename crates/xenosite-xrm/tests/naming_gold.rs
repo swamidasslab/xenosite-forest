@@ -118,6 +118,38 @@ fn no_enzyme_strings_in_primary_labels() {
 }
 
 #[test]
+fn forest_class_parents_use_unabbreviated_labels() {
+    let namer = namer();
+    let expect = [
+        ("xrm:0000010", "stable oxygenation"),
+        ("xrm:0000011", "unstable oxygenation"),
+        ("xrm:0000012", "dehydrogenation"),
+        ("xrm:0000013", "hydrolysis"),
+        ("xrm:0000014", "reduction"),
+    ];
+    for (id, label) in expect {
+        let c = namer.thesaurus.get(id).expect(id);
+        assert_eq!(c.pref_label, label);
+        assert_eq!(
+            c.broader.first().map(|b| b.as_str()),
+            Some("xrm:0000001"),
+            "{id} must hang under phase I"
+        );
+        for alt in &c.alt_labels {
+            assert!(
+                !matches!(alt.as_str(), "SO" | "UO" | "DH" | "HD" | "RD"),
+                "{id} must not use Rainbow abbreviations as altLabel: {alt}"
+            );
+        }
+    }
+    // Abbreviations may exist only as opaque forest SSSOM object ids.
+    let forest = &namer.mappings.by_subject;
+    assert!(forest["xrm:0000010"]
+        .iter()
+        .any(|m| m.object_id.as_str() == "forest.ruleset:SO"));
+}
+
+#[test]
 fn tag_hydroxylation_without_structural_match_still_names() {
     // Same formula pair that is NOT a hydroxylation chemically, but caller
     // supplied an opaque forest tag — namer trusts tags as data.

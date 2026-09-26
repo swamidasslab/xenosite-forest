@@ -31,4 +31,12 @@ xrm:0001031	skos:relatedMatch	forest.pattern:Glutathionation/michael	semapv:Manu
 xrm:0001032	skos:relatedMatch	forest.pattern:Glutathionation/epoxide_ch	semapv:ManualMappingCuration	epoxide glutathionation	epoxide_ch
 xrm:0002000	skos:relatedMatch	forest.rule:Tautomerization	semapv:ManualMappingCuration	tautomerization	Tautomerization
 xrm:0000001	skos:relatedMatch	forest.ruleset:PhaseOne	semapv:ManualMappingCuration	phase I	PhaseOne
+xrm:0000010	skos:relatedMatch	forest.ruleset:SO	semapv:ManualMappingCuration	stable oxygenation	SO
+xrm:0000011	skos:relatedMatch	forest.ruleset:UO	semapv:ManualMappingCuration	unstable oxygenation	UO
+xrm:0000012	skos:relatedMatch	forest.ruleset:DH	semapv:ManualMappingCuration	dehydrogenation	DH
+xrm:0000013	skos:relatedMatch	forest.ruleset:HD	semapv:ManualMappingCuration	hydrolysis	HD
+xrm:0000014	skos:relatedMatch	forest.ruleset:RD	semapv:ManualMappingCuration	reduction	RD
 xrm:0000002	skos:relatedMatch	forest.ruleset:Conjugation	semapv:ManualMappingCuration	phase II	Conjugation
+xrm:0000024	skos:relatedMatch	forest.ruleset:Conjugation	semapv:ManualMappingCuration	conjugation	Conjugation
+xrm:0000300	skos:relatedMatch	forest.ruleset:QuinoneFormation	semapv:ManualMappingCuration	quinone formation	QuinoneFormation
+xrm:0002000	skos:relatedMatch	forest.ruleset:Tautomerization	semapv:ManualMappingCuration	tautomerization	Tautomerization

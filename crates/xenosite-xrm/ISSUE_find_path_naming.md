@@ -12,7 +12,7 @@ Keep `xenosite-xrm` free of forest imports. Optionally add a **separate** thin a
 
 Structural SMARTS/delta assignment covers many Phase I transforms, but:
 
-- Multi-step paths (e.g. quinone formation as OH + DH plan) are hard to encode as a single reactant/product SMARTS pair.
+- Multi-step paths (e.g. quinone formation as hydroxylation + dehydrogenation plan) are hard to encode as a single reactant/product SMARTS pair.
 - Phase II conjugations often use star adducts / large groups; tag-based naming is more reliable when the emitter is known.
 - `find_path` already returns the identity the thesaurus maps to.
 
@@ -51,5 +51,5 @@ Namer::name(MappedReaction { reactant, product, tags, ... })
 ## Acceptance for a follow-up PR
 
 - Adapter crate or forest helper with no changes to xrm assignment engine semantics.
-- Golden tests: ethane→ethanol tags include `forest.rule:Hydroxylation`; namer still returns Phase I → SO → hydroxylation → aliphatic….
+- Golden tests: ethane→ethanol tags include `forest.rule:Hydroxylation`; namer still returns phase I → stable oxygenation → hydroxylation → aliphatic hydroxylation (full names; no SO/UO/DH/HD/RD abbreviations as XRM labels).
 - Boundary test in xrm continues to fail if forest is added to `Cargo.toml`.
