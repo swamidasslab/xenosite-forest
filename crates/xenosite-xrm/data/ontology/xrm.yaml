@@ -4,10 +4,10 @@ scheme:
   id: xrm:scheme
   preferred_label: Xenobiotic Reaction Metabolism
   iri: https://xenosite.org/ontology/xrm#
-  definition: 'XRM tags each reaction with many terms from parallel, cross-cutting spines aligned to med-chem
-    faceting: metabolism phase, chemical transformation, phase I reaction family (Rainbow), phase II conjugation
-    family, medchem liability, reactive metabolite family, site type, structural delta, product status,
-    rule provenance, evidence, biological context, plus ambiguity and Metabolic Forest map (alias spine).'
+  definition: Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming, site-localized
+    labels, structural transformation tags, product/liability classes, leaving groups, and mappings to
+    RXNO/MOP/GO/ChEBI/Rhea/KEGG/MeSH/ECO/CHMO. Separate from named-synthesis and enzyme ontologies; the
+    layer between SMARTS/rules and human-useful med-chem metabolism names.
 spines:
 - id: xrm:1000000
   preferred_label: metabolism phase
@@ -87,9 +87,16 @@ spines:
   preferred_label: Metabolic Forest map
   definition: Alias / mapping spine for Metabolic Forest rulesets → rules → patterns. Opaque forest.*
     CURIEs only; not the chemist backbone.
-  synonyms: &id013
+  synonyms: &id014
   - forest alignment
   - ruleset–rule–pattern map
+- id: xrm:2200000
+  preferred_label: leaving group
+  definition: Fragment or moiety that departs in a cleavage / substitution / dealkylation / hydrolysis
+    step. Med-chem handle for soft-spot design.
+  synonyms: &id013
+  - leaving_group
+  - departing group
 concepts:
 - id: xrm:0000000
   preferred_label: xenobiotic biotransformation
@@ -480,6 +487,7 @@ concepts:
   - xrm:7300002
   - xrm:7400002
   - xrm:7100007
+  - xrm:2200032
 - id: xrm:0000201
   preferred_label: N-dealkylation
   parents:
@@ -523,10 +531,14 @@ concepts:
   definition: N-dealkylation that releases formaldehyde.
   parents:
   - xrm:0000201
+  related_match:
+  - xrm:2200010
 - id: xrm:0000206
   preferred_label: N-deethylation
   parents:
   - xrm:0000201
+  related_match:
+  - xrm:2200011
 - id: xrm:0000207
   preferred_label: N-depropylation
   parents:
@@ -547,6 +559,8 @@ concepts:
   synonyms:
   - aryl methyl ether cleavage
   - oxidative O-demethylation
+  related_match:
+  - xrm:2200010
 - id: xrm:0000210
   preferred_label: oxidative dehalogenation
   synonyms:
@@ -561,10 +575,13 @@ concepts:
   - xrm:7200002
   - xrm:7400002
   - xrm:7700009
+  - xrm:2200016
 - id: xrm:0000211
   preferred_label: O-deethylation
   parents:
   - xrm:0000202
+  related_match:
+  - xrm:2200011
 - id: xrm:0000212
   preferred_label: aromatic O-dealkylation
   definition: Cleavage of an aryl–O–alkyl ether (e.g. anisole → phenol).
@@ -740,10 +757,14 @@ concepts:
   preferred_label: ester hydrolysis
   parents:
   - xrm:0000013
+  related_match:
+  - xrm:2200025
 - id: xrm:0000402
   preferred_label: amide hydrolysis
   parents:
   - xrm:0000013
+  related_match:
+  - xrm:2200022
 - id: xrm:0000403
   preferred_label: lactone hydrolysis
   parents:
@@ -4485,6 +4506,185 @@ concepts:
   - xrm:2100000
   synonyms:
   - fasted_state_context
+- id: xrm:2200000
+  preferred_label: leaving group
+  definition: Fragment or moiety that departs in a cleavage / substitution / dealkylation / hydrolysis
+    step. Med-chem handle for soft-spot design.
+  synonyms: *id013
+  parents:
+  - xrm:0000000
+- id: xrm:2200010
+  preferred_label: methyl leaving group
+  definition: Methyl fragment departing (typical N-/O-demethylation).
+  parents:
+  - xrm:2200000
+  synonyms:
+  - CH3 leaving group
+  related_match:
+  - xrm:0000205
+  - xrm:0000209
+- id: xrm:2200011
+  preferred_label: ethyl leaving group
+  definition: Ethyl fragment departing (typical N-/O-deethylation).
+  parents:
+  - xrm:2200000
+  related_match:
+  - xrm:0000206
+  - xrm:0000211
+- id: xrm:2200012
+  preferred_label: propyl leaving group
+  definition: Propyl fragment departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200013
+  preferred_label: isopropyl leaving group
+  definition: Isopropyl fragment departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200014
+  preferred_label: benzyl leaving group
+  definition: Benzyl fragment departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200015
+  preferred_label: allyl leaving group
+  definition: Allyl fragment departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200016
+  preferred_label: halide leaving group
+  definition: Halide ion / halogen departing.
+  parents:
+  - xrm:2200000
+  synonyms:
+  - halogen leaving group
+  related_match:
+  - xrm:0000210
+- id: xrm:2200017
+  preferred_label: fluoride leaving group
+  definition: Fluoride departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200018
+  preferred_label: chloride leaving group
+  definition: Chloride departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200019
+  preferred_label: bromide leaving group
+  definition: Bromide departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200020
+  preferred_label: iodide leaving group
+  definition: Iodide departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200021
+  preferred_label: alcohol leaving fragment
+  definition: Alcohol / alkoxide fragment from ether cleavage or hydrolysis.
+  parents:
+  - xrm:2200000
+- id: xrm:2200022
+  preferred_label: amine leaving fragment
+  definition: Amine fragment from amide/urea hydrolysis or N-dealkylation path.
+  parents:
+  - xrm:2200000
+  related_match:
+  - xrm:0000402
+- id: xrm:2200023
+  preferred_label: phenol leaving fragment
+  definition: Phenol / phenoxide fragment departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200024
+  preferred_label: thiol leaving fragment
+  definition: Thiol / thiolate fragment departing.
+  parents:
+  - xrm:2200000
+- id: xrm:2200025
+  preferred_label: carboxylate leaving group
+  definition: Carboxylate departing (e.g. ester hydrolysis).
+  parents:
+  - xrm:2200000
+  related_match:
+  - xrm:0000401
+- id: xrm:2200026
+  preferred_label: phosphate leaving group
+  definition: Phosphate / phosphoryl leaving group.
+  parents:
+  - xrm:2200000
+- id: xrm:2200027
+  preferred_label: sulfate leaving group
+  definition: Sulfate leaving group.
+  parents:
+  - xrm:2200000
+- id: xrm:2200028
+  preferred_label: water leaving group
+  definition: Water departing (dehydration / condensation reverse).
+  parents:
+  - xrm:2200000
+- id: xrm:2200029
+  preferred_label: hydrogen leaving group
+  definition: Hydride / proton framing for dehydrogenation ends.
+  parents:
+  - xrm:2200000
+- id: xrm:2200030
+  preferred_label: formaldehyde leaving fragment
+  definition: Formaldehyde-equivalent from demethylation carbinolamine cleavage.
+  parents:
+  - xrm:2200000
+- id: xrm:2200031
+  preferred_label: acetaldehyde leaving fragment
+  definition: Acetaldehyde-equivalent from deethylation path.
+  parents:
+  - xrm:2200000
+- id: xrm:2200032
+  preferred_label: small alkyl leaving group
+  definition: Generic small alkyl departing group.
+  parents:
+  - xrm:2200000
+  related_match:
+  - xrm:0000200
+- id: xrm:2200033
+  preferred_label: aryl leaving group
+  definition: Aryl fragment departing (less common).
+  parents:
+  - xrm:2200000
+- id: xrm:2200034
+  preferred_label: mesylate leaving group
+  definition: Mesylate / sulfonate ester leaving group.
+  parents:
+  - xrm:2200000
+  synonyms:
+  - sulfonate leaving group
+- id: xrm:2200035
+  preferred_label: tosylate leaving group
+  definition: Tosylate leaving group.
+  parents:
+  - xrm:2200000
+- id: xrm:2200036
+  preferred_label: isocyanate leaving fragment
+  definition: Isocyanate fragment in carbamate/urea chemistry.
+  parents:
+  - xrm:2200000
+- id: xrm:2200037
+  preferred_label: cyanide leaving group
+  definition: Cyanide departing (nitrile hydrolysis / related).
+  parents:
+  - xrm:2200000
+- id: xrm:2200038
+  preferred_label: nitrogen gas leaving group
+  definition: N2 departing (azo / diazo paths).
+  parents:
+  - xrm:2200000
+- id: xrm:2200039
+  preferred_label: no leaving group
+  definition: Transformation without a discrete departing fragment.
+  parents:
+  - xrm:2200000
+  synonyms:
+  - non-cleaving transformation
 - id: xrm:6000000
   preferred_label: ambiguity and underspecification
   definition: Cross-cutting spine for incomplete, conflicting, or underdetermined naming evidence. Prefer
@@ -5164,7 +5364,7 @@ concepts:
   - xrm:0004014
 - id: xrm:9000000
   preferred_label: Metabolic Forest map
-  synonyms: *id013
+  synonyms: *id014
   definition: Alias / mapping spine for Metabolic Forest rulesets → rules → patterns. Opaque forest.*
     CURIEs only; not the chemist backbone.
   parents:

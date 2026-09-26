@@ -39,6 +39,7 @@ Forest ruleset concepts use unabbreviated labels ending in `ruleset`.
 | **rule provenance** | SMARTS vs delta vs caller vs Forest map | assignment path |
 | **evidence** | Literature, MS, NMR, incubation system, … | harvest / curation tags |
 | **biological context** | Enzyme / tissue / species / matrix (orthogonal) | never primary reaction label |
+| **leaving group** | Departing methyl / ethyl / halide / carboxylate / … | dealkylation, hydrolysis, dehalogenation deltas |
 | **ambiguity and underspecification** | Typed incomplete/conflicting evidence | `chem:*-ambiguity` |
 | **Metabolic Forest map** | Alias spine: ruleset → rule → PatternInfo | `forest.rule:*`, `forest.pattern:*` |
 

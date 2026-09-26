@@ -66,7 +66,7 @@ Each [`Term`](src/term.rs) includes ontology identity, pref/alt labels, broader/
 1. **Separate XRM + declared synonyms** — MeSH is too coarse (Phase I/II only); KEGG RCLASS is RDM-centric; MOP has good leaves but no xenobiotic Phase spine.
 2. **SKOS + SSSOM + JSONL** — established standards; no OWL reasoner required on the hot path.
 3. **Assignment without forest imports** — prefer structural SMARTS / formula delta; opaque tags only when structure cannot decide (and for Forest-map correspondence).
-4. **Cross-cutting multi-spine tagging** — ChatGPT-aligned facets (metabolism phase, chemical transformation, Rainbow phase I family, phase II conjugation family, medchem liability, reactive metabolite family, site type, structural delta, product status, rule provenance, evidence, biological context) plus ambiguity and Metabolic Forest map as an alias spine.
+4. **Cross-cutting multi-spine tagging** — med-chem facets (metabolism phase, chemical transformation, Rainbow phase I family, phase II conjugation, medchem liability, reactive metabolite / product class, site type, structural delta, leaving group, product status, rule provenance, evidence, biological context) plus ambiguity and Metabolic Forest map as an alias spine. Combinations use annotation bundles, not combinatorial concepts.
 5. **Site-localized terms** — caller tags may use `@map` (`chem:hydroxylation@1`); SMARTS hits attach `SiteRef` so multi-change cases disambiguate.
 6. **Phase I / Phase II expected**; enzyme names excluded from primary output.
 

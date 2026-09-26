@@ -8,3 +8,12 @@ xrm:0000205	skos:closeMatch	mop:0000669	semapv:ManualMappingCuration	N-demethyla
 xrm:0001040	skos:closeMatch	mop:0000060	semapv:ManualMappingCuration	methylation	methylation
 xrm:7000001	skos:relatedMatch	mop:0000673	semapv:ManualMappingCuration	net oxidation	hydroxylation
 xrm:7200002	skos:relatedMatch	mop:0000669	semapv:ManualMappingCuration	bond cleavage	demethylation
+xrm:0000013	skos:closeMatch	mop:0000402	semapv:ManualMappingCuration	hydrolysis	hydrolysis
+xrm:0000014	skos:relatedMatch	mop:0000469	semapv:ManualMappingCuration	reduction	reduction
+xrm:0000020	skos:relatedMatch	mop:0000450	semapv:ManualMappingCuration	oxidation	oxidation
+xrm:0000012	skos:relatedMatch	mop:0000454	semapv:ManualMappingCuration	dehydrogenation	dehydrogenation
+xrm:0001020	skos:closeMatch	mop:0000035	semapv:ManualMappingCuration	acetylation	acetylation
+xrm:0001010	skos:relatedMatch	mop:0000410	semapv:ManualMappingCuration	sulfation	sulfation
+xrm:0000201	skos:closeMatch	mop:0000669	semapv:ManualMappingCuration	N-dealkylation	demethylation
+xrm:0000202	skos:closeMatch	mop:0000669	semapv:ManualMappingCuration	O-dealkylation	demethylation
+xrm:1100000	skos:broadMatch	mop:0000000	semapv:ManualMappingCuration	chemical transformation	molecular process

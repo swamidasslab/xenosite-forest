@@ -11,10 +11,10 @@
 # Formula-delta automatics (cross-cutting; fire alongside typed rules)
 {"id":"asg:delta-oxygen-gain","emit":["xrm:7700001","xrm:7000001","xrm:1700010","xrm:1700012","xrm:1900011","xrm:1700000"],"delta":{"O":1}}
 {"id":"asg:delta-oxygen-loss","emit":["xrm:7700002","xrm:7000002","xrm:1700000","xrm:1900011"],"delta":{"O":-1}}
-{"id":"asg:delta-halogen-loss-F","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011"],"delta":{"F":-1}}
-{"id":"asg:delta-halogen-loss-Cl","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011"],"delta":{"Cl":-1}}
-{"id":"asg:delta-halogen-loss-Br","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011"],"delta":{"Br":-1}}
-{"id":"asg:delta-carbon-loss","emit":["xrm:7700007","xrm:7300002","xrm:7200002","xrm:1700000","xrm:1900011"],"delta":{"C":-1}}
+{"id":"asg:delta-halogen-loss-F","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011","xrm:2200016","xrm:2200000"],"delta":{"F":-1}}
+{"id":"asg:delta-halogen-loss-Cl","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011","xrm:2200016","xrm:2200000"],"delta":{"Cl":-1}}
+{"id":"asg:delta-halogen-loss-Br","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011","xrm:2200016","xrm:2200000"],"delta":{"Br":-1}}
+{"id":"asg:delta-carbon-loss","emit":["xrm:7700007","xrm:7300002","xrm:7200002","xrm:1700000","xrm:1900011","xrm:2200032","xrm:2200000"],"delta":{"C":-1}}
 # Chemist / Forest tags
 {"id":"asg:tag-hydroxylation","emit":["xrm:0000100","xrm:9100100","xrm:7000001","xrm:7400001","xrm:7300001","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1900012"],"tags_any":["forest.rule:Hydroxylation","chem:hydroxylation"]}
 {"id":"asg:tag-aromatic-hydroxylation","emit":["xrm:0000101","xrm:8000003","xrm:7800001","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1900012"],"tags_any":["chem:aromatic-hydroxylation","chem:aryl-hydroxylation"]}
@@ -26,12 +26,12 @@
 {"id":"asg:tag-nih-shift","emit":["xrm:0004003","xrm:0004002","xrm:8000007","xrm:7200005","xrm:1900012"],"tags_any":["chem:NIH-shift"]}
 {"id":"asg:tag-ipso","emit":["xrm:0004004","xrm:8000003","xrm:7200004","xrm:1900012"],"tags_any":["chem:ipso-substitution"]}
 {"id":"asg:tag-dearomatization","emit":["xrm:0004001","xrm:8000001","xrm:1900012"],"tags_any":["chem:dearomatization"]}
-{"id":"asg:tag-dealkylation","emit":["xrm:0000200","xrm:9100200","xrm:7400002","xrm:7300002","xrm:7200002","xrm:7100007","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012"],"tags_any":["forest.rule:Dealkylation","chem:dealkylation"]}
-{"id":"asg:tag-n-dealkylation","emit":["xrm:0000201","xrm:0004006","xrm:9100201","xrm:7100002","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1400022","xrm:1600021","xrm:1400019","xrm:1900012"],"tags_any":["forest.rule:NDealkylation","forest.pattern:Dealkylation/hemiaminal","chem:N-dealkylation"]}
-{"id":"asg:tag-n-demethylation","emit":["xrm:0000205","xrm:0004006","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1400022","xrm:1600021","xrm:1400019","xrm:1900012"],"tags_any":["chem:N-demethylation","chem:demethylation"]}
+{"id":"asg:tag-dealkylation","emit":["xrm:0000200","xrm:9100200","xrm:7400002","xrm:7300002","xrm:7200002","xrm:7100007","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012","xrm:2200032","xrm:2200000"],"tags_any":["forest.rule:Dealkylation","chem:dealkylation"]}
+{"id":"asg:tag-n-dealkylation","emit":["xrm:0000201","xrm:0004006","xrm:9100201","xrm:7100002","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1400022","xrm:1600021","xrm:1400019","xrm:1900012","xrm:2200032","xrm:2200000"],"tags_any":["forest.rule:NDealkylation","forest.pattern:Dealkylation/hemiaminal","chem:N-dealkylation"]}
+{"id":"asg:tag-n-demethylation","emit":["xrm:0000205","xrm:0004006","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1400022","xrm:1600021","xrm:1400019","xrm:1900012","xrm:2200010","xrm:2200000"],"tags_any":["chem:N-demethylation","chem:demethylation"]}
 {"id":"asg:tag-oxidative-deamination","emit":["xrm:0000208","xrm:0004006","xrm:7100002","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1400022","xrm:1600021","xrm:1400019","xrm:1900012"],"tags_any":["chem:oxidative-deamination","chem:deamination"]}
-{"id":"asg:tag-o-dealkylation","emit":["xrm:0000202","xrm:7100003","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012"],"tags_any":["chem:O-dealkylation"]}
-{"id":"asg:tag-o-demethylation","emit":["xrm:0000209","xrm:7100003","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012"],"tags_any":["chem:O-demethylation"]}
+{"id":"asg:tag-o-dealkylation","emit":["xrm:0000202","xrm:7100003","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012","xrm:2200032","xrm:2200000"],"tags_any":["chem:O-dealkylation"]}
+{"id":"asg:tag-o-demethylation","emit":["xrm:0000209","xrm:7100003","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012","xrm:2200010","xrm:2200000"],"tags_any":["chem:O-demethylation"]}
 {"id":"asg:tag-glucuronidation","emit":["xrm:0001000","xrm:9101000","xrm:7000003","xrm:7500003","xrm:7700008","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1900012"],"tags_any":["forest.rule:Glucuronidation","chem:glucuronidation"]}
 {"id":"asg:tag-acyl-glucuronidation","emit":["xrm:0001004","xrm:0004017","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1500015","xrm:1400014","xrm:1400019","xrm:1900012"],"tags_any":["chem:acyl-glucuronidation","chem:acyl-glucuronide"]}
 {"id":"asg:tag-phenolic-glucuronidation","emit":["xrm:0001002","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1900012"],"tags_any":["chem:phenolic-glucuronidation"]}
@@ -51,8 +51,8 @@
 {"id":"asg:tag-nitroaromatic-reduction","emit":["xrm:0000513","xrm:0003000","xrm:7000002","xrm:7500001","xrm:7800001","xrm:1900012"],"tags_any":["chem:nitroaromatic-reduction","forest.rule:NitroaromaticReduction"]}
 {"id":"asg:tag-carbonyl-reduction","emit":["xrm:0000524","xrm:7000002","xrm:7100001","xrm:1900012"],"tags_any":["chem:carbonyl-reduction"]}
 {"id":"asg:tag-sulfo-reduction","emit":["xrm:0000533","xrm:7000002","xrm:7100004","xrm:1900012"],"tags_any":["chem:sulfo-reduction"]}
-{"id":"asg:tag-cyanide-hydrolysis","emit":["xrm:0000409","xrm:7000003","xrm:7200002","xrm:7300002","xrm:1900012"],"tags_any":["chem:cyanide-hydrolysis"]}
-{"id":"asg:tag-ether-hydrolysis","emit":["xrm:0000408","xrm:7000003","xrm:7200002","xrm:7300002","xrm:1900012"],"tags_any":["chem:ether-hydrolysis"]}
+{"id":"asg:tag-cyanide-hydrolysis","emit":["xrm:0000409","xrm:7000003","xrm:7200002","xrm:7300002","xrm:1900012","xrm:2200021","xrm:2200000"],"tags_any":["chem:cyanide-hydrolysis"]}
+{"id":"asg:tag-ether-hydrolysis","emit":["xrm:0000408","xrm:7000003","xrm:7200002","xrm:7300002","xrm:1900012","xrm:2200021","xrm:2200000"],"tags_any":["chem:ether-hydrolysis"]}
 {"id":"asg:tag-methylation","emit":["xrm:0001040","xrm:7000003","xrm:7200004","xrm:1900012"],"tags_any":["chem:methylation"]}
 {"id":"asg:tag-glycine-conjugation","emit":["xrm:0001051","xrm:7000003","xrm:7700008","xrm:1900012"],"tags_any":["chem:glycine-conjugation"]}
 {"id":"asg:tag-tautomerization","emit":["xrm:0002000","xrm:9102000","xrm:7000003","xrm:7700010","xrm:7200005","xrm:1900012"],"tags_any":["forest.rule:Tautomerization","chem:tautomerization"]}

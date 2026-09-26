@@ -41,6 +41,7 @@ chemical transformation and phase I family).
 | Biological context | 40–80 | Enzyme/tissue/species/matrix (orthogonal) |
 | Rule/model provenance | 20–40 | SMARTS, Rainbow class, XenoNet, legacy model |
 | Localization templates | 20–40 | Templates only — not per-atom enumerations |
+| Leaving group | 20–40 | Departing methyl/ethyl/halide/carboxylate/… fragments |
 
 ## SKOS link types
 
@@ -74,6 +75,7 @@ identity parents.
 | `xmet:bioactivatesTo` / `xmet:detoxifiesTo` | medchem ↔ product_class related pairs |
 | `xmet:hasConjugateGroup` | phase2 / product_class conjugates |
 | `xmet:hasAttachmentAtomType` | site environment attachment-atom leaves |
+| `xmet:hasLeavingGroup` | `leaving_group` |
 
 ## Bundle shape
 

@@ -43,7 +43,7 @@
       "type": "skos:ConceptScheme",
       "prefLabel": "Xenobiotic Reaction Metabolism",
       "iri": "https://xenosite.org/ontology/xrm#",
-      "definition": "XRM tags each reaction with many terms from parallel, cross-cutting spines aligned to med-chem faceting: metabolism phase, chemical transformation, phase I reaction family (Rainbow), phase II conjugation family, medchem liability, reactive metabolite family, site type, structural delta, product status, rule provenance, evidence, biological context, plus ambiguity and Metabolic Forest map (alias spine)."
+      "definition": "Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming, site-localized labels, structural transformation tags, product/liability classes, leaving groups, and mappings to RXNO/MOP/GO/ChEBI/Rhea/KEGG/MeSH/ECO/CHMO. Separate from named-synthesis and enzyme ontologies; the layer between SMARTS/rules and human-useful med-chem metabolism names."
     },
     {
       "id": "xrm:0000000",
@@ -604,7 +604,8 @@
         "xrm:7200002",
         "xrm:7300002",
         "xrm:7400002",
-        "xrm:7100007"
+        "xrm:7100007",
+        "xrm:2200032"
       ]
     },
     {
@@ -670,14 +671,16 @@
         "demethylation",
         "oxidative N-demethylation"
       ],
-      "broader": "xrm:0000201"
+      "broader": "xrm:0000201",
+      "relatedMatch": "xrm:2200010"
     },
     {
       "id": "xrm:0000206",
       "type": "skos:Concept",
       "prefLabel": "N-deethylation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000201"
+      "broader": "xrm:0000201",
+      "relatedMatch": "xrm:2200011"
     },
     {
       "id": "xrm:0000207",
@@ -710,7 +713,8 @@
         "aryl methyl ether cleavage",
         "oxidative O-demethylation"
       ],
-      "broader": "xrm:0000202"
+      "broader": "xrm:0000202",
+      "relatedMatch": "xrm:2200010"
     },
     {
       "id": "xrm:0000210",
@@ -730,7 +734,8 @@
         "xrm:7100005",
         "xrm:7200002",
         "xrm:7400002",
-        "xrm:7700009"
+        "xrm:7700009",
+        "xrm:2200016"
       ]
     },
     {
@@ -738,7 +743,8 @@
       "type": "skos:Concept",
       "prefLabel": "O-deethylation",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000202"
+      "broader": "xrm:0000202",
+      "relatedMatch": "xrm:2200011"
     },
     {
       "id": "xrm:0000212",
@@ -994,14 +1000,16 @@
       "type": "skos:Concept",
       "prefLabel": "ester hydrolysis",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000013"
+      "broader": "xrm:0000013",
+      "relatedMatch": "xrm:2200025"
     },
     {
       "id": "xrm:0000402",
       "type": "skos:Concept",
       "prefLabel": "amide hydrolysis",
       "inScheme": "xrm:scheme",
-      "broader": "xrm:0000013"
+      "broader": "xrm:0000013",
+      "relatedMatch": "xrm:2200022"
     },
     {
       "id": "xrm:0000403",
@@ -6890,6 +6898,282 @@
         "fasted_state_context"
       ],
       "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2200000",
+      "type": "skos:Concept",
+      "prefLabel": "leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Fragment or moiety that departs in a cleavage / substitution / dealkylation / hydrolysis step. Med-chem handle for soft-spot design.",
+      "altLabel": [
+        "leaving_group",
+        "departing group"
+      ],
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:2200010",
+      "type": "skos:Concept",
+      "prefLabel": "methyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Methyl fragment departing (typical N-/O-demethylation).",
+      "altLabel": [
+        "CH3 leaving group"
+      ],
+      "broader": "xrm:2200000",
+      "relatedMatch": [
+        "xrm:0000205",
+        "xrm:0000209"
+      ]
+    },
+    {
+      "id": "xrm:2200011",
+      "type": "skos:Concept",
+      "prefLabel": "ethyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Ethyl fragment departing (typical N-/O-deethylation).",
+      "broader": "xrm:2200000",
+      "relatedMatch": [
+        "xrm:0000206",
+        "xrm:0000211"
+      ]
+    },
+    {
+      "id": "xrm:2200012",
+      "type": "skos:Concept",
+      "prefLabel": "propyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Propyl fragment departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200013",
+      "type": "skos:Concept",
+      "prefLabel": "isopropyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Isopropyl fragment departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200014",
+      "type": "skos:Concept",
+      "prefLabel": "benzyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Benzyl fragment departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200015",
+      "type": "skos:Concept",
+      "prefLabel": "allyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Allyl fragment departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200016",
+      "type": "skos:Concept",
+      "prefLabel": "halide leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Halide ion / halogen departing.",
+      "altLabel": [
+        "halogen leaving group"
+      ],
+      "broader": "xrm:2200000",
+      "relatedMatch": "xrm:0000210"
+    },
+    {
+      "id": "xrm:2200017",
+      "type": "skos:Concept",
+      "prefLabel": "fluoride leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Fluoride departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200018",
+      "type": "skos:Concept",
+      "prefLabel": "chloride leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Chloride departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200019",
+      "type": "skos:Concept",
+      "prefLabel": "bromide leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Bromide departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200020",
+      "type": "skos:Concept",
+      "prefLabel": "iodide leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Iodide departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200021",
+      "type": "skos:Concept",
+      "prefLabel": "alcohol leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Alcohol / alkoxide fragment from ether cleavage or hydrolysis.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200022",
+      "type": "skos:Concept",
+      "prefLabel": "amine leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Amine fragment from amide/urea hydrolysis or N-dealkylation path.",
+      "broader": "xrm:2200000",
+      "relatedMatch": "xrm:0000402"
+    },
+    {
+      "id": "xrm:2200023",
+      "type": "skos:Concept",
+      "prefLabel": "phenol leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Phenol / phenoxide fragment departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200024",
+      "type": "skos:Concept",
+      "prefLabel": "thiol leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Thiol / thiolate fragment departing.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200025",
+      "type": "skos:Concept",
+      "prefLabel": "carboxylate leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Carboxylate departing (e.g. ester hydrolysis).",
+      "broader": "xrm:2200000",
+      "relatedMatch": "xrm:0000401"
+    },
+    {
+      "id": "xrm:2200026",
+      "type": "skos:Concept",
+      "prefLabel": "phosphate leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Phosphate / phosphoryl leaving group.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200027",
+      "type": "skos:Concept",
+      "prefLabel": "sulfate leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Sulfate leaving group.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200028",
+      "type": "skos:Concept",
+      "prefLabel": "water leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Water departing (dehydration / condensation reverse).",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200029",
+      "type": "skos:Concept",
+      "prefLabel": "hydrogen leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Hydride / proton framing for dehydrogenation ends.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200030",
+      "type": "skos:Concept",
+      "prefLabel": "formaldehyde leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Formaldehyde-equivalent from demethylation carbinolamine cleavage.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200031",
+      "type": "skos:Concept",
+      "prefLabel": "acetaldehyde leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Acetaldehyde-equivalent from deethylation path.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200032",
+      "type": "skos:Concept",
+      "prefLabel": "small alkyl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Generic small alkyl departing group.",
+      "broader": "xrm:2200000",
+      "relatedMatch": "xrm:0000200"
+    },
+    {
+      "id": "xrm:2200033",
+      "type": "skos:Concept",
+      "prefLabel": "aryl leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Aryl fragment departing (less common).",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200034",
+      "type": "skos:Concept",
+      "prefLabel": "mesylate leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Mesylate / sulfonate ester leaving group.",
+      "altLabel": [
+        "sulfonate leaving group"
+      ],
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200035",
+      "type": "skos:Concept",
+      "prefLabel": "tosylate leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Tosylate leaving group.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200036",
+      "type": "skos:Concept",
+      "prefLabel": "isocyanate leaving fragment",
+      "inScheme": "xrm:scheme",
+      "definition": "Isocyanate fragment in carbamate/urea chemistry.",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200037",
+      "type": "skos:Concept",
+      "prefLabel": "cyanide leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Cyanide departing (nitrile hydrolysis / related).",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200038",
+      "type": "skos:Concept",
+      "prefLabel": "nitrogen gas leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "N2 departing (azo / diazo paths).",
+      "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2200039",
+      "type": "skos:Concept",
+      "prefLabel": "no leaving group",
+      "inScheme": "xrm:scheme",
+      "definition": "Transformation without a discrete departing fragment.",
+      "altLabel": [
+        "non-cleaving transformation"
+      ],
+      "broader": "xrm:2200000"
     },
     {
       "id": "xrm:6000000",

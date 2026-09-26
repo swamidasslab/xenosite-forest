@@ -270,6 +270,7 @@ fn parallel_spine_roots_present() {
         ("xrm:1900000", "rule provenance"),
         ("xrm:2000000", "evidence"),
         ("xrm:2100000", "biological context"),
+        ("xrm:2200000", "leaving group"),
         ("xrm:6000000", "ambiguity and underspecification"),
         ("xrm:9000000", "Metabolic Forest map"),
     ] {
@@ -329,6 +330,17 @@ fn site_localized_tags_disambiguate_multi_change() {
         .collect();
     assert_eq!(aryl.len(), 1, "{:?}", labels(&terms));
     assert_eq!(aryl[0].site.map_nums, vec![2]);
+}
+
+#[test]
+fn leaving_group_tags_with_dealkylation() {
+    let terms = namer()
+        .name_smiles("C", "C", &["chem:N-demethylation"])
+        .unwrap();
+    let labs = labels(&terms);
+    assert!(labs.contains(&"N-demethylation"), "{labs:?}");
+    assert!(labs.contains(&"methyl leaving group"), "{labs:?}");
+    assert!(labs.contains(&"leaving group"), "{labs:?}");
 }
 
 #[test]

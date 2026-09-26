@@ -21,6 +21,7 @@ pub mod spines {
     pub const RULE_PROVENANCE: &str = "xrm:1900000";
     pub const EVIDENCE: &str = "xrm:2000000";
     pub const BIOLOGICAL_CONTEXT: &str = "xrm:2100000";
+    pub const LEAVING_GROUP: &str = "xrm:2200000";
     pub const PHASE_I: &str = "xrm:0000001";
     pub const PHASE_II: &str = "xrm:0000002";
 }
@@ -56,6 +57,8 @@ pub struct AnnotationBundle {
     pub evidence_type: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub biological_context: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leaving_group: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub generated_by_rule: Vec<String>,
     /// Dynamic localized display name (not an ontology concept).
@@ -118,6 +121,7 @@ impl AnnotationBundle {
         b.product_status = ids_leaves(&under(spines::PRODUCT_STATUS));
         b.evidence_type = ids_leaves(&under(spines::EVIDENCE));
         b.biological_context = ids_leaves(&under(spines::BIOLOGICAL_CONTEXT));
+        b.leaving_group = ids_leaves(&under(spines::LEAVING_GROUP));
         b.generated_by_rule = ids_leaves(&under(spines::RULE_PROVENANCE));
 
         b.site_label = site_label(thesaurus, &b);
@@ -232,6 +236,9 @@ fn xmet_tips(b: &AnnotationBundle) -> Vec<String> {
     }
     if !b.biological_context.is_empty() {
         p.push("xmet:hasBiologicalContext".into());
+    }
+    if !b.leaving_group.is_empty() {
+        p.push("xmet:hasLeavingGroup".into());
     }
     if !b.generated_by_rule.is_empty() {
         p.push("xmet:generatedByRule".into());
