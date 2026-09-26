@@ -57,7 +57,10 @@ pub struct AtomDiff {
     pub mappings: Vec<BTreeMap<usize, usize>>,
     pub cleaved: BTreeSet<usize>,
     pub cleavage_bonds: BTreeSet<(usize, usize)>,
+    /// Mapped atoms with reactant aromatic and target not (filter signal).
     pub loses_aromaticity: BTreeSet<usize>,
+    /// Mapped atoms whose aromatic bit differs (0↔1). Cost uses `|Δ|` = this count.
+    pub aromatic_delta: BTreeSet<usize>,
     pub bond_raises: BTreeSet<(usize, usize)>,
     pub bond_order_mismatches: usize,
     pub n_extra: usize,
@@ -84,9 +87,13 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // MCS map gaps only. H is not a cost term: `formula_l1` counts it
-        // like any element; H at atoms is via [`Self::atom_h_delta`] (no cache).
-        3 * self.cleaved.len() + 3 * self.n_extra + 3 * self.cleavage_bonds.len()
+        // MCS map gaps (×3) + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a
+        // cost term: `formula_l1` counts it like any element; H at atoms is via
+        // [`Self::atom_h_delta`] (no cache).
+        3 * self.cleaved.len()
+            + 3 * self.n_extra
+            + 3 * self.cleavage_bonds.len()
+            + self.aromatic_delta.len()
     }
 
     /// Target−reactant H for `atom` under this view's primary mapping.
@@ -375,12 +382,17 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
 
     let mut cleavage_bonds = BTreeSet::new();
     let mut loses_aromaticity = BTreeSet::new();
+    let mut aromatic_delta = BTreeSet::new();
     let mut bond_raises = BTreeSet::new();
     let mut bond_order_mismatches = 0usize;
 
     for (&r_idx, &t_idx) in mapping {
         let ra = reactant.atom(atom_idx(r_idx));
         let ta = target.atom(atom_idx(t_idx));
+        // aromatic as 0/1: |Δ| contributes to field_cost; loses_* stays the filter set.
+        if ra.aromatic != ta.aromatic {
+            aromatic_delta.insert(r_idx);
+        }
         if ra.aromatic && !ta.aromatic {
             loses_aromaticity.insert(r_idx);
         }
@@ -435,6 +447,7 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
         .count();
 
     let loses_aromaticity = expand_by_rank(reactant, loses_aromaticity);
+    let aromatic_delta = expand_by_rank(reactant, aromatic_delta);
 
     let mut diff = AtomDiff {
         mapping: mapping.clone(),
@@ -442,6 +455,7 @@ fn diff_for(reactant: &Molecule, target: &Molecule, mapping: &BTreeMap<usize, us
         cleaved,
         cleavage_bonds,
         loses_aromaticity,
+        aromatic_delta,
         bond_raises,
         bond_order_mismatches,
         n_extra,
@@ -467,6 +481,7 @@ fn merge_views(mut views: Vec<AtomDiff>) -> AtomDiff {
         primary.cleavage_bonds.extend(&view.cleavage_bonds);
         primary.bond_raises.extend(&view.bond_raises);
         primary.loses_aromaticity.extend(&view.loses_aromaticity);
+        primary.aromatic_delta.extend(&view.aromatic_delta);
         primary.bond_order_mismatches = primary
             .bond_order_mismatches
             .max(view.bond_order_mismatches);
@@ -618,9 +633,10 @@ fn best_diff_from_lifted_maps(
 ///
 /// Casts the effect onto the parent MCS-gap cost: clear `n_extra` and cleavage
 /// bond + leave heavies the effect is declared to fix on
-/// `site_atoms ∪ path_ends`. Same weights as [`AtomDiff::field_cost`].
-/// H is not a cost term (`formula_l1` / on-demand [`atom_h_delta`]). Useful for
-/// tests / filters. Not used to decide lift vs MCS.
+/// `site_atoms ∪ path_ends`. Dearomatizing effects clear `|Δaromatic|` on the
+/// scope. Same weights as [`AtomDiff::field_cost`]. H is not a cost term
+/// (`formula_l1` / on-demand [`atom_h_delta`]). Useful for tests / filters.
+/// Not used to decide lift vs MCS.
 pub fn residual_cost_after_site_cast(
     parent: &AtomDiff,
     effect: &Effect,
@@ -632,6 +648,7 @@ pub fn residual_cost_after_site_cast(
     let mut cleaved = parent.cleaved.clone();
     let mut cleavage_bonds = parent.cleavage_bonds.clone();
     let mut n_extra = parent.n_extra;
+    let mut aromatic_delta = parent.aromatic_delta.clone();
 
     if effect_adds_oxygen(effect) {
         let o_delta = effect.delta_formula.get("O").copied().unwrap_or(0).max(0) as usize;
@@ -665,8 +682,11 @@ pub fn residual_cost_after_site_cast(
             });
         }
     }
+    if effect.dearomatizes {
+        aromatic_delta.retain(|a| !scope.contains(a));
+    }
 
-    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len()
+    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len() + aromatic_delta.len()
 }
 
 /// Heavy child atoms whose tags are not on `parent` (local additions).
@@ -1855,6 +1875,16 @@ mod tests {
         assert!(
             !diff.loses_aromaticity.is_empty() || diff.h_loss(&reactant, &target),
             "{diff:?}"
+        );
+        // |Δaromatic| ∈ {0,1} per mismatched mapped atom is in field_cost.
+        assert!(
+            !diff.aromatic_delta.is_empty(),
+            "aromatic 0/1 mismatch recorded: {diff:?}"
+        );
+        assert_eq!(
+            diff.cost(),
+            diff.aromatic_delta.len(),
+            "HQ→Q has no MCS gaps; cost is Σ|Δaromatic|: {diff:?}"
         );
     }
 
