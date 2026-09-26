@@ -369,7 +369,7 @@ fn main() {
     let cases = if hard { HARD } else { MID };
     let title = if hard { "HARD" } else { "MID" };
     println!(
-        "shell_cost_bench — site_shell_cost Σ norm|current−target| (+leave); keep iff cost>0\n"
+        "shell_cost_bench — site_shell_cost Σ norm|current−target| (+leave, +dearomatic); keep iff cost>0\n"
     );
     let t0 = Instant::now();
     let rows: Vec<Row> = cases.iter().map(|(n, r, t)| eval_case(n, r, t)).collect();

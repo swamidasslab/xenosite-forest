@@ -9,12 +9,13 @@
 //! - [`align_shells`] — two [`MoleculeShells`] + a reactant→target map → the
 //!   **same atom shape** with **deltas** (target − reactant) on aligned atoms,
 //!   plus how many heavy atoms sit outside the alignment on each side.
-//! - **Cost** — at a site, Σ over atoms of normalized shell distance between
+//! - **Cost** — at a site, Σ over atoms of normalized distance between
 //!   `current + δ` and target ([`site_shell_cost`]). Each shell contributes
-//!   `L1 / Σ max(|a|,|b|)` ∈ [0,1] ([`shell_norm_l1`]), so each atom is at
-//!   most 3 (n0+n1+n2). Aligned atoms share n0 → at most 2. Site atoms are
-//!   matched as a **multiset** (orbit / MCS swap safe). `δ = 0` is distance
-//!   now; a complete edit scores 0. Close pairs use the joint site atom list.
+//!   `L1 / Σ max(|a|,|b|)` ∈ [0,1] ([`shell_norm_l1`]); plus |Δaromatic| ∈ {0,1}
+//!   as a dearomatization hint. Per atom ≤ 4 (≤ 3 when aligned n0 matches).
+//!   Site atoms matched as a **multiset** (orbit / MCS swap safe). `δ = 0` is
+//!   distance now; a complete edit scores 0. Close pairs use the joint site
+//!   atom list. Cleaving sites should pass [`site_atoms_with_leave`].
 //! - **Site bag** — [`SiteShellBag`]: order-invariant multiset of kept site
 //!   deltas plus cleaved/added counts. Cleavage (methyl leave) is first-class.
 //! - [`check_site_shell_bags`] — warn or error on mismatch after an edit.
@@ -100,12 +101,15 @@ impl AtomNeighborhood {
         self.l1(&Self::default())
     }
 
-    /// Normalized shell distance vs `other`: Σ [`shell_norm_l1`] over n0/n1/n2.
+    /// Normalized distance vs `other`: |Δaromatic| ∈ {0,1} plus Σ [`shell_norm_l1`]
+    /// over n0/n1/n2 (each ∈ [0,1]).
     ///
-    /// At most 3. When atoms are element-aligned, n0 matches → at most 2.
-    /// Aromatic is not included (shells only).
+    /// At most 4. When atoms are element-aligned, n0 matches → at most 3.
+    /// The aromatic term is the dearomatization hint (1 when aromaticity disagrees).
     pub fn norm_l1(&self, other: &Self) -> f64 {
-        shell_norm_l1(&self.n0, &other.n0)
+        let aromatic = (i32::from(self.aromatic) - i32::from(other.aromatic)).unsigned_abs() as f64;
+        aromatic
+            + shell_norm_l1(&self.n0, &other.n0)
             + shell_norm_l1(&self.n1, &other.n1)
             + shell_norm_l1(&self.n2, &other.n2)
     }
@@ -411,7 +415,7 @@ fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> A
 
 /// Site cost: Σ normalized |current + δ − target| at `site_atoms`.
 ///
-/// Each atom contributes [`AtomNeighborhood::norm_l1`] (≤ 3; ≤ 2 when n0 matches).
+/// Each atom contributes [`AtomNeighborhood::norm_l1`] (≤ 4; ≤ 3 when n0 matches).
 /// Projected site neighborhoods are matched to target site neighborhoods as a
 /// **multiset** (greedy), so unique-edit orbit mates / MCS orientation swaps do
 /// not inflate cost. Close pairs: pass **both** ends so mutual n1/n2 effects
@@ -815,8 +819,8 @@ mod tests {
     }
 
     #[test]
-    fn aligned_atom_norm_at_most_two() {
-        // Same element → n0 matches; only n1/n2 can differ → ≤ 2.
+    fn aligned_atom_norm_at_most_three_with_dearomatic() {
+        // Same element → n0 matches; n1/n2 + aromatic disagree → ≤ 3.
         let mut left = AtomNeighborhood {
             aromatic: 1,
             ..Default::default()
@@ -825,12 +829,17 @@ mod tests {
         left.n1.insert("C".into(), 1);
         left.n1.insert("H".into(), 3);
         let mut right = left.clone();
+        right.aromatic = 0;
         right.n1.insert("O".into(), 1);
         *right.n1.get_mut("H").unwrap() = 2;
         let n = left.norm_l1(&right);
-        assert!(n <= 2.0 + 1e-12, "{n}");
-        assert!(n > 0.0, "{n}");
+        assert!(n <= 3.0 + 1e-12, "{n}");
+        assert!(n > 1.0, "dearomatic hint should fire: {n}");
         assert_eq!(shell_norm_l1(&left.n0, &right.n0), 0.0);
+        // Pure dearomatic, shells equal → exactly 1.
+        let mut same_shells = left.clone();
+        same_shells.aromatic = 0;
+        assert!((left.norm_l1(&same_shells) - 1.0).abs() < 1e-12);
     }
 
     #[test]
