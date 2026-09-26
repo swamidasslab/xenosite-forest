@@ -4,7 +4,8 @@
 //! atom tags through edits). Expands via [`RuleSet::candidates`]: site–pattern–
 //! parent triples. A search reads [`PatternInfo`] / effect fields to decide,
 //! then materializes only for survivors. Nested sets stay namespaces on each
-//! step's leaf-first `rule_path`.
+//! step's leaf-first `rule_path` (stamped by RuleSet doors;
+//! [`RuleSet::with_outer_path`] appends ancestors — do not mint leaf names here).
 //!
 //! Outcomes carry [`crate::canonical_plan::Deps`] plans (elementary steps +
 //! precedes + [`crate::canonical_plan::Maybe`] cleavage bags). Composite leaves
@@ -1987,15 +1988,20 @@ where
             });
             self.counters.blocked_circular_oxygen += blocked;
         }
-        // Leaf-first path: this set, then ancestors still on the stack (root last).
-        let mut rule_path = vec![set.name.clone()];
-        for frame in self.pair_stack.iter().rev() {
-            rule_path.push(frame.set.name.clone());
-        }
+        // Leaf already stamped by pair_candidates_leaf; append ancestors (root last).
+        let outers: Vec<_> = self
+            .pair_stack
+            .iter()
+            .rev()
+            .map(|frame| frame.set.name.clone())
+            .collect();
         let pending: Vec<PendingPair<'a>> = pairs
             .into_iter()
-            .map(|pair| {
-                let pair = pair.with_rule_path(rule_path.clone());
+            .map(|mut pair| {
+                pair.rule_path = RuleSet::with_outer_path(
+                    std::mem::take(&mut pair.rule_path),
+                    outers.iter().cloned(),
+                );
                 PendingPair { pair, set }
             })
             .collect();

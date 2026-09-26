@@ -5,6 +5,12 @@
 //! full match set for that pattern); the ruleset walk does not buffer every
 //! pattern's candidates or every emission before yielding. Pair discovery may
 //! buffer SMARTS hits for one leaf's endpoints before yielding pairs.
+//!
+//! `rule_path` stamping lives on [`RuleSet`]: leaf batches use
+//! [`RuleSet::leaf_rule_path`] / [`RuleSet::stamp_pair_paths`]; nested frames
+//! append via [`RuleSet::with_outer_path`] (or one-level `parent_link` push).
+//! Prefer [`RuleSet::metabolites`] / [`RuleSet::pair_candidates_leaf`] over bare
+//! [`crate::pair_edit::pair_candidates`].
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -56,6 +62,7 @@ impl<'a> Candidates<'a> {
     }
 
     fn finish_candidate(&self, mut c: Candidate) -> Candidate {
+        // One outer per nested frame (same as RuleSet::with_outer_path).
         if let Some(parent_name) = &self.parent_link {
             c.rule_path.push(parent_name.clone());
         }
@@ -149,7 +156,7 @@ pub(crate) fn pattern_candidate_batch(
                 site,
                 orbit: hit.orbit,
                 pattern: pattern.resolve_for_match(mol, &hit.mapped),
-                rule_path: vec![set.name.clone()],
+                rule_path: set.leaf_rule_path(),
                 mapped: hit.mapped,
                 parent: ParentRef::Form(Box::new(forms[form_i].clone())),
             });
@@ -163,7 +170,7 @@ pub(crate) fn pattern_candidate_batch(
                 site,
                 orbit: hit.orbit,
                 pattern: pattern.resolve_for_match(mol, &hit.mapped),
-                rule_path: vec![set.name.clone()],
+                rule_path: set.leaf_rule_path(),
                 mapped: hit.mapped,
                 parent: ParentRef::Context,
             });
@@ -262,6 +269,7 @@ where
         from_nested_child: bool,
     ) -> Option<Emission> {
         if let Some(parent_name) = &self.parent_link {
+            // Nested frame append (same leaf-first order as RuleSet::with_outer_path).
             emission.rule_path.push(parent_name.clone());
         }
         // Fail-closed: only dedup when every product has a stable Chematic key.
@@ -399,8 +407,7 @@ where
 
             if !self.pairs_loaded {
                 self.pairs_loaded = true;
-                // Stamp leaf name like find_path; filter endpoints via pair_candidates_leaf
-                // after filter_rules on the leaf's endpoint patterns.
+                // Filter endpoints, then stamp via RuleSet (same as pair_candidates_leaf).
                 let endpoints: Vec<PatternInfo> = self
                     .set
                     .leaf_pair_endpoints()
@@ -411,10 +418,7 @@ where
                 if !endpoints.is_empty() {
                     match discover_pairs(self.mol, &endpoints) {
                         Ok(mut pairs) => {
-                            let path = vec![self.set.name.clone()];
-                            for pair in &mut pairs {
-                                pair.rule_path = path.clone();
-                            }
+                            self.set.stamp_pair_paths(&mut pairs);
                             self.pairs = pairs.into_iter();
                         }
                         Err(e) => {
@@ -464,7 +468,7 @@ where
                             cleaves: pair.effect.cleaves,
                             pattern_name: pair.pattern_name.clone(),
                             search_bias: pair.left.search_bias.min(pair.right.search_bias),
-                            rule_path: vec![self.set.name.clone()],
+                            rule_path: pair.rule_path.clone(),
                             mols,
                             products,
                             cleave_side_sig,
@@ -536,7 +540,6 @@ impl Iterator for PairCandidates<'_> {
             }
             let set = self.sets[self.set_i];
             self.set_i += 1;
-            // Same door as find_path: stamp leaf RuleSet name onto each pair.
             match set.pair_candidates_leaf(self.mol) {
                 Ok(pairs) if pairs.is_empty() => continue,
                 Ok(pairs) => self.pending = pairs.into_iter(),
@@ -565,7 +568,6 @@ struct PairEmissionFrame<'a> {
 struct PendingPairEmission<'a> {
     pair: PairCandidate,
     set: &'a RuleSet,
-    rule_path: Vec<Option<String>>,
 }
 
 enum PairEmissionAction<'a> {
@@ -585,18 +587,20 @@ impl<'a> PairEmissions<'a> {
     }
 
     fn load_leaf(&mut self, set: &'a RuleSet) -> Result<(), ForestError> {
-        let pairs = set.pair_candidates_leaf(self.mol)?;
-        let mut rule_path = vec![set.name.clone()];
-        for frame in self.stack.iter().rev() {
-            rule_path.push(frame.set.name.clone());
+        let mut pairs = set.pair_candidates_leaf(self.mol)?;
+        let outers: Vec<_> = self
+            .stack
+            .iter()
+            .rev()
+            .map(|frame| frame.set.name.clone())
+            .collect();
+        for pair in &mut pairs {
+            pair.rule_path =
+                RuleSet::with_outer_path(std::mem::take(&mut pair.rule_path), outers.iter().cloned());
         }
         let pending: Vec<_> = pairs
             .into_iter()
-            .map(|pair| PendingPairEmission {
-                pair,
-                set,
-                rule_path: rule_path.clone(),
-            })
+            .map(|pair| PendingPairEmission { pair, set })
             .collect();
         self.pending = pending.into_iter();
         Ok(())
@@ -675,7 +679,7 @@ impl Iterator for PairEmissions<'_> {
                                 .left
                                 .search_bias
                                 .min(pending.pair.right.search_bias),
-                            rule_path: pending.rule_path,
+                            rule_path: pending.pair.rule_path.clone(),
                             mols,
                             products,
                             cleave_side_sig,

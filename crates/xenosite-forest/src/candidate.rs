@@ -4,6 +4,11 @@
 //! products. A search reads [`PatternInfo`] / [`Effect`] to filter, then calls
 //! [`Candidate::materialize`] only for survivors — no filter closures inside
 //! the rule walk.
+//!
+//! Prefer [`crate::ruleset::RuleSet::candidates`] /
+//! [`crate::ruleset::RuleSet::metabolites`]: they stamp leaf-first
+//! [`Candidate::rule_path`]. Do not invent hop labels from
+//! [`PatternInfo::name`] when a leaf set name is present.
 
 use std::collections::BTreeMap;
 
@@ -42,6 +47,8 @@ pub struct Candidate {
     pub orbit: Vec<usize>,
     pub pattern: PatternInfo,
     /// Leaf-first rule namespace (emitting set, then containers).
+    /// Filled by [`crate::ruleset::RuleSet::candidates`] / metabolize batches
+    /// via [`crate::ruleset::RuleSet::leaf_rule_path`]; nested walks append outers.
     pub rule_path: Vec<Option<String>>,
     pub mapped: BTreeMap<u16, usize>,
     pub parent: ParentRef,

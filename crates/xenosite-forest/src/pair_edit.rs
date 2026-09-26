@@ -302,9 +302,14 @@ pub struct PairEmission {
 /// running the edit. [`PairCandidate::materialize`] finds alternating paths
 /// and applies end edits.
 ///
-/// [`Self::rule_path`] is the same leaf-first namespace as [`crate::candidate::Candidate`]:
-/// stamp it when discovering under a named [`crate::ruleset::RuleSet`] so
-/// [`Self::rule_name`] / [`Self::leaf_rule`] match find_path / metabolize.
+/// [`Self::rule_path`] is the same leaf-first namespace as [`crate::candidate::Candidate`].
+/// Prefer [`crate::ruleset::RuleSet::pair_candidates_leaf`] /
+/// [`crate::ruleset::RuleSet::pair_candidates`] /
+/// [`crate::ruleset::RuleSet::metabolites`] so the leaf name is stamped
+/// automatically. Bare [`pair_candidates`] leaves `rule_path` empty — call
+/// [`crate::ruleset::RuleSet::stamp_pair_paths`] (and
+/// [`crate::ruleset::RuleSet::with_outer_path`] for nested walks) if you must
+/// use the discovery primitive.
 #[derive(Clone, Debug)]
 pub struct PairCandidate {
     pub site: usize,
@@ -314,7 +319,8 @@ pub struct PairCandidate {
     /// Merged end effects (dearomatizes resolved against system aromaticity).
     pub effect: crate::pattern::Effect,
     /// Leaf-first rule namespace (emitting set, then containers). Empty when
-    /// discovered via bare [`pair_candidates`] without a [`RuleSet`].
+    /// discovered via bare [`pair_candidates`] without a
+    /// [`crate::ruleset::RuleSet`] stamp.
     pub rule_path: Vec<Option<String>>,
     map1: BTreeMap<u16, usize>,
     map2: BTreeMap<u16, usize>,
@@ -344,6 +350,10 @@ impl PairCandidate {
     }
 
     /// Stamp leaf-first namespace (replaces any prior path).
+    ///
+    /// Prefer [`crate::ruleset::RuleSet::stamp_pair_paths`] /
+    /// [`crate::ruleset::RuleSet::with_outer_path`] at discovery time so call
+    /// sites do not mint leaf names by hand.
     pub fn with_rule_path(mut self, rule_path: Vec<Option<String>>) -> Self {
         self.rule_path = rule_path;
         self
@@ -494,6 +504,12 @@ fn merge_effect_fields(
 }
 
 /// Discover pair sites without applying path flips.
+///
+/// Discovery primitive: returns pairs with empty [`PairCandidate::rule_path`].
+/// Prefer [`crate::ruleset::RuleSet::pair_candidates_leaf`] (or the nested
+/// [`RuleSet::pair_candidates`] / [`RuleSet::metabolites`] walk) so leaf names
+/// are stamped. If you filter endpoints first, call bare discovery then
+/// [`RuleSet::stamp_pair_paths`].
 pub fn pair_candidates(
     mol: &Molecule,
     endpoints: &[PatternInfo],

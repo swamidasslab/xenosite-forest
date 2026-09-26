@@ -5,6 +5,20 @@
 //! after the child that emitted (leaf first, outer last), matching Python
 //! `info["rule"]` / addition chain order.
 //!
+//! # Call pattern (rule_path)
+//!
+//! Prefer these doors — they stamp leaf names automatically:
+//! - [`RuleSet::metabolites`] / [`RuleSet::metabolize`] — SMIRKS + pairs as
+//!   [`Emission`]s (`rule_path` already leaf-first; nested walks append outers)
+//! - [`RuleSet::candidates`] — SMIRKS site hits with stamped [`Candidate::rule_path`]
+//! - [`RuleSet::pair_candidates`] / [`RuleSet::pair_candidates_leaf`] — pairs with
+//!   stamped [`PairCandidate::rule_path`]
+//!
+//! Bare [`crate::pair_edit::pair_candidates`] is a discovery primitive: it leaves
+//! `rule_path` empty. Callers that need a hop label must go through a RuleSet
+//! door (or [`RuleSet::stamp_pair_paths`] / [`RuleSet::with_outer_path`]).
+//! Do not invent leaf names at product_layer / find_path / enumerate.
+//!
 //! Primary walk: [`RuleSet::candidates`] is a pull iterator of site–pattern–
 //! [`ParentRef`] triples without applying edits. A search reads [`PatternInfo`]
 //! / [`Effect`] to filter, then [`Candidate::materialize`] only for survivors.
@@ -186,7 +200,9 @@ impl RuleSet {
     ///
     /// Pull iterator: each `next` advances one unique-edit survivor (or nested
     /// child). Pair-endpoint patterns are skipped here and resolved in
-    /// [`Self::metabolize`] / [`Self::pair_candidates`].
+    /// [`Self::metabolize`] / [`Self::pair_candidates`]. Each yield already has
+    /// a leaf-stamped [`crate::candidate::Candidate::rule_path`]; nested walks
+    /// append outer names.
     pub fn candidates<'a>(&'a self, mol: &'a Molecule) -> crate::stream::Candidates<'a> {
         crate::stream::Candidates::new(self, mol)
     }
@@ -204,9 +220,41 @@ impl RuleSet {
             .collect()
     }
 
+    /// Leaf segment of a leaf-first `rule_path`: this set's name alone.
+    /// Nested walks append outers via [`Self::with_outer_path`].
+    pub fn leaf_rule_path(&self) -> Vec<Option<String>> {
+        vec![self.name.clone()]
+    }
+
+    /// Append outer container names (root last) onto a leaf-stamped path.
+    ///
+    /// Used by find_path / pair_emissions after [`Self::pair_candidates_leaf`].
+    /// Prefer not rebuilding the leaf segment by hand.
+    pub fn with_outer_path(
+        mut leaf_first: Vec<Option<String>>,
+        outers: impl IntoIterator<Item = Option<String>>,
+    ) -> Vec<Option<String>> {
+        leaf_first.extend(outers);
+        leaf_first
+    }
+
+    /// Stamp this set's name onto each pair's [`PairCandidate::rule_path`].
+    ///
+    /// Prefer [`Self::pair_candidates_leaf`] (discovers + stamps). Use this when
+    /// endpoints were already filtered (metabolize) after bare
+    /// [`crate::pair_edit::pair_candidates`].
+    pub fn stamp_pair_paths(&self, pairs: &mut [crate::pair_edit::PairCandidate]) {
+        let path = self.leaf_rule_path();
+        for pair in pairs {
+            pair.rule_path = path.clone();
+        }
+    }
+
     /// Materialize every candidate (and leaf pair paths). No filter closures.
     ///
-    /// Pull iterator — collects nothing until the caller drives `next` / `collect`.
+    /// Preferred door for product_layer / enumerate / depth-1 compares: one
+    /// iterator for SMIRKS and ResonancePair, with leaf-first `rule_path`
+    /// already stamped. Pull — collects nothing until the caller drives `next`.
     pub fn metabolites<'a>(
         &'a self,
         mol: &'a Molecule,
@@ -217,7 +265,9 @@ impl RuleSet {
 
     /// ResonancePair path candidates for this set and nested children.
     ///
-    /// Discovery only — no path flip. Pull iterator over nested leaves.
+    /// Discovery only — no path flip. Pull iterator over nested leaves; each
+    /// pair is leaf-stamped via [`Self::pair_candidates_leaf`]. Prefer this over
+    /// bare [`crate::pair_edit::pair_candidates`].
     pub fn pair_candidates<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairCandidates<'a> {
         crate::stream::PairCandidates::new(self, mol)
     }
@@ -226,7 +276,8 @@ impl RuleSet {
     ///
     /// Stamps [`PairCandidate::rule_path`] with this set's name so
     /// [`PairCandidate::rule_name`] / [`PairCandidate::leaf_rule`] match
-    /// [`crate::candidate::Candidate`] (find_path, product_layer, ms1).
+    /// [`crate::candidate::Candidate`]. Nested searches append ancestors with
+    /// [`Self::with_outer_path`] — do not re-invent the leaf segment.
     pub fn pair_candidates_leaf(
         &self,
         mol: &Molecule,
@@ -236,17 +287,15 @@ impl RuleSet {
             return Ok(Vec::new());
         }
         let mut pairs = pair_candidates(mol, &endpoints)?;
-        let path = vec![self.name.clone()];
-        for pair in &mut pairs {
-            pair.rule_path = path.clone();
-        }
+        self.stamp_pair_paths(&mut pairs);
         Ok(pairs)
     }
 
     /// ResonancePair path emissions for this set and nested children.
     ///
     /// Pull iterator: materializes one pair at a time (discovery may buffer
-    /// SMARTS hits for a leaf). Prefer [`Self::metabolize`] when filters apply.
+    /// SMARTS hits for a leaf). Prefer [`Self::metabolize`] / [`Self::metabolites`]
+    /// when SMIRKS and pairs should share one walk.
     pub fn pair_emissions<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairEmissions<'a> {
         crate::stream::PairEmissions::new(self, mol)
     }
@@ -554,6 +603,36 @@ mod tests {
         let emission = &emissions[0];
         assert_eq!(emission.rule_path, vec![Some("Hydroxylation".into()), None]);
         assert_eq!(emission.namespace(), vec!["Hydroxylation"]);
+    }
+
+    #[test]
+    fn pair_leaf_door_stamps_rule_path_bare_does_not() {
+        use crate::pair_edit::pair_candidates as bare_pairs;
+        use crate::rules::quinone_formation;
+        let qf = quinone_formation();
+        let mol = parse_mol("COc1ccccc1").unwrap();
+        let stamped = qf.pair_candidates_leaf(&mol).unwrap();
+        assert!(!stamped.is_empty());
+        for pair in &stamped {
+            assert_eq!(pair.rule_path, qf.leaf_rule_path());
+            assert_eq!(pair.rule_name(), "QuinoneFormation");
+        }
+        let endpoints = qf.leaf_pair_endpoints();
+        let bare = bare_pairs(&mol, &endpoints).unwrap();
+        assert_eq!(bare.len(), stamped.len());
+        for pair in &bare {
+            assert!(pair.rule_path.is_empty());
+        }
+        let mut restamped = bare;
+        qf.stamp_pair_paths(&mut restamped);
+        let with_outer = RuleSet::with_outer_path(
+            restamped[0].rule_path.clone(),
+            [Some("PhaseOne".into())],
+        );
+        assert_eq!(
+            with_outer,
+            vec![Some("QuinoneFormation".into()), Some("PhaseOne".into())]
+        );
     }
 
     /// Two overlapping leaf rules, same SMARTS / same product — outer unique_csmi

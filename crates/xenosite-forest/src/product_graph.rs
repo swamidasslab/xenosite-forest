@@ -130,7 +130,8 @@ pub struct ProductChild {
 /// One-hop product layer from a tagged parent.
 ///
 /// One walk: [`RuleSet::metabolites`] (SMIRKS + pairs). Rule names come from
-/// emission `rule_path` (leaf RuleSet), same as find_path — no pair branch.
+/// emission `rule_path` (leaf RuleSet stamped by that door), same as find_path —
+/// no pair branch and no pattern-name aliases.
 pub fn product_layer(
     parent: &ForestMol,
     ruleset: &RuleSet,
