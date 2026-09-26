@@ -17,9 +17,9 @@ from __future__ import annotations
 from typing import Any
 
 
-def _native():
+def _native() -> Any:
     try:
-        import xenosite_forest as native
+        import xenosite_forest as native  # type: ignore[import-not-found]
     except ImportError as e:  # pragma: no cover - optional native wheel
         raise ImportError(
             "find_path_rust requires the xenosite-forest-native extension "
@@ -62,7 +62,7 @@ def find_path_rust(
 def native_available() -> bool:
     """True when ``xenosite_forest`` can be imported."""
     try:
-        import xenosite_forest  # noqa: F401
+        import xenosite_forest  # type: ignore[import-not-found]  # noqa: F401
 
         return True
     except ImportError:

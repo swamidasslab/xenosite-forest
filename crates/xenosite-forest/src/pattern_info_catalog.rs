@@ -6,10 +6,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::ForestMol;
 use crate::mol::{atom_idx, parse_mol};
 use crate::pattern::{Edit, Effect, PatternInfo, SiteKind, compose_delta_formula};
 use crate::rules::{catalog_names, leaf_rule};
-use crate::ForestMol;
 
 /// Probe mols that expose aromatic (and a few aliphatic) sites.
 const PROBES: &[&str] = &[

@@ -1998,7 +1998,8 @@ mod tests {
         assert!(
             aliph.iter().all(|c| !c.pattern.effect.dearomatizes),
             "aliphatic site resolves false; got {:?}",
-            aliph.iter()
+            aliph
+                .iter()
                 .map(|c| (c.site, c.pattern.effect.dearomatizes))
                 .collect::<Vec<_>>()
         );

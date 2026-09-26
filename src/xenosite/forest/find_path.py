@@ -608,12 +608,17 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
         return False
     # Bare span.dearomatizes=True means every possibility *claims* capability
     # to dearomatize. That is not "always dearomatizes after resolve" — path
-    # Hydrogenation declares capability while still reducing aliphatic C=O.
-    # Patterns that also add H are gated by adds_h_only below / filter_sites;
-    # do not refuse them here when the target keeps aromaticity.
+    # Hydrogenation (adds H) and Epoxidation (adds O) declare capability while
+    # still editing aliphatic sites. Those are gated by adds-H / site resolve
+    # below; do not refuse them here when the target keeps aromaticity.
     if (
         _all_span(span, "dearomatizes", bool, False)
-        and not _any_span(span, "adds", lambda value: bool(value) and "H" in value, "")
+        and not _any_span(
+            span,
+            "adds",
+            lambda value: bool(value) and ("H" in value or "O" in value),
+            "",
+        )
         and not diff.loses_aromaticity
     ):
         return False

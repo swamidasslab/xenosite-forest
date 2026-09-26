@@ -1035,10 +1035,7 @@ pub fn epoxide_hydration_canonical_plan(
     let c0 = site_atoms[0];
     let c1 = site_atoms[1];
     vec![
-        Step::new(
-            "Epoxidation",
-            [PlanAtom::index(c0), PlanAtom::index(c1)],
-        ),
+        Step::new("Epoxidation", [PlanAtom::index(c0), PlanAtom::index(c1)]),
         Step::new(
             "EpoxideOpening",
             [PlanAtom::index(c0), PlanAtom::oxygen_at(c0)],
@@ -1309,10 +1306,7 @@ mod tests {
                 &[c0, c1],
             ));
             assert_eq!(rules_of(&deps), ["Dehydrogenation"]);
-            assert!(
-                deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap(),
-                "{deps:?}"
-            );
+            assert!(deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap(), "{deps:?}");
         }
 
         // 2) OH → DH — phenol.
@@ -1327,10 +1321,7 @@ mod tests {
                 &[c_h, c_oh],
             ));
             assert_eq!(rules_of(&deps), ["Hydroxylation", "Dehydrogenation"]);
-            assert!(
-                deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap(),
-                "{deps:?}"
-            );
+            assert!(deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap(), "{deps:?}");
         }
 
         // 3) OH → OH → DH — benzene.

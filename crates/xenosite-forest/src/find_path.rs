@@ -1413,12 +1413,7 @@ where
             if here.as_ref() == self.target_csmi.as_str() {
                 self.counters.nodes += 1;
                 let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
-                record_yield_plan_signals(
-                    self.counters,
-                    &self.yielded,
-                    &plan,
-                    drop_skeleton_twins,
-                );
+                record_yield_plan_signals(self.counters, &self.yielded, &plan, drop_skeleton_twins);
                 if plan_already_yielded(&self.yielded, &plan, drop_skeleton_twins) {
                     continue;
                 }
@@ -1590,10 +1585,8 @@ where
                     steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
                     let mut plan = walk.plan.clone();
                     plan.extend(emission.plan.iter().cloned());
-                    let cost_gain = hop_cost_gain(
-                        parent_cost,
-                        child_diff.as_ref().map(|d| d.cost()),
-                    );
+                    let cost_gain =
+                        hop_cost_gain(parent_cost, child_diff.as_ref().map(|d| d.cost()));
                     let parent_f =
                         crate::forest::formula_l1(&walk.mol.formula(), &self.target_formula);
                     let child_f = crate::forest::formula_l1(&kept.formula(), &self.target_formula);
@@ -1604,17 +1597,17 @@ where
                         parent_cost,
                         child_diff.as_ref().map(|d| d.cost()),
                     );
-                    let diversity_key = if diversity && matches!(heap_score, HeapScoreMode::Match(_))
-                    {
-                        Some(diversity_key_for(
-                            &walk.mol,
-                            &kept,
-                            &emission.pattern_name,
-                            &emission.site_atoms,
-                        ))
-                    } else {
-                        None
-                    };
+                    let diversity_key =
+                        if diversity && matches!(heap_score, HeapScoreMode::Match(_)) {
+                            Some(diversity_key_for(
+                                &walk.mol,
+                                &kept,
+                                &emission.pattern_name,
+                                &emission.site_atoms,
+                            ))
+                        } else {
+                            None
+                        };
                     let match_priority = match &diversity_key {
                         Some(key) => {
                             let n = self.diversity_counts.get(key).copied().unwrap_or(0);
@@ -2238,12 +2231,7 @@ where
             let here = walk.mol.csmi();
             if here.as_ref() == self.target_csmi.as_str() {
                 let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
-                record_yield_plan_signals(
-                    self.counters,
-                    &self.yielded,
-                    &plan,
-                    drop_skeleton_twins,
-                );
+                record_yield_plan_signals(self.counters, &self.yielded, &plan, drop_skeleton_twins);
                 if plan_already_yielded(&self.yielded, &plan, drop_skeleton_twins) {
                     continue;
                 }

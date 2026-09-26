@@ -94,13 +94,7 @@ fn scores() -> [HeapScoreMode; 3] {
 fn step_line(hit: &PathOutcome) -> String {
     hit.steps
         .iter()
-        .map(|s| {
-            format!(
-                "{}:{}",
-                s.leaf_rule().unwrap_or("?"),
-                s.pattern_name
-            )
-        })
+        .map(|s| format!("{}:{}", s.leaf_rule().unwrap_or("?"), s.pattern_name))
         .collect::<Vec<_>>()
         .join(" → ")
 }

@@ -1257,7 +1257,11 @@ pub fn pattern_could_help_on(
     if can_cleave && !diff.has_cleavage() {
         return false;
     }
-    if effect.dearomatizes && !effect_adds_h(effect) && diff.loses_aromaticity.is_empty() {
+    if effect.dearomatizes
+        && !effect_adds_h(effect)
+        && !effect_adds_oxygen(effect)
+        && diff.loses_aromaticity.is_empty()
+    {
         return false;
     }
     let drops_h_only = !can_cleave && effect.adds.is_none() && effect_removes_h(effect);
@@ -1884,8 +1888,8 @@ mod tests {
         // Bare expand atom_diff does not place the epoxide O on a target
         // hydroxyl; mcs_extend views do (cost drop is lift/gold territory,
         // not find_path expand). See epoxide_toward_diol_drops_with_heavier_n_extra.
-        use crate::rules::epoxidation;
         use crate::forest_mol::ForestMol;
+        use crate::rules::epoxidation;
         let parent = ForestMol::parse("C=C").unwrap();
         let target = parse_mol("OCCO").unwrap();
         let c = epoxidation()

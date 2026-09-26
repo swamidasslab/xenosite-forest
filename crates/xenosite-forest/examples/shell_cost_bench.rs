@@ -320,7 +320,15 @@ fn record_decision(
     collect_dis: bool,
     drop: bool,
     gate: bool,
-    meta: (&'static str, &str, &'static str, String, f64, f64, Vec<usize>),
+    meta: (
+        &'static str,
+        &str,
+        &'static str,
+        String,
+        f64,
+        f64,
+        Vec<usize>,
+    ),
 ) {
     let (suite, case, kind, name, before, after, atoms) = meta;
     if drop {
@@ -968,10 +976,7 @@ fn main() {
     // Head-to-head: full n0/n1/n2 vs H-closer/no-n2 (PatternInfo unchanged).
     println!("\n## Shell view: full n0/n1/n2 vs H→closer/no-n2");
     let views = [
-        (
-            "full n0/n1/n2",
-            Mode::proj_baseline(),
-        ),
+        ("full n0/n1/n2", Mode::proj_baseline()),
         (
             "full +leave",
             Mode {

@@ -1425,13 +1425,8 @@ mod tests {
             .filter_map(|m| c.mapped.get(m).copied())
             .collect();
         let mapped: Vec<usize> = c.mapped.values().copied().collect();
-        let expanded = site_atoms_with_leave(
-            parent.mol(),
-            &site,
-            None,
-            &ad.cleavage_bonds,
-            &mapped,
-        );
+        let expanded =
+            site_atoms_with_leave(parent.mol(), &site, None, &ad.cleavage_bonds, &mapped);
         assert_eq!(
             expanded.len(),
             2,

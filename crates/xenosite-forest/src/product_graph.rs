@@ -180,10 +180,7 @@ pub fn product_layer(
             atoms.into_iter().collect()
         };
         let site_tags = site_tags_of(parent, &site_atoms);
-        let rule = c
-            .leaf_rule()
-            .unwrap_or(c.pattern.name.as_str())
-            .to_string();
+        let rule = c.leaf_rule().unwrap_or(c.pattern.name.as_str()).to_string();
         let cleaves = c.pattern.effect.cleaves && pieces.len() >= 2;
 
         for piece in pieces {
@@ -316,7 +313,10 @@ fn push_pair_children(
 }
 
 fn site_tags_of(parent: &ForestMol, site_atoms: &[usize]) -> Vec<Tag> {
-    let mut tags: Vec<Tag> = site_atoms.iter().filter_map(|&i| parent.tag_of(i)).collect();
+    let mut tags: Vec<Tag> = site_atoms
+        .iter()
+        .filter_map(|&i| parent.tag_of(i))
+        .collect();
     tags.sort();
     tags.dedup();
     tags
@@ -486,12 +486,8 @@ mod tests {
     #[test]
     fn ethane_hydroxylation_layer_has_ethanol() {
         let parent = ForestMol::parse("CC").unwrap();
-        let layer = product_layer(
-            &parent,
-            &hydroxylation(),
-            &ProductGraphConfig::default(),
-        )
-        .unwrap();
+        let layer =
+            product_layer(&parent, &hydroxylation(), &ProductGraphConfig::default()).unwrap();
         assert!(!layer.is_empty());
         let ethanol = canon_of("CCO").unwrap();
         assert!(
@@ -510,15 +506,13 @@ mod tests {
 
     #[test]
     fn anisole_product_graph_reaches_phenol() {
-        let (stats, graph) = product_graph_stats(
-            "COc1ccccc1",
-            Some("Oc1ccccc1"),
-            &o_dealkylation(),
-            64,
-            4,
-        )
-        .unwrap();
-        assert!(stats.reaches_target, "nodes={:?}", graph.nodes.iter().map(|n| &n.csmi).collect::<Vec<_>>());
+        let (stats, graph) =
+            product_graph_stats("COc1ccccc1", Some("Oc1ccccc1"), &o_dealkylation(), 64, 4).unwrap();
+        assert!(
+            stats.reaches_target,
+            "nodes={:?}",
+            graph.nodes.iter().map(|n| &n.csmi).collect::<Vec<_>>()
+        );
         assert!(stats.n_nodes >= 2);
         assert!(stats.n_edges >= 1);
     }
@@ -563,12 +557,6 @@ mod tests {
         let target = crate::mol::parse_mol("Oc1ccccc1").unwrap();
         let tc = canon_of("Oc1ccccc1").unwrap();
         let diff = atom_diff(parent.mol(), &target);
-        assert!(fragment_worth_expanding(
-            Some(&diff),
-            &tc,
-            &target,
-            &tc,
-            7
-        ));
+        assert!(fragment_worth_expanding(Some(&diff), &tc, &target, &tc, 7));
     }
 }

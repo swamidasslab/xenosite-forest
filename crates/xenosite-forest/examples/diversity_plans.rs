@@ -147,7 +147,18 @@ fn main() {
     );
     println!(
         "{:<28} {:>4} {:>6} {:>5} {:>5} {:>5} {:>5} {:>6} {:>5} {:>5} {:>5} {:>7}",
-        "case", "mode", "bill", "hits", "uniq", "bags", "linP", "skelP", "dup", "ex", "sk", "repush"
+        "case",
+        "mode",
+        "bill",
+        "hits",
+        "uniq",
+        "bags",
+        "linP",
+        "skelP",
+        "dup",
+        "ex",
+        "sk",
+        "repush"
     );
 
     let mut tot_off_bill = 0usize;
@@ -209,15 +220,7 @@ fn main() {
     );
     println!(
         "{:<28} {:>4} {:>6} {:>5} {:>5} {:>5} {:>5} {:>6}  drop_dup={}",
-        "",
-        "−n",
-        tot_on_bill,
-        "",
-        tot_on_uniq,
-        "",
-        "",
-        tot_on_skel_p,
-        tot_on_dup
+        "", "−n", tot_on_bill, "", tot_on_uniq, "", "", tot_on_skel_p, tot_on_dup
     );
     println!(
         "\nuniq = distinct step@site sequences among yielded hits; \

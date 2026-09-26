@@ -8,7 +8,7 @@
 use std::env;
 use std::time::Instant;
 
-use xenosite_forest::{product_graph_stats, phase_one};
+use xenosite_forest::{phase_one, product_graph_stats};
 
 const MID: &[(&str, &str, &str)] = &[
     (
@@ -26,11 +26,7 @@ const MID: &[(&str, &str, &str)] = &[
         "COc1ccc(O)cc1",
         "O=C1C=C(O)C(=O)C(O)=C1",
     ),
-    (
-        "anisole→phenol",
-        "COc1ccccc1",
-        "Oc1ccccc1",
-    ),
+    ("anisole→phenol", "COc1ccccc1", "Oc1ccccc1"),
 ];
 
 const HARD: &[(&str, &str, &str)] = &[

@@ -329,11 +329,9 @@ where
                 match c.emit(self.mol) {
                     Ok(Some(mut emission)) => {
                         if self.set.has_plan_hook() {
-                            emission.plan = self.set.canonical_plan(
-                                self.mol,
-                                &emission.site_atoms,
-                                None,
-                            );
+                            emission.plan =
+                                self.set
+                                    .canonical_plan(self.mol, &emission.site_atoms, None);
                         }
                         if let Some(e) = self.take_emission(emission, false) {
                             return Some(Ok(e));

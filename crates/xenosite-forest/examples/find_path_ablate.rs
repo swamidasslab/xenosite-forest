@@ -323,11 +323,7 @@ fn main() {
     let repeats = parse_u64(&args, "--repeats", 3) as u32;
     let budget = Duration::from_secs(parse_u64(&args, "--budget-secs", 60));
 
-    let (cases, title) = if hard {
-        (HARD, "hard")
-    } else {
-        (MID, "mid")
-    };
+    let (cases, title) = if hard { (HARD, "hard") } else { (MID, "mid") };
 
     let base_cfg = FindPathConfig {
         max_paths,
