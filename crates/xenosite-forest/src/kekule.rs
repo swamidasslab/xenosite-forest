@@ -1571,17 +1571,36 @@ mod tests {
         }
     }
 
-    /// Naphthalene → 1,4-naphthoquinone: one fused ring collapses to a
-    /// cyclohexadienedione; the other remains aromatic. Gate is cyclic 2-core
-    /// + Kekulé + 4n+2 — no `aromatize` / sanitize call.
-    ///
-    /// Reactant topology `c1ccc2ccccc2c1`; product shape
-    /// `O=C1C=CC(=O)c2ccccc12`. Forced exocyclic C=O doubles consume the
-    /// quinone carbons' π demand; residual 2-core keeps the benzenoid sextet.
+
+    /// Naphthalene → 1,4-naphthoquinone: one fused aromatic system partially
+    /// collapses. Reactant `c1ccc2ccccc2c1` is one connected conjugated
+    /// component. Product shape `O=C1C=CC(=O)c2ccccc12` keeps the other fused
+    /// ring aromatic (`c2ccccc12`). Gate is cyclic 2-core + Kekulé + 4n+2 —
+    /// **no** `aromatize` / sanitize call.
     #[test]
     fn naphthalene_14_naphthoquinone_partial_collapse_without_sanitize() {
-        // 1,4-naphthalenediol: phenol ends become the forced C=O leaves.
-        // Indices (RDKit/chematic): O0–C1, O5–C4; fused ring C6–C11.
+        // --- Reactant: one connected fused aromatic system ---
+        let reactant = parse_mol("c1ccc2ccccc2c1").unwrap();
+        let reactant_sys = PiGraph::conjugated(&reactant, 0);
+        assert_eq!(
+            reactant_sys.atoms.len(),
+            10,
+            "naphthalene is one conjugated system: {:?}",
+            reactant_sys.atoms
+        );
+
+        // --- Product target (CSMI lock) ---
+        let want_product = canon_of("O=C1C=CC(=O)c2ccccc12").unwrap();
+        assert_eq!(
+            canon_of("O=C1C=CC(=O)c2ccccc12").unwrap(),
+            want_product,
+            "product SMILES must be self-stable"
+        );
+
+        // --- Collapse gate without aromatize/sanitize ---
+        // 1,4-naphthalenediol is the pair-door parent whose phenol ends become
+        // forced C=O leaves (same connectivity as the product quinone ring).
+        // Indices: O0–C1, O5–C4; fused benzenoid C6–C11.
         let mol = parse_mol("Oc1ccc(O)c2ccccc12").unwrap();
         let parent = PiGraph::conjugated(&mol, 1);
         assert!(
@@ -1589,11 +1608,10 @@ mod tests {
             "naphthalene diol is one fused conjugated system: {:?}",
             parent.atoms
         );
-        let forced: BTreeSet<(usize, usize)> =
-            [(0usize, 1usize), (4usize, 5usize)]
-                .into_iter()
-                .map(|(a, b)| bond_key(a, b))
-                .collect();
+        let forced: BTreeSet<(usize, usize)> = [(0usize, 1usize), (4usize, 5usize)]
+            .into_iter()
+            .map(|(a, b)| bond_key(a, b))
+            .collect();
         // Perceive as the emit path does: only the in-system endpoint of each
         // exocyclic forced double is demand-consumed.
         let residual = parent.after_forced_doubles(&forced);
@@ -1607,6 +1625,7 @@ mod tests {
             BTreeSet::from([6, 7, 8, 9, 10, 11]),
             "dangling quinone ring strips; fused benzenoid 2-core remains"
         );
+        // No aromatize / sanitize — aromaticity is the 2-core + Kekulé gate.
         let aromatic = residual.aromatic_2core_atoms(&mol, &KekuleConfig::for_constraints());
         assert_eq!(
             aromatic,
@@ -1616,6 +1635,20 @@ mod tests {
         assert!(
             !aromatic.contains(&1) && !aromatic.contains(&4) && !aromatic.contains(&2),
             "quinone-ring carbons must not stay aromatic"
+        );
+
+        // Surviving sextet matches the aromatic atoms on the product SMILES
+        // (after a separate parse used only for this cross-check).
+        let product = parse_mol("O=C1C=CC(=O)c2ccccc12").unwrap();
+        assert_eq!(canon_of(&canon_smiles(&product)).unwrap(), want_product);
+        let product_aromatic: BTreeSet<_> = product
+            .atoms()
+            .filter_map(|(idx, atom)| atom.aromatic.then_some(atom_usize(idx)))
+            .collect();
+        assert_eq!(
+            product_aromatic.len(),
+            6,
+            "product keeps one aromatic fused ring: {product_aromatic:?}"
         );
     }
 
