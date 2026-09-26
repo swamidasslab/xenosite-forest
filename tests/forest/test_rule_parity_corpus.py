@@ -18,6 +18,11 @@ relative to Rust.
 Mapped reactant ``[#Z]`` (aromaticable Z) must hit **aliphatic and aromatic**
 in the corpus whenever both states are reachable — data indicator on the
 SMARTS, not rule-name branches (equivalent ``#`` expand coverage).
+
+Cleaving patterns (``cleaves`` on the PatternInfo / possibility) must have a
+corpus mol where the SMARTS hits with a mapped atom in a ring whenever such
+a ring hit is reachable on a small probe set — grow ``PARITY_FUZZ_MOLS``, do
+not special-case rule names.
 """
 
 from __future__ import annotations
@@ -214,6 +219,107 @@ def test_parity_fuzz_mols_cover_aliphatic_and_aromatic_smarts_branches():
         "SMARTS aliphatic/aromatic branch gaps — add covering mols to "
         "PARITY_FUZZ_MOLS (data indicator: mapped [#Z] on aromaticable Z):\n"
         + "\n".join(f"  {g}" for g in gaps[:40])
+    )
+
+
+def test_parity_fuzz_mols_cover_cleavage_ring_matches():
+    """Cleaving SMARTS with a reachable ring hit must appear in-corpus on-ring.
+
+    Data indicator: ``cleaves`` on the PatternInfo or a possibility. A ring
+    match is any SMARTS hit where at least one mapped reactant atom is in a
+    ring. Reachability uses a fixed ring-substrate probe set (not the corpus);
+    gaps are fixed by growing ``PARITY_FUZZ_MOLS``. Patterns that never match
+    in a ring on the probes are skipped — no rule-name allowlist.
+    """
+
+    from xenosite.forest.rules import _kekule_forms, _site_indexes
+
+    # Reachability probes only — gaps are fixed by growing PARITY_FUZZ_MOLS.
+    ring_probes = (
+        "C1OC1",
+        "C1CCCO1",
+        "C1CCOCC1",
+        "c1ccccc1OC",
+        "c1ccccc1OC(=O)C",
+        "C1CCNCC1",
+        "CN1CCCC1",
+        "c1ccncc1",
+        "c1ccc2[nH]ccc2c1",
+        "c1ccc2occc2c1",
+        "c1ccc2sccc2c1",
+        "c1ccc2c(c1)OCO2",
+        "O=C1CCCC1",
+        "O=C1CCCCO1",
+        "O=C1CCCN1",
+        "C1CSSC1",
+        "C1COOC1",
+        "O=S1CCCC1",
+        "c1ccc2nnccc2c1",
+        "C1COP(=O)(O)OC1",
+        "ClC1CCCC1",
+        "ClC1(Cl)CCCC1",
+        "OC1CCCC1",
+        "OC1NCCC1",
+        "OC1OCCC1",
+        "O=[N+]([O-])c1ccccc1",
+        "O=[N+]([O-])C1CCCC1",
+        "C1CN1",
+        "C1CS1",
+        "c1ccc2c(c1)Nc1ccccc1O2",
+        "CC1(C)CO1",
+        "O=NC1CCCC1",
+    )
+
+    def effect_cleaves(info) -> bool:
+        if info.get("cleaves"):
+            return True
+        return any(p.get("cleaves") for p in (info.get("possibilities") or ()))
+
+    def any_mapped_in_ring(mol, mapped: dict[int, int]) -> bool:
+        return any(mol.GetAtomWithIdx(idx).IsInRing() for idx in mapped.values())
+
+    def first_ring_hit(
+        reactant: str, info, smiles_list: tuple[str, ...]
+    ) -> str | None:
+        for smiles in smiles_list:
+            mol = MolFromSmiles(smiles)
+            if mol is None:
+                continue
+            for work in _kekule_forms(mol):
+                for mapped in work.xf.smarts_matches(reactant):
+                    if not _site_indexes(mapped, info):
+                        continue
+                    if any_mapped_in_ring(work, mapped):
+                        return smiles
+        return None
+
+    seen: set[tuple[str, str, str]] = set()
+    gaps: list[str] = []
+    reachable = 0
+    for row in iter_pattern_possibilities():
+        info = pattern_info_for(row)
+        if not effect_cleaves(info):
+            continue
+        key = (row.rule_cls.__name__, row.pattern_name or "?", row.smarts)
+        if key in seen:
+            continue
+        seen.add(key)
+        reactant = row.smarts.split(">>", 1)[0]
+        probe_hit = first_ring_hit(reactant, info, ring_probes)
+        if probe_hit is None:
+            continue
+        reachable += 1
+        if first_ring_hit(reactant, info, PARITY_FUZZ_MOLS) is None:
+            gaps.append(
+                f"{row.rule_cls.__name__}/{row.pattern_name or '?'} "
+                f"ring-reachable via {probe_hit!r} "
+                f"(smarts={reactant!r})"
+            )
+
+    assert reachable > 0, "expected some cleaving patterns to match in a ring"
+    assert not gaps, (
+        "Cleavage ring-match gaps — add covering mols to PARITY_FUZZ_MOLS "
+        "(mapped atom in a ring):\n" + "\n".join(f"  {g}" for g in gaps[:40])
     )
 
 

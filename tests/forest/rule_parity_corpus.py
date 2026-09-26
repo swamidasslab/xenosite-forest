@@ -646,6 +646,16 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
     ParityEntry('c1ccc2c(c1)Nc1ccccc1O2', ()),
     ParityEntry('[nH]1cccc1', ()),
     ParityEntry('c1ccncc1', ()),
+    # Ring-context cleavage substrates (meta-test: cleaving SMARTS with a
+    # reachable ring hit must appear in-corpus with a mapped atom in a ring).
+    ParityEntry('c1ccc2nnccc2c1', ()),  # cyclic azo (cinnoline)
+    ParityEntry('OC1NCCC1', ()),  # cyclic hemiaminal
+    ParityEntry('C1COP(=O)(O)OC1', ()),  # cyclic phosphate
+    ParityEntry('O=C1CCCCO1', ()),  # lactone
+    ParityEntry('ClC1(Cl)CCCC1', ()),  # gem-dihalo cyclohexane
+    ParityEntry('C1COOC1', ()),  # cyclic peroxide
+    ParityEntry('O=S1CCCC1', ()),  # cyclic sulfoxide
+    ParityEntry('C1CSSC1', ()),  # cyclic disulfide
 )
 
 
