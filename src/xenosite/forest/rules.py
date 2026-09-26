@@ -63,6 +63,7 @@ from xenosite.forest.rdkitutil import (
     rw_copy,
     sanitize_catch,
     sanitized_fragments,
+    refuse_dearomatized_ketene,
 )
 from xenosite.forest.records import (
     EditCounters,
@@ -350,6 +351,16 @@ class ReactionRule:
                 products.extend(pieces)
             if not products:
                 continue
+
+            # O-leave cleavage: refuse fully dearomatized ketenes (benzoic →
+            # O=C=C1CCCCC1). Matches Rust accept_o_leave_product. Drop the
+            # whole emission when a heavy piece is refused (not just the leave).
+            leave = (info.get("options") or {}).get("leave_formula") or {}
+            if leave.get("O") == 1 and not any(
+                k != "O" and v for k, v in leave.items()
+            ):
+                if any(refuse_dearomatized_ketene(mol, p) for p in products):
+                    continue
 
             for p in products:
                 p.xf.sanitize()

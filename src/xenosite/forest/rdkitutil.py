@@ -1656,6 +1656,37 @@ def _sanitize_piece(frag: Mol) -> bool:
     return not _nitrogen_two_doubles(frag)
 
 
+def refuse_dearomatized_ketene(parent: Mol, product: Mol) -> bool:
+    """True when ``product`` should be dropped as aromatic→ketene junk.
+
+    O-leave cleavage (dehydration) on an aromatic acid must not emit a fully
+    aliphatic ketene (``O=C=C1CCCCC1``). Ring-open dealk ketenes that retain
+    an aromatic piece are kept. Mirrors Rust ``accept_o_leave_product``.
+    """
+
+    if not any(a.GetIsAromatic() for a in parent.GetAtoms()):
+        return False
+    if any(a.GetIsAromatic() for a in product.GetAtoms()):
+        return False
+    # Ketene carbon: C with double bonds to both C and O.
+    for atom in product.GetAtoms():
+        if atom.GetAtomicNum() != 6:
+            continue
+        to_c = to_o = False
+        for bond in atom.GetBonds():
+            if bond.GetBondType() != BondType.DOUBLE:
+                continue
+            other = bond.GetOtherAtom(atom)
+            z = other.GetAtomicNum()
+            if z == 6:
+                to_c = True
+            elif z == 8:
+                to_o = True
+        if to_c and to_o:
+            return True
+    return False
+
+
 def carry_forest(src: Mol, dst: Mol) -> Mol:
     """Deep-copy ``src._forest`` onto ``dst``, remapped by ``forestLabel``.
 

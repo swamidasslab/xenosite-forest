@@ -34,7 +34,7 @@ use crate::mol::{Molecule, atom_idx, atom_usize, canon_smiles};
 use crate::pair_edit::pair_candidates;
 use crate::pattern::{Edit, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
-use crate::valence::accept_product;
+use crate::valence::{accept_o_leave_product, accept_product};
 
 /// True when the SMARTS bond between the first two `site_map` atoms is an
 /// exclusive double (`=`), not `=,:`. Epoxidation matches that on Kekulé forms.
@@ -540,9 +540,18 @@ pub(crate) fn apply_edit_mols(
     // Aromatic alkene/alkyne SMIRKS can rematerialize the reactant (pyrrole /
     // thiophene H). Refuse identity — same gate as pair path_end.
     let parent_csmi = canon_smiles(mol);
+    let o_leave = pattern.effect.cleaves
+        && pattern.effect.leave_formula == crate::pattern::leave_o();
     Ok(products
         .into_iter()
         .filter(|p| canon_smiles(p) != parent_csmi)
+        .filter(|p| {
+            if o_leave {
+                accept_o_leave_product(mol, p)
+            } else {
+                true
+            }
+        })
         .collect())
 }
 

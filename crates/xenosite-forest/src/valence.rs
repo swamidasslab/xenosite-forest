@@ -56,6 +56,48 @@ fn oxygen_oxonium(mol: &Molecule) -> bool {
     false
 }
 
+/// Cumulative `C=C=O` (ketene carbon: C with double bonds to C and O).
+pub fn has_ketene(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() != 6 {
+            continue;
+        }
+        let mut to_c = false;
+        let mut to_o = false;
+        for (nbr, bidx) in mol.neighbors(idx) {
+            if mol.bond(bidx).order != BondOrder::Double {
+                continue;
+            }
+            match mol.atom(nbr).element.atomic_number() {
+                6 => to_c = true,
+                8 => to_o = true,
+                _ => {}
+            }
+        }
+        if to_c && to_o {
+            return true;
+        }
+    }
+    false
+}
+
+/// True when any atom is aromatic.
+pub fn has_aromatic_atom(mol: &Molecule) -> bool {
+    mol.atoms().any(|(_, a)| a.aromatic)
+}
+
+/// O-leave cleavage must not fully dearomatize into a ketene (benzoic acid →
+/// `O=C=C1CCCCC1`). Ring-open dealk ketenes that keep an aromatic piece pass.
+pub fn accept_o_leave_product(parent: &Molecule, product: &Molecule) -> bool {
+    if !accept_product(product) {
+        return false;
+    }
+    if has_aromatic_atom(parent) && !has_aromatic_atom(product) && has_ketene(product) {
+        return false;
+    }
+    true
+}
+
 /// Organic C/N/O atoms have enough bonds+H for a closed shell (no radicals).
 fn closed_shell(mol: &Molecule) -> bool {
     for (idx, atom) in mol.atoms() {
