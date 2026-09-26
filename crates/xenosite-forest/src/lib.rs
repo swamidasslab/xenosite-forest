@@ -65,7 +65,7 @@ pub use atom_diff::{
     try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
-pub use candidate::{Candidate, ParentRef};
+pub use candidate::{Candidate, EditCandidate, ParentRef};
 pub use canonical_plan::{
     ApplyN, ApplyNEmitStats, ApplyNProduct, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps,
     Linearization, Maybe, PlanAtom, Step, align_deps_indices, apply_n_distinct_products,
@@ -81,8 +81,8 @@ pub use cleavage_graph::{
     fold_cleavage_arms,
 };
 pub use enumerate::{
-    EnumConfig, EnumOrder, Metabolite, MetaboliteEnum, PathHop, PathInfo, bfs, dfs,
-    enumerate_metabolites,
+    EnumConfig, EnumOrder, Metabolite, MetaboliteEnum, PathHop, PathInfo, bfs, bfs_default, dfs,
+    dfs_default, enumerate_metabolites,
 };
 pub use find_path::{
     FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
@@ -129,10 +129,11 @@ pub use pattern::{
 };
 pub use product_graph::{
     ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
-    product_graph, product_graph_stats, product_layer,
+    product_graph, product_graph_default, product_graph_stats, product_layer,
 };
 pub use rules::{
-    all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
+    all_rules, catalog_names, default_ruleset, default_ruleset_ref, epoxide_hydration, leaf_rule,
+    phase_one,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
@@ -140,7 +141,7 @@ pub use ruleset::{
 };
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;
-pub use stream::{Candidates, Metabolize, PairCandidates};
+pub use stream::{Candidates, Metabolize};
 pub use unique_edit::{
     UniqueSite, same_site_orbit, unique_atom_sites, unique_atom_sites_with_orbits,
 };

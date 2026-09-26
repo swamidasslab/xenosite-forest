@@ -331,6 +331,15 @@ pub fn product_graph(
     Ok(ProductGraph { nodes })
 }
 
+/// [`product_graph`] with [`crate::rules::default_ruleset`]. Override via
+/// [`product_graph`].
+pub fn product_graph_default(
+    start: &str,
+    config: &ProductGraphConfig,
+) -> Result<ProductGraph, ForestError> {
+    product_graph(start, crate::rules::default_ruleset_ref(), config)
+}
+
 /// Compact stats for benches.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProductGraphStats {

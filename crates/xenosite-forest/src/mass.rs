@@ -275,7 +275,7 @@ mod tests {
         let cand = set
             .candidates(&epox)
             .map(|c| c.unwrap())
-            .find(|c| c.pattern.name == "hydrate")
+            .find(|c| c.pattern_name() == "hydrate")
             .unwrap();
         let product = &cand.materialize_mols(&epox).unwrap()[0];
         let observed = formula_delta(&parent_f, &molecule_formula(product)).counts;
@@ -299,7 +299,7 @@ mod tests {
         let cand = set
             .candidates(&mol)
             .map(|c| c.unwrap())
-            .find(|c| c.pattern.name == "hydroxy")
+            .find(|c| c.pattern_name() == "hydroxy")
             .unwrap();
         let product = &cand.materialize_mols(&mol).unwrap()[0];
         let observed = formula_delta(&parent_f, &molecule_formula(product)).counts;

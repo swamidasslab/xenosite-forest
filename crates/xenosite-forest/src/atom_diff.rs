@@ -1309,16 +1309,7 @@ pub fn pattern_could_help_mol(
 }
 
 fn site_atoms(candidate: &Candidate) -> Vec<usize> {
-    let mut atoms: Vec<usize> = candidate
-        .pattern
-        .site_map
-        .iter()
-        .filter_map(|m| candidate.mapped.get(m).copied())
-        .collect();
-    if atoms.is_empty() {
-        atoms.push(candidate.site);
-    }
-    atoms
+    candidate.site_atoms()
 }
 
 fn leaving_heavy_counts(mol: &Molecule, atoms: &[usize]) -> Option<(usize, usize)> {
@@ -1522,7 +1513,13 @@ pub fn candidate_could_help_on(
     mol: Option<&Molecule>,
     target: Option<&Molecule>,
 ) -> bool {
-    let effect = &candidate.pattern.effect;
+    if let Some(pair) = candidate.as_pair() {
+        let (Some(m), Some(t)) = (mol, target) else {
+            return false;
+        };
+        return pair_could_help(pair, diff, m, t);
+    }
+    let effect = candidate.effect();
     let ok = match (mol, target) {
         (Some(m), Some(t)) => pattern_could_help_mol(effect, diff, m, t),
         _ => pattern_could_help_on(effect, diff, mol, target),
@@ -1566,7 +1563,7 @@ fn candidate_could_help_on_view(
     mol: Option<&Molecule>,
     target: Option<&Molecule>,
 ) -> bool {
-    let effect = &candidate.pattern.effect;
+    let effect = candidate.effect();
     if effect_adds_oxygen(effect) && !effect.dearomatizes {
         let (Some(m), Some(t)) = (mol, target) else {
             return false;
@@ -1687,7 +1684,7 @@ pub fn candidate_order_key_on(
     mol: Option<&Molecule>,
     target: Option<&Molecule>,
 ) -> (u8, u8, u8, i32, String) {
-    let effect = &candidate.pattern.effect;
+    let effect = candidate.effect();
     let want_cleave = diff.target_smaller() || diff.has_cleavage();
     let want_dear = !diff.loses_aromaticity.is_empty();
     let want_oxy = target.is_some_and(|t| any_needs_oxygen(t, diff));
@@ -1705,7 +1702,7 @@ pub fn candidate_order_key_on(
         secondary,
         tertiary,
         -progress,
-        candidate.pattern.name.clone(),
+        candidate.pattern_name().to_string(),
     )
 }
 
@@ -1830,7 +1827,7 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert!(
-            cands.iter().any(|c| c.pattern.effect.cleaves
+            cands.iter().any(|c| c.effect().cleaves
                 && candidate_could_help_on(c, &diff, Some(&reactant), Some(&target))),
             "dealkylation should survive filter; diff={diff:?}"
         );
@@ -2110,18 +2107,18 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         for c in &cands {
-            if c.pattern.effect.adds.as_deref() == Some("HH")
+            if c.effect().adds.as_deref() == Some("HH")
                 && !any_h_gain(&reactant, &target, &diff)
             {
                 assert!(
                     !pattern_could_help_on(
-                        &c.pattern.effect,
+                        &c.effect(),
                         &diff,
                         Some(&reactant),
                         Some(&target)
-                    ) || c.pattern.effect.cleaves,
+                    ) || c.effect().cleaves,
                     "pattern {} should not help toward quinone",
-                    c.pattern.name
+                    c.pattern_name()
                 );
             }
         }
@@ -2164,7 +2161,7 @@ mod tests {
             .unwrap();
         let carbonyl: Vec<_> = cands
             .iter()
-            .filter(|c| c.pattern.name == "carbonyl")
+            .filter(|c| c.pattern_name() == "carbonyl")
             .collect();
         assert!(!carbonyl.is_empty(), "expected carbonyl OR candidates");
         assert!(
@@ -2197,7 +2194,7 @@ mod tests {
             .unwrap();
         let carbonyl: Vec<_> = cands
             .iter()
-            .filter(|c| c.pattern.name == "carbonyl")
+            .filter(|c| c.pattern_name() == "carbonyl")
             .collect();
         assert!(
             !carbonyl.is_empty(),
@@ -2224,7 +2221,7 @@ mod tests {
             .unwrap();
         let c = cands
             .iter()
-            .find(|c| c.pattern.name == "carbonyl")
+            .find(|c| c.pattern_name() == "carbonyl")
             .expect("carbonyl");
         let (_a, _b, _c, prog_no_mol, _) = candidate_order_key_on(c, &diff, None, None);
         let (_a, _b, _c, prog_with, _) =
@@ -2309,8 +2306,8 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = &cands[0];
-        let atoms = [c.site];
-        let goal = residual_cost_after_site_cast(&parent_diff, &c.pattern.effect, &atoms, &[]);
+        let atoms = [c.site()];
+        let goal = residual_cost_after_site_cast(&parent_diff, &c.effect(), &atoms, &[]);
         // Casting hydroxyl onto a needs-oxygen site should claim the O gap.
         assert!(
             goal < parent_diff.cost(),

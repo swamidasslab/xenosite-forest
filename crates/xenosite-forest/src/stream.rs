@@ -6,11 +6,9 @@
 //! pattern's candidates or every emission before yielding. Pair discovery may
 //! buffer SMARTS hits for one leaf's endpoints before yielding pairs.
 //!
-//! `rule_path` stamping lives on [`RuleSet`]: leaf batches use
-//! [`RuleSet::leaf_rule_path`] / [`RuleSet::stamp_pair_paths`]; nested frames
-//! append via [`RuleSet::with_outer_path`] (or one-level `parent_link` push).
-//! Prefer [`RuleSet::metabolites`] / [`RuleSet::pair_candidates_leaf`] over bare
-//! [`crate::pair_edit::pair_candidates`].
+//! Prefer [`RuleSet::candidates`] / [`RuleSet::metabolites`]: both yield SMIRKS
+//! and ResonancePair under [`Candidate`] / [`Emission`]. Pair-specific doors are
+//! internal — callers do not branch on pair discovery.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -24,7 +22,7 @@ use crate::pattern::{Edit, Emission, PatternInfo, SiteInfo};
 use crate::ruleset::{RuleMember, RuleSet, site_bond_is_exclusive_double};
 use crate::unique_edit::{unique_sites, unique_sites_on_forms};
 
-/// Discover site–pattern triples one at a time (no edit).
+/// Discover edit + ResonancePair hits one at a time (no materialize).
 pub struct Candidates<'a> {
     set: &'a RuleSet,
     mol: &'a Molecule,
@@ -33,6 +31,7 @@ pub struct Candidates<'a> {
     member_i: usize,
     pending: std::vec::IntoIter<Candidate>,
     child: Option<Box<Candidates<'a>>>,
+    pairs_loaded: bool,
     done: bool,
 }
 
@@ -45,6 +44,7 @@ impl<'a> Candidates<'a> {
             member_i: 0,
             pending: Vec::new().into_iter(),
             child: None,
+            pairs_loaded: false,
             done: false,
         }
     }
@@ -57,6 +57,7 @@ impl<'a> Candidates<'a> {
             member_i: 0,
             pending: Vec::new().into_iter(),
             child: None,
+            pairs_loaded: false,
             done: false,
         }
     }
@@ -64,7 +65,7 @@ impl<'a> Candidates<'a> {
     fn finish_candidate(&self, mut c: Candidate) -> Candidate {
         // One outer per nested frame (same as RuleSet::with_outer_path).
         if let Some(parent_name) = &self.parent_link {
-            c.rule_path.push(parent_name.clone());
+            c.rule_path_mut().push(parent_name.clone());
         }
         c
     }
@@ -72,6 +73,12 @@ impl<'a> Candidates<'a> {
     fn load_pattern(&mut self, pattern: &PatternInfo) -> Result<(), ForestError> {
         let batch = pattern_candidate_batch(self.set, self.mol, pattern)?;
         self.pending = batch.into_iter();
+        Ok(())
+    }
+
+    fn load_pairs(&mut self) -> Result<(), ForestError> {
+        let pairs = self.set.pair_candidates_leaf(self.mol)?;
+        self.pending = pairs.into_iter().map(Candidate::from_pair).collect::<Vec<_>>().into_iter();
         Ok(())
     }
 }
@@ -101,30 +108,40 @@ impl Iterator for Candidates<'_> {
                 }
             }
             let members = self.set.members();
-            if self.member_i >= members.len() {
-                self.done = true;
-                return None;
-            }
-            let member = &members[self.member_i];
-            self.member_i += 1;
-            match member {
-                RuleMember::Pattern(pattern) => {
-                    if matches!(pattern.edit, Edit::PairEndpoint(_)) {
-                        continue;
+            if self.member_i < members.len() {
+                let member = &members[self.member_i];
+                self.member_i += 1;
+                match member {
+                    RuleMember::Pattern(pattern) => {
+                        if matches!(pattern.edit, Edit::PairEndpoint(_)) {
+                            continue;
+                        }
+                        if let Err(e) = self.load_pattern(pattern) {
+                            self.done = true;
+                            return Some(Err(e));
+                        }
                     }
-                    if let Err(e) = self.load_pattern(pattern) {
-                        self.done = true;
-                        return Some(Err(e));
+                    RuleMember::Set(child) => {
+                        self.child = Some(Box::new(Candidates::nested(
+                            child,
+                            self.mol,
+                            self.set.name.clone(),
+                        )));
                     }
                 }
-                RuleMember::Set(child) => {
-                    self.child = Some(Box::new(Candidates::nested(
-                        child,
-                        self.mol,
-                        self.set.name.clone(),
-                    )));
-                }
+                continue;
             }
+            // After patterns / nested sets: leaf pair endpoints (polymorphic).
+            if !self.pairs_loaded {
+                self.pairs_loaded = true;
+                if let Err(e) = self.load_pairs() {
+                    self.done = true;
+                    return Some(Err(e));
+                }
+                continue;
+            }
+            self.done = true;
+            return None;
         }
     }
 }
@@ -152,28 +169,28 @@ pub(crate) fn pattern_candidate_batch(
                 continue;
             };
             // Resolve on aromatic context `mol`, not the Kekulé form.
-            out.push(Candidate {
+            out.push(Candidate::edit(
                 site,
-                orbit: hit.orbit,
-                pattern: pattern.resolve_for_match(mol, &hit.mapped),
-                rule_path: set.leaf_rule_path(),
-                mapped: hit.mapped,
-                parent: ParentRef::Form(Box::new(forms[form_i].clone())),
-            });
+                hit.orbit,
+                pattern.resolve_for_match(mol, &hit.mapped),
+                set.leaf_rule_path(),
+                hit.mapped,
+                ParentRef::Form(Box::new(forms[form_i].clone())),
+            ));
         }
     } else {
         for hit in unique_sites(mol, &pattern.smarts, pattern.site_kind, &pattern.site_map)? {
             let Some(&site) = hit.mapped.get(&pattern.primary_map()) else {
                 continue;
             };
-            out.push(Candidate {
+            out.push(Candidate::edit(
                 site,
-                orbit: hit.orbit,
-                pattern: pattern.resolve_for_match(mol, &hit.mapped),
-                rule_path: set.leaf_rule_path(),
-                mapped: hit.mapped,
-                parent: ParentRef::Context,
-            });
+                hit.orbit,
+                pattern.resolve_for_match(mol, &hit.mapped),
+                set.leaf_rule_path(),
+                hit.mapped,
+                ParentRef::Context,
+            ));
         }
     }
     Ok(out)
@@ -189,9 +206,7 @@ pub struct Metabolize<'a, R, S> {
     member_i: usize,
     pattern_pending: std::vec::IntoIter<Candidate>,
     child: Option<Box<Metabolize<'a, R, S>>>,
-    pairs: std::vec::IntoIter<PairCandidate>,
     pairs_loaded: bool,
-    pair_patterns: Vec<PatternInfo>,
     seen_csmi: BTreeMap<BTreeSet<String>, String>,
     seen_leaf: BTreeSet<(String, BTreeSet<String>)>,
     /// `Some(parent_name)` when this walk is nested under a parent set.
@@ -227,9 +242,7 @@ where
             member_i: 0,
             pattern_pending: Vec::new().into_iter(),
             child: None,
-            pairs: Vec::new().into_iter(),
             pairs_loaded: false,
-            pair_patterns: Vec::new(),
             seen_csmi: BTreeMap::new(),
             seen_leaf: BTreeSet::new(),
             parent_link: None,
@@ -253,9 +266,7 @@ where
             member_i: 0,
             pattern_pending: Vec::new().into_iter(),
             child: None,
-            pairs: Vec::new().into_iter(),
             pairs_loaded: false,
-            pair_patterns: Vec::new(),
             seen_csmi: BTreeMap::new(),
             seen_leaf: BTreeSet::new(),
             parent_link: Some(parent_name),
@@ -325,21 +336,37 @@ where
         }
         loop {
             while let Some(c) = self.pattern_pending.next() {
+                let pattern_for_site = match &c {
+                    Candidate::Edit(e) => e.pattern.clone(),
+                    Candidate::Pair(p) => p.left.clone(),
+                };
                 let info = SiteInfo {
-                    site: c.site,
-                    orbit: c.orbit.clone(),
-                    pattern: c.pattern.clone(),
+                    site: c.site(),
+                    orbit: c.orbit().to_vec(),
+                    pattern: pattern_for_site,
                     shell_forecast: None,
                 };
-                if !(self.filter_sites)(self.mol, c.site, &info) {
+                if !(self.filter_sites)(self.mol, c.site(), &info) {
                     continue;
                 }
                 match c.emit(self.mol) {
                     Ok(Some(mut emission)) => {
                         if self.set.has_plan_hook() {
-                            emission.plan =
-                                self.set
-                                    .canonical_plan(self.mol, &emission.site_atoms, None);
+                            emission.plan = match c.as_pair() {
+                                Some(p) => {
+                                    let ends = [&p.left.effect, &p.right.effect];
+                                    self.set.canonical_plan(
+                                        self.mol,
+                                        &emission.site_atoms,
+                                        Some(&ends),
+                                    )
+                                }
+                                None => self.set.canonical_plan(
+                                    self.mol,
+                                    &emission.site_atoms,
+                                    None,
+                                ),
+                            };
                         }
                         if let Some(e) = self.take_emission(emission, false) {
                             return Some(Ok(e));
@@ -407,19 +434,22 @@ where
 
             if !self.pairs_loaded {
                 self.pairs_loaded = true;
-                // Filter endpoints, then stamp via RuleSet (same as pair_candidates_leaf).
+                // Filter endpoints, stamp, enqueue as Candidate::Pair (same pending as edits).
                 let endpoints: Vec<PatternInfo> = self
                     .set
                     .leaf_pair_endpoints()
                     .into_iter()
                     .filter(|p| (self.filter_rules)(self.mol, self.set, p))
                     .collect();
-                self.pair_patterns = endpoints.clone();
                 if !endpoints.is_empty() {
                     match discover_pairs(self.mol, &endpoints) {
                         Ok(mut pairs) => {
                             self.set.stamp_pair_paths(&mut pairs);
-                            self.pairs = pairs.into_iter();
+                            self.pattern_pending = pairs
+                                .into_iter()
+                                .map(Candidate::from_pair)
+                                .collect::<Vec<_>>()
+                                .into_iter();
                         }
                         Err(e) => {
                             self.done = true;
@@ -430,62 +460,6 @@ where
                 continue;
             }
 
-            while let Some(pair) = self.pairs.next() {
-                let pattern = self.pair_patterns.first().cloned().unwrap_or_else(|| {
-                    PatternInfo::new(
-                        "pair",
-                        "[#6:1]",
-                        Edit::PairEndpoint("x".into()),
-                        Default::default(),
-                    )
-                });
-                let info = SiteInfo {
-                    site: pair.site,
-                    orbit: vec![pair.site],
-                    pattern,
-                    shell_forecast: None,
-                };
-                if !(self.filter_sites)(self.mol, pair.site, &info) {
-                    continue;
-                }
-                match pair.materialize_mols(self.mol) {
-                    Ok(mols) if !mols.is_empty() => {
-                        let site_atoms = pair.plan_site_atoms();
-                        let ends = [&pair.left.effect, &pair.right.effect];
-                        let plan = self.set.canonical_plan(self.mol, &site_atoms, Some(&ends));
-                        let products = mols.iter().map(crate::mol::canon_smiles).collect();
-                        let left_sig = pair.left.cleave_side_sig();
-                        let right_sig = pair.right.cleave_side_sig();
-                        let cleave_side_sig = if left_sig == right_sig {
-                            left_sig
-                        } else {
-                            crate::pattern::CleaveSideSig::Ungrouped
-                        };
-                        let emission = Emission {
-                            site: pair.site,
-                            site_orbit: vec![pair.site],
-                            site_atoms: site_atoms.clone(),
-                            cleaves: pair.effect.cleaves,
-                            pattern_name: pair.pattern_name.clone(),
-                            search_bias: pair.left.search_bias.min(pair.right.search_bias),
-                            rule_path: pair.rule_path.clone(),
-                            mols,
-                            products,
-                            cleave_side_sig,
-                            plan,
-                        };
-                        if let Some(e) = self.take_emission(emission, false) {
-                            return Some(Ok(e));
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        self.done = true;
-                        return Some(Err(e));
-                    }
-                }
-            }
-
             self.done = true;
             return None;
         }
@@ -493,7 +467,9 @@ where
 }
 
 /// Streaming pair-candidate discovery across this set and nested children.
-pub struct PairCandidates<'a> {
+///
+/// Crate-internal. Prefer [`crate::ruleset::RuleSet::candidates`].
+pub(crate) struct PairCandidates<'a> {
     sets: Vec<&'a RuleSet>,
     set_i: usize,
     mol: &'a Molecule,
@@ -553,7 +529,9 @@ impl Iterator for PairCandidates<'_> {
 }
 
 /// Stream ResonancePair emissions (materialize one pair at a time).
-pub struct PairEmissions<'a> {
+///
+/// Crate-internal. Prefer [`crate::ruleset::RuleSet::metabolites`].
+pub(crate) struct PairEmissions<'a> {
     stack: Vec<PairEmissionFrame<'a>>,
     mol: &'a Molecule,
     pending: std::vec::IntoIter<PendingPairEmission<'a>>,

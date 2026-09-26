@@ -303,13 +303,10 @@ pub struct PairEmission {
 /// and applies end edits.
 ///
 /// [`Self::rule_path`] is the same leaf-first namespace as [`crate::candidate::Candidate`].
-/// Prefer [`crate::ruleset::RuleSet::pair_candidates_leaf`] /
-/// [`crate::ruleset::RuleSet::pair_candidates`] /
+/// Prefer [`crate::ruleset::RuleSet::candidates`] /
 /// [`crate::ruleset::RuleSet::metabolites`] so the leaf name is stamped
-/// automatically. Bare [`pair_candidates`] leaves `rule_path` empty — call
-/// [`crate::ruleset::RuleSet::stamp_pair_paths`] (and
-/// [`crate::ruleset::RuleSet::with_outer_path`] for nested walks) if you must
-/// use the discovery primitive.
+/// automatically. Bare [`pair_candidates`] is `pub(crate)` and leaves
+/// `rule_path` empty — RuleSet doors stamp via `stamp_pair_paths`.
 #[derive(Clone, Debug)]
 pub struct PairCandidate {
     pub site: usize,
@@ -505,12 +502,10 @@ fn merge_effect_fields(
 
 /// Discover pair sites without applying path flips.
 ///
-/// Discovery primitive: returns pairs with empty [`PairCandidate::rule_path`].
-/// Prefer [`crate::ruleset::RuleSet::pair_candidates_leaf`] (or the nested
-/// [`RuleSet::pair_candidates`] / [`RuleSet::metabolites`] walk) so leaf names
-/// are stamped. If you filter endpoints first, call bare discovery then
-/// [`RuleSet::stamp_pair_paths`].
-pub fn pair_candidates(
+/// Crate-internal discovery primitive: returns pairs with empty
+/// [`PairCandidate::rule_path`]. Prefer [`crate::ruleset::RuleSet::candidates`]
+/// / [`crate::ruleset::RuleSet::metabolites`].
+pub(crate) fn pair_candidates(
     mol: &Molecule,
     endpoints: &[PatternInfo],
 ) -> Result<Vec<PairCandidate>, ForestError> {

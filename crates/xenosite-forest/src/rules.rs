@@ -1850,6 +1850,16 @@ pub fn default_ruleset() -> RuleSet {
     )
 }
 
+/// Process-wide [`default_ruleset`] for doors that take `&RuleSet`.
+///
+/// Callers that need a different catalog pass their own `&RuleSet` to the
+/// non-`_default` APIs (`find_path`, `bfs`, `product_graph`, …).
+pub fn default_ruleset_ref() -> &'static RuleSet {
+    use std::sync::OnceLock;
+    static DEFAULT: OnceLock<RuleSet> = OnceLock::new();
+    DEFAULT.get_or_init(default_ruleset)
+}
+
 /// Every ported leaf rule as one nested catalog.
 pub fn all_rules() -> RuleSet {
     RuleSet::compose(
@@ -1988,10 +1998,10 @@ mod tests {
             .unwrap();
         assert!(!arom.is_empty(), "{arom:?}");
         assert!(
-            arom.iter().all(|c| c.pattern.effect.dearomatizes),
+            arom.iter().all(|c| c.effect().dearomatizes),
             "aromatic site resolves dearomatizes; got {:?}",
             arom.iter()
-                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .map(|c| (c.site(), c.effect().dearomatizes))
                 .collect::<Vec<_>>()
         );
 
@@ -2002,11 +2012,11 @@ mod tests {
             .unwrap();
         assert!(!aliph.is_empty(), "{aliph:?}");
         assert!(
-            aliph.iter().all(|c| !c.pattern.effect.dearomatizes),
+            aliph.iter().all(|c| !c.effect().dearomatizes),
             "aliphatic site resolves false; got {:?}",
             aliph
                 .iter()
-                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .map(|c| (c.site(), c.effect().dearomatizes))
                 .collect::<Vec<_>>()
         );
     }

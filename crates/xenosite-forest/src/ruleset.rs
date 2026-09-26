@@ -5,19 +5,16 @@
 //! after the child that emitted (leaf first, outer last), matching Python
 //! `info["rule"]` / addition chain order.
 //!
-//! # Call pattern (rule_path)
+//! # Call pattern (`rule_path`)
 //!
-//! Prefer these doors — they stamp leaf names automatically:
-//! - [`RuleSet::metabolites`] / [`RuleSet::metabolize`] — SMIRKS + pairs as
-//!   [`Emission`]s (`rule_path` already leaf-first; nested walks append outers)
-//! - [`RuleSet::candidates`] — SMIRKS site hits with stamped [`Candidate::rule_path`]
-//! - [`RuleSet::pair_candidates`] / [`RuleSet::pair_candidates_leaf`] — pairs with
-//!   stamped [`PairCandidate::rule_path`]
+//! Prefer these **public** doors — they stamp leaf names and cover SMIRKS +
+//! ResonancePair without a pair branch:
+//! - [`RuleSet::metabolites`] / [`RuleSet::metabolize`] → [`Emission`]
+//! - [`RuleSet::candidates`] → [`Candidate`] (edit or pair)
 //!
-//! Bare [`crate::pair_edit::pair_candidates`] is a discovery primitive: it leaves
-//! `rule_path` empty. Callers that need a hop label must go through a RuleSet
-//! door (or [`RuleSet::stamp_pair_paths`] / [`RuleSet::with_outer_path`]).
-//! Do not invent leaf names at product_layer / find_path / enumerate.
+//! Pair-only helpers (`pair_candidates_leaf`, `stamp_pair_paths`, …) are
+//! `pub(crate)`. Bare [`crate::pair_edit::pair_candidates`] is also crate-internal
+//! and leaves `rule_path` empty.
 //!
 //! Primary walk: [`RuleSet::candidates`] is a pull iterator of site–pattern–
 //! [`ParentRef`] triples without applying edits. A search reads [`PatternInfo`]
@@ -222,15 +219,14 @@ impl RuleSet {
 
     /// Leaf segment of a leaf-first `rule_path`: this set's name alone.
     /// Nested walks append outers via [`Self::with_outer_path`].
-    pub fn leaf_rule_path(&self) -> Vec<Option<String>> {
+    pub(crate) fn leaf_rule_path(&self) -> Vec<Option<String>> {
         vec![self.name.clone()]
     }
 
     /// Append outer container names (root last) onto a leaf-stamped path.
     ///
-    /// Used by find_path / pair_emissions after [`Self::pair_candidates_leaf`].
-    /// Prefer not rebuilding the leaf segment by hand.
-    pub fn with_outer_path(
+    /// Crate-internal: nested discovery walks use this after a leaf stamp.
+    pub(crate) fn with_outer_path(
         mut leaf_first: Vec<Option<String>>,
         outers: impl IntoIterator<Item = Option<String>>,
     ) -> Vec<Option<String>> {
@@ -240,10 +236,8 @@ impl RuleSet {
 
     /// Stamp this set's name onto each pair's [`PairCandidate::rule_path`].
     ///
-    /// Prefer [`Self::pair_candidates_leaf`] (discovers + stamps). Use this when
-    /// endpoints were already filtered (metabolize) after bare
-    /// [`crate::pair_edit::pair_candidates`].
-    pub fn stamp_pair_paths(&self, pairs: &mut [crate::pair_edit::PairCandidate]) {
+    /// Crate-internal. Callers use [`Self::candidates`] / [`Self::metabolites`].
+    pub(crate) fn stamp_pair_paths(&self, pairs: &mut [crate::pair_edit::PairCandidate]) {
         let path = self.leaf_rule_path();
         for pair in pairs {
             pair.rule_path = path.clone();
@@ -265,20 +259,18 @@ impl RuleSet {
 
     /// ResonancePair path candidates for this set and nested children.
     ///
-    /// Discovery only — no path flip. Pull iterator over nested leaves; each
-    /// pair is leaf-stamped via [`Self::pair_candidates_leaf`]. Prefer this over
-    /// bare [`crate::pair_edit::pair_candidates`].
-    pub fn pair_candidates<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairCandidates<'a> {
+    /// Crate-internal discovery. Prefer [`Self::candidates`] (polymorphic).
+    pub(crate) fn pair_candidates<'a>(
+        &'a self,
+        mol: &'a Molecule,
+    ) -> crate::stream::PairCandidates<'a> {
         crate::stream::PairCandidates::new(self, mol)
     }
 
     /// Pair candidates from this leaf's own endpoint patterns only.
     ///
-    /// Stamps [`PairCandidate::rule_path`] with this set's name so
-    /// [`PairCandidate::rule_name`] / [`PairCandidate::leaf_rule`] match
-    /// [`crate::candidate::Candidate`]. Nested searches append ancestors with
-    /// [`Self::with_outer_path`] — do not re-invent the leaf segment.
-    pub fn pair_candidates_leaf(
+    /// Crate-internal. Prefer [`Self::candidates`] / [`Self::metabolites`].
+    pub(crate) fn pair_candidates_leaf(
         &self,
         mol: &Molecule,
     ) -> Result<Vec<crate::pair_edit::PairCandidate>, ForestError> {
@@ -293,10 +285,11 @@ impl RuleSet {
 
     /// ResonancePair path emissions for this set and nested children.
     ///
-    /// Pull iterator: materializes one pair at a time (discovery may buffer
-    /// SMARTS hits for a leaf). Prefer [`Self::metabolize`] / [`Self::metabolites`]
-    /// when SMIRKS and pairs should share one walk.
-    pub fn pair_emissions<'a>(&'a self, mol: &'a Molecule) -> crate::stream::PairEmissions<'a> {
+    /// Crate-internal. Prefer [`Self::metabolites`] for the unified walk.
+    pub(crate) fn pair_emissions<'a>(
+        &'a self,
+        mol: &'a Molecule,
+    ) -> crate::stream::PairEmissions<'a> {
         crate::stream::PairEmissions::new(self, mol)
     }
 
@@ -464,8 +457,8 @@ mod tests {
             .candidates(&mol)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        let h = cands.iter().find(|c| c.pattern.name == "h").unwrap();
-        assert_eq!(h.orbit.len(), 6);
+        let h = cands.iter().find(|c| c.pattern_name() == "h").unwrap();
+        assert_eq!(h.orbit().len(), 6);
         let plan = &emissions[0].plan;
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].orbit.len(), 6);
@@ -747,7 +740,7 @@ mod tests {
             .unwrap();
         assert_eq!(candidates.len(), 1, "{candidates:?}");
         assert!(matches!(
-            candidates[0].parent,
+            candidates[0].as_edit().unwrap().parent,
             crate::candidate::ParentRef::Form(_)
         ));
         let emissions = epoxidation()
@@ -781,11 +774,11 @@ mod tests {
         let set = hydroxylation();
         let cands = set.candidates(&mol).collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(cands.len(), 1);
-        assert_eq!(cands[0].pattern.name, "h2");
+        assert_eq!(cands[0].as_edit().unwrap().pattern.name, "h2");
         // Filtering by pattern data needs no closure into the rule.
         let refuse: Vec<_> = cands
             .iter()
-            .filter(|c| c.pattern.effect.adds.as_deref() != Some("O"))
+            .filter(|c| c.effect().adds.as_deref() != Some("O"))
             .collect();
         assert!(refuse.is_empty());
         let products = cands[0].materialize(&mol).unwrap();

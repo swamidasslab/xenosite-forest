@@ -238,28 +238,30 @@ fn remap_candidate_to_wanted(
     n_atoms: usize,
     mol: &Molecule,
 ) -> Option<crate::candidate::Candidate> {
-    if wanted.contains(&c.site) {
+    // ApplyN remaps SMIRKS / AtomPair edit hits only (not ResonancePair).
+    let edit = c.as_edit()?;
+    if wanted.contains(&edit.site) {
         return Some(c.clone());
     }
-    if !c.mapped.is_empty() && c.mapped.values().all(|i| wanted.contains(i)) {
+    if !edit.mapped.is_empty() && edit.mapped.values().all(|i| wanted.contains(i)) {
         return Some(c.clone());
     }
-    let orbit = crate::orbits::atom_orbit_with_gens(gens, n_atoms, c.site);
+    let orbit = crate::orbits::atom_orbit_with_gens(gens, n_atoms, edit.site);
     let &want = wanted.iter().find(|w| orbit.contains(w))?;
-    if c.mapped.len() <= 1 {
-        let mut c2 = c.clone();
-        c2.site = want;
-        for v in c2.mapped.values_mut() {
+    if edit.mapped.len() <= 1 {
+        let mut e2 = edit.clone();
+        e2.site = want;
+        for v in e2.mapped.values_mut() {
             *v = want;
         }
-        return Some(c2);
+        return Some(crate::candidate::Candidate::Edit(e2));
     }
-    // Pair: move each mapped end onto the wanted atom of the same element in
+    // AtomPair: move each mapped end onto the wanted atom of the same element in
     // the orbit (C→wanted carbon; O/N/S→hetero bonded to that carbon).
     let want_z = mol.atom(atom_idx(want)).element.atomic_number();
-    let mut c2 = c.clone();
-    c2.site = want;
-    for v in c2.mapped.values_mut() {
+    let mut e2 = edit.clone();
+    e2.site = want;
+    for v in e2.mapped.values_mut() {
         let z = mol.atom(atom_idx(*v)).element.atomic_number();
         if z == want_z {
             *v = want;
@@ -284,7 +286,7 @@ fn remap_candidate_to_wanted(
             return None;
         }
     }
-    Some(c2)
+    Some(crate::candidate::Candidate::Edit(e2))
 }
 
 fn pair_matches_wanted(
@@ -476,14 +478,14 @@ pub fn eligible_sites_for_apply_n(
     let mut eligible = BTreeSet::new();
     for cand in ruleset.candidates(mol) {
         let cand = cand?;
-        let rule = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
+        let rule = cand.leaf_rule().unwrap_or(cand.pattern_name());
         if !pool.allows(rule) {
             continue;
         }
-        if cand.orbit.is_empty() {
-            eligible.insert(cand.site);
+        if cand.orbit().is_empty() {
+            eligible.insert(cand.site());
         } else {
-            eligible.extend(cand.orbit.iter().copied());
+            eligible.extend(cand.orbit().iter().copied());
         }
     }
     Ok(eligible.into_iter().collect())
@@ -586,7 +588,7 @@ fn apply_combo_sorted(
         let mut applied = false;
         for cand in ruleset.candidates(cur.mol()) {
             let cand = cand?;
-            let rule = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
+            let rule = cand.leaf_rule().unwrap_or(cand.pattern_name());
             if !pool.allows(rule) {
                 continue;
             }
@@ -598,7 +600,7 @@ fn apply_combo_sorted(
             if pieces.is_empty() {
                 continue;
             }
-            let piece = if cand.pattern.effect.cleaves && pieces.len() > 1 {
+            let piece = if cand.effect().cleaves && pieces.len() > 1 {
                 // Keep the largest fragment (MS1 continue side); leave goes to Maybe.
                 pieces
                     .into_iter()
@@ -2355,7 +2357,7 @@ mod tests {
             .candidates(glycol.mol())
             .find(|c| {
                 c.as_ref()
-                    .is_ok_and(|c| c.pattern.name == "alcohol")
+                    .is_ok_and(|c| c.pattern_name() == "alcohol")
             })
             .unwrap()
             .unwrap();

@@ -75,18 +75,13 @@ fn goal_for_candidate(
         .unwrap();
     let c = &cands[0];
     let atoms: Vec<usize> = {
-        let mut a: BTreeSet<usize> = c
-            .pattern
-            .site_map
-            .iter()
-            .filter_map(|m| c.mapped.get(m).copied())
-            .collect();
+        let mut a: BTreeSet<usize> = c.site_atoms().into_iter().collect();
         if a.is_empty() {
-            a.insert(c.site);
+            a.insert(c.site());
         }
         a.into_iter().collect()
     };
-    let goal = residual_cost_after_site_cast(parent_diff, &c.pattern.effect, &atoms, &[]);
+    let goal = residual_cost_after_site_cast(parent_diff, &c.effect(), &atoms, &[]);
     (Some(goal), atoms)
 }
 
@@ -191,20 +186,15 @@ fn lift_matches_mcs_dealkylation_anisole() {
             let adopted = parent.adopt_product(piece);
             if adopted.csmi().as_ref() == phenol.as_str() {
                 let atoms: Vec<usize> = {
-                    let mut a: BTreeSet<usize> = c
-                        .pattern
-                        .site_map
-                        .iter()
-                        .filter_map(|m| c.mapped.get(m).copied())
-                        .collect();
+                    let mut a: BTreeSet<usize> = c.site_atoms().into_iter().collect();
                     if a.is_empty() {
-                        a.insert(c.site);
+                        a.insert(c.site());
                     }
                     a.into_iter().collect()
                 };
                 goal = Some(residual_cost_after_site_cast(
                     &parent_diff,
-                    &c.pattern.effect,
+                    &c.effect(),
                     &atoms,
                     &[],
                 ));
@@ -242,18 +232,13 @@ fn lift_matches_mcs_dealkylation_dimethoxy() {
     let mut checked = 0usize;
     for c in &cands {
         let atoms: Vec<usize> = {
-            let mut a: BTreeSet<usize> = c
-                .pattern
-                .site_map
-                .iter()
-                .filter_map(|m| c.mapped.get(m).copied())
-                .collect();
+            let mut a: BTreeSet<usize> = c.site_atoms().into_iter().collect();
             if a.is_empty() {
-                a.insert(c.site);
+                a.insert(c.site());
             }
             a.into_iter().collect()
         };
-        let goal = residual_cost_after_site_cast(&parent_diff, &c.pattern.effect, &atoms, &[]);
+        let goal = residual_cost_after_site_cast(&parent_diff, &c.effect(), &atoms, &[]);
         let pieces = c.materialize_mols(parent.mol()).unwrap();
         for piece in pieces {
             let child = parent.adopt_product(piece);
@@ -267,7 +252,7 @@ fn lift_matches_mcs_dealkylation_dimethoxy() {
                 &target,
                 &parent_diff,
                 Some(goal),
-                &format!("dimethoxy dealk site={}", c.site),
+                &format!("dimethoxy dealk site={}", c.site()),
             );
             checked += 1;
         }
@@ -339,22 +324,17 @@ fn residual_never_exceeds_parent_cost_when_cast_helps() {
             .unwrap();
         for c in &cands {
             let atoms: Vec<usize> = {
-                let mut a: BTreeSet<usize> = c
-                    .pattern
-                    .site_map
-                    .iter()
-                    .filter_map(|m| c.mapped.get(m).copied())
-                    .collect();
+                let mut a: BTreeSet<usize> = c.site_atoms().into_iter().collect();
                 if a.is_empty() {
-                    a.insert(c.site);
+                    a.insert(c.site());
                 }
                 a.into_iter().collect()
             };
-            let goal = residual_cost_after_site_cast(&parent_diff, &c.pattern.effect, &atoms, &[]);
+            let goal = residual_cost_after_site_cast(&parent_diff, &c.effect(), &atoms, &[]);
             assert!(
                 goal <= parent_diff.cost(),
                 "{reactant}→{target_smi} pattern={}: goal={goal} parent={}",
-                c.pattern.name,
+                c.pattern_name(),
                 parent_diff.cost()
             );
         }
@@ -402,18 +382,13 @@ fn one_hop_phase_one_lift_matches_mcs_on_eugenol() {
             continue;
         }
         let atoms: Vec<usize> = {
-            let mut a: BTreeSet<usize> = c
-                .pattern
-                .site_map
-                .iter()
-                .filter_map(|m| c.mapped.get(m).copied())
-                .collect();
+            let mut a: BTreeSet<usize> = c.site_atoms().into_iter().collect();
             if a.is_empty() {
-                a.insert(c.site);
+                a.insert(c.site());
             }
             a.into_iter().collect()
         };
-        let goal = residual_cost_after_site_cast(&parent_diff, &c.pattern.effect, &atoms, &[]);
+        let goal = residual_cost_after_site_cast(&parent_diff, &c.effect(), &atoms, &[]);
         let Ok(pieces) = c.materialize_mols(parent.mol()) else {
             continue;
         };
@@ -427,8 +402,8 @@ fn one_hop_phase_one_lift_matches_mcs_on_eugenol() {
             }
             let label = format!(
                 "eugenol hop {} site={} child={}",
-                c.pattern.name,
-                c.site,
+                c.pattern_name(),
+                c.site(),
                 child.csmi()
             );
             if let Some(lifted) =

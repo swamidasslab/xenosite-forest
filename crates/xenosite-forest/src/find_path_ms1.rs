@@ -168,16 +168,7 @@ fn walk_mz(mol: &ForestMol, adduct: Ms1Adduct) -> Option<f64> {
 }
 
 fn candidate_site_atoms(candidate: &Candidate) -> BTreeSet<usize> {
-    let mut atoms: BTreeSet<usize> = candidate
-        .pattern
-        .site_map
-        .iter()
-        .filter_map(|m| candidate.mapped.get(m).copied())
-        .collect();
-    if atoms.is_empty() {
-        atoms.insert(candidate.site);
-    }
-    atoms
+    candidate.site_atoms().into_iter().collect()
 }
 
 /// Same plan emission as structure [`crate::find_path`]: composite leaves use
@@ -308,13 +299,13 @@ pub fn find_path_ms1(
                 }
             };
 
-            let delta = cand.pattern.effect.resolved_delta_formula();
+            let delta = cand.effect().resolved_delta_formula();
             // Soft pre-filter (non-cleavage only): try full declared delta and
             // heavy-only (strip H). Hydroxyl bags are +O −H while live mols are
             // +O — heavy wins. H-only nets (epoxide rearrange +2H) need full.
             // Cleavage leave bags do not predict either fragment's mono mass —
             // skip the hint and let materialize + closer decide.
-            if !cand.pattern.effect.cleaves {
+            if !cand.effect().cleaves {
                 let full_mz = predicted_mz_after_delta(&walk.mol, &delta, config.adduct);
                 let mut heavy_delta = delta.clone();
                 heavy_delta.remove("H");
@@ -370,10 +361,10 @@ pub fn find_path_ms1(
 
             let plan_steps = plan_steps_for_candidate(&cand, mol, &gens);
             let path_step = PathStep {
-                rule_path: cand.rule_path.clone(),
-                pattern_name: cand.pattern.name.clone(),
-                site: cand.site,
-                site_orbit: cand.orbit.clone(),
+                rule_path: cand.rule_path().to_vec(),
+                pattern_name: cand.pattern_name().to_string(),
+                site: cand.site(),
+                site_orbit: cand.orbit().to_vec(),
                 product: child_mol.csmi().as_ref().to_string(),
                 sides: Vec::new(),
             };
@@ -848,7 +839,7 @@ mod tests {
         let mut phenol = None;
         for cand in set.candidates(parent.mol()) {
             let cand = cand.unwrap();
-            if !cand.pattern.effect.cleaves {
+            if !cand.effect().cleaves {
                 continue;
             }
             for p in cand.materialize_mols(parent.mol()).unwrap() {

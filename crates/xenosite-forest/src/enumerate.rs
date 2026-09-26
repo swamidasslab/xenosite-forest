@@ -314,6 +314,14 @@ pub fn bfs<'a>(
     enumerate_metabolites(reactant, ruleset, EnumConfig::bfs(max_depth))
 }
 
+/// [`bfs`] with [`crate::rules::default_ruleset`]. Override via [`bfs`].
+pub fn bfs_default(
+    reactant: &str,
+    max_depth: usize,
+) -> Result<MetaboliteEnum<'static>, ForestError> {
+    bfs(reactant, crate::rules::default_ruleset_ref(), max_depth)
+}
+
 /// Depth-first metabolites up to `max_depth` (Python `dfs`; CSMI-deduped).
 pub fn dfs<'a>(
     reactant: &str,
@@ -321,6 +329,14 @@ pub fn dfs<'a>(
     max_depth: usize,
 ) -> Result<MetaboliteEnum<'a>, ForestError> {
     enumerate_metabolites(reactant, ruleset, EnumConfig::dfs(max_depth))
+}
+
+/// [`dfs`] with [`crate::rules::default_ruleset`]. Override via [`dfs`].
+pub fn dfs_default(
+    reactant: &str,
+    max_depth: usize,
+) -> Result<MetaboliteEnum<'static>, ForestError> {
+    dfs(reactant, crate::rules::default_ruleset_ref(), max_depth)
 }
 
 #[cfg(test)]
