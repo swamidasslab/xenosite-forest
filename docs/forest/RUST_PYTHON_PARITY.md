@@ -118,23 +118,24 @@ is unnecessary remains open work, not an excuse for product mismatch.
 
 ### C11 — ``unique_csmi`` product collapse is a soft failure
 
-Yield-layer CSMI dedup (``unique_csmi=True`` dropping a later emission with
-the same ``(rule, PatternInfo.name|SMARTS, fragment-CSMI frozenset)``) is a
-**soft failure**, same family as C10 sanitize: the site unique-edit /
-pattern / ``when`` partition should already have collapsed equivalent edits.
-Ideally a rule dedups from **sites, patterns, and whens alone**; product
-identity is a safety net, not the design.
+Yield-layer CSMI dedup is a **soft failure**, same family as C10 sanitize:
+sites / patterns / ``when`` should already have collapsed equivalent edits.
+Product identity is not the design.
 
-``SiteDeduplicationWarning`` (check layer: same pattern + CSMI set + site
-ranks) is the unique-edit-miss signal that often accompanies a yield drop.
-Quiet yield drops (unequal ranks, same CSMI) are still soft failures under
-this choice until C13 (product-identical distinct sites) picks a schema —
-silent yield CSMI is not the long-term design for that class either.
+**Rule data:** ``ReactionRule.unique_csmi_compliant`` (default ``True``).
+Yield CSMI drop runs only when the caller passes ``unique_csmi=True`` **and**
+the rule is compliant. Non-compliant leaves emit every unique-edit survivor
+(no yield papering). Goal: every leaf ``True``.
 
-Parity / regression: ``tests/forest/test_csmi_dedup_soft_failure.py`` is
-parametric over ``PARITY_FUZZ_MOLS`` × Python leaves. Known hits may use
-temporary ``pytest.xfail`` until partition / unique-edit / C13 fixes land —
-xfail is not approval. Status: **approved** (goal).
+**Tests:** only ``tests/forest/test_csmi_dedup_soft_failure.py`` gates this —
+compliant → hard-fail on duplicate ``(rule, pattern, CSMI)`` keys or
+``SiteDeduplicationWarning``; non-compliant → ``pytest.xfail`` on hits (and
+a meta check that the corpus still hits). Other suites do **not** xfail
+non-compliant rules.
+
+``SiteDeduplicationWarning`` remains the unique-edit-miss check signal.
+Quiet unequal-rank same-CSMI pairs are C13 until ``product_equiv`` / identity
+data lands. Status: **approved** (goal).
 
 ### C12 — C7 resolution: fix partition / unique-edit, not “no dedup”
 
@@ -252,7 +253,7 @@ implemented.
 | 11 | Dehydration: site-count mismatch with matching products | **open** | site_map / topo key align |
 | 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |
 | 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
-| 14 | Parametric ``unique_csmi`` yield-drop / SiteDeduplicationWarning | **done** (xfail soft hits) | C11 — ``test_csmi_dedup_soft_failure``; clear xfails when fixed |
+| 14 | ``unique_csmi_compliant`` + CSMI-dup parametric test | **done** | C11 — only that test xfails non-compliant; hard-fail if compliant |
 | 15 | Product-identical distinct sites + Dealk other-side double-emit | **open** | C13 — not decided; options: ``product_equiv`` field vs SMARTS partition |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):

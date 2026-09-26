@@ -221,15 +221,21 @@ Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`,
 
 ## Product-identical distinct sites / Dealk other-side double-emit
 
-Status: **not decided**. See [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) Choice **C13**.
+Status: **not decided** (emission shape); tracking in [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C13**.
 
 Automorphism-equivalent sites already emit once with ``orbit`` / ``site_orbit``.
 Ester Dealkylation (two directed ``quaternary_alcohol`` sites on the bridging
-O, unequal ranks, one product bag) and similar epoxide cases are a different
-class. Options: ``product_equiv`` field on SiteInfo (canonical by site sort) vs
-SMARTS/``when`` partition vs PatternInfo fold flag. Do not widen undirected
-unique-edit for all ``directed_bond`` (regioisomers). Do not treat silent
-``unique_csmi`` as the design.
+O, unequal ranks, one product bag) and similar cases are a different class.
+``unique_csmi_compliant=False`` on those leaves until data (``product_equiv`` /
+identity maps) folds them — only the CSMI-dup test xfails (C11).
+
+## ``unique_csmi_compliant`` (rule data)
+
+Status: **approved**. Class attribute on ``ReactionRule`` (default ``True``).
+Yield-layer CSMI dedup runs only when compliant. Goal: all leaves ``True``.
+Non-compliant: ``Dealkylation``, ``OxidativeDehalogenation`` (corpus hits).
+Tests: ``test_csmi_dedup_soft_failure`` only — hard-fail if compliant + hit;
+xfail if non-compliant + hit. Other suites do not xfail on this flag.
 
 ## Antipattern: global `_kekule_forms` on SmirksReactionRule
 

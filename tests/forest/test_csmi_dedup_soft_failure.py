@@ -1,26 +1,31 @@
-"""Parametric soft-failure detector: ``unique_csmi`` yield drops (C11).
+"""Parametric CSMI-dedup compliance (C11).
 
-A rule should dedup from sites / patterns / ``when`` alone. When
-``metabolize(..., unique_csmi=True)`` yields fewer emissions than
-``unique_csmi=False``, the yield layer papered over a unique-edit or
-partition miss — a **soft failure** (same family as sanitize, C10).
+Rules declare ``unique_csmi_compliant`` (class data). Yield-layer CSMI dedup
+runs only when that flag is True. Goal: every leaf compliant — dedup from
+sites / patterns / ``when`` alone.
 
-``SiteDeduplicationWarning`` is the check-layer unique-edit-miss signal
-(same pattern + CSMI set + site ranks). It often accompanies a yield drop.
+This file is the **only** suite that xfails on non-compliant rules. Other
+parity / chemistry tests run them normally.
 
-Known hits may use temporary ``pytest.xfail`` until partition / unique-edit
-fixes land. An xfail here is not approval — remove the entry when green.
-See ``docs/forest/RUST_PYTHON_PARITY.md`` Choices C11 / C12.
+- **Compliant:** hard-fail on duplicate ``(rule, pattern, emission CSMI)``
+  keys or ``SiteDeduplicationWarning`` (unique-edit miss).
+- **Non-compliant:** xfail when a hit is present; fail if the corpus no
+  longer hits (then mark ``unique_csmi_compliant = True``).
 """
 
 from __future__ import annotations
 
+from collections import Counter
 import warnings
 
 import pytest
 
 from xenosite.forest.rdkit_api import MolFromSmiles
-from xenosite.forest.rules import ReactionRule, SiteDeduplicationWarning
+from xenosite.forest.rules import (
+    ReactionRule,
+    SiteDeduplicationWarning,
+    _unique_csmi_key,
+)
 
 from .pattern_info_inventory import instantiate_rule
 from .rule_parity_corpus import PARITY_FUZZ_MOLS
@@ -28,21 +33,6 @@ from .rule_parity_pairs import python_leaf_classes, python_parity_exception
 
 # Formula-delta suite gate is orthogonal; this sweep only asserts CSMI soft fails.
 pytestmark = pytest.mark.allow_formula_delta_mismatch
-
-# Temporary soft failures (C11). Drop an entry when unique-edit / pattern
-# partition / C13 product-equiv handling stops relying on yield CSMI.
-_XFAIL_CSMI_DEDUP: frozenset[tuple[str, str]] = frozenset(
-    {
-        # C13 class A: product-identical distinct directed sites (ester
-        # quaternary_alcohol on both carbons of bridging O). Unequal ranks —
-        # not SiteDeduplicationWarning; quiet unique_csmi drop only.
-        ("Dealkylation", "CC(=O)Oc1ccccc1C(=O)O"),
-        # Unique-edit miss + yield drop (halide/At geminal overlaps).
-        ("OxidativeDehalogenation", "ClC(I)Cl"),
-        ("OxidativeDehalogenation", "[At]C(Cl)[At]"),
-        ("OxidativeDehalogenation", "ClC([At])Cl"),
-    }
-)
 
 
 def _leaf_names() -> list[str]:
@@ -57,63 +47,96 @@ def _leaf_names() -> list[str]:
 _LEAVES = _leaf_names()
 
 
-def _count_emissions(
-    rule: ReactionRule, smiles: str, *, unique_csmi: bool
-) -> tuple[int, int]:
-    """Return ``(emission_count, SiteDeduplicationWarning count)``."""
+def _noncompliant_names() -> list[str]:
+    out: list[str] = []
+    for name in _LEAVES:
+        cls = python_leaf_classes()[name]
+        if not bool(getattr(cls, "unique_csmi_compliant", True)):
+            out.append(name)
+    return out
+
+
+_NONCOMPLIANT = _noncompliant_names()
+
+
+def _csmi_dup_hits(rule: ReactionRule, smiles: str) -> tuple[int, int]:
+    """Return ``(duplicate_key_count, SiteDeduplicationWarning count)``.
+
+    Counts under ``unique_csmi=False`` so detection does not depend on whether
+    the rule's yield layer is armed (compliance gate).
+    """
 
     mol = MolFromSmiles(smiles)
     assert mol is not None, smiles
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", SiteDeduplicationWarning)
-        n = len(list(rule.metabolize(mol, unique_csmi=unique_csmi)))
+        rows = list(rule.metabolize(mol, unique_csmi=False))
     n_warn = sum(
         1 for w in caught if issubclass(w.category, SiteDeduplicationWarning)
     )
-    return n, n_warn
+    keys: list[tuple[str, str | None, frozenset[str]]] = []
+    for products, info in rows:
+        fragment: list[str] = []
+        unstable = False
+        for product in products:
+            dedup = product.xf.tracing.dedup_smi
+            if dedup is None:
+                unstable = True
+                break
+            fragment.append(dedup)
+        if unstable:
+            continue
+        keys.append(_unique_csmi_key(info, frozenset(fragment)))
+    n_dup = sum(1 for _key, n in Counter(keys).items() if n > 1)
+    return n_dup, n_warn
 
 
 @pytest.mark.parametrize("rule_name", _LEAVES or ["Hydroxylation"])
 @pytest.mark.parametrize("smiles", PARITY_FUZZ_MOLS)
-def test_no_unique_csmi_yield_drop(rule_name: str, smiles: str) -> None:
-    """``unique_csmi`` must not drop emissions (sites/patterns/whens suffice)."""
+def test_unique_csmi_compliance(rule_name: str, smiles: str) -> None:
+    """Compliant: no CSMI dups. Non-compliant: xfail only here when dups remain."""
 
     if not _LEAVES:
         pytest.skip("no Python leaf rules")
 
     cls = python_leaf_classes()[rule_name]
     rule = instantiate_rule(cls)
-    expect_soft = (rule_name, smiles) in _XFAIL_CSMI_DEDUP
+    compliant = bool(getattr(rule, "unique_csmi_compliant", True))
+    n_dup, n_warn = _csmi_dup_hits(rule, smiles)
+    has_hit = n_dup > 0 or n_warn > 0
 
-    try:
-        n_off, warn_off = _count_emissions(rule, smiles, unique_csmi=False)
-        n_on, warn_on = _count_emissions(rule, smiles, unique_csmi=True)
-
-        if n_off > n_on:
-            raise AssertionError(
-                f"unique_csmi yield drop for {rule_name} on {smiles!r}: "
-                f"unique_csmi=False → {n_off} emissions, True → {n_on} "
-                f"(SiteDeduplicationWarning off={warn_off} on={warn_on}). "
-                f"Dedup should come from sites/patterns/whens (C11)."
-            )
-
-        # Check layer can warn even when yield keeps both (unique_csmi=False).
-        # Any warning is still a unique-edit miss soft failure.
-        if warn_off or warn_on:
-            raise AssertionError(
-                f"SiteDeduplicationWarning for {rule_name} on {smiles!r}: "
-                f"off={warn_off} on={warn_on} (unique-edit miss; C11)."
-            )
-    except AssertionError:
-        if expect_soft:
+    if not compliant:
+        if has_hit:
             pytest.xfail(
-                "C11 soft failure: unique_csmi / SiteDeduplicationWarning; "
-                "fix unique-edit/partition then remove from _XFAIL_CSMI_DEDUP"
+                f"{rule_name} unique_csmi_compliant=False: CSMI dup / "
+                f"SiteDeduplicationWarning on {smiles!r} "
+                f"(dups={n_dup}, warns={n_warn}); fix unique-edit then mark compliant"
             )
-        raise
+        return
 
-    if expect_soft:
-        pytest.fail(
-            f"{rule_name} on {smiles!r} no longer hits unique_csmi soft failure — "
-            f"remove from _XFAIL_CSMI_DEDUP"
+    if has_hit:
+        raise AssertionError(
+            f"compliant rule {rule_name} on {smiles!r}: "
+            f"CSMI duplicate keys={n_dup}, SiteDeduplicationWarning={n_warn}. "
+            f"Dedup must come from sites/patterns/whens (C11), or set "
+            f"unique_csmi_compliant=False until fixed."
         )
+
+
+@pytest.mark.parametrize("rule_name", _NONCOMPLIANT or ["_none_"])
+def test_noncompliant_still_hits_somewhere(rule_name: str) -> None:
+    """Non-compliant leaves must still show a corpus hit (else mark compliant)."""
+
+    if rule_name == "_none_":
+        pytest.skip("all leaves unique_csmi_compliant")
+    cls = python_leaf_classes()[rule_name]
+    rule = instantiate_rule(cls)
+    assert not rule.unique_csmi_compliant
+    for smiles in PARITY_FUZZ_MOLS:
+        n_dup, n_warn = _csmi_dup_hits(rule, smiles)
+        if n_dup > 0 or n_warn > 0:
+            return
+    raise AssertionError(
+        f"{rule_name} is unique_csmi_compliant=False but PARITY_FUZZ_MOLS has no "
+        f"CSMI dup / SiteDeduplicationWarning — set unique_csmi_compliant=True"
+    )

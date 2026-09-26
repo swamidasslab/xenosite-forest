@@ -156,6 +156,11 @@ class ReactionRule:
     # Non-empty string ⇒ unpaired or intentionally divergent; tests read this
     # attribute and do not hardcode exception name lists.
     rust_parity_exception: str | None = None
+    # C11: yield-layer ``unique_csmi`` only runs when True. Dedup must come
+    # from sites/patterns/whens; product CSMI collapse is a soft failure.
+    # Goal: every leaf True. Non-compliant leaves keep duplicates until
+    # unique-edit / partition / product_equiv fixes land (tests xfail).
+    unique_csmi_compliant: bool = True
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -263,9 +268,12 @@ class ReactionRule:
           ``SiteDeduplicationWarning`` when a later emission under the
           same ``(rule, pattern)`` repeats an earlier emission's frozenset
           of fragment CSMIs *and* matching site ranks (unique-edit miss);
-          **yield** (only when ``unique_csmi``, default on) drops duplicate
+          **yield** (only when ``unique_csmi`` **and** this rule is
+          ``unique_csmi_compliant``, default on for both) drops duplicate
           ``(rule, pattern, emission frozenset)`` emissions from the
-          stream. Check does not imply drop; ``unique_csmi=False`` still
+          stream. Non-compliant rules never yield-drop on CSMI (C11): fix
+          unique-edit / partition instead, then set ``unique_csmi_compliant``.
+          Check does not imply drop; ``unique_csmi=False`` still
           checks but yields every emission after site unique-edit. Yield
           keys prefer ``info["pattern"]["name"]``, else the SMARTS string;
           pair emissions without a pattern use ``None`` for the middle
@@ -308,8 +316,12 @@ class ReactionRule:
         self._clear_atom_maps(mol)
 
         # Yield layer (unique_csmi): (rule, PatternInfo.name | SMARTS, S).
-        # Site topology lives only in unique-edit upstream. S is the emission
-        # frozenset of fragment CSMIs (same as check).
+        # Only when this rule is ``unique_csmi_compliant`` (C11). Site topology
+        # lives in unique-edit upstream. S is the emission frozenset of
+        # fragment CSMIs (same as check).
+        apply_unique_csmi = bool(unique_csmi) and bool(
+            getattr(self, "unique_csmi_compliant", True)
+        )
         seen_yield: set[tuple[str, str | None, frozenset[str]]] = set()
         # Check layer: keepers are (emission CSMI frozenset, site ranks) under
         # (rule, pattern). Same S + equal ranks → SiteDeduplicationWarning (miss).
@@ -398,7 +410,7 @@ class ReactionRule:
                 mol, info, finished, kwargs.get("counters")
             )
 
-            if unique_csmi and emission_csmi is not None:
+            if apply_unique_csmi and emission_csmi is not None:
                 key = _unique_csmi_key(info, emission_csmi)
                 if key in seen_yield:
                     continue
@@ -2939,6 +2951,9 @@ class Dealkylation(ResonanceRule):
     """
     sites_on = "bonds"
     site_kind: RuleSiteKind = "directed_bond"
+    # C13: ester bridging-O double directed sites share a product bag until
+    # product_equiv / identity data folds them; yield CSMI must not paper over.
+    unique_csmi_compliant = False
     _example_substrates: tuple[str, ...] = ('CCO', 'COc1ccccc1')
 
 
@@ -3822,6 +3837,9 @@ class OxidativeDehalogenation(SmirksReactionRule):
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
+    # Geminal multi-halide unique-edit miss until sites/patterns partition;
+    # yield CSMI must not paper over (C11).
+    unique_csmi_compliant = False
     _example_substrates: tuple[str, ...] = ('CCCl', 'Clc1ccccc1')
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
