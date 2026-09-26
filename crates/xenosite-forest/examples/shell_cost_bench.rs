@@ -77,10 +77,11 @@ const HARD: &[(&str, &str, &str)] = &[
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CostKind {
     /// Legacy baseline: Σ|δ| on kept site atoms only (no cleaved count).
-    /// Matches pre-SiteShellBag `shell_cost_bench` numbers.
     AtSitesLegacy,
     /// Current `at_sites().cost()` = Σ|δ| + cleaved + added.
     AtSitesCleaved,
+    /// Multiset Σ |current−target| via [`AtomNeighborhood::l1`] (raw site shell cost).
+    MultisetRaw,
     /// Multiset Σ norm|current−target|; shells only.
     MultisetNormShells,
     /// Multiset Σ norm|current−target|; shells + |Δaromatic|.
@@ -106,8 +107,9 @@ impl Mode {
         parts.push(match self.kind {
             CostKind::AtSitesLegacy => "at_sites Σ|δ| (legacy)",
             CostKind::AtSitesCleaved => "at_sites Σ|δ|+cleaved",
-            CostKind::MultisetNormShells => "multiset norm shells",
-            CostKind::MultisetNormDear => "multiset norm+dear",
+            CostKind::MultisetRaw => "site_shell Σ|cur−tgt|",
+            CostKind::MultisetNormShells => "site_shell norm shells",
+            CostKind::MultisetNormDear => "site_shell norm+dear",
         });
         if self.leave {
             parts.push("+leave");
@@ -195,6 +197,48 @@ fn expand_atoms(
     }
 }
 
+fn neighborhood_bag_raw_l1(
+    a: &[xenosite_forest::AtomNeighborhood],
+    b: &[xenosite_forest::AtomNeighborhood],
+) -> f64 {
+    let mut unused = b.to_vec();
+    let mut cost = 0usize;
+    for env in a {
+        if let Some((i, _)) = unused.iter().enumerate().min_by_key(|(_, x)| env.l1(x)) {
+            let other = unused.swap_remove(i);
+            cost += env.l1(&other);
+        } else {
+            cost += env.abs_delta();
+        }
+    }
+    for other in &unused {
+        cost += other.abs_delta();
+    }
+    cost as f64
+}
+
+fn multiset_raw_cost(
+    cur: &xenosite_forest::MoleculeShells,
+    tgt: &xenosite_forest::MoleculeShells,
+    map: &std::collections::BTreeMap<usize, usize>,
+    atoms: &[usize],
+) -> f64 {
+    let mut projected = Vec::new();
+    let mut target_envs = Vec::new();
+    for &r in atoms {
+        let Some(c) = cur.atoms.get(&r) else {
+            continue;
+        };
+        if let Some(&t) = map.get(&r) {
+            if let Some(te) = tgt.atoms.get(&t) {
+                target_envs.push(te.clone());
+            }
+        }
+        projected.push(c.clone());
+    }
+    neighborhood_bag_raw_l1(&projected, &target_envs)
+}
+
 fn site_cost(
     mode: Mode,
     align: &xenosite_forest::AlignedShells,
@@ -211,6 +255,7 @@ fn site_cost(
             .map(|e| e.abs_delta())
             .sum::<usize>() as f64,
         CostKind::AtSitesCleaved => align.at_sites(atoms).cost() as f64,
+        CostKind::MultisetRaw => multiset_raw_cost(cur, tgt, map, atoms),
         CostKind::MultisetNormShells => site_shell_cost_opts(
             cur,
             None,
@@ -387,14 +432,21 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
                 },
             ));
             out.push((
-                "→ multiset norm shells".into(),
+                "→ site_shell Σ|cur−tgt|".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetRaw,
+                },
+            ));
+            out.push((
+                "→ site_shell norm shells".into(),
                 Mode {
                     leave: base.leave,
                     kind: CostKind::MultisetNormShells,
                 },
             ));
             out.push((
-                "→ multiset norm+dear".into(),
+                "→ site_shell norm+dear".into(),
                 Mode {
                     leave: base.leave,
                     kind: CostKind::MultisetNormDear,
@@ -403,14 +455,37 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
         }
         CostKind::AtSitesCleaved => {
             out.push((
-                "→ multiset norm shells".into(),
+                "→ site_shell Σ|cur−tgt|".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetRaw,
+                },
+            ));
+            out.push((
+                "→ site_shell norm shells".into(),
                 Mode {
                     leave: base.leave,
                     kind: CostKind::MultisetNormShells,
                 },
             ));
             out.push((
-                "→ multiset norm+dear".into(),
+                "→ site_shell norm+dear".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormDear,
+                },
+            ));
+        }
+        CostKind::MultisetRaw => {
+            out.push((
+                "+normalize shells".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormShells,
+                },
+            ));
+            out.push((
+                "+normalize+dearomatic".into(),
                 Mode {
                     leave: base.leave,
                     kind: CostKind::MultisetNormDear,
@@ -439,42 +514,38 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
     out
 }
 
-fn main() {
-    println!(
-        "shell_cost_bench — greedy ablation from baseline vs live gate\n\
-         columns: suite  P/R/Agree  hop0-top1/known\n"
-    );
-    let t0 = Instant::now();
-
-    let mut history: Vec<(String, SuiteStats)> = Vec::new();
-    let mut current = Mode::baseline();
-    let baseline = run_mode(current);
-    print_row("BASELINE", &baseline);
-    history.push(("BASELINE".into(), baseline.clone()));
-    let mut best = baseline;
+fn run_greedy_chain(
+    start: Mode,
+    start_tag: &str,
+    history: &mut Vec<(String, SuiteStats)>,
+) -> (Mode, SuiteStats) {
+    let mut current = start;
+    let start_stats = run_mode(current);
+    print_row(start_tag, &start_stats);
+    history.push((start_tag.into(), start_stats.clone()));
+    let mut best = start_stats;
     let mut best_mode = current;
 
-    // Also record every single-add from baseline for the ledger.
-    println!("\n## Single adds from baseline");
-    for (tag, mode) in candidates_from(Mode::baseline()) {
+    println!("\n### Single adds from {start_tag}");
+    for (tag, mode) in candidates_from(start) {
+        if mode == start {
+            continue;
+        }
         let s = run_mode(mode);
         print_row(&tag, &s);
-        history.push((tag, s));
+        history.push((format!("{start_tag} {tag}"), s));
     }
 
-    println!("\n## Greedy keep-if-helps");
-    loop {
-        let mut improved = false;
+    println!("\n### Greedy keep-if-helps ({start_tag})");
+    for _ in 0..6 {
         let mut round_best: Option<(String, Mode, SuiteStats)> = None;
         for (tag, mode) in candidates_from(current) {
-            // Skip modes already equal to current.
             if mode == current {
                 continue;
             }
             let s = run_mode(mode);
             print_row(&format!("  try {tag}"), &s);
-            let better = score_key(&s) > score_key(&best);
-            if better {
+            if score_key(&s) > score_key(&best) {
                 match &round_best {
                     None => round_best = Some((tag, mode, s)),
                     Some((_, _, prev)) if score_key(&s) > score_key(prev) => {
@@ -490,33 +561,23 @@ fn main() {
             best = s;
             best_mode = mode;
             current = mode;
-            improved = true;
-        }
-        if !improved {
+        } else {
             println!("  (no improving add)");
             break;
         }
-        // Stop if no further unused feature directions.
-        if candidates_from(current)
-            .into_iter()
-            .all(|(_, m)| m == current || history.iter().any(|(_, h)| h.label == m.label()))
-        {
-            // Still allow one more round of tries; break only when none help.
-        }
-        // Cap rounds.
-        if history.len() > 12 {
-            break;
-        }
     }
+    (best_mode, best)
+}
 
+fn print_ledger(history: &[(String, SuiteStats)]) {
     println!("\n## Ledger (all measured)");
     println!(
-        "{:<28}  {:>22}  {:>22}  config",
+        "{:<36}  {:>22}  {:>22}  config",
         "step", "mid P/R/A top", "hard P/R/A top"
     );
-    for (tag, s) in &history {
+    for (tag, s) in history {
         println!(
-            "{:<28}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {}",
+            "{:<36}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {}",
             tag,
             s.mid.prec(),
             s.mid.rec(),
@@ -531,8 +592,37 @@ fn main() {
             s.label
         );
     }
+}
+
+fn main() {
     println!(
-        "\nBEST: {}  (agree_sum={:.3} prec_sum={:.3})",
+        "shell_cost_bench — greedy ablation vs live gate\n\
+         Chain A: legacy at_sites Σ|δ|\n\
+         Chain B: site_shell_cost Σ|current−target| (multiset raw)\n\
+         columns: P/R/Agree  hop0-top1/known\n"
+    );
+    let t0 = Instant::now();
+    let mut history: Vec<(String, SuiteStats)> = Vec::new();
+
+    println!("## Chain A — from legacy at_sites baseline");
+    let (best_a_mode, best_a) = run_greedy_chain(Mode::baseline(), "A BASELINE", &mut history);
+
+    println!("\n## Chain B — from site_shell_cost Σ|current−target|");
+    let site_start = Mode {
+        leave: false,
+        kind: CostKind::MultisetRaw,
+    };
+    let (best_b_mode, best_b) = run_greedy_chain(site_start, "B SITE_SHELL", &mut history);
+
+    print_ledger(&history);
+
+    let (best_mode, best, which) = if score_key(&best_b) > score_key(&best_a) {
+        (best_b_mode, best_b, "B")
+    } else {
+        (best_a_mode, best_a, "A")
+    };
+    println!(
+        "\nBEST overall [{which}]: {}  (agree_sum={:.3} prec_sum={:.3})",
         best_mode.label(),
         best.mid.agree() + best.hard.agree(),
         best.mid.prec() + best.hard.prec()
