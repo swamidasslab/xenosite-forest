@@ -38,6 +38,8 @@ pub mod valence;
 
 #[cfg(test)]
 mod lift_mcs_correctness;
+#[cfg(test)]
+mod pattern_info_catalog;
 
 #[cfg(all(feature = "python", not(target_arch = "wasm32")))]
 mod python_api;

@@ -1,4 +1,4 @@
-//! Always-on PatternInfo catalog audit.
+//! Always-on PatternInfo catalog audit (part of `cargo test --lib`).
 //!
 //! Structural invariants + chemistry probe: if applying a pattern clears
 //! aromaticity at `site_map` atoms, the catalog must declare
@@ -6,11 +6,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use xenosite_forest::mol::atom_idx;
-use xenosite_forest::{
-    Edit, Effect, ForestMol, PatternInfo, SiteKind, catalog_names, compose_delta_formula,
-    leaf_rule, parse_mol,
-};
+use crate::mol::{atom_idx, parse_mol};
+use crate::pattern::{Edit, Effect, PatternInfo, SiteKind, compose_delta_formula};
+use crate::rules::{catalog_names, leaf_rule};
+use crate::ForestMol;
 
 /// Probe mols that expose aromatic (and a few aliphatic) sites.
 const PROBES: &[&str] = &[

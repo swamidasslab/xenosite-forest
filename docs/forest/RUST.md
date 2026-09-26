@@ -110,17 +110,12 @@ rs.metabolize(ForestMol("c1ccccc1"))  # no per-search marshal of patterns
 
 ## Build
 
-Native tests:
+Native tests (PatternInfo catalog audit is part of `--lib`, not a separate harness):
 
 ```bash
 cargo test -p xenosite-forest
+cargo test -p xenosite-forest --lib   # includes pattern_info_catalog
 cargo test -p xenosite-forest --features python
-```
-
-Always-on PatternInfo catalog audit (also under the plain `cargo test` line above):
-
-```bash
-cargo test -p xenosite-forest --test pattern_info_catalog
 ```
 
 Browser WASM (the whole rlib + cdylib, including hydroxylation and the JS `ForestMol` class):
