@@ -630,10 +630,20 @@ pub fn site_atoms_with_leave(
     }
 
     for (a, b) in bonds {
-        let side_a = heavy_side(mol, a, b);
-        let side_b = heavy_side(mol, b, a);
-        let leave = pick_leave_side(&side_a, &side_b, leave_count);
-        out.extend(leave);
+        if let Some(n) = leave_count {
+            // Sized leave: flood each side, keep the side with `n` heavies
+            // (or the smaller if neither matches exactly).
+            let side_a = heavy_side(mol, a, b);
+            let side_b = heavy_side(mol, b, a);
+            let leave = pick_leave_side(&side_a, &side_b, Some(n));
+            out.extend(leave.iter().copied());
+        } else {
+            // Open leave: fragment size unknown — do **not** flood a ring half.
+            // Only the bond ends; heavies that actually leave are those absent
+            // from the applied edit alignment (see site_shell_cost_leave callers).
+            out.insert(a);
+            out.insert(b);
+        }
     }
     let mut v: Vec<usize> = out.into_iter().collect();
     v.sort_unstable();
@@ -1310,6 +1320,84 @@ mod tests {
         assert!(
             before > after + 1e-12,
             "cleaving OH leave should drop residual: {before:.3} → {after:.3} atoms={atoms:?} leave={leave_only:?}"
+        );
+    }
+
+    #[test]
+    fn open_leave_does_not_flood_ring() {
+        use crate::rules::dealkylation;
+        let parent = ForestMol::parse("COc1ccc2c(OC)cccc2c1").unwrap();
+        let target = parse_mol("O=C1C(=O)c2ccccc2C=C1").unwrap();
+        let ad = atom_diff(parent.mol(), &target);
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+        let set = dealkylation();
+        let c = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.pattern.name == "cc_quaternary_alcohol" && c.site == 2)
+            .expect("cc_quaternary at site 2");
+        assert!(c.pattern.effect.cleaves);
+        assert!(c.pattern.effect.leave_count.is_none());
+        let site: Vec<usize> = c
+            .pattern
+            .site_map
+            .iter()
+            .filter_map(|m| c.mapped.get(m).copied())
+            .collect();
+        let mapped: Vec<usize> = c.mapped.values().copied().collect();
+        let expanded = site_atoms_with_leave(
+            parent.mol(),
+            &site,
+            None,
+            &ad.cleavage_bonds,
+            &mapped,
+        );
+        assert_eq!(
+            expanded.len(),
+            2,
+            "open leave must stay at bond ends, not flood the ring: {expanded:?}"
+        );
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let edit = edit_shells(&parent, &child);
+        // Leave = heavies the edit actually drops from the alignment.
+        let leave_only: Vec<usize> = expanded
+            .iter()
+            .copied()
+            .filter(|a| !edit.alignment.contains_key(a))
+            .collect();
+        assert!(
+            !leave_only.is_empty(),
+            "edit should cleave at least one bond end: align missing from {expanded:?}"
+        );
+        let mut atoms = site.clone();
+        atoms.extend(&leave_only);
+        atoms.sort_unstable();
+        atoms.dedup();
+        let before = site_shell_cost_leave(
+            &cur,
+            None,
+            &tgt,
+            &ad.mapping,
+            &atoms,
+            &leave_only,
+            SiteShellCostOpts::default(),
+        );
+        let after = site_shell_cost_leave(
+            &cur,
+            Some(&edit),
+            &tgt,
+            &ad.mapping,
+            &atoms,
+            &leave_only,
+            SiteShellCostOpts::default(),
+        );
+        assert!(
+            before > after + 1e-12,
+            "open-leave cleavage should drop residual: {before:.3} → {after:.3} leave={leave_only:?}"
         );
     }
 
