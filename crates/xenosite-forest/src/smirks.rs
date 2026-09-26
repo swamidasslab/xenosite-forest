@@ -289,6 +289,47 @@ fn specialize_product_wildcards(
 /// - Resolve SMARTS bond or-queries (`-,:`, `=,:`) to the live bond order.
 /// - Rewrite product `[*&H0&+:map]`-style wildcards to `[ElH0+:map]`.
 /// - Leave product organic atoms alone when already chematic-clean.
+
+/// Explicit H-count from a SMARTS bracket body (`H2`, `h1`, `H0`, …).
+fn h_count_from_bracket(inner: &str) -> Option<u8> {
+    let bytes = inner.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Skip nested recursive `$()` so `$([#6H3])` does not leak.
+        if bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
+            let mut depth = 0_i32;
+            while i < bytes.len() {
+                match bytes[i] {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            i += 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if (bytes[i] == b'H' || bytes[i] == b'h') && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit()
+        {
+            return Some((bytes[i + 1] - b'0') as u8);
+        }
+        // Bare `H` / `h` before `:` means H1 (RDKit).
+        if (bytes[i] == b'H' || bytes[i] == b'h')
+            && (i + 1 == bytes.len()
+                || matches!(bytes[i + 1], b':' | b';' | b',' | b'&' | b'!'))
+        {
+            return Some(1);
+        }
+        i += 1;
+    }
+    None
+}
+
 pub fn specialize_smirks_for_maps(
     smirks: &str,
     mol: &Molecule,
@@ -317,8 +358,21 @@ pub fn specialize_smirks_for_maps(
                     let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
                         ForestError::Smirks(format!("unsupported element for map {mapno}"))
                     })?;
+                    // Keep H-count when the query constrains H (H0/H1/h2, …)
+                    // so chematic apply still distinguishes [#6H1] vs [#6H2]
+                    // after #→El rewrite. Use the matched atom's H, not the
+                    // first OR branch in the bracket (`#7h1,#7h2` → atom H).
+                    let h = if h_count_from_bracket(bracket).is_some() {
+                        Some(mol.implicit_hydrogen_count(atom_idx(atom)))
+                    } else {
+                        None
+                    };
                     out.push('[');
                     out.push_str(sym);
+                    if let Some(h) = h {
+                        out.push('H');
+                        out.push_str(&h.to_string());
+                    }
                     out.push(':');
                     out.push_str(&mapno.to_string());
                     out.push(']');
@@ -515,8 +569,12 @@ pub fn apply_smirks_at(
     };
     let mut try_forms = Vec::new();
     // Organic product expand of `#` (aliphatic first, then aromatic) on the
-    // specialized template, then on the original if different.
-    for base in [&specialized, smirks] {
+    // specialized template, then on the original if different. Also try a
+    // reactant-H-stripped specialized form: H-counts discriminate sites
+    // (e.g. aziridine CH vs CH2) for find_reaction_matches, but some chematic
+    // applies prefer bare `[N:1]` over `[NH1:1]`.
+    let stripped = strip_reactant_h_counts(&specialized);
+    for base in [&specialized, &stripped, smirks] {
         match organic_product_variants(base) {
             Ok(vars) => {
                 for v in vars {
@@ -542,6 +600,54 @@ pub fn apply_smirks_at(
         }
     }
     Ok(Vec::new())
+}
+
+/// Drop explicit `H`/`Hn` from reactant atom brackets (product side unchanged).
+fn strip_reactant_h_counts(smirks: &str) -> String {
+    let Some((reactant, product)) = smirks.split_once(">>") else {
+        return smirks.to_string();
+    };
+    let bytes = reactant.as_bytes();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            let Ok(end) = closing_bracket(reactant, i) else {
+                out.push_str(&reactant[i..]);
+                break;
+            };
+            let inner = &reactant[i + 1..end];
+            let mut cleaned = String::new();
+            let ib = inner.as_bytes();
+            let mut j = 0;
+            while j < ib.len() {
+                if (ib[j] == b'H' || ib[j] == b'h')
+                    && j + 1 < ib.len()
+                    && ib[j + 1].is_ascii_digit()
+                {
+                    j += 2;
+                    continue;
+                }
+                if (ib[j] == b'H' || ib[j] == b'h')
+                    && (j + 1 == ib.len()
+                        || matches!(ib[j + 1], b':' | b';' | b',' | b'&' | b'!'))
+                {
+                    j += 1;
+                    continue;
+                }
+                cleaned.push(ib[j] as char);
+                j += 1;
+            }
+            out.push('[');
+            out.push_str(&cleaned);
+            out.push(']');
+            i = end + 1;
+            continue;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    format!("{out}>>{product}")
 }
 
 fn apply_smirks_raw(
@@ -684,7 +790,7 @@ mod tests {
         assert_eq!(hits.len(), 1);
         let python = "[#6H3:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)";
         let form = specialize_smirks_for_maps(python, &mol, &hits[0]).unwrap();
-        assert_eq!(form, "[C:1][O:2]>>[*:2].[*:1](=O)O");
+        assert_eq!(form, "[CH3:1][OH0:2]>>[*:2].[*:1](=O)O");
         let products = apply_smirks_at(python, &mol, &hits[0]).unwrap();
         let phenol = canon_of("Oc1ccccc1").unwrap();
         assert!(
@@ -750,13 +856,13 @@ mod tests {
     fn acetylation_covers_aliphatic_and_aromatic_heteroatom_branches() {
         let smirks = "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1][#6](=[#8])[#6]";
         let cases = [
-            ("CCO", "[O:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)OCC"),
-            ("CCN", "[N:1]>>[*:1][#6](=[#8])[#6]", "CCNC(C)=O"),
-            ("CS", "[S:1]>>[*:1][#6](=[#8])[#6]", "CSC(C)=O"),
-            ("Oc1ccccc1", "[O:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Oc1ccccc1"),
-            ("Nc1ccccc1", "[N:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Nc1ccccc1"),
-            ("Sc1ccccc1", "[S:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Sc1ccccc1"),
-            ("[nH]1cccc1", "[n:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)n1cccc1"),
+            ("CCO", "[OH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)OCC"),
+            ("CCN", "[NH2:1]>>[*:1][#6](=[#8])[#6]", "CCNC(C)=O"),
+            ("CS", "[SH1:1]>>[*:1][#6](=[#8])[#6]", "CSC(C)=O"),
+            ("Oc1ccccc1", "[OH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Oc1ccccc1"),
+            ("Nc1ccccc1", "[NH2:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Nc1ccccc1"),
+            ("Sc1ccccc1", "[SH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Sc1ccccc1"),
+            ("[nH]1cccc1", "[nH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)n1cccc1"),
         ];
         for (smiles, want_form, want_prod) in cases {
             let mol = parse_mol(smiles).unwrap();
@@ -809,7 +915,7 @@ mod tests {
         let smirks = "[#7v3H0:1]>>[*&H0&+:1][O-]";
         let hits = smarts_matches(&mol, "[#7v3H0:1]").unwrap();
         let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
-        assert_eq!(form, "[N:1]>>[NH0+:1][O-]");
+        assert_eq!(form, "[NH0:1]>>[NH0+:1][O-]");
         let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
         let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
         assert_eq!(got, BTreeSet::from([canon_of("C[N+](C)(C)[O-]").unwrap()]));
