@@ -359,7 +359,13 @@ class ReactionRule:
             if leave.get("O") == 1 and not any(
                 k != "O" and v for k, v in leave.items()
             ):
-                if any(refuse_o_leave_aromatic_collapse(mol, p) for p in products):
+                def _heavy(p):
+                    return sum(1 for a in p.GetAtoms() if a.GetAtomicNum() > 1) > 1
+
+                if any(
+                    _heavy(p) and refuse_o_leave_aromatic_collapse(mol, p)
+                    for p in products
+                ):
                     continue
 
             for p in products:

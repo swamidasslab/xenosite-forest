@@ -88,10 +88,18 @@ pub fn has_aromatic_atom(mol: &Molecule) -> bool {
 
 /// O-leave cleavage must not fully dearomatize into a ketene (benzoic acid →
 /// `O=C=C1CCCCC1`) or drop a full aromatic sextet (nitroarene β-elim junk).
-/// Ring-open dealk ketenes that keep an aromatic piece pass.
+/// Ring-open dealk ketenes that keep an aromatic piece pass. Leave fragments
+/// (water) are not judged — only heavy products.
 pub fn accept_o_leave_product(parent: &Molecule, product: &Molecule) -> bool {
     if !accept_product(product) {
         return false;
+    }
+    let heavy = product
+        .atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .count();
+    if heavy <= 1 {
+        return true;
     }
     let parent_arom = parent.atoms().filter(|(_, a)| a.aromatic).count();
     let product_arom = product.atoms().filter(|(_, a)| a.aromatic).count();
