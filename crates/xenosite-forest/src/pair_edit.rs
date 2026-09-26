@@ -11,13 +11,13 @@ use chematic::core::{Atom, BondOrder, Element};
 use chematic::perception::find_sssr;
 
 use crate::kekule::{
-    all_assignments, aromatic_2core_atoms, bond_order_sums, conjugated_component,
-    move_charge_with_bonds, with_atom_explicit_h,
+    KekuleConfig, KekuleConstraints, all_assignments, aromatic_2core_atoms, bond_order_sums,
+    conjugated_component, move_charge_with_bonds, with_atom_explicit_h,
 };
 use crate::mol::{ForestError, Molecule, aromatize, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
 use crate::smarts::smarts_matches;
-use crate::valence::accept_product;
+use crate::valence::{accept_product, edited_valence_atoms, fill_closed_shell_h};
 
 fn bond_key(a: usize, b: usize) -> (usize, usize) {
     if a < b { (a, b) } else { (b, a) }
@@ -259,35 +259,11 @@ fn edit_end(
     }
 }
 
-/// Atoms whose σ skeleton changed in an end edit (cleavage / atom add). Their
-/// bond-order baseline for [`move_charge_with_bonds`] is the post-edit graph so
-/// H is not double-counted (methyl leave must be CH4, not [CH5]).
-fn skeleton_changed_atoms(
-    left: &PatternInfo,
-    map1: &BTreeMap<u16, usize>,
-    right: &PatternInfo,
-    map2: &BTreeMap<u16, usize>,
-) -> BTreeSet<usize> {
-    let mut out = BTreeSet::new();
-    for (pattern, mapped) in [(left, map1), (right, map2)] {
-        let Edit::PairEndpoint(edit) = &pattern.edit else {
-            continue;
-        };
-        match edit.as_str() {
-            "dealkylate" => {
-                if let (Some(&hetero), Some(&alkyl)) = (mapped.get(&2), mapped.get(&3)) {
-                    out.insert(hetero);
-                    out.insert(alkyl);
-                }
-            }
-            "add_carbonyl_o" => {
-                // New oxygen is absent from parent `before`; ring carbon’s new
-                // C=O is a π constraint — keep parent baseline for that carbon.
-            }
-            _ => {}
-        }
-    }
-    out
+/// Atoms whose σ skeleton or incident bond-order sum changed — see
+/// [`crate::valence::edited_valence_atoms`]. Kept as a thin alias so the emit
+/// path documents the charge-baseline contract in one place.
+fn charge_baseline_atoms(parent: &Molecule, edited: &Molecule) -> BTreeSet<usize> {
+    edited_valence_atoms(parent, edited)
 }
 
 fn edit_single_to_double(
@@ -356,40 +332,10 @@ fn edit_dealkylate(
     }
     // Closed-shell H after cleavage (no radicals, no [CH5]/[CH6]). Fill from
     // remaining bond orders + charge; do not stack bump on valence-inferred H.
+    // (materialize also settles all edited-valence atoms after both ends.)
     fill_closed_shell_h(mol, alkyl);
     fill_closed_shell_h(mol, hetero);
     true
-}
-
-/// Set explicit H so atom valence is complete (closed shell). Used after
-/// cleavage so leave fragments are CH4 / HN= / O= without sanitize rescue.
-fn fill_closed_shell_h(mol: &mut Molecule, atom: usize) {
-    let idx = atom_idx(atom);
-    let a = mol.atom(idx);
-    let z = a.element.atomic_number();
-    let charge = a.charge as i16;
-    let mut bond_sum = 0.0_f32;
-    for (_nbr, bidx) in mol.neighbors(idx) {
-        bond_sum += match mol.bond(bidx).order {
-            BondOrder::Single | BondOrder::Up | BondOrder::Down => 1.0,
-            BondOrder::Double => 2.0,
-            BondOrder::Triple => 3.0,
-            BondOrder::Aromatic => 1.5,
-            BondOrder::Quadruple => 4.0,
-            _ => 1.0,
-        };
-    }
-    // Organic valence targets (neutral): C 4, N 3, O 2. Charge adjusts.
-    let target = match z {
-        6 => 4 + charge,
-        7 => 3 + charge,
-        8 => 2 + charge,
-        _ => return,
-    };
-    let need = target - bond_sum.round() as i16;
-    if need >= 0 {
-        *mol = with_atom_explicit_h(mol, idx, need as u8);
-    }
 }
 
 /// One pair emission before RuleSet packaging.
@@ -488,9 +434,22 @@ impl PairCandidate {
             .union(&saturate_sites(&self.right, &self.map2))
             .copied()
             .collect::<BTreeSet<_>>();
+        // Emit-path closed-shell settle + charge baseline (perception of
+        // neighbor / bond-sum change — not edit-token names). Kekulé matcher
+        // stays generic; config is the behavior contract.
+        let settle = charge_baseline_atoms(mol, &rw);
+        for &a in &settle {
+            fill_closed_shell_h(&mut rw, a);
+        }
         let (atoms, bonds) = residual_pi_graph(mol, &self.system, &saturate);
         let forced = perceive_forced_doubles(&rw, &atoms);
-        let assignments = all_assignments(&rw, &atoms, &bonds, &forced, &saturate);
+        let config = KekuleConfig::for_constraints();
+        let constraints = KekuleConstraints::new()
+            .with_forced(forced.clone())
+            .with_saturate(saturate.clone());
+        // Caller already perceived forced doubles — do not double-count from mol.
+        let match_cfg = config.explicit_forced_only();
+        let assignments = all_assignments(&rw, &atoms, &bonds, &constraints, &match_cfg);
         if assignments.is_empty() {
             return Ok(Vec::new());
         }
@@ -498,7 +457,7 @@ impl PairCandidate {
         // Residual aromaticity: cyclic 2-core after dropping demand-consumed
         // atoms (forced doubles / saturate) — HEURISTICS, not sanitize flags.
         let (arom_atoms, arom_bonds) = aromatic_residual_after_forced(&atoms, &bonds, &forced);
-        let aromatic_core = aromatic_2core_atoms(&rw, &arom_atoms, &arom_bonds);
+        let aromatic_core = aromatic_2core_atoms(&rw, &arom_atoms, &arom_bonds, &config);
         if self.effect.dearomatizes {
             let edited: HashSet<usize> = self
                 .system
@@ -514,12 +473,12 @@ impl PairCandidate {
 
         let mut products = Vec::new();
         let mut local_csmi = BTreeSet::new();
-        // Charge/H follow parent π bond sums (aromatic = 1.5). Cleaved atoms
-        // use the post-edit baseline so leave fragments stay closed-shell
-        // (CH4 not [CH5]) — no sanitize rescue, no Rust regression on C16.
+        // Charge/H follow parent π bond sums (aromatic = 1.5). Edited-valence
+        // atoms use the post-edit baseline so leave fragments stay closed-shell
+        // (CH4 not [CH5]; phenol O not [OH+]) — no sanitize rescue.
         let mut before = bond_order_sums(mol);
         let post_edit = bond_order_sums(&rw);
-        for a in skeleton_changed_atoms(&self.left, &self.map1, &self.right, &self.map2) {
+        for a in settle {
             if let Some(&v) = post_edit.get(&a) {
                 before.insert(a, v);
             }

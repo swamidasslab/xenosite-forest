@@ -369,6 +369,95 @@ impl KekuleCache {
     }
 }
 
+/// Config for the generic Kekulé / π-matching solver.
+///
+/// **This is the contract for altering solver behavior.** Callers (pair emit,
+/// ResonanceRule parents, 2-core aromaticity) pass data constraints
+/// (`forced_doubles`, `saturate`) plus this config. Do not add element- or
+/// rule-named branches inside the matcher — flip a field here (or extend this
+/// struct with a named, documented option) when behavior must change.
+///
+/// Defaults match current forest use: perceive post-edit doubles, enumerate
+/// multi-resonance seeds, charge-follow on overlay, 4n+2 benzenoid 2-core.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KekuleConfig {
+    /// Treat existing `BondOrder::Double` edges that touch the atom set as
+    /// additional forced seeds (graph perception after end edits).
+    pub perceive_existing_doubles: bool,
+    /// When listing assignments, also try each residual bond as an extra
+    /// forced seed (multi-resonance enumeration).
+    pub enumerate_bond_seeds: bool,
+    /// After stamping an assignment, run [`move_charge_with_bonds`].
+    pub move_charge_on_overlay: bool,
+    /// Cyclic 2-core component stays aromatic only if atom count is 4n+2
+    /// (all-carbon benzenoid shortcut). When false, any cyclic valid Kekulé
+    /// 2-core component is kept.
+    pub huckel_4n2: bool,
+}
+
+impl Default for KekuleConfig {
+    fn default() -> Self {
+        Self {
+            perceive_existing_doubles: true,
+            enumerate_bond_seeds: true,
+            move_charge_on_overlay: true,
+            huckel_4n2: true,
+        }
+    }
+}
+
+impl KekuleConfig {
+    /// Parent-bag fill / bond overlay (ResonanceRule `reactant_parent`).
+    pub fn for_parents() -> Self {
+        Self::default()
+    }
+
+    /// Constraint-directed pair materialize (forced doubles + saturate).
+    pub fn for_constraints() -> Self {
+        Self::default()
+    }
+
+    /// Single complete match only (no multi-resonance seed enumeration).
+    pub fn single_assignment(mut self) -> Self {
+        self.enumerate_bond_seeds = false;
+        self
+    }
+
+    /// Do not auto-force doubles already on the mol (caller supplies all forced).
+    pub fn explicit_forced_only(mut self) -> Self {
+        self.perceive_existing_doubles = false;
+        self
+    }
+}
+
+/// Constraints for one matching call (data, not config).
+///
+/// Supply from perception and/or PatternInfo. The solver does not interpret
+/// edit tokens or rule names.
+#[derive(Clone, Debug, Default)]
+pub struct KekuleConstraints {
+    /// Edges that must be selected as double (forced leaf/edge).
+    pub forced_doubles: BTreeSet<(usize, usize)>,
+    /// Atoms that leave must-match (and typically gain H on the emit path).
+    pub saturate: BTreeSet<usize>,
+}
+
+impl KekuleConstraints {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_forced(mut self, forced: BTreeSet<(usize, usize)>) -> Self {
+        self.forced_doubles = forced;
+        self
+    }
+
+    pub fn with_saturate(mut self, saturate: BTreeSet<usize>) -> Self {
+        self.saturate = saturate;
+        self
+    }
+}
+
 /// Parents covering two atoms. Different systems: union, not a product.
 #[derive(Clone)]
 pub struct EndParents {
@@ -399,14 +488,14 @@ pub(crate) fn bond_order_sums(mol: &Molecule) -> HashMap<usize, f32> {
 
 /// Move formal charge when a bond-order flip would leave it behind.
 ///
-/// Same rules as Python `move_charge_with_bonds`: neutral C shifts H; neutral
-/// aromatic atoms do not mint charge from 1.5→1/2 alone; already-charged atoms
-/// and neutral non-aromatic heteroatoms follow the bond (N may gain charge when
-/// bond order rises — iminium / amide resonance / pyridinium bookkeeping).
+/// Same rules as Python `move_charge_with_bonds` — general π bookkeeping, not
+/// rule chemistry: neutral C shifts H; neutral aromatic atoms do not mint
+/// charge from 1.5→1/2 alone; already-charged atoms and neutral non-aromatic
+/// heteroatoms follow the bond (N may gain charge when bond order rises).
 ///
-/// Closed-shell exception for oxygen: bond-order rise on neutral OH consumes H
-/// (phenol/enol → carbonyl) instead of minting `[OH+]`. Radicals and protonated
-/// carbonyls are not products — emit-path correctness, not sanitize rescue (C10).
+/// Closed-shell valence after **end edits** (forced doubles, cleavage) belongs
+/// on the emit path ([`crate::pair_edit`] / valence fill), not here — do not
+/// special-case elements for named reactions.
 pub fn move_charge_with_bonds(
     mol: &mut Molecule,
     before: &HashMap<usize, f32>,
@@ -437,11 +526,6 @@ pub fn move_charge_with_bonds(
             }
         } else if neutral && aromatic.contains(&i) {
             continue;
-        } else if neutral && z == 8 && delta > 0 {
-            // Phenol/enol → carbonyl: closed-shell O (H=0, charge=0). Do not
-            // mint [OH+] — after the double is written, valence-inferred H is
-            // already 0 so a "consume H else charge" branch wrongly charges.
-            *mol = with_atom_explicit_h(mol, atom_idx(i), 0);
         } else {
             mol.set_charge(atom_idx(i), charge.saturating_add(delta));
         }
@@ -472,37 +556,40 @@ fn match_assignment(
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
     seed: (usize, usize),
+    config: &KekuleConfig,
 ) -> Option<BTreeMap<(usize, usize), BondOrder>> {
-    complete_assignment(
-        mol,
-        atoms,
-        bonds,
-        &BTreeSet::from([bond_key(seed.0, seed.1)]),
-        &BTreeSet::new(),
-    )
+    let constraints = KekuleConstraints {
+        forced_doubles: BTreeSet::from([bond_key(seed.0, seed.1)]),
+        saturate: BTreeSet::new(),
+    };
+    complete_assignment(mol, atoms, bonds, &constraints, config)
 }
 
 /// Complete a Kekulé assignment under π constraints.
 ///
-/// `forced_doubles` seed the matching (exocyclic carbonyl/imine leaves, edited
-/// single→double edges). `saturate` atoms leave must-match (Hydrogenation
-/// `keep` + adds H — PatternInfo when the edit does not change the graph).
-/// Returns `None` when the residual matching is impossible.
+/// `constraints.forced_doubles` seed the matching (exocyclic leaves / edited
+/// edges that must be double). `constraints.saturate` atoms leave must-match
+/// (PatternInfo when the end edit does not change the graph — e.g. `keep` +
+/// adds H). [`KekuleConfig::perceive_existing_doubles`] optionally treats
+/// doubles already on `mol` as additional forced seeds. Returns `None` when
+/// the residual matching is impossible.
 pub fn complete_assignment(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
-    forced_doubles: &BTreeSet<(usize, usize)>,
-    saturate: &BTreeSet<usize>,
+    constraints: &KekuleConstraints,
+    config: &KekuleConfig,
 ) -> Option<BTreeMap<(usize, usize), BondOrder>> {
     use chematic::core::kekulization::atom_must_be_matched;
     let must: BTreeSet<usize> = atoms
         .iter()
         .copied()
-        .filter(|&i| !saturate.contains(&i) && atom_must_be_matched(mol, atom_idx(i)))
+        .filter(|&i| {
+            !constraints.saturate.contains(&i) && atom_must_be_matched(mol, atom_idx(i))
+        })
         .collect();
     let mut doubles: HashMap<usize, usize> = HashMap::new();
-    for &(left, right) in forced_doubles {
+    for &(left, right) in &constraints.forced_doubles {
         if doubles.contains_key(&left) || doubles.contains_key(&right) {
             if doubles.get(&left) != Some(&right) {
                 return None;
@@ -512,25 +599,27 @@ pub fn complete_assignment(
         doubles.insert(left, right);
         doubles.insert(right, left);
     }
-    // Also treat existing Double bonds touching the system as forced (perception
-    // after end edits — carbonyl O may sit outside `must`).
-    for (_, bond) in mol.bonds() {
-        if bond.order != BondOrder::Double {
-            continue;
-        }
-        let a = atom_usize(bond.atom1);
-        let b = atom_usize(bond.atom2);
-        if !atoms.contains(&a) && !atoms.contains(&b) {
-            continue;
-        }
-        if doubles.contains_key(&a) || doubles.contains_key(&b) {
-            if doubles.get(&a) != Some(&b) {
-                return None;
+    // Optionally treat existing Double bonds touching the system as forced
+    // (perception after end edits — the leaf partner may sit outside `must`).
+    if config.perceive_existing_doubles {
+        for (_, bond) in mol.bonds() {
+            if bond.order != BondOrder::Double {
+                continue;
             }
-            continue;
+            let a = atom_usize(bond.atom1);
+            let b = atom_usize(bond.atom2);
+            if !atoms.contains(&a) && !atoms.contains(&b) {
+                continue;
+            }
+            if doubles.contains_key(&a) || doubles.contains_key(&b) {
+                if doubles.get(&a) != Some(&b) {
+                    return None;
+                }
+                continue;
+            }
+            doubles.insert(a, b);
+            doubles.insert(b, a);
         }
-        doubles.insert(a, b);
-        doubles.insert(b, a);
     }
     let mut adj: HashMap<usize, Vec<usize>> = must.iter().map(|&a| (a, Vec::new())).collect();
     for &(left, right) in bonds {
@@ -601,24 +690,31 @@ pub fn count_assignments(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
-    forced_doubles: &BTreeSet<(usize, usize)>,
-    saturate: &BTreeSet<usize>,
+    constraints: &KekuleConstraints,
+    config: &KekuleConfig,
 ) -> usize {
-    all_assignments(mol, atoms, bonds, forced_doubles, saturate).len()
+    all_assignments(mol, atoms, bonds, constraints, config).len()
 }
 
 /// Every distinct complete assignment under the constraints.
+///
+/// When [`KekuleConfig::enumerate_bond_seeds`] is set, also tries each residual
+/// bond as an extra forced seed (multi-resonance enumeration).
 pub fn all_assignments(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
-    forced_doubles: &BTreeSet<(usize, usize)>,
-    saturate: &BTreeSet<usize>,
+    constraints: &KekuleConstraints,
+    config: &KekuleConfig,
 ) -> Vec<BTreeMap<(usize, usize), BondOrder>> {
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
     let mut consider = |forced: &BTreeSet<(usize, usize)>| {
-        let Some(assignment) = complete_assignment(mol, atoms, bonds, forced, saturate) else {
+        let c = KekuleConstraints {
+            forced_doubles: forced.clone(),
+            saturate: constraints.saturate.clone(),
+        };
+        let Some(assignment) = complete_assignment(mol, atoms, bonds, &c, config) else {
             return;
         };
         let sig: Vec<_> = assignment
@@ -629,14 +725,16 @@ pub fn all_assignments(
             out.push(assignment);
         }
     };
-    consider(forced_doubles);
-    for &seed in bonds {
-        if forced_doubles.contains(&seed) {
-            continue;
+    consider(&constraints.forced_doubles);
+    if config.enumerate_bond_seeds {
+        for &seed in bonds {
+            if constraints.forced_doubles.contains(&seed) {
+                continue;
+            }
+            let mut forced = constraints.forced_doubles.clone();
+            forced.insert(seed);
+            consider(&forced);
         }
-        let mut forced = forced_doubles.clone();
-        forced.insert(seed);
-        consider(&forced);
     }
     out
 }
@@ -675,21 +773,27 @@ pub fn two_core(
 }
 
 /// Atoms that remain aromatic: cyclic 2-core components with a valid Kekulé
-/// state and 4n+2 π electrons (all-carbon benzenoid shortcut).
+/// state (and 4n+2 π electrons when [`KekuleConfig::huckel_4n2`] is set —
+/// all-carbon benzenoid shortcut).
 ///
 /// Build `residual_atoms` / `residual_bonds` **after** dearomatizing edits
-/// (epoxidation: drop the two sp³ atoms; quinone: drop the carbonyl carbon
-/// from the aromatic candidate, or equivalently consume its demand with
-/// forced C=O so it is absent here). Then ask which cyclic 2-core pieces
-/// survive — not whether the original fused system is still aromatic.
+/// (drop sp³ / demand-consumed atoms from the aromatic candidate, or treat
+/// demand as consumed by a forced exocyclic double — same effect on the
+/// candidate graph). Then ask which cyclic 2-core pieces survive — not whether
+/// the original fused system is still aromatic.
 pub fn aromatic_2core_atoms(
     mol: &Molecule,
     residual_atoms: &BTreeSet<usize>,
     residual_bonds: &BTreeSet<(usize, usize)>,
+    config: &KekuleConfig,
 ) -> BTreeSet<usize> {
     let (core_atoms, core_bonds) = two_core(residual_atoms, residual_bonds);
     let mut aromatic = BTreeSet::new();
     let mut seen = BTreeSet::new();
+    let empty = KekuleConstraints::default();
+    // 2-core matching: caller already stripped demand; do not re-perceive
+    // doubles from the (possibly still-edited) mol as extra forced seeds.
+    let match_cfg = config.explicit_forced_only().single_assignment();
     for &start in &core_atoms {
         if !seen.insert(start) {
             continue;
@@ -720,19 +824,11 @@ pub fn aromatic_2core_atoms(
         if comp_bonds.len() < comp_atoms.len() {
             continue;
         }
-        if complete_assignment(
-            mol,
-            &comp_atoms,
-            &comp_bonds,
-            &BTreeSet::new(),
-            &BTreeSet::new(),
-        )
-        .is_none()
-        {
+        if complete_assignment(mol, &comp_atoms, &comp_bonds, &empty, &match_cfg).is_none() {
             continue;
         }
         let n = comp_atoms.len();
-        if n >= 6 && n % 4 == 2 {
+        if !config.huckel_4n2 || (n >= 6 && n % 4 == 2) {
             aromatic.extend(comp_atoms);
         }
     }
@@ -744,12 +840,14 @@ pub fn aromatic_2core_atoms(
 /// `atoms` and `assignment` are **index**-keyed for the current mol layout
 /// (perception). Cached bags store tag-keyed maps — resolve before calling.
 ///
-/// Applies [`move_charge_with_bonds`] so charge separation on valid writings
+/// When [`KekuleConfig::move_charge_on_overlay`] is set, applies
+/// [`move_charge_with_bonds`] so charge separation on valid writings
 /// (including N that gains charge) matches Python reactant overlays.
 pub fn overlay(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     assignment: &BTreeMap<(usize, usize), BondOrder>,
+    config: &KekuleConfig,
 ) -> Molecule {
     let before = bond_order_sums(mol);
     let aromatic: HashSet<usize> = mol
@@ -767,7 +865,9 @@ pub fn overlay(
             out = out.with_atom_aromatic(atom_idx(atom), false);
         }
     }
-    move_charge_with_bonds(&mut out, &before, &aromatic);
+    if config.move_charge_on_overlay {
+        move_charge_with_bonds(&mut out, &before, &aromatic);
+    }
     out
 }
 
@@ -776,10 +876,11 @@ pub fn overlay_tagged(
     mol: &Molecule,
     atom_tags: &BTreeSet<Tag>,
     assignment: &BTreeMap<(Tag, Tag), BondOrder>,
+    config: &KekuleConfig,
 ) -> Option<Molecule> {
     let atoms = atoms_to_idxs(mol, atom_tags)?;
     let orders = assignment_to_idxs(mol, assignment)?;
-    Some(overlay(mol, &atoms, &orders))
+    Some(overlay(mol, &atoms, &orders, config))
 }
 
 fn fill_slot(
@@ -791,10 +892,11 @@ fn fill_slot(
     if slot.borrow().is_filled() {
         return;
     }
+    let config = KekuleConfig::for_parents();
     let mut bag = slot.borrow_mut();
     let mut seen = BTreeSet::new();
     for &seed in bonds {
-        let Some(bond_orders) = match_assignment(mol, atoms, bonds, seed) else {
+        let Some(bond_orders) = match_assignment(mol, atoms, bonds, seed, &config) else {
             continue;
         };
         let Some(tagged) = assignment_to_tags(mol, &bond_orders) else {
@@ -858,7 +960,7 @@ pub fn parent_for_bond(
     let tb = tag_of(mol, right)?;
     let index = *bag.by_order.get(&(tag_bond_key(ta, tb), order))?;
     let assignment = bag.assignments.get(index)?;
-    overlay_tagged(mol, &key.atoms, assignment)
+    overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
 }
 
 /// Parents covering `start` and `end`. Different systems: union, not a product.
@@ -891,7 +993,9 @@ pub fn parents_for_ends(
             .borrow()
             .assignments
             .iter()
-            .filter_map(|assignment| overlay_tagged(mol, &key.atoms, assignment))
+            .filter_map(|assignment| {
+                overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
+            })
             .collect();
         return EndParents {
             parents,
@@ -913,20 +1017,23 @@ pub fn parents_for_ends(
         .borrow()
         .assignments
         .iter()
-        .filter_map(|assignment| overlay_tagged(mol, &start_key.atoms, assignment))
+        .filter_map(|assignment| {
+            overlay_tagged(
+                mol,
+                &start_key.atoms,
+                assignment,
+                &KekuleConfig::for_parents(),
+            )
+        })
         .collect();
     if !same {
         let end_slot = cache
             .get(&SystemKey::of(mol, &end_atoms, &end_bonds))
             .expect("end system filled");
         let end_key = SystemKey::of(mol, &end_atoms, &end_bonds);
-        parents.extend(
-            end_slot
-                .borrow()
-                .assignments
-                .iter()
-                .filter_map(|assignment| overlay_tagged(mol, &end_key.atoms, assignment)),
-        );
+        parents.extend(end_slot.borrow().assignments.iter().filter_map(|assignment| {
+            overlay_tagged(mol, &end_key.atoms, assignment, &KekuleConfig::for_parents())
+        }));
     }
     EndParents {
         parents,
@@ -989,7 +1096,9 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
             slot.borrow()
                 .assignments
                 .iter()
-                .filter_map(|assignment| overlay_tagged(mol, &key.atoms, assignment)),
+                .filter_map(|assignment| {
+                    overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
+                }),
         );
     }
     if forms.is_empty() {
@@ -1169,9 +1278,64 @@ mod tests {
             .copied()
             .filter(|&(a, b)| residual_atoms.contains(&a) && residual_atoms.contains(&b))
             .collect();
-        let aromatic = aromatic_2core_atoms(&mol, &residual_atoms, &residual_bonds);
+        let aromatic = aromatic_2core_atoms(
+            &mol,
+            &residual_atoms,
+            &residual_bonds,
+            &KekuleConfig::for_constraints(),
+        );
         assert_eq!(aromatic.len(), 6, "one benzenoid sextet survives: {aromatic:?}");
         assert!(!aromatic.contains(&outer.0) && !aromatic.contains(&outer.1));
+    }
+
+    #[test]
+    fn kekule_config_gates_enumeration_and_huckel() {
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let (atoms, bonds) = conjugated_component(&mol, 0);
+        let empty = KekuleConstraints::default();
+        let multi = all_assignments(
+            &mol,
+            &atoms,
+            &bonds,
+            &empty,
+            &KekuleConfig::for_parents(),
+        );
+        assert!(multi.len() >= 2, "default enumerates bond seeds");
+        let single = all_assignments(
+            &mol,
+            &atoms,
+            &bonds,
+            &empty,
+            &KekuleConfig::for_parents().single_assignment(),
+        );
+        assert_eq!(single.len(), 1, "single_assignment stops after one complete");
+
+        // Cyclobutadiene-shaped 4-atom cyclic 2-core: valid matching, fails 4n+2.
+        let four: BTreeSet<usize> = BTreeSet::from([0, 1, 2, 3]);
+        let four_bonds: BTreeSet<_> = [(0, 1), (1, 2), (2, 3), (3, 0)]
+            .into_iter()
+            .map(|(a, b)| bond_key(a, b))
+            .collect();
+        let with_huckel = aromatic_2core_atoms(
+            &mol,
+            &four,
+            &four_bonds,
+            &KekuleConfig {
+                huckel_4n2: true,
+                ..KekuleConfig::default()
+            },
+        );
+        assert!(with_huckel.is_empty());
+        let without = aromatic_2core_atoms(
+            &mol,
+            &four,
+            &four_bonds,
+            &KekuleConfig {
+                huckel_4n2: false,
+                ..KekuleConfig::default()
+            },
+        );
+        assert_eq!(without, four);
     }
 
     #[test]

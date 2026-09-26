@@ -316,6 +316,20 @@ products Rust already got right (e.g. C16 QF N=C=X dealkylate) is also a
 signal when changing Kekulé / pair materialize or moving Python onto Rust
 Kekulé — do not “fix” parity by dropping Rust-ahead chemistry.
 
+**Kekulé solver config contract (approved):** the matcher stays **generically
+applicable** — no element- or rule-named branches inside
+[`complete_assignment`](../../crates/xenosite-forest/src/kekule.rs) /
+`all_assignments` / `overlay` / `aromatic_2core_atoms`. Behavior changes go
+through [`KekuleConfig`](../../crates/xenosite-forest/src/kekule.rs) (fields:
+`perceive_existing_doubles`, `enumerate_bond_seeds`, `move_charge_on_overlay`,
+`huckel_4n2`; presets `for_parents` / `for_constraints`) plus data
+[`KekuleConstraints`](../../crates/xenosite-forest/src/kekule.rs)
+(`forced_doubles`, `saturate`). Closed-shell H after end edits lives on the
+emit path (`valence::fill_closed_shell_h` / `edited_valence_atoms`), not in
+`move_charge_with_bonds`. Extending behavior = add a named, documented config
+field (or PatternInfo/Effect data) — not a silent `if` for one reaction.
+Status: approved.
+
 **Python → Rust Kekulé (parents):** on a probe set (benzene, naphthalene,
 hydroquinone, anisole, PhNCO, pyridine, pyrrole) Rust `kekule_forms` counts
 match Python `ResonanceMolSupplier` / `_kekule_forms`. The demonstrable
