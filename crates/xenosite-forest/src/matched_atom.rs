@@ -101,22 +101,35 @@ impl AtomNeighborhood {
         self.l1(&Self::default())
     }
 
-    /// Normalized distance vs `other`: |Δaromatic| ∈ {0,1} plus Σ [`shell_norm_l1`]
-    /// over n0/n1/n2 (each ∈ [0,1]).
+    /// Normalized distance vs `other`.
     ///
-    /// At most 4. When atoms are element-aligned, n0 matches → at most 3.
-    /// The aromatic term is the dearomatization hint (1 when aromaticity disagrees).
-    pub fn norm_l1(&self, other: &Self) -> f64 {
-        let aromatic = (i32::from(self.aromatic) - i32::from(other.aromatic)).unsigned_abs() as f64;
-        aromatic
-            + shell_norm_l1(&self.n0, &other.n0)
+    /// Shells: Σ [`shell_norm_l1`] over n0/n1/n2 (each ∈ [0,1]). When
+    /// `dearomatic` is set, also |Δaromatic| ∈ {0,1}. Max 3 or 4 accordingly;
+    /// aligned n0 match → max 2 or 3.
+    pub fn norm_l1_opts(&self, other: &Self, dearomatic: bool) -> f64 {
+        let shells = shell_norm_l1(&self.n0, &other.n0)
             + shell_norm_l1(&self.n1, &other.n1)
-            + shell_norm_l1(&self.n2, &other.n2)
+            + shell_norm_l1(&self.n2, &other.n2);
+        if dearomatic {
+            let ar = (i32::from(self.aromatic) - i32::from(other.aromatic)).unsigned_abs() as f64;
+            ar + shells
+        } else {
+            shells
+        }
+    }
+
+    /// [`Self::norm_l1_opts`] with dearomatization hint on.
+    pub fn norm_l1(&self, other: &Self) -> f64 {
+        self.norm_l1_opts(other, true)
     }
 
     /// [`Self::norm_l1`] against empty (full miss on all shells).
     pub fn abs_norm(&self) -> f64 {
         self.norm_l1(&Self::default())
+    }
+
+    pub fn abs_norm_opts(&self, dearomatic: bool) -> f64 {
+        self.norm_l1_opts(&Self::default(), dearomatic)
     }
 }
 
@@ -413,24 +426,45 @@ fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> A
     }
 }
 
+/// Options for [`site_shell_cost_opts`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SiteShellCostOpts {
+    /// Include |Δaromatic| ∈ {0,1} per atom (dearomatization hint).
+    pub dearomatic: bool,
+}
+
 /// Site cost: Σ normalized |current + δ − target| at `site_atoms`.
 ///
-/// Each atom contributes [`AtomNeighborhood::norm_l1`] (≤ 4; ≤ 3 when n0 matches).
-/// Projected site neighborhoods are matched to target site neighborhoods as a
-/// **multiset** (greedy), so unique-edit orbit mates / MCS orientation swaps do
-/// not inflate cost. Close pairs: pass **both** ends so mutual n1/n2 effects
-/// stay in one comparison. Cleaving sites should pass
-/// [`site_atoms_with_leave`] so the leaving fragment is in the bag.
-///
-/// - `delta == None`: distance of current to target at the site.
-/// - `delta` = an edit (or residual align): residual after applying that δ.
-/// - A δ that lands on target scores 0.
+/// Defaults to dearomatization hint on. See [`site_shell_cost_opts`].
 pub fn site_shell_cost(
     current: &MoleculeShells,
     delta: Option<&AlignedShells>,
     target: &MoleculeShells,
     reactant_to_target: &BTreeMap<usize, usize>,
     site_atoms: &[usize],
+) -> f64 {
+    site_shell_cost_opts(
+        current,
+        delta,
+        target,
+        reactant_to_target,
+        site_atoms,
+        SiteShellCostOpts { dearomatic: true },
+    )
+}
+
+/// [`site_shell_cost`] with explicit [`SiteShellCostOpts`].
+///
+/// Each atom contributes [`AtomNeighborhood::norm_l1_opts`]. Projected site
+/// neighborhoods are matched to target as a **multiset** (greedy). Close pairs:
+/// pass both ends. Cleaving sites should pass [`site_atoms_with_leave`].
+pub fn site_shell_cost_opts(
+    current: &MoleculeShells,
+    delta: Option<&AlignedShells>,
+    target: &MoleculeShells,
+    reactant_to_target: &BTreeMap<usize, usize>,
+    site_atoms: &[usize],
+    opts: SiteShellCostOpts,
 ) -> f64 {
     let zero = AtomNeighborhood::default();
     let mut projected: Vec<AtomNeighborhood> = Vec::new();
@@ -450,8 +484,6 @@ pub fn site_shell_cost(
         }
 
         if cleaved {
-            // Left the molecule; no projected shell. If target still listed it
-            // above, the unmatched target env pays abs_norm in the bag match.
             continue;
         }
 
@@ -462,7 +494,7 @@ pub fn site_shell_cost(
         projected.push(projected_env);
     }
 
-    neighborhood_bag_norm_l1(&projected, &target_envs)
+    neighborhood_bag_norm_l1(&projected, &target_envs, opts.dearomatic)
 }
 
 /// Expand `site_atoms` with heavies on the leaving side of a cleavage bond.
@@ -559,23 +591,27 @@ fn pick_leave_side<'a>(a: &'a [usize], b: &'a [usize], leave_count: Option<usize
 }
 
 /// Greedy multiset normalized L1 between two neighborhood bags.
-fn neighborhood_bag_norm_l1(a: &[AtomNeighborhood], b: &[AtomNeighborhood]) -> f64 {
+fn neighborhood_bag_norm_l1(
+    a: &[AtomNeighborhood],
+    b: &[AtomNeighborhood],
+    dearomatic: bool,
+) -> f64 {
     let mut unused: Vec<AtomNeighborhood> = b.to_vec();
     let mut cost = 0.0;
     for env in a {
         if let Some((i, _)) = unused.iter().enumerate().min_by(|(_, x), (_, y)| {
-            env.norm_l1(x)
-                .partial_cmp(&env.norm_l1(y))
+            env.norm_l1_opts(x, dearomatic)
+                .partial_cmp(&env.norm_l1_opts(y, dearomatic))
                 .unwrap_or(std::cmp::Ordering::Equal)
         }) {
             let other = unused.swap_remove(i);
-            cost += env.norm_l1(&other);
+            cost += env.norm_l1_opts(&other, dearomatic);
         } else {
-            cost += env.abs_norm();
+            cost += env.abs_norm_opts(dearomatic);
         }
     }
     for other in &unused {
-        cost += other.abs_norm();
+        cost += other.abs_norm_opts(dearomatic);
     }
     cost
 }

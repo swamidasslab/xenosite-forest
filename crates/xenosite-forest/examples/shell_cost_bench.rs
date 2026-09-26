@@ -1,18 +1,21 @@
-//! Shell-cost bench on real mid/hard find_path cases.
+//! Incremental shell-cost ablation from baseline.
 //!
-//! Site cost = Σ normalized |current − target| at site atoms (`site_shell_cost`,
-//! δ = 0). Keep iff cost > 0. Path column is the same residual over all heavies.
+//! Baseline = `at_sites` raw Σ|δ| (aromatic + n0/n1/n2, missing=0), no leave
+//! expand. Each step tries unused features one at a time; keeps the add that
+//! best improves (agree, then precision, then hop0 top-1) on mid+hard vs the
+//! live gate. Recall stays ~1.0 across trials.
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example shell_cost_bench --release
-//! cargo run -p xenosite-forest --example shell_cost_bench --release -- --hard
 //! ```
 
+use std::collections::BTreeSet;
 use std::time::Instant;
 
 use xenosite_forest::{
-    FindPathConfig, PathCounters, atom_diff, candidate_could_help_on, find_path_with,
-    molecule_shells, pair_could_help, parse_mol, phase_one, site_atoms_with_leave, site_shell_cost,
+    FindPathConfig, PathCounters, SiteShellCostOpts, aligned_shells, atom_diff,
+    candidate_could_help_on, find_path_with, molecule_shells, pair_could_help, parse_mol,
+    phase_one, site_atoms_with_leave, site_shell_cost_opts,
 };
 
 const MID: &[(&str, &str, &str)] = &[
@@ -71,6 +74,92 @@ const HARD: &[(&str, &str, &str)] = &[
     ),
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CostKind {
+    /// Legacy baseline: Σ|δ| on kept site atoms only (no cleaved count).
+    /// Matches pre-SiteShellBag `shell_cost_bench` numbers.
+    AtSitesLegacy,
+    /// Current `at_sites().cost()` = Σ|δ| + cleaved + added.
+    AtSitesCleaved,
+    /// Multiset Σ norm|current−target|; shells only.
+    MultisetNormShells,
+    /// Multiset Σ norm|current−target|; shells + |Δaromatic|.
+    MultisetNormDear,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Mode {
+    leave: bool,
+    kind: CostKind,
+}
+
+impl Mode {
+    fn baseline() -> Self {
+        Self {
+            leave: false,
+            kind: CostKind::AtSitesLegacy,
+        }
+    }
+
+    fn label(self) -> String {
+        let mut parts = Vec::new();
+        parts.push(match self.kind {
+            CostKind::AtSitesLegacy => "at_sites Σ|δ| (legacy)",
+            CostKind::AtSitesCleaved => "at_sites Σ|δ|+cleaved",
+            CostKind::MultisetNormShells => "multiset norm shells",
+            CostKind::MultisetNormDear => "multiset norm+dear",
+        });
+        if self.leave {
+            parts.push("+leave");
+        }
+        parts.join(" ")
+    }
+}
+
+#[derive(Clone, Debug)]
+struct SuiteStats {
+    label: String,
+    mid: GateStats,
+    hard: GateStats,
+}
+
+#[derive(Clone, Debug, Default)]
+struct GateStats {
+    tp: usize,
+    fp: usize,
+    tn: usize,
+    fn_: usize,
+    top1: usize,
+    known: usize,
+}
+
+impl GateStats {
+    fn prec(&self) -> f64 {
+        let d = self.tp + self.fp;
+        if d == 0 {
+            0.0
+        } else {
+            self.tp as f64 / d as f64
+        }
+    }
+    fn rec(&self) -> f64 {
+        let d = self.tp + self.fn_;
+        if d == 0 {
+            0.0
+        } else {
+            self.tp as f64 / d as f64
+        }
+    }
+    fn agree(&self) -> f64 {
+        let n = self.tp + self.fp + self.tn + self.fn_;
+        if n == 0 {
+            0.0
+        } else {
+            (self.tp + self.tn) as f64 / n as f64
+        }
+    }
+}
+
 fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
     let mut atoms: Vec<usize> = c
         .pattern
@@ -89,290 +178,364 @@ fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
     atoms
 }
 
-fn all_heavy(shells: &xenosite_forest::MoleculeShells) -> Vec<usize> {
-    shells.atoms.keys().copied().collect()
+fn expand_atoms(
+    mol: &xenosite_forest::Molecule,
+    atoms: &[usize],
+    leave: bool,
+    leave_count: Option<usize>,
+    cleavage_bonds: &BTreeSet<(usize, usize)>,
+) -> Vec<usize> {
+    if leave {
+        site_atoms_with_leave(mol, atoms, leave_count, cleavage_bonds)
+    } else {
+        let mut a = atoms.to_vec();
+        a.sort_unstable();
+        a.dedup();
+        a
+    }
 }
 
-struct Row {
-    name: String,
-    hit: bool,
-    secs: f64,
-    steps: usize,
-    edits: usize,
-    n_cand: usize,
-    gate_keep: usize,
-    shell_keep: usize,
-    tp: usize,
-    fp: usize,
-    tn: usize,
-    fn_: usize,
-    hop0_site_cost: Option<f64>,
-    hop0_rank: Option<(usize, usize)>,
-    shell_costs: Vec<f64>,
-    atom_costs: Vec<usize>,
-    shell_mono: bool,
-    atom_mono: bool,
+fn site_cost(
+    mode: Mode,
+    align: &xenosite_forest::AlignedShells,
+    cur: &xenosite_forest::MoleculeShells,
+    tgt: &xenosite_forest::MoleculeShells,
+    map: &std::collections::BTreeMap<usize, usize>,
+    atoms: &[usize],
+) -> f64 {
+    match mode.kind {
+        CostKind::AtSitesLegacy => align
+            .at_sites(atoms)
+            .atoms
+            .values()
+            .map(|e| e.abs_delta())
+            .sum::<usize>() as f64,
+        CostKind::AtSitesCleaved => align.at_sites(atoms).cost() as f64,
+        CostKind::MultisetNormShells => site_shell_cost_opts(
+            cur,
+            None,
+            tgt,
+            map,
+            atoms,
+            SiteShellCostOpts { dearomatic: false },
+        ),
+        CostKind::MultisetNormDear => site_shell_cost_opts(
+            cur,
+            None,
+            tgt,
+            map,
+            atoms,
+            SiteShellCostOpts { dearomatic: true },
+        ),
+    }
 }
 
-fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
-    let ra = parse_mol(reactant).unwrap();
-    let rb = parse_mol(target).unwrap();
+fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
+    let mut stats = GateStats::default();
     let set = phase_one();
-    let cur0 = molecule_shells(&ra);
-    let tgt = molecule_shells(&rb);
-    let map0 = atom_diff(&ra, &rb).mapping;
-    let ad = atom_diff(&ra, &rb);
+    for &(_name, reactant, target) in cases {
+        let ra = parse_mol(reactant).unwrap();
+        let rb = parse_mol(target).unwrap();
+        let align = aligned_shells(&ra, &rb);
+        let cur = molecule_shells(&ra);
+        let tgt = molecule_shells(&rb);
+        let ad = atom_diff(&ra, &rb);
+        let map = ad.mapping.clone();
 
-    let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
-    for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
-        let mut atoms = site_atoms_cand(&c);
-        if c.pattern.effect.cleaves {
+        let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
+        for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
             let leave_n = c.pattern.effect.leave_count.map(|n| n as usize);
-            atoms = site_atoms_with_leave(&ra, &atoms, leave_n, &ad.cleavage_bonds);
+            let atoms = expand_atoms(
+                &ra,
+                &site_atoms_cand(&c),
+                mode.leave && c.pattern.effect.cleaves,
+                leave_n,
+                &ad.cleavage_bonds,
+            );
+            let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
+            let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
+            scored.push((cost, gate, atoms));
         }
-        let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
-        let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
-        scored.push((cost, gate, atoms));
-    }
-    for p in set
-        .pair_candidates(&ra)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap()
-    {
-        let gate = pair_could_help(&p, &ad, &ra, &rb);
-        let mut atoms = p.plan_site_atoms();
-        atoms.sort_unstable();
-        atoms.dedup();
-        // Close pairs: joint ends already; no leave fragment.
-        let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
-        scored.push((cost, gate, atoms));
-    }
-
-    let mut tp = 0usize;
-    let mut fp = 0usize;
-    let mut tn = 0usize;
-    let mut fn_ = 0usize;
-    let mut gate_keep = 0usize;
-    let mut shell_keep = 0usize;
-    for &(cost, gate, _) in &scored {
-        let shell = cost > 1e-12;
-        if gate {
-            gate_keep += 1;
+        for p in set
+            .pair_candidates(&ra)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+        {
+            let mut atoms = p.plan_site_atoms();
+            atoms.sort_unstable();
+            atoms.dedup();
+            let gate = pair_could_help(&p, &ad, &ra, &rb);
+            let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
+            scored.push((cost, gate, atoms));
         }
-        if shell {
-            shell_keep += 1;
-        }
-        match (gate, shell) {
-            (true, true) => tp += 1,
-            (false, false) => tn += 1,
-            (false, true) => fp += 1,
-            (true, false) => fn_ += 1,
-        }
-    }
 
-    let mut counters = PathCounters::default();
-    let config = FindPathConfig {
-        max_nodes: 800,
-        max_paths: 1,
-        use_atom_diff: true,
-        ..FindPathConfig::default()
-    };
-    let t0 = Instant::now();
-    let hits = find_path_with(reactant, target, &set, &mut counters, config, |_| true)
-        .unwrap_or_else(|e| panic!("{name}: {e}"))
-        .collect_all()
-        .unwrap();
-    let secs = t0.elapsed().as_secs_f64();
-
-    let mut shell_costs = Vec::new();
-    let mut atom_costs = Vec::new();
-    let mut shell_mono = true;
-    let mut atom_mono = true;
-    let mut hop0_site_cost = None;
-    let mut hop0_rank = None;
-    let mut steps = 0usize;
-
-    if let Some(hit) = hits.first() {
-        steps = hit.steps.len();
-        let mut cur = reactant.to_string();
-        let mut prev_s: Option<f64> = None;
-        let mut prev_a: Option<usize> = None;
-        for (i, step) in hit.steps.iter().enumerate() {
-            let mol = parse_mol(&cur).unwrap();
-            let cur_s = molecule_shells(&mol);
-            let map = atom_diff(&mol, &rb).mapping;
-            let sh = site_shell_cost(&cur_s, None, &tgt, &map, &all_heavy(&cur_s));
-            let at = atom_diff(&mol, &rb).cost();
-            shell_costs.push(sh);
-            atom_costs.push(at);
-            if let Some(ps) = prev_s {
-                if sh > ps + 1e-9 {
-                    shell_mono = false;
-                }
+        for &(cost, gate, _) in &scored {
+            let shell = cost > 1e-12;
+            match (gate, shell) {
+                (true, true) => stats.tp += 1,
+                (false, false) => stats.tn += 1,
+                (false, true) => stats.fp += 1,
+                (true, false) => stats.fn_ += 1,
             }
-            if let Some(pa) = prev_a {
-                if at > pa {
-                    atom_mono = false;
-                }
-            }
-            prev_s = Some(sh);
-            prev_a = Some(at);
+        }
 
-            if i == 0 {
+        // hop0 rank among gate-kept (needs a path).
+        let mut counters = PathCounters::default();
+        let config = FindPathConfig {
+            max_nodes: 800,
+            max_paths: 1,
+            use_atom_diff: true,
+            ..FindPathConfig::default()
+        };
+        let hits = find_path_with(reactant, target, &set, &mut counters, config, |_| true)
+            .unwrap()
+            .collect_all()
+            .unwrap();
+        if let Some(hit) = hits.first() {
+            if let Some(step) = hit.steps.first() {
                 let mut atoms = if step.site_orbit.is_empty() {
                     vec![step.site]
                 } else {
                     step.site_orbit.clone()
                 };
-                atoms.sort_unstable();
-                atoms.dedup();
-                // Cleavage hops: fold in leaving-fragment heavies.
-                if !step.sides.is_empty() || ad.has_cleavage() {
-                    atoms = site_atoms_with_leave(&ra, &atoms, None, &ad.cleavage_bonds);
-                }
-                let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
-                hop0_site_cost = Some(cost);
+                atoms = expand_atoms(
+                    &ra,
+                    &atoms,
+                    mode.leave && (!step.sides.is_empty() || ad.has_cleavage()),
+                    None,
+                    &ad.cleavage_bonds,
+                );
+                let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
                 let mut gate_costs: Vec<f64> = scored
                     .iter()
                     .filter(|(_, g, _)| *g)
                     .map(|(c, _, _)| *c)
                     .collect();
                 gate_costs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-                let n = gate_costs.len();
-                // Rank by cost value among gate-kept (1 = highest residual).
-                let rank = gate_costs.iter().filter(|&&c| c > cost + 1e-9).count() + 1;
-                hop0_rank = Some(if n == 0 { (0, 0) } else { (rank.min(n), n) });
-            }
-            cur = step.product.clone();
-        }
-        shell_costs.push(0.0);
-        atom_costs.push(0);
-    }
-
-    Row {
-        name: name.into(),
-        hit: !hits.is_empty(),
-        secs,
-        steps,
-        edits: counters.mol_edits,
-        n_cand: scored.len(),
-        gate_keep,
-        shell_keep,
-        tp,
-        fp,
-        tn,
-        fn_,
-        hop0_site_cost,
-        hop0_rank,
-        shell_costs,
-        atom_costs,
-        shell_mono,
-        atom_mono,
-    }
-}
-
-fn print_table(title: &str, rows: &[Row]) {
-    println!("\n=== {title} ===\n");
-    println!(
-        "{:<28} {:>3} {:>5} {:>4} {:>4}/{:<4} {:>3} {:>3} {:>3} {:>3} {:>5} {:>8}  shell_path            atom_path   mono",
-        "case", "hit", "s", "ed", "gK", "sK", "TP", "FP", "TN", "FN", "hop0", "rank"
-    );
-    let mut sum_tp = 0;
-    let mut sum_fp = 0;
-    let mut sum_tn = 0;
-    let mut sum_fn = 0;
-    let mut top1 = 0usize;
-    let mut known = 0usize;
-    for r in rows {
-        sum_tp += r.tp;
-        sum_fp += r.fp;
-        sum_tn += r.tn;
-        sum_fn += r.fn_;
-        if let Some((rank, _)) = r.hop0_rank {
-            if rank > 0 {
-                known += 1;
-                if rank == 1 {
-                    top1 += 1;
+                if !gate_costs.is_empty() {
+                    stats.known += 1;
+                    let rank = gate_costs.iter().filter(|&&c| c > cost + 1e-9).count() + 1;
+                    if rank == 1 {
+                        stats.top1 += 1;
+                    }
                 }
             }
         }
-        let hit = if r.hit { "ok" } else { "MISS" };
-        let hop = r
-            .hop0_site_cost
-            .map(|c| format!("{c:.2}"))
-            .unwrap_or_else(|| "-".into());
-        let rank = match r.hop0_rank {
-            Some((0, n)) => format!("?/{n}"),
-            Some((r0, n)) => format!("{r0}/{n}"),
-            None => "-".into(),
-        };
-        let shell_path = r
-            .shell_costs
-            .iter()
-            .map(|c| format!("{c:.1}"))
-            .collect::<Vec<_>>()
-            .join("→");
-        let atom_path = r
-            .atom_costs
-            .iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<_>>()
-            .join("→");
-        let mono = format!(
-            "s{} a{}",
-            if r.shell_mono { "↓" } else { "↑" },
-            if r.atom_mono { "↓" } else { "↑" }
-        );
-        println!(
-            "{:<28} {:>3} {:>5.2} {:>4} {:>4}/{:<4} {:>3} {:>3} {:>3} {:>3} {:>5} {:>8}  {:>20}  {:>10}  {mono}",
-            r.name,
-            hit,
-            r.secs,
-            r.edits,
-            r.gate_keep,
-            r.shell_keep,
-            r.tp,
-            r.fp,
-            r.tn,
-            r.fn_,
-            hop,
-            rank,
-            shell_path,
-            atom_path
-        );
-        let _ = r.steps;
-        let _ = r.n_cand;
     }
-    let n = sum_tp + sum_fp + sum_tn + sum_fn;
-    let prec = if sum_tp + sum_fp == 0 {
-        0.0
-    } else {
-        sum_tp as f64 / (sum_tp + sum_fp) as f64
+    stats
+}
+
+fn run_mode(mode: Mode) -> SuiteStats {
+    SuiteStats {
+        label: mode.label(),
+        mid: eval_suite(MID, mode),
+        hard: eval_suite(HARD, mode),
+    }
+}
+
+fn score_key(s: &SuiteStats) -> (f64, f64, f64) {
+    // Higher better: combined agree, then precision, then hop0 top1 rate.
+    let agree = s.mid.agree() + s.hard.agree();
+    let prec = s.mid.prec() + s.hard.prec();
+    let top = {
+        let k = s.mid.known + s.hard.known;
+        if k == 0 {
+            0.0
+        } else {
+            (s.mid.top1 + s.hard.top1) as f64 / k as f64
+        }
     };
-    let rec = if sum_tp + sum_fn == 0 {
-        0.0
-    } else {
-        sum_tp as f64 / (sum_tp + sum_fn) as f64
-    };
-    let agree = if n == 0 {
-        0.0
-    } else {
-        (sum_tp + sum_tn) as f64 / n as f64
-    };
-    println!("\n  decisions={n}  TP={sum_tp} FP={sum_fp} TN={sum_tn} FN={sum_fn}");
-    println!("  site_cost>0 vs live gate: precision={prec:.2} recall={rec:.2} agree={agree:.2}");
-    println!("  first-hop site top-1 by site_cost among gate-kept: {top1}/{known}");
+    (agree, prec, top)
+}
+
+fn print_row(tag: &str, s: &SuiteStats) {
+    println!(
+        "{:<28}  mid {:.2}/{:.2}/{:.2} top{}/{}   hard {:.2}/{:.2}/{:.2} top{}/{}   [{}]",
+        tag,
+        s.mid.prec(),
+        s.mid.rec(),
+        s.mid.agree(),
+        s.mid.top1,
+        s.mid.known,
+        s.hard.prec(),
+        s.hard.rec(),
+        s.hard.agree(),
+        s.hard.top1,
+        s.hard.known,
+        s.label
+    );
+}
+
+fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
+    let mut out = Vec::new();
+    if !base.leave {
+        out.push((
+            "+leave".into(),
+            Mode {
+                leave: true,
+                kind: base.kind,
+            },
+        ));
+    }
+    match base.kind {
+        CostKind::AtSitesLegacy => {
+            out.push((
+                "+cleaved count".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::AtSitesCleaved,
+                },
+            ));
+            out.push((
+                "→ multiset norm shells".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormShells,
+                },
+            ));
+            out.push((
+                "→ multiset norm+dear".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormDear,
+                },
+            ));
+        }
+        CostKind::AtSitesCleaved => {
+            out.push((
+                "→ multiset norm shells".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormShells,
+                },
+            ));
+            out.push((
+                "→ multiset norm+dear".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormDear,
+                },
+            ));
+        }
+        CostKind::MultisetNormShells => {
+            out.push((
+                "+dearomatic".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormDear,
+                },
+            ));
+        }
+        CostKind::MultisetNormDear => {
+            out.push((
+                "−dearomatic (shells only)".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::MultisetNormShells,
+                },
+            ));
+        }
+    }
+    out
 }
 
 fn main() {
-    let hard = std::env::args().any(|a| a == "--hard");
-    let cases = if hard { HARD } else { MID };
-    let title = if hard { "HARD" } else { "MID" };
     println!(
-        "shell_cost_bench — site_shell_cost Σ norm|current−target| (+leave, +dearomatic); keep iff cost>0\n"
+        "shell_cost_bench — greedy ablation from baseline vs live gate\n\
+         columns: suite  P/R/Agree  hop0-top1/known\n"
     );
     let t0 = Instant::now();
-    let rows: Vec<Row> = cases.iter().map(|(n, r, t)| eval_case(n, r, t)).collect();
-    print_table(title, &rows);
-    println!("\n  wall {:.2}s", t0.elapsed().as_secs_f64());
+
+    let mut history: Vec<(String, SuiteStats)> = Vec::new();
+    let mut current = Mode::baseline();
+    let baseline = run_mode(current);
+    print_row("BASELINE", &baseline);
+    history.push(("BASELINE".into(), baseline.clone()));
+    let mut best = baseline;
+    let mut best_mode = current;
+
+    // Also record every single-add from baseline for the ledger.
+    println!("\n## Single adds from baseline");
+    for (tag, mode) in candidates_from(Mode::baseline()) {
+        let s = run_mode(mode);
+        print_row(&tag, &s);
+        history.push((tag, s));
+    }
+
+    println!("\n## Greedy keep-if-helps");
+    loop {
+        let mut improved = false;
+        let mut round_best: Option<(String, Mode, SuiteStats)> = None;
+        for (tag, mode) in candidates_from(current) {
+            // Skip modes already equal to current.
+            if mode == current {
+                continue;
+            }
+            let s = run_mode(mode);
+            print_row(&format!("  try {tag}"), &s);
+            let better = score_key(&s) > score_key(&best);
+            if better {
+                match &round_best {
+                    None => round_best = Some((tag, mode, s)),
+                    Some((_, _, prev)) if score_key(&s) > score_key(prev) => {
+                        round_best = Some((tag, mode, s));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if let Some((tag, mode, s)) = round_best {
+            println!("  KEEP {tag}  → {}", s.label);
+            history.push((format!("KEEP {tag}"), s.clone()));
+            best = s;
+            best_mode = mode;
+            current = mode;
+            improved = true;
+        }
+        if !improved {
+            println!("  (no improving add)");
+            break;
+        }
+        // Stop if no further unused feature directions.
+        if candidates_from(current)
+            .into_iter()
+            .all(|(_, m)| m == current || history.iter().any(|(_, h)| h.label == m.label()))
+        {
+            // Still allow one more round of tries; break only when none help.
+        }
+        // Cap rounds.
+        if history.len() > 12 {
+            break;
+        }
+    }
+
+    println!("\n## Ledger (all measured)");
+    println!(
+        "{:<28}  {:>22}  {:>22}  config",
+        "step", "mid P/R/A top", "hard P/R/A top"
+    );
+    for (tag, s) in &history {
+        println!(
+            "{:<28}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {}",
+            tag,
+            s.mid.prec(),
+            s.mid.rec(),
+            s.mid.agree(),
+            s.mid.top1,
+            s.mid.known,
+            s.hard.prec(),
+            s.hard.rec(),
+            s.hard.agree(),
+            s.hard.top1,
+            s.hard.known,
+            s.label
+        );
+    }
+    println!(
+        "\nBEST: {}  (agree_sum={:.3} prec_sum={:.3})",
+        best_mode.label(),
+        best.mid.agree() + best.hard.agree(),
+        best.mid.prec() + best.hard.prec()
+    );
+    println!("wall {:.2}s", t0.elapsed().as_secs_f64());
 }

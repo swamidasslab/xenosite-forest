@@ -86,9 +86,10 @@ pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
-    SiteShellMismatch, align_shells, atom_neighborhood, check_site_shell_bags, edit_shells,
-    edit_site_bag, forecast_site_bag, format_shell, molecule_shells, shell_l1, shell_norm_l1,
-    site_atoms_with_leave, site_delta_forecast, site_shell_cost,
+    SiteShellCostOpts, SiteShellMismatch, align_shells, atom_neighborhood, check_site_shell_bags,
+    edit_shells, edit_site_bag, forecast_site_bag, format_shell, molecule_shells, shell_l1,
+    shell_norm_l1, site_atoms_with_leave, site_delta_forecast, site_shell_cost,
+    site_shell_cost_opts,
 };
 pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
