@@ -5,6 +5,11 @@
 //! constraints use [`crate::canonical_plan::ApplyN`] (OR of transforms, apply
 //! exactly N) composable with [`crate::canonical_plan::Deps`] / [`Maybe`].
 //!
+//! Yield dedup matches structure find_path: exact [`Deps::same_linearizations`]
+//! drops; remapped [`Deps::same_rule_maybe_skeleton`] drops only when the hit
+//! CSMI matches (isobar regioisomers stay distinct). Path orders for one plan
+//! are covering linearizations — not separate emissions.
+//!
 //! No MCS atom_diff toward a missing structure target. Closer / hit use
 //! [`crate::mass`] + PatternInfo `delta_formula` (shared with structure
 //! find_path — see `mass` / catalog tests for drift guards).
@@ -127,6 +132,35 @@ fn any_pool_open(pools: &[ApplyN], used: &[u16]) -> bool {
     pools.iter().zip(used.iter()).any(|(p, &u)| u < p.count)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ms1DuplicatePlanKind {
+    Exact,
+    Skeleton,
+}
+
+/// Whether this hit would be a redundant MS1 yield (HEURISTICS: find_path yield).
+///
+/// Exact [`Deps::same_linearizations`] always drops. Remapped
+/// [`Deps::same_rule_maybe_skeleton`] drops only when `smiles` matches an
+/// already-yielded hit — otherwise isobar regioisomers (ortho/meta/para diols)
+/// incorrectly collapse.
+fn ms1_duplicate_plan_kind(
+    found: &[PathOutcome],
+    plan: &crate::canonical_plan::Deps,
+    smiles: &str,
+) -> Option<Ms1DuplicatePlanKind> {
+    if found.iter().any(|h| h.plan.same_linearizations(plan)) {
+        return Some(Ms1DuplicatePlanKind::Exact);
+    }
+    if found
+        .iter()
+        .any(|h| h.smiles == smiles && h.plan.same_rule_maybe_skeleton(plan))
+    {
+        return Some(Ms1DuplicatePlanKind::Skeleton);
+    }
+    None
+}
+
 fn walk_mz(mol: &ForestMol, adduct: Ms1Adduct) -> Option<f64> {
     // Prefer atom walk so explicit isotope labels shift mass; formula path
     // is element-symbol only (common isotopes).
@@ -228,10 +262,25 @@ pub fn find_path_ms1(
         let hit_pools = pools_satisfied(pools, &walk.pool_used);
         if hit_mass && hit_pools {
             let plan = as_deps(walk.plan.clone()).with_apply_n(pools.iter().cloned());
+            let smiles = walk.mol.csmi().as_ref().to_string();
+            // Same as structure find_path yield: do not emit redundant plans.
+            // Skeleton twins only share a product CSMI — isobar regioisomers
+            // (benzene diols) share rule multisets but must stay distinct hits.
+            if let Some(kind) = ms1_duplicate_plan_kind(&found, &plan, &smiles) {
+                counters.dropped_duplicate_plan += 1;
+                match kind {
+                    Ms1DuplicatePlanKind::Exact => counters.dropped_exact_plan += 1,
+                    Ms1DuplicatePlanKind::Skeleton => counters.dropped_skeleton_twin += 1,
+                }
+                continue;
+            }
+            if found.iter().any(|h| h.plan.dominates_extension_of(&plan)) {
+                counters.signal_contained_plan += 1;
+            }
             found.push(PathOutcome {
                 steps: walk.steps,
                 plan,
-                smiles: walk.mol.csmi().as_ref().to_string(),
+                smiles,
             });
             continue;
         }
@@ -381,6 +430,27 @@ mod tests {
         mz_of_mol(parsed.mol(), adduct)
     }
 
+    /// Emitted hits must not include redundant plans (exact linearizations, or
+    /// same-product skeleton twins). Distinct isobar CSMIs may share a rule
+    /// multiset — that is not redundancy.
+    fn assert_no_redundant_emitted_plans(hits: &[PathOutcome]) {
+        for (i, a) in hits.iter().enumerate() {
+            for (j, b) in hits.iter().enumerate().skip(i + 1) {
+                assert!(
+                    !a.plan.same_linearizations(&b.plan),
+                    "hit{i} and hit{j} same_linearizations (smiles {} vs {})",
+                    a.smiles,
+                    b.smiles
+                );
+                assert!(
+                    !(a.smiles == b.smiles && a.plan.same_rule_maybe_skeleton(&b.plan)),
+                    "hit{i} and hit{j} same-product skeleton twins ({})",
+                    a.smiles
+                );
+            }
+        }
+    }
+
     /// Every emitted hit's product(s) must satisfy the target m/z.
     ///
     /// - `hit.smiles` and the last path-step product lie within `tol_da`.
@@ -395,6 +465,7 @@ mod tests {
         tol_da: f64,
     ) {
         assert!(!hits.is_empty(), "expected at least one MS1 hit");
+        assert_no_redundant_emitted_plans(hits);
         let start = ForestMol::parse(reactant).unwrap();
         let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).unwrap();
         for h in hits {
@@ -651,6 +722,7 @@ mod tests {
     /// Final-product m/z + monotonic path error (no plan replay).
     fn assert_hits_mz_only(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64) {
         assert!(!hits.is_empty(), "expected at least one MS1 hit");
+        assert_no_redundant_emitted_plans(hits);
         let start = ForestMol::parse(reactant).unwrap();
         let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).unwrap();
         for h in hits {
@@ -1629,6 +1701,150 @@ mod tests {
         assert_eq!(hits[0].plan.apply_n()[0].count, 1);
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("Hydroxylation"));
         assert_hits_satisfy_mz(&hits, "CC", mz, 0.001);
+    }
+
+    #[test]
+    fn ms1_emits_no_redundant_plans_among_isobars() {
+        // Benzene OH×2: three regioisomer products, same m/z — not redundant.
+        let set = hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let diol_mz = mz_of_mol(
+            ForestMol::parse("Oc1ccccc1O").unwrap().mol(),
+            Ms1Adduct::MPlusH,
+        )
+        .unwrap();
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            "c1ccccc1",
+            &set,
+            &[pool.clone()],
+            &mut counters,
+            Ms1Config {
+                mz: diol_mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 16,
+                max_nodes: 2000,
+            },
+        )
+        .unwrap();
+        assert_eq!(hits.len(), 3, "{:?}", hits.iter().map(|h| &h.smiles).collect::<Vec<_>>());
+        assert_no_redundant_emitted_plans(&hits);
+        assert_eq!(counters.dropped_exact_plan, 0);
+        assert_eq!(counters.dropped_skeleton_twin, 0);
+    }
+
+    #[test]
+    fn ms1_covers_apply_n_emit_products_at_mass_without_redundant_hits() {
+        // ApplyN emit is the complete Aut-deduped product set; MS1 at that mass
+        // must recover every emit product, each once (covering lins on the plan).
+        let set = hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let (emitted, stats) =
+            crate::canonical_plan::apply_n_emit_products("c1ccccc1", &set, &pool).unwrap();
+        assert_eq!(stats.n_products, 3);
+        assert_eq!(stats.n_covering_linearizations, 6);
+        let mz = mz_of_mol(
+            ForestMol::parse(&emitted[0].smiles).unwrap().mol(),
+            Ms1Adduct::MPlusH,
+        )
+        .unwrap();
+        // All benzene diols share formula mass.
+        for p in &emitted {
+            let pmz = mz_of_mol(ForestMol::parse(&p.smiles).unwrap().mol(), Ms1Adduct::MPlusH)
+                .unwrap();
+            assert!(mz_within(pmz, mz, 0.001), "{} mz drift", p.smiles);
+        }
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            "c1ccccc1",
+            &set,
+            &[pool],
+            &mut counters,
+            Ms1Config {
+                mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 16,
+                max_nodes: 2000,
+            },
+        )
+        .unwrap();
+        assert_no_redundant_emitted_plans(&hits);
+        let hit_smiles: std::collections::BTreeSet<_> =
+            hits.iter().map(|h| h.smiles.as_str()).collect();
+        for p in &emitted {
+            assert!(
+                hit_smiles.contains(p.smiles.as_str()),
+                "emit product {} missing from MS1 hits {:?}; billed={}",
+                p.smiles,
+                hit_smiles,
+                counters.billed()
+            );
+            let matched: Vec<_> = hits.iter().filter(|h| h.smiles == p.smiles).collect();
+            assert_eq!(
+                matched.len(),
+                1,
+                "redundant emissions for {}: {:?}",
+                p.smiles,
+                matched.iter().map(|h| &h.plan).collect::<Vec<_>>()
+            );
+            assert!(
+                matched[0].plan.reaches("c1ccccc1", &p.smiles).unwrap(),
+                "plan must cover path to {}",
+                p.smiles
+            );
+            // Free 2-step plan: both apply orders are linearizations, not extra hits.
+            assert_eq!(
+                matched[0].plan.n_linearizations(),
+                2,
+                "hit plan should cover both apply orders for {}",
+                p.smiles
+            );
+        }
+        // Emit products ⊆ hits (MS1 may find same-site repeats beyond Aut subsets).
+        assert!(hits.len() >= emitted.len());
+    }
+
+    #[test]
+    fn ethane_oh2_ms1_covers_emit_product_without_redundant_hits() {
+        // ApplyN emit: Aut unordered 2-subsets → one product (1,2-diol) with 2
+        // covering linearizations. MS1 may also reach gem-diol (same site twice);
+        // that is a distinct metabolite, not a redundant emission of the emit product.
+        let set = hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let (emitted, stats) =
+            crate::canonical_plan::apply_n_emit_products("CC", &set, &pool).unwrap();
+        assert_eq!(stats.n_products, 1);
+        assert_eq!(stats.n_covering_linearizations, 2);
+        let expect = &emitted[0].smiles;
+        let mz = mz_of_mol(ForestMol::parse(expect).unwrap().mol(), Ms1Adduct::MPlusH).unwrap();
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            "CC",
+            &set,
+            &[pool],
+            &mut counters,
+            Ms1Config {
+                mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 8,
+                max_nodes: 500,
+            },
+        )
+        .unwrap();
+        assert_no_redundant_emitted_plans(&hits);
+        let matched: Vec<_> = hits.iter().filter(|h| h.smiles == *expect).collect();
+        assert_eq!(
+            matched.len(),
+            1,
+            "emit product {expect} should appear once; hits={:?}",
+            hits.iter().map(|h| &h.smiles).collect::<Vec<_>>()
+        );
+        assert!(matched[0].plan.reaches("CC", expect).unwrap());
+        // Covering path orders live on the plan, not as duplicate hits.
+        assert_eq!(matched[0].plan.n_linearizations(), 2);
     }
 
     #[test]

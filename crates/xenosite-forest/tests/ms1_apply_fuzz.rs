@@ -434,7 +434,28 @@ fn assert_mixed_two_hop_expected_found(reactant: &str, leaf_a: &str, leaf_b: &st
         hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
         counters.billed()
     );
+    // No redundant emitted plans (exact linearizations / same-product skeleton).
+    for (i, a) in hits.iter().enumerate() {
+        for b in hits.iter().skip(i + 1) {
+            assert!(
+                !a.plan.same_linearizations(&b.plan),
+                "{reactant} hit same_linearizations ({}/{})",
+                a.smiles,
+                b.smiles
+            );
+            assert!(
+                !(a.smiles == b.smiles && a.plan.same_rule_maybe_skeleton(&b.plan)),
+                "{reactant} same-product skeleton twin ({})",
+                a.smiles
+            );
+        }
+    }
     let matched: Vec<_> = hits.iter().filter(|h| h.smiles == csmi).collect();
+    assert!(
+        !matched.is_empty(),
+        "{reactant} {leaf_a}+{leaf_b} → {csmi} missing after dedup check; billed={}",
+        counters.billed()
+    );
     assert!(
         matched
             .iter()
@@ -535,6 +556,18 @@ proptest! {
         }
         let matched: Vec<_> = hits.iter().filter(|h| h.smiles == csmi).collect();
         prop_assert!(!matched.is_empty());
+        for (i, a) in hits.iter().enumerate() {
+            for b in hits.iter().skip(i + 1) {
+                prop_assert!(
+                    !a.plan.same_linearizations(&b.plan),
+                    "{reactant} emitted same_linearizations"
+                );
+                prop_assert!(
+                    !(a.smiles == b.smiles && a.plan.same_rule_maybe_skeleton(&b.plan)),
+                    "{reactant} emitted same-product skeleton twin"
+                );
+            }
+        }
         prop_assert!(
             matched
                 .iter()
