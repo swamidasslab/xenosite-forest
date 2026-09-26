@@ -190,37 +190,35 @@ impl Step {
         };
         let gens = crate::orbits::atom_bond_generators(mol);
         let n = mol.atom_count();
+        let mut accepted = wanted.clone();
+        for &w in &wanted {
+            for i in crate::orbits::atom_orbit_with_gens(&gens, n, w) {
+                accepted.insert(i);
+            }
+        }
         let mut products = Vec::new();
         let mut seen = HashSet::new();
+        // One walk: candidates() yields SMIRKS edits and ResonancePair hits.
         for c in rule.candidates(mol) {
             let c = c?;
-            let Some(c) = remap_candidate_to_wanted(&c, &wanted, &gens, n, mol) else {
-                continue;
+            let c = match &c {
+                crate::candidate::Candidate::Edit(_) => {
+                    match remap_candidate_to_wanted(&c, &wanted, &gens, n, mol) {
+                        Some(remapped) => remapped,
+                        None => continue,
+                    }
+                }
+                crate::candidate::Candidate::Pair(pair) => {
+                    if !pair_matches_wanted(mol, pair, &accepted) {
+                        continue;
+                    }
+                    c
+                }
             };
             for p in c.materialize_mols(mol)? {
                 let smi = canon_smiles(&p);
                 if seen.insert(smi) {
                     products.push(p);
-                }
-            }
-        }
-        let endpoints = rule.leaf_pair_endpoints();
-        if !endpoints.is_empty() {
-            let mut accepted = wanted.clone();
-            for &w in &wanted {
-                for i in crate::orbits::atom_orbit_with_gens(&gens, n, w) {
-                    accepted.insert(i);
-                }
-            }
-            for pair in crate::pair_edit::pair_candidates(mol, &endpoints)? {
-                if !pair_matches_wanted(mol, &pair, &accepted) {
-                    continue;
-                }
-                for p in pair.materialize_mols(mol)? {
-                    let smi = canon_smiles(&p);
-                    if seen.insert(smi) {
-                        products.push(p);
-                    }
                 }
             }
         }

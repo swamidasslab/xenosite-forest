@@ -1860,6 +1860,13 @@ pub fn default_ruleset_ref() -> &'static RuleSet {
     DEFAULT.get_or_init(default_ruleset)
 }
 
+/// Process-wide [`phase_one`] (full Phase-I nest).
+pub fn phase_one_ref() -> &'static RuleSet {
+    use std::sync::OnceLock;
+    static PHASE_ONE: OnceLock<RuleSet> = OnceLock::new();
+    PHASE_ONE.get_or_init(phase_one)
+}
+
 /// Every ported leaf rule as one nested catalog.
 pub fn all_rules() -> RuleSet {
     RuleSet::compose(

@@ -77,21 +77,21 @@ pub use canonical_plan::{
 pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
     CleavageNode, CleavageOr, CleavageSeed, CleavageSeedHop, cleavage_first_seeds,
-    cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
-    fold_cleavage_arms,
+    cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_graph_stats_default,
+    cleavage_layer, cleavage_product_graph, cleavage_product_graph_default, fold_cleavage_arms,
 };
 pub use enumerate::{
     EnumConfig, EnumOrder, Metabolite, MetaboliteEnum, PathHop, PathInfo, bfs, bfs_default, dfs,
-    dfs_default, enumerate_metabolites,
+    dfs_default, enumerate_metabolites, enumerate_metabolites_default,
 };
 pub use find_path::{
     FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
     MatchScoreSpec, OpenFindPath, PathCounters, PathOutcome, PathStep, diversity_penalty,
-    find_path, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
-    hop_match_add_score, hop_match_product_score, hop_match_score, log_close_term,
-    log_improve_term, neg_log1p_score,
+    find_path, find_path_default, find_path_diff, find_path_diff_default, find_path_with,
+    find_path_with_filters, hop_match_add_score, hop_match_product_score, hop_match_score,
+    log_close_term, log_improve_term, neg_log1p_score,
 };
-pub use find_path_ms1::{Ms1Config, find_path_ms1, predicted_mz_after_delta};
+pub use find_path_ms1::{Ms1Config, find_path_ms1, find_path_ms1_default, predicted_mz_after_delta};
 pub use forest::{
     Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
 };
@@ -129,11 +129,12 @@ pub use pattern::{
 };
 pub use product_graph::{
     ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
-    product_graph, product_graph_default, product_graph_stats, product_layer,
+    product_graph, product_graph_default, product_graph_stats, product_graph_stats_default,
+    product_layer,
 };
 pub use rules::{
     all_rules, catalog_names, default_ruleset, default_ruleset_ref, epoxide_hydration, leaf_rule,
-    phase_one,
+    phase_one, phase_one_ref,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,

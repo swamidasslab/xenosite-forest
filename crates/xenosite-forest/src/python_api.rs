@@ -15,17 +15,25 @@ use pyo3::types::PyString;
 use crate::find_path::{FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
 use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
-use crate::mol::Molecule;
+use crate::mol::{Molecule, ranks};
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
-use crate::rules::phase_one;
+use crate::rules::{catalog_names, default_ruleset, leaf_rule, phase_one};
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
 fn py_err(err: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(err.to_string())
 }
 
-/// One `RuleSet.metabolize` row: `(pattern_name, site, products, rule_path)`.
-type MetabolizeRow = (String, usize, Vec<String>, Vec<Option<String>>);
+/// One `RuleSet.metabolize` row:
+/// `(pattern_name, site, site_atoms, site_orbit, products, rule_path)`.
+type MetabolizeRow = (
+    String,
+    usize,
+    Vec<usize>,
+    Vec<usize>,
+    Vec<String>,
+    Vec<Option<String>>,
+);
 
 /// Python-visible formula. Nested `#[pyclass]` wrap of [`Formula`].
 #[pyclass(name = "Formula", frozen)]
@@ -130,6 +138,12 @@ impl PyForestMol {
             .iter()
             .map(|mapped| mapped.iter().map(|(&k, &v)| (k, v)).collect())
             .collect())
+    }
+
+    /// Topological equivalence ranks (one per atom index). Same role as
+    /// RDKit ``CanonicalRankAtoms(..., breakTies=False)`` for site identity.
+    fn ranks(&self) -> Vec<usize> {
+        ranks(self.inner.mol())
     }
 
     fn __repr__(&self) -> String {
@@ -271,6 +285,32 @@ impl PyRuleSet {
         }
     }
 
+    /// Named leaf catalog rule (`Hydroxylation`, `Dealkylation`, …).
+    #[staticmethod]
+    fn leaf(name: &str) -> PyResult<Self> {
+        leaf_rule(name)
+            .map(|inner| Self { inner })
+            .ok_or_else(|| PyValueError::new_err(format!("unknown leaf rule {name:?}")))
+    }
+
+    /// Leaf names in catalog order.
+    #[staticmethod]
+    fn catalog_names() -> Vec<String> {
+        catalog_names().iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[staticmethod]
+    fn phase_one() -> Self {
+        Self { inner: phase_one() }
+    }
+
+    #[staticmethod]
+    fn default_ruleset() -> Self {
+        Self {
+            inner: default_ruleset(),
+        }
+    }
+
     #[staticmethod]
     #[pyo3(signature = (sets, name=None))]
     fn compose(sets: Vec<PyRef<'_, PyRuleSet>>, name: Option<String>) -> Self {
@@ -302,8 +342,9 @@ impl PyRuleSet {
     /// Run the owned members. `filter_rules` / `filter_sites` are optional Python
     /// callables; omit them and Rust `accept_all_*` runs with no GIL per site.
     ///
-    /// Each row is `(pattern_name, site, products, rule_path)` where `rule_path`
-    /// is leaf-first namespace names (`None` for an unnamed set).
+    /// Each row is
+    /// `(pattern_name, site, site_atoms, site_orbit, products, rule_path)`
+    /// where `rule_path` is leaf-first namespace names (`None` for an unnamed set).
     #[pyo3(signature = (mol, filter_rules=None, filter_sites=None))]
     fn metabolize(
         slf: &Bound<'_, Self>,
@@ -322,7 +363,16 @@ impl PyRuleSet {
         };
         Ok(emissions
             .into_iter()
-            .map(|e| (e.pattern_name, e.site, e.products, e.rule_path))
+            .map(|e| {
+                (
+                    e.pattern_name,
+                    e.site,
+                    e.site_atoms,
+                    e.site_orbit,
+                    e.products,
+                    e.rule_path,
+                )
+            })
             .collect())
     }
 

@@ -1205,6 +1205,8 @@ fn child_oxygen_lists(
 /// Pull iterator (Python generator parity): each [`Iterator::next`] resumes the
 /// search until the next [`PathOutcome`]. Nested sets keep step namespaces on
 /// each `rule_path`. Callers that want a list use `.collect()`.
+///
+/// Pass any [`RuleSet`] to override the catalog. See [`find_path_default`].
 pub fn find_path<'a, 'b>(
     reactant: &str,
     target: &str,
@@ -1221,7 +1223,8 @@ pub fn find_path<'a, 'b>(
     )
 }
 
-/// [`find_path`] with the Phase-I default catalog.
+/// [`find_path`] with [`crate::rules::default_ruleset`]. Override via
+/// [`find_path`].
 pub fn find_path_default<'b>(
     reactant: &str,
     target: &str,
@@ -1236,6 +1239,8 @@ pub fn find_path_default<'b>(
 }
 
 /// [`find_path`] with atom-diff candidate gating (no filter closures).
+///
+/// Pass any [`RuleSet`] to override the catalog. See [`find_path_diff_default`].
 pub fn find_path_diff<'a, 'b>(
     reactant: &str,
     target: &str,
@@ -1252,6 +1257,21 @@ pub fn find_path_diff<'a, 'b>(
             ..FindPathConfig::default()
         },
         accept_all_candidates,
+    )
+}
+
+/// [`find_path_diff`] with [`crate::rules::default_ruleset`]. Override via
+/// [`find_path_diff`].
+pub fn find_path_diff_default<'b>(
+    reactant: &str,
+    target: &str,
+    counters: &'b mut PathCounters,
+) -> Result<OpenFindPath<'static, 'b>, ForestError> {
+    find_path_diff(
+        reactant,
+        target,
+        crate::rules::default_ruleset_ref(),
+        counters,
     )
 }
 

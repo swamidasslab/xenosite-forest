@@ -205,6 +205,8 @@ pub fn predicted_mz_after_delta(
 ///
 /// `pools` empty ⇒ any ruleset chemistry may fire until mass hits
 /// (unconstrained). Non-empty ⇒ each hop must feed some unsatisfied pool.
+///
+/// Pass any [`RuleSet`] to override the catalog. See [`find_path_ms1_default`].
 pub fn find_path_ms1(
     reactant: &str,
     ruleset: &RuleSet,
@@ -395,6 +397,23 @@ pub fn find_path_ms1(
     }
 
     Ok(found)
+}
+
+/// [`find_path_ms1`] with [`crate::rules::default_ruleset`]. Override via
+/// [`find_path_ms1`].
+pub fn find_path_ms1_default(
+    reactant: &str,
+    pools: &[ApplyN],
+    counters: &mut PathCounters,
+    config: Ms1Config,
+) -> Result<Vec<PathOutcome>, ForestError> {
+    find_path_ms1(
+        reactant,
+        crate::rules::default_ruleset_ref(),
+        pools,
+        counters,
+        config,
+    )
 }
 
 #[cfg(test)]

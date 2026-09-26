@@ -380,6 +380,23 @@ pub fn product_graph_stats(
     ))
 }
 
+/// [`product_graph_stats`] with [`crate::rules::default_ruleset`]. Override via
+/// [`product_graph_stats`].
+pub fn product_graph_stats_default(
+    start: &str,
+    target: Option<&str>,
+    max_nodes: usize,
+    max_depth: usize,
+) -> Result<(ProductGraphStats, ProductGraph), ForestError> {
+    product_graph_stats(
+        start,
+        target,
+        crate::rules::default_ruleset_ref(),
+        max_nodes,
+        max_depth,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

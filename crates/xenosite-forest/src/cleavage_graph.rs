@@ -337,6 +337,8 @@ fn split_usable(
 /// every fragment that matches the target progress gate (strict MCS cost drop,
 /// ha ≥ target). If both sides match, both are enqueued — no single-winner
 /// prune. Non-matching sides stay on the Or for Maybe / [`CleavageOr::choose`].
+///
+/// Pass any [`RuleSet`] to override the catalog. See [`cleavage_product_graph_default`].
 pub fn cleavage_product_graph(
     start: &str,
     ruleset: &RuleSet,
@@ -678,6 +680,24 @@ pub fn cleavage_graph_stats(
         },
         graph,
     ))
+}
+
+/// [`cleavage_product_graph`] with [`crate::rules::default_ruleset`]. Override
+/// via [`cleavage_product_graph`].
+pub fn cleavage_product_graph_default(
+    start: &str,
+    config: &CleavageGraphConfig,
+) -> Result<CleavageGraph, ForestError> {
+    cleavage_product_graph(start, crate::rules::default_ruleset_ref(), config)
+}
+
+/// [`cleavage_graph_stats`] with [`crate::rules::default_ruleset`]. Override via
+/// [`cleavage_graph_stats`].
+pub fn cleavage_graph_stats_default(
+    start: &str,
+    target: Option<&str>,
+) -> Result<(CleavageGraphStats, CleavageGraph), ForestError> {
+    cleavage_graph_stats(start, target, crate::rules::default_ruleset_ref())
 }
 
 #[cfg(test)]

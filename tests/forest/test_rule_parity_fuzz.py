@@ -1,0 +1,230 @@
+"""Rust↔RDKit leaf-rule product parity fuzz.
+
+Randomly samples ``(mol, rule)`` from :data:`PARITY_FUZZ_MOLS` × shared leaf
+catalog. For each draw:
+
+1. Collect candidates / emissions on both engines.
+2. Collapse sites by **that engine's** topological ranks (orbits).
+3. Assert the same number of unique topological sites.
+4. Apply (metabolize) and compare product sets after **RDKit** CSMI.
+
+The corpus meta-test (:mod:`test_rule_parity_corpus`) must stay green: every
+pattern / every ``when`` has a covering mol in ``PARITY_FUZZ_MOLS``.
+"""
+
+from __future__ import annotations
+
+import os
+from collections import Counter
+from collections.abc import Iterable
+from typing import Any
+
+import pytest
+from hypothesis import given, settings, strategies as st
+from rdkit import Chem
+from rdkit.Chem.rdmolops import RemoveStereochemistry
+
+from xenosite.forest.find_path_rust import native_available
+from xenosite.forest.rdkit_api import MolFromSmiles, MolToSmiles
+from xenosite.forest.rules import ReactionRule
+
+from .pattern_info_inventory import (
+    PATTERNLESS_REACTION_RULE_BASES,
+    discover_reaction_rule_classes,
+    instantiate_rule,
+)
+from .rule_parity_corpus import PARITY_FUZZ_MOLS
+
+pytestmark = pytest.mark.skipif(
+    not native_available(),
+    reason="xenosite-forest-native not installed",
+)
+
+
+def _fuzz_examples(default: int) -> int:
+    raw = os.environ.get("PARITY_FUZZ_EXAMPLES")
+    if raw is None:
+        return default
+    return max(1, int(raw))
+
+
+def _rdkit_csmi(smiles_or_mol: Any) -> str | None:
+    """Canonical non-isomeric RDKit SMILES; ``None`` if unparseable."""
+
+    if smiles_or_mol is None:
+        return None
+    if isinstance(smiles_or_mol, str):
+        mol = MolFromSmiles(smiles_or_mol)
+    else:
+        mol = Chem.Mol(smiles_or_mol)
+    if mol is None:
+        return None
+    RemoveStereochemistry(mol)
+    for atom in mol.GetAtoms():
+        atom.SetAtomMapNum(0)
+    return MolToSmiles(mol, canonical=True, isomericSmiles=False)
+
+
+def _site_kind(rule: ReactionRule) -> str:
+    kind = getattr(rule, "site_kind", "atom")
+    assert kind in {"atom", "bond", "directed_bond", "atom_pair"}, kind
+    return kind
+
+
+def _topo_key(ranks: dict[int, int] | list[int], atoms: Iterable[int], kind: str) -> tuple:
+    """Engine-local topological site key (ranks are not cross-engine)."""
+
+    def rank(i: int) -> int:
+        if isinstance(ranks, dict):
+            return int(ranks[i])
+        return int(ranks[i])
+
+    vals = [rank(i) for i in atoms]
+    if kind in {"bond", "atom_pair"}:
+        return tuple(sorted(vals))
+    if kind == "directed_bond":
+        # Public Python site is undirected frozenset; keep undirected key.
+        return tuple(sorted(vals))
+    if len(vals) == 1:
+        return (vals[0],)
+    return tuple(sorted(vals))
+
+
+def _shared_leaf_rules() -> list[tuple[str, type[ReactionRule]]]:
+    """Concrete Python leaves that also exist as Rust ``leaf_rule`` names."""
+
+    import xenosite_forest as native  # type: ignore[import-not-found]
+
+    rust_names = set(native.RuleSet.catalog_names())
+    out: list[tuple[str, type[ReactionRule]]] = []
+    for cls in discover_reaction_rule_classes():
+        if cls in PATTERNLESS_REACTION_RULE_BASES:
+            continue
+        name = cls.__name__
+        if name in rust_names:
+            out.append((name, cls))
+    return sorted(out, key=lambda t: t[0])
+
+
+_SHARED_LEAVES = _shared_leaf_rules() if native_available() else []
+_LEAF_NAMES = [name for name, _ in _SHARED_LEAVES]
+_LEAF_BY_NAME = dict(_SHARED_LEAVES)
+
+
+def _python_emissions(
+    rule: ReactionRule, smiles: str, kind: str
+) -> tuple[Counter[tuple], set[str]]:
+    """``(topo_site → product-frozenset counter keys, all product CSMIs)``.
+
+    Returns a Counter over frozensets of RDKit CSMIs (one entry per unique
+    topological site). Sites that emit nothing after CSMI filter are dropped.
+    """
+
+    mol = MolFromSmiles(smiles)
+    assert mol is not None, smiles
+    ranks = mol.xf.topol_equiv
+    by_topo: dict[tuple, set[str]] = {}
+    all_products: set[str] = set()
+    for products, info in rule.metabolize(mol):
+        site = info.get("discovered_site", info["site"])
+        if isinstance(site, (set, frozenset)):
+            atoms = list(site)
+        elif isinstance(site, tuple):
+            atoms = list(site)
+        else:
+            atoms = [int(site)]
+        key = _topo_key(ranks, atoms, kind)
+        bucket = by_topo.setdefault(key, set())
+        for product in products:
+            csmi = _rdkit_csmi(product)
+            if csmi is None:
+                continue
+            # Cleavage: one emission may list several fragments; keep each.
+            bucket.add(csmi)
+            all_products.add(csmi)
+    site_product_bags = Counter(
+        frozenset(prods) for prods in by_topo.values() if prods
+    )
+    return site_product_bags, all_products
+
+
+def _rust_emissions(
+    rule_name: str, smiles: str, kind: str
+) -> tuple[Counter[tuple], set[str]]:
+    import xenosite_forest as native  # type: ignore[import-not-found]
+
+    rs = native.RuleSet.leaf(rule_name)
+    mol = native.ForestMol(smiles)
+    ranks = mol.ranks()
+    by_topo: dict[tuple, set[str]] = {}
+    all_products: set[str] = set()
+    for _pattern, _site, site_atoms, _orbit, products, _path in rs.metabolize(mol):
+        atoms = list(site_atoms) if site_atoms else [_site]
+        key = _topo_key(ranks, atoms, kind)
+        bucket = by_topo.setdefault(key, set())
+        for product in products:
+            # Cleavage products may be multi-fragment SMILES; split then CSMI.
+            for piece in product.split("."):
+                csmi = _rdkit_csmi(piece)
+                if csmi is None:
+                    continue
+                bucket.add(csmi)
+                all_products.add(csmi)
+    site_product_bags = Counter(
+        frozenset(prods) for prods in by_topo.values() if prods
+    )
+    return site_product_bags, all_products
+
+
+def _assert_parity(rule_name: str, smiles: str) -> None:
+    cls = _LEAF_BY_NAME[rule_name]
+    rule = instantiate_rule(cls)
+    kind = _site_kind(rule)
+    py_sites, py_prods = _python_emissions(rule, smiles, kind)
+    rs_sites, rs_prods = _rust_emissions(rule_name, smiles, kind)
+
+    if py_prods != rs_prods:
+        only_py = sorted(py_prods - rs_prods)
+        only_rs = sorted(rs_prods - py_prods)
+        raise AssertionError(
+            f"product CSMI mismatch for {rule_name} on {smiles!r}:\n"
+            f"  only Python ({len(only_py)}): {only_py[:12]}\n"
+            f"  only Rust   ({len(only_rs)}): {only_rs[:12]}"
+        )
+
+    if sum(py_sites.values()) != sum(rs_sites.values()):
+        raise AssertionError(
+            f"topological site count mismatch for {rule_name} on {smiles!r}: "
+            f"python={sum(py_sites.values())} rust={sum(rs_sites.values())} "
+            f"(product sets already match)"
+        )
+
+    if py_sites != rs_sites:
+        raise AssertionError(
+            f"site→product bag mismatch for {rule_name} on {smiles!r}: "
+            f"python_bags={len(py_sites)} rust_bags={len(rs_sites)} "
+            f"(counts matched, bag multiset differed)"
+        )
+
+
+@settings(max_examples=_fuzz_examples(80), deadline=60_000, derandomize=True)
+@given(
+    smiles=st.sampled_from(PARITY_FUZZ_MOLS),
+    rule_name=st.sampled_from(_LEAF_NAMES or ["Hydroxylation"]),
+)
+def test_fuzz_leaf_rule_product_parity(smiles: str, rule_name: str) -> None:
+    if not _LEAF_NAMES:
+        pytest.skip("no shared leaf rules")
+    _assert_parity(rule_name, smiles)
+
+
+@pytest.mark.parametrize("rule_name", _LEAF_NAMES or ["Hydroxylation"])
+def test_smoke_leaf_parity_on_example_substrate(rule_name: str) -> None:
+    """One guaranteed hit per shared leaf (``_example_substrates``)."""
+
+    if not _LEAF_NAMES:
+        pytest.skip("no shared leaf rules")
+    cls = _LEAF_BY_NAME[rule_name]
+    examples = getattr(cls, "_example_substrates", ()) or ()
+    assert examples, f"{rule_name} lacks _example_substrates"
+    _assert_parity(rule_name, examples[0])

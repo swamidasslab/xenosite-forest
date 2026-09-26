@@ -305,6 +305,15 @@ pub fn enumerate_metabolites<'a>(
     MetaboliteEnum::new(reactant, ruleset, config)
 }
 
+/// [`enumerate_metabolites`] with [`crate::rules::default_ruleset`]. Override
+/// via [`enumerate_metabolites`].
+pub fn enumerate_metabolites_default(
+    reactant: &str,
+    config: EnumConfig,
+) -> Result<MetaboliteEnum<'static>, ForestError> {
+    enumerate_metabolites(reactant, crate::rules::default_ruleset_ref(), config)
+}
+
 /// Breadth-first metabolites up to `max_depth` (Python `bfs`; CSMI-deduped).
 pub fn bfs<'a>(
     reactant: &str,
