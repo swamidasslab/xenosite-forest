@@ -53,7 +53,10 @@ Composite hops own a `canonical_plan` hook on the leaf (Python
 `ReactionRule.canonical_plan`): it returns elementary `Step`s named after
 catalog rules (`Hydroxylation`, `Dehydrogenation`, …). Search asks the leaf;
 there is no `PlanKind` enum. Metabolize may still apply a composite leaf in one
-hop; the plan is the elementary split for search and replay.
+hop; the plan is the elementary split for search and replay. QuinoneFormation
+expands to Hydroxylation (or OxidativeDehalogenation) then Dehydrogenation.
+EpoxideHydration expands to Epoxidation then EpoxideOpening (peers already in
+PhaseOne). Status: approved (Rust derisk).
 
 Replay: `Deps::linearizations` → each `Linearization::apply` runs named
 elementary rules at resolved sites. Correctness: an accepted product’s plan

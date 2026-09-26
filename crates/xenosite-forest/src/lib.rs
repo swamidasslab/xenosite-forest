@@ -61,8 +61,9 @@ pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
     CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
-    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges, identity_canonical_plan,
-    identity_plan, identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
+    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
+    epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
+    identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
     transitive_closure_masks,
 };
 pub use cleavage_graph::{
@@ -106,7 +107,9 @@ pub use pattern::{
     bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o, leave_oo,
     merge_delta_formula, named_leave_formula,
 };
-pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};
+pub use rules::{
+    all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
+};
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
     accept_all_sites, o_dealkylation,

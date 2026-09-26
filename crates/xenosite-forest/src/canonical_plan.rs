@@ -840,14 +840,14 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
 
 /// Whether `step` is a prep that can supply `element` for a [`PlanAtom::WillAdd`].
 ///
-/// Named after the elementary rules quinone / DH plans emit as preps. Matching
-/// any earlier site that merely *touches* the anchor (e.g. Dealkylation) would
-/// invent precedes between free cleaves and later DH.
+/// Named after the elementary rules quinone / DH / epoxide-hydration plans
+/// emit as preps. Matching any earlier site that merely *touches* the anchor
+/// (e.g. Dealkylation) would invent precedes between free cleaves and later DH.
 fn step_supplies_will_add(step: &Step, element: &str) -> bool {
     match element {
         "O" => matches!(
             step.rule.as_str(),
-            "Hydroxylation" | "OxidativeDehalogenation"
+            "Hydroxylation" | "OxidativeDehalogenation" | "Epoxidation"
         ),
         _ => false,
     }
@@ -1019,6 +1019,33 @@ pub fn quinone_canonical_plan(
     identity_plan("Dehydrogenation", site_atoms.iter().copied())
 }
 
+/// Stable oxygenation (epoxidation) then hydrolysis (epoxide opening).
+///
+/// Wired on [`crate::rules::epoxide_hydration`] — one metabolize hop to the
+/// vicinal diol; the plan is the elementary split for search / replay.
+pub fn epoxide_hydration_canonical_plan(
+    _mol: &Molecule,
+    _rule_name: &str,
+    site_atoms: &[usize],
+    _end_effects: Option<&[&Effect]>,
+) -> Vec<Step> {
+    if site_atoms.len() < 2 {
+        return identity_plan("EpoxideHydration", site_atoms.iter().copied());
+    }
+    let c0 = site_atoms[0];
+    let c1 = site_atoms[1];
+    vec![
+        Step::new(
+            "Epoxidation",
+            [PlanAtom::index(c0), PlanAtom::index(c1)],
+        ),
+        Step::new(
+            "EpoxideOpening",
+            [PlanAtom::index(c0), PlanAtom::oxygen_at(c0)],
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1087,6 +1114,21 @@ mod tests {
                 .iter()
                 .any(|a| matches!(a, PlanAtom::WillAdd { .. }))
         );
+    }
+
+    #[test]
+    fn epoxide_hydration_plan_is_epoxidation_then_opening() {
+        let plan = epoxide_hydration_canonical_plan(
+            &parse_mol("C=C").unwrap(),
+            "EpoxideHydration",
+            &[0, 1],
+            None,
+        );
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[0].rule, "Epoxidation");
+        assert_eq!(plan[1].rule, "EpoxideOpening");
+        let deps = Deps::bind(plan);
+        assert_eq!(deps.precedes(), &[(0, 1)]);
     }
 
     #[test]

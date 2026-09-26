@@ -135,6 +135,11 @@ impl RuleSet {
         self
     }
 
+    /// `true` when a composite [`Self::canonical_plan`] hook is attached.
+    pub fn has_plan_hook(&self) -> bool {
+        self.plan_fn.is_some()
+    }
+
     /// Elementary steps for one accepted hop (Python `canonical_plan`).
     ///
     /// Default: identity — this rule at the discovery site. Composites return

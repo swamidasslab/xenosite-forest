@@ -1266,6 +1266,33 @@ pub fn epoxidation() -> RuleSet {
     )
 }
 
+/// Alkene → vicinal diol in one hop (epoxidation then hydrolytic opening).
+///
+/// Metabolize applies the diol SMIRKS; [`canonical_plan`](crate::ruleset::RuleSet::canonical_plan)
+/// records `Epoxidation` then `EpoxideOpening` — the matching elementary leaves.
+pub fn epoxide_hydration() -> RuleSet {
+    RuleSet::new(
+        Some("EpoxideHydration".into()),
+        [smirks_row(
+            "diol",
+            "[#6:1]=[#6,#7:2]>>[*:1](O)[*:2]O",
+            SiteKind::Bond,
+            vec![1, 2],
+            Effect {
+                adds: Some("OO".into()),
+                removes: None,
+                cleaves: false,
+                methide: false,
+                dearomatizes: false,
+                leave_count: None,
+                partner: None,
+                ..Default::default()
+            },
+        )],
+    )
+    .with_canonical_plan(crate::canonical_plan::epoxide_hydration_canonical_plan)
+}
+
 /// `SulfurOxidation` from Python `xenosite.forest.rules`.
 pub fn sulfur_oxidation() -> RuleSet {
     RuleSet::new(
@@ -1779,6 +1806,7 @@ pub fn phase_one() -> RuleSet {
         [
             hydroxylation(),
             epoxidation(),
+            epoxide_hydration(),
             sulfur_oxidation(),
             nitrogen_oxidation(),
             dehydrogenation(),
@@ -1818,6 +1846,7 @@ pub fn all_rules() -> RuleSet {
         [
             hydroxylation(),
             epoxidation(),
+            epoxide_hydration(),
             sulfur_oxidation(),
             nitrogen_oxidation(),
             dehydrogenation(),
@@ -1868,6 +1897,7 @@ pub fn catalog_names() -> &'static [&'static str] {
         "ReductiveDehalogenation",
         "SulfurReduction",
         "Epoxidation",
+        "EpoxideHydration",
         "SulfurOxidation",
         "NitrogenOxidation",
         "OxidativeDehalogenation",
@@ -1900,6 +1930,7 @@ pub fn leaf_rule(name: &str) -> Option<RuleSet> {
         "ReductiveDehalogenation" => reductive_dehalogenation(),
         "SulfurReduction" => sulfur_reduction(),
         "Epoxidation" => epoxidation(),
+        "EpoxideHydration" => epoxide_hydration(),
         "SulfurOxidation" => sulfur_oxidation(),
         "NitrogenOxidation" => nitrogen_oxidation(),
         "OxidativeDehalogenation" => oxidative_dehalogenation(),
@@ -1918,16 +1949,68 @@ mod tests {
     use crate::ruleset::{accept_all_rules, accept_all_sites};
 
     #[test]
-    fn phase_one_nests_seventeen_leaf_rules() {
+    fn phase_one_nests_eighteen_leaf_rules() {
         let set = phase_one();
-        assert_eq!(set.members().len(), 17);
+        assert_eq!(set.members().len(), 18);
         assert_eq!(set.name.as_deref(), Some("PhaseOne"));
     }
 
     #[test]
     fn all_rules_registers_every_leaf() {
-        assert_eq!(all_rules().members().len(), 26);
-        assert_eq!(catalog_names().len(), 26);
+        assert_eq!(all_rules().members().len(), 27);
+        assert_eq!(catalog_names().len(), 27);
+    }
+
+    #[test]
+    fn epoxide_hydration_pattern_info_and_plan() {
+        let set = epoxide_hydration();
+        assert!(set.has_plan_hook());
+        let patterns = set.patterns();
+        assert_eq!(patterns.len(), 1);
+        let info = patterns[0];
+        assert_eq!(info.name, "diol");
+        assert_eq!(info.site_kind, SiteKind::Bond);
+        assert_eq!(info.site_map, vec![1, 2]);
+        assert_eq!(info.effect.adds.as_deref(), Some("OO"));
+        assert_eq!(info.effect.delta_formula.get("O"), Some(&2));
+        assert!(!info.effect.cleaves);
+        match &info.edit {
+            Edit::Smirks(s) => assert!(s.contains(">>"), "{s}"),
+            other => panic!("expected Smirks edit, got {other:?}"),
+        }
+
+        let mol = parse_mol("C=C").unwrap();
+        let emissions = set
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!emissions.is_empty(), "{emissions:?}");
+        let want = canon_of("OCCO").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "want OCCO, got {:?}",
+            emissions.iter().map(|e| &e.products).collect::<Vec<_>>()
+        );
+        let emission = emissions
+            .iter()
+            .find(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want))
+            .unwrap();
+        assert_eq!(emission.pattern_name, "diol");
+        assert_eq!(emission.leaf_rule(), Some("EpoxideHydration"));
+        let names: Vec<_> = emission.plan.iter().map(|s| s.rule.as_str()).collect();
+        assert_eq!(names, ["Epoxidation", "EpoxideOpening"]);
+        assert_eq!(emission.site_atoms.len(), 2);
+
+        let benzene = parse_mol("c1ccccc1").unwrap();
+        let arom = set
+            .metabolize(&benzene, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!arom.is_empty(), "{arom:?}");
+        let names: Vec<_> = arom[0].plan.iter().map(|s| s.rule.as_str()).collect();
+        assert_eq!(names, ["Epoxidation", "EpoxideOpening"]);
     }
 
     #[test]

@@ -1541,6 +1541,17 @@ where
                 )
             })
             .unwrap_or(0);
+        let plan = match candidate
+            .leaf_rule()
+            .and_then(crate::rules::leaf_rule)
+            .filter(|leaf| leaf.has_plan_hook())
+        {
+            Some(leaf) => leaf.canonical_plan(self.parent.mol(), &atoms, None),
+            None => candidate.identity_plan_with_gens(
+                &self.parent.atom_bond_generators(),
+                self.parent.mol().atom_count(),
+            ),
+        };
         Ok(Some(ForestEmission {
             site: candidate.site,
             site_orbit: candidate.orbit.clone(),
@@ -1556,10 +1567,7 @@ where
             dh_ends: None,
             rule_path: candidate.rule_path.clone(),
             products,
-            plan: candidate.identity_plan_with_gens(
-                &self.parent.atom_bond_generators(),
-                self.parent.mol().atom_count(),
-            ),
+            plan,
         }))
     }
 
