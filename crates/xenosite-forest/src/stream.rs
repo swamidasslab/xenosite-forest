@@ -147,7 +147,7 @@ pub(crate) fn pattern_candidate_batch(
             out.push(Candidate {
                 site,
                 orbit: hit.orbit,
-                pattern: pattern.clone(),
+                pattern: pattern.resolve_for_match(mol, &hit.mapped),
                 rule_path: vec![set.name.clone()],
                 mapped: hit.mapped,
                 parent: ParentRef::Form(Box::new(forms[form_i].clone())),
@@ -161,7 +161,7 @@ pub(crate) fn pattern_candidate_batch(
             out.push(Candidate {
                 site,
                 orbit: hit.orbit,
-                pattern: pattern.clone(),
+                pattern: pattern.resolve_for_match(mol, &hit.mapped),
                 rule_path: vec![set.name.clone()],
                 mapped: hit.mapped,
                 parent: ParentRef::Context,

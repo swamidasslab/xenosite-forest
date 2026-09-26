@@ -1218,8 +1218,7 @@ mod tests {
     }
 
     /// Every QF prep-spine shape: OH/DH cases must [`Deps::reaches`]; OxDehal
-    /// spines are constructed here (aryl `OxidativeDehalogenation` SMIRKS does
-    /// not yet apply under chematic — aliphatic leaf covered separately).
+    /// spines check structure + aryl/aliphatic leaf apply (aromatic specialize).
     #[test]
     fn qf_canonical_plan_shapes_all_replay() {
         fn rules_of(deps: &Deps) -> Vec<&str> {
@@ -1350,7 +1349,7 @@ mod tests {
             assert!(deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap());
         }
 
-        // 4–7) OxDehal spines — structure only (aryl OxDehal SMIRKS empty under chematic).
+        // 4–7) OxDehal spines — structure only (cleavage remaps Indices for reaches).
         {
             let smi = "Oc1ccc(Cl)cc1";
             let mol = parse_mol(smi).unwrap();
@@ -1426,7 +1425,24 @@ mod tests {
             );
         }
 
-        // Aliphatic OxDehal leaf does apply (chematic gap is aryl-only).
+        // Aryl OxDehal leaf applies via aromatic specialize; aliphatic too.
+        {
+            let mol = parse_mol("Clc1ccccc1").unwrap();
+            let hits =
+                crate::smarts::smarts_matches(&mol, "[#9,#17,#35,#53,#85:1]-[#6:2]").unwrap();
+            assert_eq!(hits.len(), 1);
+            let c = *hits[0].get(&2).unwrap();
+            let step = Step::new("OxidativeDehalogenation", [PlanAtom::index(c)]);
+            let products = step.apply(&mol).unwrap();
+            let phenol = canon_of("Oc1ccccc1").unwrap();
+            assert!(
+                products
+                    .iter()
+                    .any(|p| canon_of(&canon_smiles(p)).unwrap() == phenol),
+                "aryl OxDehal got {:?}",
+                products.iter().map(canon_smiles).collect::<Vec<_>>()
+            );
+        }
         {
             let mol = parse_mol("CCCl").unwrap();
             let hits =

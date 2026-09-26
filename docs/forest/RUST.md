@@ -108,6 +108,12 @@ cargo test -p xenosite-forest
 cargo test -p xenosite-forest --features python
 ```
 
+Always-on PatternInfo catalog audit (also under the plain `cargo test` line above):
+
+```bash
+cargo test -p xenosite-forest --test pattern_info_catalog
+```
+
 Browser WASM (the whole rlib + cdylib, including hydroxylation and the JS `ForestMol` class):
 
 ```bash

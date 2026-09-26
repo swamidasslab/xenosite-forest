@@ -1244,6 +1244,9 @@ pub fn sulfur_reduction() -> RuleSet {
 }
 
 /// `Epoxidation` from Python `xenosite.forest.rules`.
+///
+/// Catalog `dearomatizes` is capability; aliphatic matches resolve false via
+/// [`PatternInfo::resolve_for_match`].
 pub fn epoxidation() -> RuleSet {
     RuleSet::new(
         Some("Epoxidation".into()),
@@ -1257,7 +1260,7 @@ pub fn epoxidation() -> RuleSet {
                 removes: None,
                 cleaves: false,
                 methide: false,
-                dearomatizes: false,
+                dearomatizes: true,
                 leave_count: None,
                 partner: None,
                 ..Default::default()
@@ -1270,6 +1273,7 @@ pub fn epoxidation() -> RuleSet {
 ///
 /// Metabolize applies the diol SMIRKS; [`canonical_plan`](crate::ruleset::RuleSet::canonical_plan)
 /// records `Epoxidation` then `EpoxideOpening` — the matching elementary leaves.
+/// Catalog `dearomatizes` is capability (aromatic alkene clears the ring bit).
 pub fn epoxide_hydration() -> RuleSet {
     RuleSet::new(
         Some("EpoxideHydration".into()),
@@ -1283,7 +1287,7 @@ pub fn epoxide_hydration() -> RuleSet {
                 removes: None,
                 cleaves: false,
                 methide: false,
-                dearomatizes: false,
+                dearomatizes: true,
                 leave_count: None,
                 partner: None,
                 ..Default::default()
@@ -1962,6 +1966,44 @@ mod tests {
     }
 
     #[test]
+    fn epoxidation_dearomatizes_capability_resolves_on_aromatic_site() {
+        let set = epoxidation();
+        let info = &set.patterns()[0];
+        assert!(
+            info.effect.dearomatizes,
+            "catalog capability must declare dearomatizes"
+        );
+
+        let benzene = parse_mol("c1ccccc1").unwrap();
+        let arom = set
+            .candidates(&benzene)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!arom.is_empty(), "{arom:?}");
+        assert!(
+            arom.iter().all(|c| c.pattern.effect.dearomatizes),
+            "aromatic site resolves dearomatizes; got {:?}",
+            arom.iter()
+                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .collect::<Vec<_>>()
+        );
+
+        let ethene = parse_mol("C=C").unwrap();
+        let aliph = set
+            .candidates(&ethene)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!aliph.is_empty(), "{aliph:?}");
+        assert!(
+            aliph.iter().all(|c| !c.pattern.effect.dearomatizes),
+            "aliphatic site resolves false; got {:?}",
+            aliph.iter()
+                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn epoxide_hydration_pattern_info_and_plan() {
         let set = epoxide_hydration();
         assert!(set.has_plan_hook());
@@ -1973,6 +2015,7 @@ mod tests {
         assert_eq!(info.site_map, vec![1, 2]);
         assert_eq!(info.effect.adds.as_deref(), Some("OO"));
         assert_eq!(info.effect.delta_formula.get("O"), Some(&2));
+        assert!(info.effect.dearomatizes, "catalog capability");
         assert!(!info.effect.cleaves);
         match &info.edit {
             Edit::Smirks(s) => assert!(s.contains(">>"), "{s}"),
