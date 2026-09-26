@@ -48,17 +48,18 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_diff::{
-    AtomDiff, added_heavy_atoms, aligned_shells, any_h_gain, any_h_loss, any_needs_oxygen,
-    atom_diff, atom_diff_after_cleavage, atom_diff_after_cleavage_tracked, atom_diff_for_child,
-    atom_diff_from_mappings, atom_h_delta, atom_needs_carbonyl, atom_needs_oxygen,
-    candidate_could_help, candidate_could_help_on, candidate_order_key, candidate_order_key_on,
-    dh_neighbors_match_any_view, dh_product_ends_match, extend_mapping_for_added,
-    extend_mapping_where_possible, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
-    mcs_extend, pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
-    projected_unaligned_reductions, residual_cost_after_site_cast, site_h_progress,
-    site_h_progress_best_placement, site_shell_forecast, try_atom_diff_for_child,
+    AtomDiff, USE_MCS_EXTEND, added_heavy_atoms, aligned_shells, any_h_gain, any_h_loss,
+    any_needs_oxygen,     atom_diff, atom_diff_after_cleavage, atom_diff_after_cleavage_tracked,
+    atom_diff_for_child, atom_diff_from_mappings, atom_diff_mcs_extend, atom_h_delta,
+    atom_needs_carbonyl, atom_needs_oxygen, candidate_could_help, candidate_could_help_on,
+    candidate_order_key, candidate_order_key_on, dh_neighbors_match_any_view,
+    dh_product_ends_match, extend_mapping_for_added, extend_mapping_where_possible,
+    is_dehydrogenation_effect, keep_against_diff, lift_mappings, mcs_align, mcs_bare, mcs_extend,
+    pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
+    projected_unaligned_reductions, residual_cost_after_site_cast, set_use_mcs_extend,
+    site_h_progress, site_h_progress_best_placement, site_shell_forecast, try_atom_diff_for_child,
     try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked, try_lift_cleaved_child,
-    try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
+    try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked, use_mcs_extend,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};

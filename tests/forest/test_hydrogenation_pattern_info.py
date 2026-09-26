@@ -95,7 +95,12 @@ def test_adds_h_filter_allows_alkene_when_target_gains_hydrogen():
 
 
 def test_meoph_oh_hydroxyq_bill_after_adds_h_filter():
-    """Regression: bill ≪ ~900 once reductive H is filtered on oxidative target."""
+    """Regression: bill ≪ ~900 once reductive H is filtered on oxidative target.
+
+    Epoxidation declares ``dearomatizes`` capability (parity with Rust catalog);
+    aromatic epox sites stay under the loses_aromaticity gate — bill sits above
+    the pre-capability ~150–200 band but must stay well under the unfiltered ~900.
+    """
 
     counters = PathCounters()
     hits = list(
@@ -109,7 +114,7 @@ def test_meoph_oh_hydroxyq_bill_after_adds_h_filter():
         )
     )
     assert hits
-    assert counters.billed < 250, (
+    assert counters.billed < 400, (
         f"expected bill≪900 after adds-H filter; got {counters.billed} "
         f"(nd={counters.nodes} ed={counters.mol_edits})"
     )

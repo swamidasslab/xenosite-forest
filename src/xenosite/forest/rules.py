@@ -3721,6 +3721,7 @@ class Epoxidation(ResonanceRule):
                 *branches(
                     ({"map": 2, "z": 6}, {"map": 2, "z": 7}),
                     adds="O",
+                    dearomatizes=True,
                 ),
                 name="epoxide",
                 site_map=(1, 2),
