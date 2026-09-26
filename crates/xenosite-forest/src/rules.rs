@@ -1182,7 +1182,10 @@ pub fn reductive_dehalogenation() -> RuleSet {
             .with_possibilities(halide_remove_branches(1, base.clone())),
             smirks_row(
                 "alkene",
-                "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
+                // Map 3 must be aliphatic: aromatic partner forces a
+                // dearomatizing exocyclic methylene that RDKit sanitize
+                // papers into junk (C=C1CCCCC1) — C10. Rust refused; keep both off.
+                "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6;!a:3]>>[*:1].[*:2]=[*:3]",
                 SiteKind::Atom,
                 vec![2],
                 base.clone(),

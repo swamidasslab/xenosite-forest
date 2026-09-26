@@ -36,6 +36,7 @@ fn element_symbol(el: Element, aromatic: bool) -> Option<&'static str> {
         (Element::CL, _) => "Cl",
         (Element::BR, _) => "Br",
         (Element::I, _) => "I",
+        (Element::AT, _) => "At",
         (Element::H, _) => "H",
         _ => return None,
     })
@@ -577,6 +578,7 @@ fn apply_smirks_raw(
                 } else {
                     frag
                 };
+                let frag = normalize_monatomic_astatine(frag);
                 if accept_product(&frag) {
                     pieces.push(frag);
                 }
@@ -620,6 +622,25 @@ fn enforce_charged_h0(mol: Molecule) -> Molecule {
         return mol;
     }
     parse_mol(&out).unwrap_or(mol)
+}
+
+/// RDKit writes monatomic At as ``[AtH]`` (not organic-subset); chematic yields
+/// ``[At]``. Normalize so RDKit CSMI parity matches other halide leaves (Br/Cl
+/// organic SMILES already imply the same valence-1 H accounting).
+fn normalize_monatomic_astatine(mol: Molecule) -> Molecule {
+    use crate::mol::{atom_idx, canon_smiles, parse_mol};
+    use chematic::core::Element;
+    if mol.atom_count() != 1 {
+        return mol;
+    }
+    let atom = mol.atom(atom_idx(0));
+    if atom.element != Element::AT {
+        return mol;
+    }
+    if canon_smiles(&mol) == "[AtH]" {
+        return mol;
+    }
+    parse_mol("[AtH]").unwrap_or(mol)
 }
 
 #[cfg(test)]

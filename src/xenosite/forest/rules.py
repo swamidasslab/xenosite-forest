@@ -3714,7 +3714,9 @@ class ReductiveDehalogenation(SmirksReactionRule):
             ),
         ),
         (
-            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]"),
+            # Map 3 aliphatic only — aromatic partner dearomatizes into
+            # sanitize-rescued junk (C10); see reductive dehalogenation notes.
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#6;!a:3]>>[*:1].[*:2]=[*:3]"),
             _describe(
                 *branches(
                     _whens(1, _HALIDE),
