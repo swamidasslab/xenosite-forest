@@ -458,11 +458,16 @@ impl PairCandidate {
                 && (parent_double_deg.get(&a).copied().unwrap_or(0) >= 2
                     || parent_double_deg.get(&b).copied().unwrap_or(0) >= 2);
             if cumulated {
+                // N=C=O: strip from residual (one-partner matching cannot
+                // express cumulated demand).
                 framework_forced.insert(edge);
-            } else if !parent_doubles.contains(&edge) {
+            } else {
+                // Edit-new leaves and surviving parent doubles (other quinone
+                // C=O, etc.): exclusive-seed so rematch does not rewrite them
+                // into [O-]/[CH3] junk. Saturate demotes path π first, so
+                // styrene vinyl is gone before perceive and rematches freely.
                 edit_forced.insert(edge);
             }
-            // else: ordinary parent double — rematch in residual, no exclusive seed
         }
         let residual_match = residual.after_forced_doubles(&framework_forced);
         // Empty residual: one-edge path_end (shared π saturated) may emit.
@@ -1383,3 +1388,6 @@ mod tests {
         );
     }
 }
+
+
+
