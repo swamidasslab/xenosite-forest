@@ -1,0 +1,4 @@
+# Python deps for XRM competency (SPARQL + SHACL).
+PyYAML>=6.0
+rdflib>=7.0
+pyshacl>=0.25

@@ -1,0 +1,11 @@
+id	reactant_smiles	product_smiles	tags	expected_transformation	expected_phase	expected_product_class	expected_site_environment	expected_liability	expected_external_mapping
+GOLD-0001	CC	CCO		hydroxylation	phase I			metabolic soft spot	mop:0000673
+GOLD-0002	C=C	C1CO1		epoxidation	phase I	epoxide		bioactivation	mop:0000671
+GOLD-0003	c1ccccc1	Oc1ccccc1	chem:aromatic-hydroxylation	aromatic hydroxylation	phase I			metabolic soft spot	
+GOLD-0004	CCO	CCO	forest.rule:Glucuronidation	glucuronidation	phase II	glucuronide conjugate			
+GOLD-0005	C	C	chem:N-demethylation	N-demethylation	phase I		tertiary amine site	metabolic soft spot	
+GOLD-0006	C	C	chem:quinone-formation	quinone formation	phase I	quinone		bioactivation	forest.rule:QuinoneFormation
+GOLD-0007	C	C	chem:acyl-glucuronidation|chem:forms-reactive-conjugate	acyl glucuronidation	phase II	acyl glucuronide		forms reactive conjugate	
+GOLD-0008	[CH3:1]c1ccc([CH3:2])cc1	O[CH2:1]c1ccc([CH3:2])cc1	chem:benzylic-hydroxylation@1	benzylic hydroxylation	phase I		benzylic site	metabolic soft spot	
+GOLD-0009	C	C	forest.rule:Glutathionation	glutathionation	phase II	GSH-trappable metabolite		forms reactive conjugate	
+GOLD-0010	CCO	CC=O		alcohol oxidation	phase I	aldehyde		aldehyde forming	

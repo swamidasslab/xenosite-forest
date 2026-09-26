@@ -111,8 +111,12 @@ Includes schema validation, golden naming, Forest opaque-tag coverage, competenc
 fixtures, enzyme-orthogonal guards, and dependency boundary checks.
 
 ```bash
-python3 crates/xenosite-xrm/tools/run_competency_tests.py   # ontology/mapping CQs + export tagging fixtures
+pip install -r crates/xenosite-xrm/tools/requirements-competency.txt
+python3 crates/xenosite-xrm/tools/run_competency_tests.py --refresh-ttl
 cargo test -p xenosite-xrm --test competency
+cargo test -p xenosite-xrm --test gold_score
+python3 crates/xenosite-xrm/tools/score_gold_set.py
 ```
 
-See `data/ontology/VALIDATION.md` and `data/competency/PLAN.md`.
+See `data/competency/PLAN.md` (executable CQ design), `data/ontology/VALIDATION.md`,
+and `data/ontology/SCOPE.md` (metabolism-only).

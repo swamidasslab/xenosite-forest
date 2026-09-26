@@ -1,0 +1,13 @@
+subject_id	predicate_id	object_id	subject_label
+xrm:0000000	skos:closeMatch	GO:0006805	xenobiotic biotransformation
+xrm:0000001	skos:broadMatch	GO:0006805	phase I
+xrm:0000002	skos:broadMatch	GO:0006805	phase II
+xrm:1500010	skos:closeMatch	CHEBI:36141	quinone
+xrm:1500011	skos:closeMatch	CHEBI:50106	quinone imine
+xrm:1500012	skos:closeMatch	CHEBI:32955	epoxide
+xrm:1500013	skos:closeMatch	CHEBI:17478	aldehyde
+xrm:1500015	skos:relatedMatch	CHEBI:139518	acyl glucuronide
+xrm:1500019	skos:relatedMatch	CHEBI:57925	GSH-trappable metabolite
+xrm:0001000	skos:relatedMatch	CHEBI:24302	glucuronidation
+xrm:0001010	skos:relatedMatch	CHEBI:26819	sulfation
+xrm:0001030	skos:relatedMatch	CHEBI:57925	glutathionation

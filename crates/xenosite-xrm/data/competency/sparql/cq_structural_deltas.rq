@@ -1,0 +1,8 @@
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xrm:  <https://xenosite.org/ontology/xrm#>
+
+SELECT DISTINCT ?term WHERE {
+  ?term skos:broader+ xrm:1700000 .
+  ?term skos:prefLabel ?label .
+  FILTER(REGEX(LCASE(STR(?label)), "monooxygenation|oxygen gain|formula delta|demethylation delta|glucuronide mass"))
+}

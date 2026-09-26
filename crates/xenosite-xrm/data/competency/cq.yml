@@ -1,15 +1,18 @@
 # Executable competency questions for XRM (ontology / mapping / tagging layers).
 # Runner: tools/run_competency_tests.py
 # Types:
-#   ontology_broader  — concept ids under a spine (nearest or descendant)
-#   ontology_labels   — prefLabels under a spine must include/exclude
-#   mapping_exists    — SSSOM row for subject/object
-#   tagging           — namer emits expected prefLabels for reactant/product/tags
+#   ontology_broader   — concept has expected ancestors
+#   ontology_labels    — prefLabels under a spine must include/exclude
+#   sparql             — SPARQL SELECT against xrm.skos.ttl
+#   shacl              — SHACL validate xrm.skos.ttl with xrm.shacl.ttl
+#   mapping_exists     — SSSOM row for subject/object
+#   definition_coverage— fraction of concepts with skos:definition
+#   tagging            — namer emits expected prefLabels (Rust fixtures)
 
-version: 1
+version: 2
 questions:
 
-  # --- Phase I transformations ---
+  # ========== Phase I transformations (10) ==========
   - id: CQ-P1-001
     layer: ontology
     question: "Which terms are under chemical transformation and named hydroxylation?"
@@ -60,7 +63,38 @@ questions:
     tags: ["chem:N-demethylation"]
     expected_labels: [N-demethylation, methyl leaving group, leaving group]
 
-  # --- Phase II ---
+  - id: CQ-P1-007
+    layer: ontology
+    question: "Find all transformations that can produce aldehydes."
+    type: sparql
+    query: sparql/cq_aldehyde_producers.rq
+    expected_contains: [xrm:0000201, xrm:0000205]
+    expected_excludes: [xrm:0001000]
+
+  - id: CQ-P1-008
+    layer: ontology
+    question: "O-dealkylation and N-dealkylation are both under dealkylation."
+    type: ontology_broader
+    concept: xrm:0000202
+    expected_ancestors: [xrm:0000200]
+
+  - id: CQ-P1-009
+    layer: tagging
+    question: "Alcohol→carbonyl tags alcohol oxidation / aldehyde framing."
+    type: tagging
+    reactant: "CCO"
+    product: "CC=O"
+    tags: []
+    expected_labels: [alcohol oxidation, phase I]
+
+  - id: CQ-P1-010
+    layer: ontology
+    question: "Epoxidation is under chemical transformation."
+    type: ontology_broader
+    concept: xrm:0000110
+    expected_ancestors: [xrm:1100000]
+
+  # ========== Phase II conjugations (10) ==========
   - id: CQ-P2-001
     layer: ontology
     question: "Phase II conjugation family includes glucuronidation and sulfation."
@@ -79,12 +113,74 @@ questions:
 
   - id: CQ-P2-003
     layer: ontology
-    question: "O-glucuronidation class exists under phase II conjugation family."
+    question: "Glucuronidation classes distinguish O/N/S/C/acyl attachment."
     type: ontology_labels
     under: xrm:1300000
-    expected_contains_labels: [O-glucuronidation class, N-glucuronidation class, acyl glucuronidation class]
+    expected_contains_labels:
+      - O-glucuronidation class
+      - N-glucuronidation class
+      - S-glucuronidation class
+      - C-glucuronidation class
+      - acyl glucuronidation class
 
-  # --- Reactive metabolites / conjugates ---
+  - id: CQ-P2-004
+    layer: ontology
+    question: "Which Phase II reactions attach a conjugate through oxygen?"
+    type: sparql
+    query: sparql/cq_phase2_oxygen_attachment.rq
+    expected_contains: [xrm:0001001, xrm:0001011, xrm:0001041, xrm:1300100, xrm:1300103, xrm:1300106]
+    expected_excludes: [xrm:0001005, xrm:1300101, xrm:0001004, xrm:1300102]
+
+  - id: CQ-P2-005
+    layer: ontology
+    question: "Which Phase II reactions attach a conjugate through nitrogen?"
+    type: sparql
+    query: sparql/cq_phase2_nitrogen_attachment.rq
+    expected_contains: [xrm:0001005, xrm:1300101]
+    expected_excludes: [xrm:0001001, xrm:1300100]
+
+  - id: CQ-P2-006
+    layer: ontology
+    question: "Given glucuronide classes, attachment atom distinguishes O/N/S/C/acyl."
+    type: sparql
+    query: sparql/cq_glucuronidation_attachment_atoms.rq
+    expected_contains: [xrm:1300100, xrm:1300101, xrm:1300102, xrm:1300120, xrm:1300121]
+    min_results: 5
+
+  - id: CQ-P2-007
+    layer: ontology
+    question: "Find all reactions classified as Phase II but not enzyme-specific."
+    type: sparql
+    query: sparql/cq_phase2_not_enzyme.rq
+    expected_contains: [xrm:0001000, xrm:0001010, xrm:0001030]
+    expected_excludes_labels: []
+
+  - id: CQ-P2-008
+    layer: tagging
+    question: "N-glucuronidation tag emits N-glucuronidation + phase II framing."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:N-glucuronidation"]
+    expected_labels: [N-glucuronidation]
+
+  - id: CQ-P2-009
+    layer: tagging
+    question: "Sulfation Forest tag emits sulfation."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["forest.rule:Sulfation"]
+    expected_labels: [sulfation]
+
+  - id: CQ-P2-010
+    layer: ontology
+    question: "Methylation classes include O- and N-methylation under phase II."
+    type: ontology_labels
+    under: xrm:1300000
+    expected_contains_labels: [O-methylation class, N-methylation class]
+
+  # ========== Reactive metabolite classes (8) ==========
   - id: CQ-RM-001
     layer: ontology
     question: "Reactive metabolite family includes quinone, epoxide, aldehyde."
@@ -110,7 +206,45 @@ questions:
     tags: ["chem:quinone-formation"]
     expected_labels: [quinone formation]
 
-  # --- Site / localization ---
+  - id: CQ-RM-004
+    layer: tagging
+    question: "Acyl glucuronidation implies forms reactive conjugate framing."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:acyl-glucuronidation", "chem:forms-reactive-conjugate"]
+    expected_labels: [acyl glucuronidation, forms reactive conjugate]
+
+  - id: CQ-RM-005
+    layer: ontology
+    question: "Find product classes that are quinone-like but not strict quinones."
+    type: sparql
+    query: sparql/cq_quinone_like_not_strict.rq
+    expected_contains: [xrm:1500011, xrm:1500100, xrm:1500103]
+    expected_excludes: [xrm:1500010]
+
+  - id: CQ-RM-006
+    layer: ontology
+    question: "Find reactive aromatic metabolite classes (quinone/epoxide/methide/nitroso)."
+    type: sparql
+    query: sparql/cq_reactive_aromatic_metabolites.rq
+    expected_contains: [xrm:1500010, xrm:1500012, xrm:1500104, xrm:1500017]
+
+  - id: CQ-RM-007
+    layer: ontology
+    question: "Find reactions that may create GSH-trappable metabolites."
+    type: sparql
+    query: sparql/cq_gsh_trappable_producers.rq
+    expected_contains: [xrm:0000110, xrm:0000300, xrm:0001004, xrm:0001030]
+
+  - id: CQ-RM-008
+    layer: ontology
+    question: "Ketene and nitrene remain as metabolism-relevant reactive classes."
+    type: ontology_labels
+    under: xrm:1500000
+    expected_contains_labels: [ketene, nitrene]
+
+  # ========== Site localization (8) ==========
   - id: CQ-SITE-001
     layer: ontology
     question: "Site type includes benzylic, tertiary amine, phenol."
@@ -128,7 +262,161 @@ questions:
     expected_labels: [benzylic hydroxylation]
     expect_site_map: [1]
 
-  # --- Leaving group / pharma / about ---
+  - id: CQ-SITE-003
+    layer: ontology
+    question: "Site environments cover benzylic/allylic/phenol/amine/aniline/omega."
+    type: sparql
+    query: sparql/cq_site_environments.rq
+    expected_contains: [xrm:1600014, xrm:1600015, xrm:1600021, xrm:1600022, xrm:1600103, xrm:1600130]
+    min_results: 5
+
+  - id: CQ-SITE-004
+    layer: tagging
+    question: "Can the system emit a site-localized name for bond-centered epoxidation?"
+    type: tagging
+    reactant: "[CH2:1]=[CH2:2]"
+    product: "C1OC1"
+    tags: ["chem:epoxidation@1,2"]
+    expected_labels: [epoxidation]
+    expect_site_map: [1, 2]
+    expect_site_label_substring: "@"
+
+  - id: CQ-SITE-005
+    layer: ontology
+    question: "Ortho/meta/para aromatic carbons are metabolism site environments."
+    type: ontology_labels
+    under: xrm:1600000
+    expected_contains_labels: [para aromatic carbon, ortho aromatic carbon, meta aromatic carbon]
+
+  - id: CQ-SITE-006
+    layer: ontology
+    question: "Attachment atom types O/N/S/C exist as site concepts."
+    type: ontology_labels
+    under: xrm:1600000
+    expected_contains_labels: [attachment atom O, attachment atom N, attachment atom S, attachment atom C]
+
+  - id: CQ-SITE-007
+    layer: tagging
+    question: "Aromatic hydroxylation localized tag carries map number."
+    type: tagging
+    reactant: "c1ccccc1"
+    product: "Oc1ccccc1"
+    tags: ["chem:aromatic-hydroxylation@1"]
+    expected_labels: [aromatic hydroxylation]
+    expect_site_map: [1]
+
+  - id: CQ-SITE-008
+    layer: ontology
+    question: "Bond site and carbon site exist for localization kind."
+    type: ontology_labels
+    under: xrm:1600000
+    expected_contains_labels: [bond site, carbon site]
+
+  # ========== Structural deltas (5) ==========
+  - id: CQ-DELTA-001
+    layer: ontology
+    question: "Structural delta includes monooxygenation and formula delta."
+    type: ontology_labels
+    under: xrm:1700000
+    expected_contains_labels: [monooxygenation, formula delta, oxygen gain]
+
+  - id: CQ-DELTA-002
+    layer: ontology
+    question: "Structural delta SPARQL finds mass-shift / oxygenation leaves."
+    type: sparql
+    query: sparql/cq_structural_deltas.rq
+    expected_contains: [xrm:1700100, xrm:7700001, xrm:1700010]
+    min_results: 3
+
+  - id: CQ-DELTA-003
+    layer: ontology
+    question: "Demethylation delta and glucuronide mass shift are expressible."
+    type: ontology_labels
+    under: xrm:1700000
+    expected_contains_labels: [demethylation delta, glucuronide mass shift]
+
+  - id: CQ-DELTA-004
+    layer: tagging
+    question: "Ethane→ethanol structural path emits oxygen-gain delta framing."
+    type: tagging
+    reactant: "CC"
+    product: "CCO"
+    tags: []
+    expected_labels: [oxygen gain]
+
+  - id: CQ-DELTA-005
+    layer: ontology
+    question: "GSH mass shift sits under structural delta."
+    type: ontology_labels
+    under: xrm:1700000
+    expected_contains_labels: [GSH mass shift]
+
+  # ========== External mappings (5) ==========
+  - id: CQ-MAP-001
+    layer: mapping
+    question: "Hydroxylation maps to MOP."
+    type: mapping_exists
+    subject: xrm:0000100
+    object_prefix: "mop:"
+
+  - id: CQ-MAP-002
+    layer: mapping
+    question: "Xenobiotic biotransformation maps to GO:0006805."
+    type: mapping_exists
+    subject: xrm:0000000
+    object: GO:0006805
+
+  - id: CQ-MAP-003
+    layer: mapping
+    question: "Hydroxylation has opaque Forest rule mapping."
+    type: mapping_exists
+    subject: xrm:0000100
+    object: forest.rule:Hydroxylation
+
+  - id: CQ-MAP-004
+    layer: mapping
+    question: "Phase I has MeSH broadMatch."
+    type: mapping_exists
+    subject: xrm:0000001
+    object_prefix: "mesh:"
+
+  - id: CQ-MAP-005
+    layer: mapping
+    question: "Quinone formation maps to Forest QuinoneFormation without Forest CURIE becoming a product class."
+    type: mapping_exists
+    subject: xrm:0000300
+    object: forest.rule:QuinoneFormation
+
+  # ========== Evidence / provenance (4) ==========
+  - id: CQ-EV-001
+    layer: ontology
+    question: "Evidence spine includes MS and literature evidence."
+    type: ontology_labels
+    under: xrm:2000000
+    expected_contains_labels: [MS1 evidence, MS2 evidence, literature evidence]
+
+  - id: CQ-PROV-001
+    layer: ontology
+    question: "Rule provenance includes SMARTS-derived and Forest-map-derived tags."
+    type: ontology_labels
+    under: xrm:1900000
+    expected_contains_labels: [SMARTS-derived tag, Forest-map-derived tag]
+
+  - id: CQ-EV-002
+    layer: ontology
+    question: "Definition coverage meets publishable floor."
+    type: definition_coverage
+    min_fraction: 0.80
+
+  - id: CQ-PROV-002
+    layer: ontology
+    question: "SHACL core concept shape (prefLabel + inScheme) holds for all concepts."
+    type: shacl
+    shapes: ../ontology/xrm.shacl.ttl
+    data: ../ontology/xrm.skos.ttl
+    allow_warnings: true
+
+  # ========== Leaving group / pharma / about (supporting) ==========
   - id: CQ-LG-001
     layer: ontology
     question: "Leaving group spine includes methyl and halide leaving groups."
@@ -167,64 +455,3 @@ questions:
     product: "C"
     tags: ["chem:inactive-metabolite", "chem:about-product"]
     expected_labels: [pharmacologically inactive metabolite, about product, pharmacological role]
-
-  - id: CQ-RM-004
-    layer: tagging
-    question: "Acyl glucuronidation implies forms reactive conjugate framing."
-    type: tagging
-    reactant: "C"
-    product: "C"
-    tags: ["chem:acyl-glucuronidation", "chem:forms-reactive-conjugate"]
-    expected_labels: [acyl glucuronidation, forms reactive conjugate]
-
-  # --- Structural delta ---
-  - id: CQ-DELTA-001
-    layer: ontology
-    question: "Structural delta includes monooxygenation and formula delta."
-    type: ontology_labels
-    under: xrm:1700000
-    expected_contains_labels: [monooxygenation, formula delta, oxygen gain]
-
-  # --- External mappings ---
-  - id: CQ-MAP-001
-    layer: mapping
-    question: "Hydroxylation maps to MOP."
-    type: mapping_exists
-    subject: xrm:0000100
-    object_prefix: "mop:"
-
-  - id: CQ-MAP-002
-    layer: mapping
-    question: "Xenobiotic biotransformation maps to GO:0006805."
-    type: mapping_exists
-    subject: xrm:0000000
-    object: GO:0006805
-
-  - id: CQ-MAP-003
-    layer: mapping
-    question: "Hydroxylation has opaque Forest rule mapping."
-    type: mapping_exists
-    subject: xrm:0000100
-    object: forest.rule:Hydroxylation
-
-  - id: CQ-MAP-004
-    layer: mapping
-    question: "Phase I has MeSH broadMatch."
-    type: mapping_exists
-    subject: xrm:0000001
-    object_prefix: "mesh:"
-
-  # --- Evidence / provenance ---
-  - id: CQ-EV-001
-    layer: ontology
-    question: "Evidence spine includes MS and literature evidence."
-    type: ontology_labels
-    under: xrm:2000000
-    expected_contains_labels: [MS1 evidence, MS2 evidence, literature evidence]
-
-  - id: CQ-PROV-001
-    layer: ontology
-    question: "Rule provenance includes SMARTS-derived and Forest-map-derived tags."
-    type: ontology_labels
-    under: xrm:1900000
-    expected_contains_labels: [SMARTS-derived tag, Forest-map-derived tag]

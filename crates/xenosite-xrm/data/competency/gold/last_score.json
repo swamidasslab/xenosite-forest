@@ -1,0 +1,44 @@
+{
+  "n_gold": 10,
+  "n_actual": 10,
+  "Transformation F1": 1.0,
+  "Phase F1": 1.0,
+  "Product class F1": 0.909,
+  "Site exact accuracy": 1.0,
+  "Site symmetry-adjusted accuracy": 1.0,
+  "Med-chem liability F1": 1.0,
+  "External mapping F1": 1.0,
+  "Coverage with >=1 useful tag": 1.0,
+  "counters": {
+    "transformation_exact": {
+      "tp": 10,
+      "fp": 0,
+      "fn": 0
+    },
+    "phase_exact": {
+      "tp": 10,
+      "fp": 0,
+      "fn": 0
+    },
+    "product_class_exact": {
+      "tp": 5,
+      "fp": 0,
+      "fn": 1
+    },
+    "site_exact": {
+      "tp": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "liability_exact": {
+      "tp": 9,
+      "fp": 0,
+      "fn": 0
+    },
+    "external_mapping_ok": {
+      "tp": 3,
+      "fp": 0,
+      "fn": 0
+    }
+  }
+}

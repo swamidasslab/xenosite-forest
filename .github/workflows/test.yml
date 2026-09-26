@@ -68,6 +68,14 @@ jobs:
         run: cargo clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
       - name: Test
         run: cargo test -p xenosite-forest
+      - name: XRM competency (Python ontology/mapping/SPARQL/SHACL)
+        run: |
+          pip install -r crates/xenosite-xrm/tools/requirements-competency.txt
+          python3 crates/xenosite-xrm/tools/run_competency_tests.py --refresh-ttl
+      - name: XRM Rust tests (naming + tagging CQs + gold emit)
+        run: cargo test -p xenosite-xrm
+      - name: XRM gold-set score
+        run: python3 crates/xenosite-xrm/tools/score_gold_set.py
       - name: PyO3
         run: |
           cargo clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings

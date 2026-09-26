@@ -1,0 +1,7 @@
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xrm:  <https://xenosite.org/ontology/xrm#>
+
+SELECT DISTINCT ?term WHERE {
+  ?term skos:relatedMatch xrm:1500013 .
+  ?term skos:broader+ xrm:1100000 .
+}

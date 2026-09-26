@@ -1,0 +1,16 @@
+{"id": "CQ-P1-004", "expected_tags": ["hydroxylation", "aliphatic hydroxylation", "phase I", "stable oxygenation"], "expected_excludes": ["aromatic hydroxylation"], "expect_site_map": []}
+{"id": "CQ-P1-005", "expected_tags": ["epoxidation", "phase I"], "expected_excludes": ["hydroxylation"], "expect_site_map": []}
+{"id": "CQ-P1-006", "expected_tags": ["N-demethylation", "methyl leaving group", "leaving group"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-009", "expected_tags": ["alcohol oxidation", "phase I"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-002", "expected_tags": ["glucuronidation", "phase II"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-008", "expected_tags": ["N-glucuronidation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-009", "expected_tags": ["sulfation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-002", "expected_tags": ["forms reactive conjugate", "reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-003", "expected_tags": ["quinone formation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-004", "expected_tags": ["acyl glucuronidation", "forms reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-002", "expected_tags": ["benzylic hydroxylation"], "expected_excludes": [], "expect_site_map": [1]}
+{"id": "CQ-SITE-004", "expected_tags": ["epoxidation"], "expected_excludes": [], "expect_site_map": [1, 2]}
+{"id": "CQ-SITE-007", "expected_tags": ["aromatic hydroxylation"], "expected_excludes": [], "expect_site_map": [1]}
+{"id": "CQ-DELTA-004", "expected_tags": ["oxygen gain"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-ABOUT-002", "expected_tags": ["prodrug", "pharmacologically active metabolite", "about parent", "about product"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PHARM-002", "expected_tags": ["pharmacologically inactive metabolite", "about product", "pharmacological role"], "expected_excludes": [], "expect_site_map": []}

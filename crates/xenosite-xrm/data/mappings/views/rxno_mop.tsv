@@ -1,0 +1,27 @@
+subject_id	predicate_id	object_id	subject_label
+xrm:0000100	skos:closeMatch	RXNO:0000330	hydroxylation
+xrm:0000110	skos:closeMatch	RXNO:0000001	epoxidation
+xrm:0000200	skos:relatedMatch	RXNO:0000336	dealkylation
+xrm:0001040	skos:closeMatch	RXNO:0000350	methylation
+xrm:0001020	skos:relatedMatch	RXNO:0000345	acetylation
+xrm:0000013	skos:relatedMatch	RXNO:0000344	hydrolysis
+xrm:0000014	skos:relatedMatch	RXNO:0000333	reduction
+xrm:0000012	skos:relatedMatch	RXNO:0000332	dehydrogenation
+xrm:0000100	skos:exactMatch	mop:0000673	hydroxylation
+xrm:0000101	skos:closeMatch	mop:0000673	aromatic hydroxylation
+xrm:0000110	skos:exactMatch	mop:0000671	epoxidation
+xrm:0001000	skos:exactMatch	mop:0000156	glucuronidation
+xrm:0000200	skos:closeMatch	mop:0000669	dealkylation
+xrm:0000205	skos:closeMatch	mop:0000669	N-demethylation
+xrm:0001040	skos:closeMatch	mop:0000060	methylation
+xrm:7000001	skos:relatedMatch	mop:0000673	net oxidation
+xrm:7200002	skos:relatedMatch	mop:0000669	bond cleavage
+xrm:0000013	skos:closeMatch	mop:0000402	hydrolysis
+xrm:0000014	skos:relatedMatch	mop:0000469	reduction
+xrm:0000020	skos:relatedMatch	mop:0000450	oxidation
+xrm:0000012	skos:relatedMatch	mop:0000454	dehydrogenation
+xrm:0001020	skos:closeMatch	mop:0000035	acetylation
+xrm:0001010	skos:relatedMatch	mop:0000410	sulfation
+xrm:0000201	skos:closeMatch	mop:0000669	N-dealkylation
+xrm:0000202	skos:closeMatch	mop:0000669	O-dealkylation
+xrm:1100000	skos:broadMatch	mop:0000000	chemical transformation

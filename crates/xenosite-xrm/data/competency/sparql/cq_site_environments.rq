@@ -1,0 +1,8 @@
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xrm:  <https://xenosite.org/ontology/xrm#>
+
+SELECT DISTINCT ?term WHERE {
+  ?term skos:broader+ xrm:1600000 .
+  ?term skos:prefLabel ?label .
+  FILTER(REGEX(LCASE(STR(?label)), "benzylic|allylic|phenol|tertiary amine|aniline|omega"))
+}

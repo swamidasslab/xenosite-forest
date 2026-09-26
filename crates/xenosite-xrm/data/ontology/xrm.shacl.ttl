@@ -1,0 +1,37 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xrm:  <https://xenosite.org/ontology/xrm#> .
+@prefix xmet: <https://xenosite.org/ontology/xmet#> .
+
+# Structural quality shapes for the XRM SKOS thesaurus.
+# Validated by tools/run_competency_tests.py (pyshacl).
+
+# Hard requirements for every concept (CI must pass).
+xmet:CoreConceptShape a sh:NodeShape ;
+  sh:targetClass skos:Concept ;
+  sh:property [
+    sh:path skos:prefLabel ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path skos:inScheme ;
+    sh:minCount 1 ;
+    sh:hasValue xrm:scheme ;
+  ] .
+
+# Definition completeness is tracked as a warning shape; coverage % is a CQ.
+xmet:DefinitionShape a sh:NodeShape ;
+  sh:targetClass skos:Concept ;
+  sh:severity sh:Warning ;
+  sh:property [
+    sh:path skos:definition ;
+    sh:minCount 1 ;
+  ] .
+
+xmet:SchemeShape a sh:NodeShape ;
+  sh:targetNode xrm:scheme ;
+  sh:property [
+    sh:path skos:prefLabel ;
+    sh:minCount 1 ;
+  ] .

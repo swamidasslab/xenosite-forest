@@ -1,0 +1,10 @@
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xrm:  <https://xenosite.org/ontology/xrm#>
+PREFIX xmet: <https://xenosite.org/ontology/xmet#>
+
+SELECT DISTINCT ?term ?atom WHERE {
+  VALUES ?term {
+    xrm:1300100 xrm:1300101 xrm:1300102 xrm:1300120 xrm:1300121
+  }
+  ?term xmet:hasAttachmentAtomType ?atom .
+}

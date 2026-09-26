@@ -1,0 +1,8 @@
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xrm:  <https://xenosite.org/ontology/xrm#>
+
+SELECT DISTINCT ?term ?label WHERE {
+  ?term skos:broader+ xrm:1300000 .
+  ?term skos:prefLabel ?label .
+  FILTER(!REGEX(LCASE(STR(?label)), "(cyp|ugt|sult|gst|nat\\b|enzyme)"))
+}

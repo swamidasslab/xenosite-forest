@@ -1,0 +1,5 @@
+subject_id	predicate_id	object_id	subject_label
+xrm:0000100	skos:relatedMatch	kegg.rclass:RC00001	hydroxylation
+xrm:0000200	skos:relatedMatch	kegg.rclass:RC00060	dealkylation
+xrm:0001000	skos:relatedMatch	kegg.rclass:RC00049	glucuronidation
+xrm:1700010	skos:relatedMatch	kegg.rclass:RC00001	formula delta

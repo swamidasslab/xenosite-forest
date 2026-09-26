@@ -19,6 +19,8 @@ struct Fixture {
     expected_excludes_labels: Vec<String>,
     #[serde(default)]
     expect_site_map: Vec<u16>,
+    #[serde(default)]
+    expect_site_label_substring: Option<String>,
 }
 
 fn fixtures() -> Vec<Fixture> {
@@ -36,7 +38,11 @@ fn fixtures() -> Vec<Fixture> {
 fn tagging_competency_fixtures() {
     let namer = Namer::from_manifest(DEFAULT_MANIFEST).unwrap();
     let cases = fixtures();
-    assert!(cases.len() >= 5, "expected tagging fixtures, got {}", cases.len());
+    assert!(
+        cases.len() >= 10,
+        "expected tagging fixtures, got {}",
+        cases.len()
+    );
     for fx in cases {
         let tag_refs: Vec<&str> = fx.tags.iter().map(String::as_str).collect();
         let terms = namer
@@ -71,6 +77,31 @@ fn tagging_competency_fixtures() {
                 terms
                     .iter()
                     .map(|t| (&t.pref_label, &t.site.map_nums))
+                    .collect::<Vec<_>>()
+            );
+        }
+        if let Some(sub) = &fx.expect_site_label_substring {
+            let bundles = namer
+                .annotate_smiles(&fx.reactant_smiles, &fx.product_smiles, &tag_refs)
+                .unwrap_or_else(|e| panic!("{} annotate: {e}", fx.id));
+            let ok = bundles.iter().any(|b| {
+                b.site_label
+                    .as_deref()
+                    .map(|s| s.contains(sub.as_str()))
+                    .unwrap_or(false)
+                    || terms.iter().any(|t| t.site.display_suffix().contains(sub))
+            });
+            assert!(
+                ok,
+                "{} expected site_label/display containing {sub:?}; bundles={:?} terms={:?}",
+                fx.id,
+                bundles
+                    .iter()
+                    .map(|b| &b.site_label)
+                    .collect::<Vec<_>>(),
+                terms
+                    .iter()
+                    .map(|t| t.site.display_suffix())
                     .collect::<Vec<_>>()
             );
         }

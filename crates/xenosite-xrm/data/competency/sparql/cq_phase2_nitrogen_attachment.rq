@@ -1,0 +1,8 @@
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xrm:  <https://xenosite.org/ontology/xrm#>
+PREFIX xmet: <https://xenosite.org/ontology/xmet#>
+
+SELECT DISTINCT ?term WHERE {
+  ?term skos:broader+ xrm:1300000 .
+  ?term xmet:hasAttachmentAtomType xrm:1600136 .
+}

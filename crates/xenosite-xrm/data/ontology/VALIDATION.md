@@ -25,6 +25,19 @@ python3 crates/xenosite-xrm/tools/validate_forest_coverage.py
    is not executed.
 4. Crate `Cargo.toml` dependencies do not include forest crates.
 
+## Competency evaluation (executable CQs)
+
+```bash
+pip install -r crates/xenosite-xrm/tools/requirements-competency.txt
+python3 crates/xenosite-xrm/tools/run_competency_tests.py --refresh-ttl
+cargo test -p xenosite-xrm --test competency
+cargo test -p xenosite-xrm --test gold_score
+python3 crates/xenosite-xrm/tools/score_gold_set.py
+```
+
+See `data/competency/PLAN.md`. SPARQL runs against `xrm.skos.ttl`; SHACL against
+`xrm.shacl.ttl`. Tagging CQs export to `fixtures/reactions.jsonl` for Rust.
+
 ## Promoting SMARTS into assignments
 
 Reviewed rows from `forest-smarts.jsonl` may become structural

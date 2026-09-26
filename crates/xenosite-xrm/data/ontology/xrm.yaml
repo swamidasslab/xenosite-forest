@@ -1,6 +1,4 @@
 # XRM thesaurus (authoring source). Export to xrm.skos.jsonld for Rust.
-# Metabolism-specific only — NOT a full chemical ontology.
-# Localization templates live in site_templates.yml (not SKOS concepts).
 scheme:
   id: xrm:scheme
   preferred_label: Xenobiotic Reaction Metabolism
@@ -364,6 +362,7 @@ concepts:
   - xrm:7700001
   - xrm:1500012
   - xrm:1300117
+  - xrm:1500019
   synonyms:
   - alkene epoxidation
   - oxirane formation
@@ -507,6 +506,7 @@ concepts:
   - xrm:7100007
   - xrm:1400022
   - xrm:1500129
+  - xrm:1500013
   synonyms:
   - oxidative N-dealkylation
   - N-dealkylative cleavage
@@ -542,6 +542,8 @@ concepts:
   - xrm:0000201
   related_match:
   - xrm:2200010
+  - xrm:1500013
+  - xrm:1400022
 - id: xrm:0000206
   preferred_label: N-deethylation
   parents:
@@ -561,6 +563,9 @@ concepts:
   - xrm:0000201
   - xrm:0000023
   - xrm:0000011
+  related_match:
+  - xrm:1500013
+  - xrm:1400022
 - id: xrm:0000209
   preferred_label: O-demethylation
   parents:
@@ -636,6 +641,7 @@ concepts:
   - xrm:7900002
   - xrm:1500010
   - xrm:0000101
+  - xrm:1500019
 - id: xrm:0000301
   preferred_label: ortho-quinone formation
   parents:
@@ -655,6 +661,7 @@ concepts:
   - xrm:8000005
   - xrm:1500011
   - xrm:0000101
+  - xrm:1500019
 - id: xrm:0000304
   preferred_label: quinone-methide formation
   synonyms:
@@ -708,11 +715,17 @@ concepts:
   parents:
   - xrm:0000012
   - xrm:0000021
+  related_match:
+  - xrm:1500013
+  - xrm:1400022
 - id: xrm:0000311
   preferred_label: primary alcohol oxidation
   definition: Oxidation of a primary alcohol toward aldehyde (and often further to acid).
   parents:
   - xrm:0000310
+  related_match:
+  - xrm:1500013
+  - xrm:1400022
 - id: xrm:0000312
   preferred_label: secondary alcohol oxidation
   definition: Oxidation of a secondary alcohol to a ketone.
@@ -996,16 +1009,22 @@ concepts:
   preferred_label: O-glucuronidation
   parents:
   - xrm:0001000
+  related_match:
+  - xrm:1600135
 - id: xrm:0001002
   preferred_label: phenolic glucuronidation
   parents:
   - xrm:0001001
+  related_match:
+  - xrm:1600135
 - id: xrm:0001003
   preferred_label: alcoholic glucuronidation
   synonyms:
   - aliphatic O-glucuronidation
   parents:
   - xrm:0001001
+  related_match:
+  - xrm:1600135
 - id: xrm:0001004
   preferred_label: acyl glucuronidation
   synonyms:
@@ -1017,24 +1036,34 @@ concepts:
   - xrm:1500015
   - xrm:1400121
   - xrm:1400030
+  - xrm:1600139
+  - xrm:1500019
 - id: xrm:0001005
   preferred_label: N-glucuronidation
   parents:
   - xrm:0001000
+  related_match:
+  - xrm:1600136
 - id: xrm:0001006
   preferred_label: quaternary N-glucuronidation
   synonyms:
   - N+-glucuronidation
   parents:
   - xrm:0001005
+  related_match:
+  - xrm:1600136
 - id: xrm:0001007
   preferred_label: S-glucuronidation
   parents:
   - xrm:0001000
+  related_match:
+  - xrm:1600137
 - id: xrm:0001008
   preferred_label: C-glucuronidation
   parents:
   - xrm:0001000
+  related_match:
+  - xrm:1600138
 - id: xrm:0001009
   preferred_label: carbamoyl glucuronidation
   synonyms:
@@ -1057,6 +1086,8 @@ concepts:
   preferred_label: O-sulfation
   parents:
   - xrm:0001010
+  related_match:
+  - xrm:1600135
 - id: xrm:0001012
   preferred_label: phenolic sulfation
   parents:
@@ -1108,6 +1139,7 @@ concepts:
   - xrm:7500002
   - xrm:7000003
   - xrm:1500114
+  - xrm:1500019
 - id: xrm:0001031
   preferred_label: Michael glutathionation
   synonyms:
@@ -1168,16 +1200,22 @@ concepts:
   - catechol O-methylation
   parents:
   - xrm:0001040
+  related_match:
+  - xrm:1600135
 - id: xrm:0001042
   preferred_label: N-methylation
   parents:
   - xrm:0001040
+  related_match:
+  - xrm:1600136
 - id: xrm:0001043
   preferred_label: S-methylation
   synonyms:
   - thiol methylation
   parents:
   - xrm:0001040
+  related_match:
+  - xrm:1600137
 - id: xrm:0001050
   preferred_label: amino acid conjugation
   parents:
@@ -1738,6 +1776,8 @@ concepts:
   synonyms:
   - phenolic or alcoholic O-glucuronidation
   - o_glucuronidation_class
+  related_match:
+  - xrm:1600135
 - id: xrm:1300101
   preferred_label: N-glucuronidation class
   definition: Glucuronidation at nitrogen.
@@ -1746,6 +1786,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - n_glucuronidation_class
+  related_match:
+  - xrm:1600136
 - id: xrm:1300102
   preferred_label: acyl glucuronidation class
   definition: Glucuronidation of a carboxylic acid.
@@ -1754,6 +1796,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - acyl_glucuronidation_class
+  related_match:
+  - xrm:1600139
 - id: xrm:1300103
   preferred_label: O-sulfation class
   definition: Sulfation at oxygen.
@@ -1762,6 +1806,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - o_sulfation_class
+  related_match:
+  - xrm:1600135
 - id: xrm:1300104
   preferred_label: N-sulfation class
   definition: Sulfation at nitrogen.
@@ -1787,6 +1833,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - o_methylation_class
+  related_match:
+  - xrm:1600135
 - id: xrm:1300107
   preferred_label: N-methylation class
   definition: Methylation at nitrogen.
@@ -1795,6 +1843,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - n_methylation_class
+  related_match:
+  - xrm:1600136
 - id: xrm:1300108
   preferred_label: S-methylation class
   definition: Methylation at sulfur.
@@ -1803,6 +1853,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - s_methylation_class
+  related_match:
+  - xrm:1600137
 - id: xrm:1300109
   preferred_label: N-acetylation class
   definition: Acetylation at nitrogen.
@@ -1894,6 +1946,26 @@ concepts:
   - xrm:0000002
   synonyms:
   - halide_displacement_gsh_conjugation
+- id: xrm:1300120
+  preferred_label: S-glucuronidation class
+  definition: Phase II glucuronidation attaching through sulfur.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - S_glucuronidation_class
+  related_match:
+  - xrm:1600137
+- id: xrm:1300121
+  preferred_label: C-glucuronidation class
+  definition: Phase II glucuronidation attaching through carbon.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - C_glucuronidation_class
+  related_match:
+  - xrm:1600138
 - id: xrm:1400000
   preferred_label: medchem liability
   synonyms: *id005
