@@ -1,0 +1,203 @@
+# Executable competency questions for XRM (ontology / mapping / tagging layers).
+# Runner: tools/run_competency_tests.py
+# Types:
+#   ontology_broader  — concept ids under a spine (nearest or descendant)
+#   ontology_labels   — prefLabels under a spine must include/exclude
+#   mapping_exists    — SSSOM row for subject/object
+#   tagging           — namer emits expected prefLabels for reactant/product/tags
+
+version: 1
+questions:
+
+  # --- Phase I transformations ---
+  - id: CQ-P1-001
+    layer: ontology
+    question: "Which terms are under chemical transformation and named hydroxylation?"
+    type: ontology_labels
+    under: xrm:1100000
+    expected_contains_labels: [hydroxylation, aromatic hydroxylation, aliphatic hydroxylation]
+
+  - id: CQ-P1-002
+    layer: ontology
+    question: "Rainbow unstable oxygenation is a phase I reaction family class."
+    type: ontology_broader
+    concept: xrm:0000011
+    expected_ancestors: [xrm:1200000]
+
+  - id: CQ-P1-003
+    layer: ontology
+    question: "N-dealkylation hangs under dealkylation / unstable oxygenation path."
+    type: ontology_broader
+    concept: xrm:0000201
+    expected_ancestors: [xrm:0000011]
+
+  - id: CQ-P1-004
+    layer: tagging
+    question: "Ethane→ethanol tags aliphatic hydroxylation + phase I + stable oxygenation."
+    type: tagging
+    reactant: "CC"
+    product: "CCO"
+    tags: []
+    expected_labels: [hydroxylation, aliphatic hydroxylation, phase I, stable oxygenation]
+    expected_excludes_labels: [aromatic hydroxylation]
+
+  - id: CQ-P1-005
+    layer: tagging
+    question: "Ethene→epoxide tags epoxidation without hydroxylation."
+    type: tagging
+    reactant: "C=C"
+    product: "C1CO1"
+    tags: []
+    expected_labels: [epoxidation, phase I]
+    expected_excludes_labels: [hydroxylation]
+
+  - id: CQ-P1-006
+    layer: tagging
+    question: "Opaque Forest N-dealkylation tag names N-dealkylation + leaving group."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:N-demethylation"]
+    expected_labels: [N-demethylation, methyl leaving group, leaving group]
+
+  # --- Phase II ---
+  - id: CQ-P2-001
+    layer: ontology
+    question: "Phase II conjugation family includes glucuronidation and sulfation."
+    type: ontology_labels
+    under: xrm:1300000
+    expected_contains_labels: [glucuronidation, sulfation, glutathionation]
+
+  - id: CQ-P2-002
+    layer: tagging
+    question: "Forest Glucuronidation tag emits glucuronidation + phase II."
+    type: tagging
+    reactant: "CCO"
+    product: "CCO"
+    tags: ["forest.rule:Glucuronidation"]
+    expected_labels: [glucuronidation, phase II]
+
+  - id: CQ-P2-003
+    layer: ontology
+    question: "O-glucuronidation class exists under phase II conjugation family."
+    type: ontology_labels
+    under: xrm:1300000
+    expected_contains_labels: [O-glucuronidation class, N-glucuronidation class, acyl glucuronidation class]
+
+  # --- Reactive metabolites / conjugates ---
+  - id: CQ-RM-001
+    layer: ontology
+    question: "Reactive metabolite family includes quinone, epoxide, aldehyde."
+    type: ontology_labels
+    under: xrm:1500000
+    expected_contains_labels: [quinone, epoxide, aldehyde, GSH-trappable metabolite]
+
+  - id: CQ-RM-002
+    layer: tagging
+    question: "forms reactive conjugate tag is expressible and emitted."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:forms-reactive-conjugate"]
+    expected_labels: [forms reactive conjugate, reactive conjugate]
+
+  - id: CQ-RM-003
+    layer: tagging
+    question: "Quinone formation tag reaches quinone product class."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:quinone-formation"]
+    expected_labels: [quinone formation]
+
+  # --- Site / localization ---
+  - id: CQ-SITE-001
+    layer: ontology
+    question: "Site type includes benzylic, tertiary amine, phenol."
+    type: ontology_labels
+    under: xrm:1600000
+    expected_contains_labels: [benzylic site, tertiary amine site, phenolic site]
+
+  - id: CQ-SITE-002
+    layer: tagging
+    question: "Localized chem tag pins benzylic hydroxylation to map 1."
+    type: tagging
+    reactant: "[CH3:1]c1ccc([CH3:2])cc1"
+    product: "O[CH2:1]c1ccc([CH3:2])cc1"
+    tags: ["chem:benzylic-hydroxylation@1"]
+    expected_labels: [benzylic hydroxylation]
+    expect_site_map: [1]
+
+  # --- Leaving group / pharma / about ---
+  - id: CQ-LG-001
+    layer: ontology
+    question: "Leaving group spine includes methyl and halide leaving groups."
+    type: ontology_labels
+    under: xrm:2200000
+    expected_contains_labels: [methyl leaving group, halide leaving group, carboxylate leaving group]
+
+  - id: CQ-PHARM-001
+    layer: ontology
+    question: "Pharmacological role distinguishes active metabolite and prodrug."
+    type: ontology_labels
+    under: xrm:2300000
+    expected_contains_labels: [pharmacologically active metabolite, pharmacologically inactive metabolite, prodrug]
+
+  - id: CQ-ABOUT-001
+    layer: ontology
+    question: "Annotation-about distinguishes parent, product, reaction."
+    type: ontology_labels
+    under: xrm:2400000
+    expected_contains_labels: [about parent, about product, about reaction]
+
+  # --- Structural delta ---
+  - id: CQ-DELTA-001
+    layer: ontology
+    question: "Structural delta includes monooxygenation and formula delta."
+    type: ontology_labels
+    under: xrm:1700000
+    expected_contains_labels: [monooxygenation, formula delta, oxygen gain]
+
+  # --- External mappings ---
+  - id: CQ-MAP-001
+    layer: mapping
+    question: "Hydroxylation maps to MOP."
+    type: mapping_exists
+    subject: xrm:0000100
+    object_prefix: "mop:"
+
+  - id: CQ-MAP-002
+    layer: mapping
+    question: "Xenobiotic biotransformation maps to GO:0006805."
+    type: mapping_exists
+    subject: xrm:0000000
+    object: GO:0006805
+
+  - id: CQ-MAP-003
+    layer: mapping
+    question: "Hydroxylation has opaque Forest rule mapping."
+    type: mapping_exists
+    subject: xrm:0000100
+    object: forest.rule:Hydroxylation
+
+  - id: CQ-MAP-004
+    layer: mapping
+    question: "Phase I has MeSH broadMatch."
+    type: mapping_exists
+    subject: xrm:0000001
+    object_prefix: "mesh:"
+
+  # --- Evidence / provenance ---
+  - id: CQ-EV-001
+    layer: ontology
+    question: "Evidence spine includes MS and literature evidence."
+    type: ontology_labels
+    under: xrm:2000000
+    expected_contains_labels: [MS1 evidence, MS2 evidence, literature evidence]
+
+  - id: CQ-PROV-001
+    layer: ontology
+    question: "Rule provenance includes SMARTS-derived and Forest-map-derived tags."
+    type: ontology_labels
+    under: xrm:1900000
+    expected_contains_labels: [SMARTS-derived tag, Forest-map-derived tag]

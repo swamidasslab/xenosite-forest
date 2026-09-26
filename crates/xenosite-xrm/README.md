@@ -107,5 +107,12 @@ cargo test -p xenosite-xrm
 python3 crates/xenosite-xrm/tools/harvest_forest_smarts.py
 ```
 
-Includes schema validation, golden naming, Forest opaque-tag coverage, enzyme-orthogonal
-guards, and dependency boundary checks. See `data/ontology/VALIDATION.md`.
+Includes schema validation, golden naming, Forest opaque-tag coverage, competency
+fixtures, enzyme-orthogonal guards, and dependency boundary checks.
+
+```bash
+python3 crates/xenosite-xrm/tools/run_competency_tests.py   # ontology/mapping CQs + export tagging fixtures
+cargo test -p xenosite-xrm --test competency
+```
+
+See `data/ontology/VALIDATION.md` and `data/competency/PLAN.md`.
