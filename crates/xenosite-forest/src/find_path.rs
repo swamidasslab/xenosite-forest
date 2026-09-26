@@ -397,9 +397,10 @@ fn diversity_key_for(
     }
 }
 
-/// Fixed-point `−ln(n+1)` diversity penalty (same scale as [`neg_log1p_score`]).
+/// Fixed-point `−n` diversity penalty (same scale as ln score terms).
+/// Stronger than `−ln(n+1)`: each prior accept costs a full unit.
 pub fn diversity_penalty(times_applied: usize) -> i64 {
-    neg_log1p_score(times_applied)
+    -(times_applied as i64) * (MATCH_LOG_SCALE as i64)
 }
 
 /// How the find_path frontier ranks walks (score, then `seq`).
@@ -717,7 +718,7 @@ struct HeapItem {
     cost_gain: i32,
     /// Match-family base score from [`MatchScoreSpec`] (no diversity).
     match_score: i64,
-    /// Match Ord primary: `match_score + −ln(n+1)` at enqueue / last refresh.
+    /// Match Ord primary: `match_score + −n` (fixed-point) at enqueue / last refresh.
     match_priority: i64,
     /// Hop that created this walk (`None` = root). Match diversity only.
     diversity_key: Option<DiversityKey>,
@@ -1035,8 +1036,8 @@ pub struct FindPathConfig {
     /// exact-only.
     pub drop_skeleton_twins: bool,
     /// Match diversity: count accepted applications per site key, add
-    /// `−ln(n+1)` into the heap primary (`score + diversity`). On pop, refresh
-    /// or accept. SoftStack ignores. Default **true**.
+    /// fixed-point `−n` into the heap primary (`score + diversity`). On pop,
+    /// refresh or accept. SoftStack ignores. Default **true**.
     pub diversity: bool,
 }
 
@@ -1365,7 +1366,7 @@ where
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
-            // Lazy diversity: priority must still equal score + −ln(n+1).
+            // Lazy diversity: priority must still equal score + −n (fixed-point).
             if diversity {
                 if let (HeapScoreMode::Match(_), Some(key)) =
                     (item.mode, item.diversity_key.clone())
@@ -2628,11 +2629,13 @@ mod tests {
     }
 
     #[test]
-    fn diversity_penalty_is_neg_log1p() {
+    fn diversity_penalty_is_neg_n_fixed() {
         assert_eq!(diversity_penalty(0), 0);
-        assert_eq!(diversity_penalty(1), neg_log1p_score(1));
-        assert_eq!(diversity_penalty(4), neg_log1p_score(4));
-        assert!(diversity_penalty(2) < diversity_penalty(1));
+        assert_eq!(diversity_penalty(1), -(MATCH_LOG_SCALE as i64));
+        assert_eq!(diversity_penalty(4), -4 * (MATCH_LOG_SCALE as i64));
+        // Stronger than −ln(n+1) for n ≥ 1.
+        assert!(diversity_penalty(1) < neg_log1p_score(1));
+        assert!(diversity_penalty(3) < neg_log1p_score(3));
     }
 
     #[test]
@@ -2674,7 +2677,7 @@ mod tests {
             seq: 2,
             walk: walk.clone(),
         };
-        // diversity_penalty(5) is largely negative → priority << 100.
+        // diversity_penalty(5) = −5·SCALE → priority << base score.
         assert!(high_pri > low_pri_better_score);
 
         let same_pri_low_score = HeapItem {
