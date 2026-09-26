@@ -276,30 +276,39 @@ Idea: ResonancePair end edits are **π-graph constraints**; valid matchings
 `flip_path` — enumerate assignments under the constraints, stamp bond orders
 (+ the same `move_charge_with_bonds` as reactant overlays).
 
-Simple patterns from the share (map onto `Edit::PairEndpoint` / Effect data,
-not one-off branches):
+The primitive is **not** “carbonyl chemistry.” Carbonyl is one instance of a
+small constraint vocabulary. Name these on `Edit` / Effect / PatternInfo data
+(generic solver reads them — no leaf-named branches):
 
-| Edit pattern | π constraint | Residual matching |
+| π constraint | Meaning | Examples (not exhaustive) |
 |---|---|---|
-| Quinone / DH carbonyl (`add_carbonyl_o`, phenol→ketone `single_to_double`) | Add forced exocyclic demand-1 leaf (`O=C`); consumes that ring atom’s demand | Remaining atoms Kekulize; para/ortho solve, meta empty on benzene |
-| Epoxidation (aromatic C=C consumed) | Require the matched edge selected as double, then **remove** it from the π system (saturated bridge + O) | Other selected edges stay doubles |
-| Two epoxides / two carbonyls | Both constraints in one assignment; incompatible ⇒ no product | Same solver |
+| **Forced leaf** | Attach demand-1 exocyclic atom; the new edge must be selected (consumes the ring atom’s demand) | `add_carbonyl_o` (O); imine / `=N` / `=S` leaves; methide `=CH2`; any exocyclic double |
+| **Forced edge** | An existing conjugated edge must be selected as double | Phenol/enol `single_to_double` (ring C–O/N → C=O/N); iminium; aromatic bond that must be the alkene |
+| **Consumed edge** | Edge must be selected in the pre-edit matching, then **removed** from the residual π system (no longer a double) | Epoxidation (C=C → C–C + O bridge); other saturations of one π bond |
+| **Demand / charge state** | Atom’s allowed `(demand, formal_charge)` set changes | Pyrrole-like demand 0; charged N; mobile skipped site; post-edit heteroatom state |
+| **Conjunction** | Several of the above in one assignment; empty ⇒ incompatible couple | Para/ortho quinone-like pairs solve; meta on benzene fails; two epoxides only if one matching contains both edges |
 
-**Why this can retire path discovery for QF/DH-shaped pairs:** today’s flow
-(find odd path between ends → edit ends → flip along path) is a procedural
-way to reach a matching that is already fixed by “these atoms are carbonyls /
-this edge was the alkene.” Constraint solving yields the same product bond
-sets (often fewer duplicates than path×parent cartesian). Rust-ahead QF
-dealkylate (C16) fits: forced carbonyl / imine demands on the ring after the
-leave split, then match — not a path through the leave fragment.
+Carbonyls, imines, methides, and halogen→oxo replacements are the same
+**forced leaf / forced edge** shape with different element and SMARTS — not
+separate algorithms. Epoxidation is **forced then consumed** edge. Cleaving
+QF dealkylate (C16) is leave split plus forced imine/carbonyl demand on the
+ring fragment, then match — not a path through the leave.
+
+**Why this can retire path discovery for constraint-shaped pairs:** today’s
+flow (find odd path between ends → edit ends → flip along path) procedurally
+builds a matching that the end constraints already determine. Constraint
+solving yields the same product bond sets (often fewer duplicates than
+path×parent cartesian).
 
 **Where path discovery may still earn its keep (do not delete yet):**
 
-- `Hydrogenation` `path_end` / `keep`: ends do not mint forced π leaves; the
-  flip *is* the reduction (H at ends where double→single). Needs a clear
-  demand/edge encoding before path search goes away.
+- `Hydrogenation` `path_end` / `keep`: ends do not yet mint an obvious forced
+  leaf/edge; the flip *is* the reduction (H at ends where double→single).
+  Encode as demand/edge constraints (or keep path) before path search goes
+  away — same vocabulary, not a special case forever.
 - Edits whose chemistry is “along a specific walk” rather than “global
-  matching under end constraints” (long-range tautomer stub).
+  matching under end constraints” (long-range tautomer stub), until that
+  walk is also constraint data.
 - Until atom-demand / charge states are shared schema on both doors, bags
   still diverge (parity judgment below) — constraint solving on the wrong
   parent bag still misses products.
@@ -310,10 +319,10 @@ leave split, then match — not a path through the leave fragment.
    overlaying a matching constrained by the path’s single/double pattern
    (same `move_charge_with_bonds`). Cleanup only.
 2. **Path drop for constraint-shaped pairs:** PatternInfo/Edit data declares
-   π constraints (forced leaf, forced/consumed edge, demand change); solve
-   matchings; no `alternating_paths` / `flip_path`. Prefer this when the edit
-   table covers the rule. Do not invent a silent branch per leaf name —
-   name the constraint on the record.
+   π constraints from the table above; solve matchings; no
+   `alternating_paths` / `flip_path`. Prefer this when the edit record covers
+   the rule. Do not invent a silent branch per leaf name or per element
+   (carbonyl vs imine) — name the constraint kind on the record.
 
 Kekulé matching must place doubles on must-match atoms (C and pyridine-type /
 charged N — `atom_must_be_matched`), not carbons alone. Until a tier lands,
@@ -392,13 +401,14 @@ full-conj) remains the parity blocker; BCC enum does not fix APAP
 neutral-amide vs `O−`/`N+` bags.
 
 **Path flipping:** `RequireBoundaryUse` / `AllowStates` are the natural hooks
-for the already-not-decided path-constrained overlay (fix bond orders /
-boundary residuals along the discovered path, solve only touching BCCs).
-The crate still does not *discover* an odd alternating path between
-ResonancePair ends. Replacing path discovery with “pick a CSP solution”
-stays **not approved**. Do not vend the share zip into `xenosite-forest`;
-steal the schema ideas (demand/charge states, BCC tables, path as
-constraints) when bags match door-by-door.
+for path-constrained overlay **or** for path-free dearomatization when end
+edits are π constraints (forced carbonyl leaf, consumed epoxide edge — see
+“Edit-as-π-constraints” under ResonancePair path edits). The crate still does
+not *discover* an odd alternating path; under that model it does not need to.
+Replacing path discovery with blind “pick a CSP solution” without edit
+constraints stays **not approved**. Do not vend the share zip into
+`xenosite-forest`; steal the schema ideas (demand/charge states, BCC tables,
+edit→constraint table) when bags match door-by-door.
 
 ## Chematic product-side ``#`` expand → organic aliphatic + aromatic
 
