@@ -211,19 +211,29 @@ fn conjugated_bond(
         BondOrder::Double | BondOrder::Triple => true,
         BondOrder::Aromatic => in_ring.contains(&key),
         BondOrder::Single => {
-            if mol.atom(atom_idx(left)).aromatic
-                && mol.atom(atom_idx(right)).aromatic
-                && in_ring.contains(&key)
-            {
+            let a_ar = mol.atom(atom_idx(left)).aromatic;
+            let b_ar = mol.atom(atom_idx(right)).aromatic;
+            if a_ar && b_ar && in_ring.contains(&key) {
                 return true;
+            }
+            // Biaryl / cross-conjugated aromatic–aromatic singles do not join
+            // rings (HEURISTICS). Styrene vinyl–ipso and enone C–C do.
+            if a_ar && b_ar {
+                return false;
             }
             let z_left = mol.atom(atom_idx(left)).element.atomic_number();
             let z_right = mol.atom(atom_idx(right)).element.atomic_number();
+            // Exocyclic hetero single (phenol, enol, aniline, thio...).
             let elements = [z_left, z_right];
-            if !elements.contains(&6) || !elements.iter().any(|z| matches!(z, 7 | 8 | 16)) {
-                return false;
+            if elements.contains(&6) && elements.iter().any(|z| matches!(z, 7 | 8 | 16)) {
+                return pi_center(mol, left) || pi_center(mol, right);
             }
-            pi_center(mol, left) || pi_center(mol, right)
+            // Carbon–carbon single between two π centers (styrene, enone,
+            // quinone, glyoxal): one conjugated component for path rematch.
+            if z_left == 6 && z_right == 6 {
+                return pi_center(mol, left) && pi_center(mol, right);
+            }
+            false
         }
         _ => mol.atom(atom_idx(left)).aromatic && mol.atom(atom_idx(right)).aromatic,
     }
@@ -250,8 +260,11 @@ pub fn conjugated_component(
 ///
 /// **Not Chematic's job:** chematic `kekulize` matches aromatic bonds once;
 /// `Molecule::fragments` splits σ components. Forest conjugation (exocyclic
-/// hetero singles, multi-resonance bags, residual/2-core) lives here — do not
-/// move this flood-fill into chematic without a shared schema both doors read.
+/// hetero singles, carbon–carbon singles between two π centers — styrene /
+/// enone / quinone / glyoxal — multi-resonance bags, residual/2-core) lives
+/// here. Aromatic–aromatic singles still refuse (biphenyl stays two systems).
+/// Do not move this flood-fill into chematic without a shared schema both doors
+/// read.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PiGraph {
     pub atoms: BTreeSet<usize>,
@@ -1814,6 +1827,46 @@ mod tests {
         for parent in &ends.parents {
             assert_eq!(aromatic_count(parent), 6);
         }
+    }
+
+    #[test]
+    fn styrene_vinyl_joins_ring_biphenyl_does_not() {
+        // C=C–c conjugating single joins vinyl to the ring (path rematch).
+        let styrene = parse_mol("C=Cc1ccccc1").unwrap();
+        let from_vinyl = PiGraph::conjugated(&styrene, 0);
+        assert!(
+            from_vinyl.atoms.len() >= 8,
+            "styrene vinyl+ring one system: {:?}",
+            from_vinyl.atoms
+        );
+        // Biaryl aromatic–aromatic single stays two systems.
+        let biphenyl = parse_mol("c1ccc(-c2ccccc2)cc1").unwrap();
+        let a = PiGraph::conjugated(&biphenyl, 0);
+        let other = (0..biphenyl.atom_count())
+            .find(|&i| !a.atoms.contains(&i))
+            .expect("second ring atom");
+        let b = PiGraph::conjugated(&biphenyl, other);
+        assert!(
+            a.atoms.is_disjoint(&b.atoms),
+            "biphenyl rings must not join via the single: {:?} vs {:?}",
+            a.atoms,
+            b.atoms
+        );
+    }
+
+    #[test]
+    fn glyoxal_and_benzoquinone_are_one_conjugated_system() {
+        let glyoxal = parse_mol("O=CC=O").unwrap();
+        let g = PiGraph::conjugated(&glyoxal, 0);
+        assert_eq!(g.atoms.len(), 4, "O=C–C=O one system: {:?}", g.atoms);
+        let q = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let qg = PiGraph::conjugated(&q, 0);
+        assert_eq!(
+            qg.atoms.len(),
+            q.atom_count(),
+            "benzoquinone one system: {:?}",
+            qg.atoms
+        );
     }
 
     #[test]

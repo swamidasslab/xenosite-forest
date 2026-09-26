@@ -367,13 +367,25 @@ when needed; prefer perceiving them from the edited graph:
 | **Demand / charge state** | Atom’s allowed `(demand, formal_charge)` set changes | Pyrrole-like demand 0; charged N; mobile skipped site |
 | **Conjunction** | Several of the above in one assignment; empty ⇒ incompatible couple | Para/ortho quinone-like pairs solve; meta on benzene fails |
 
-Pre-existing doubles on the parent that survive demote (cumulated N=C=O,
-exocyclic carbonyl) are **fixed framework**, not edit-forced seeds. Exclusive
-one-partner matching cannot express cumulated demand; those atoms leave the
-residual via [`PiGraph::after_forced_doubles`](../../crates/xenosite-forest/src/kekule.rs)
-before rematch. Only edit-new doubles (forced leaf/edge from the endpoint
-edits) seed [`KekuleConstraints`](../../crates/xenosite-forest/src/kekule.rs).
-Status: approved. Tests: `quinone_formation_add_carbonyl_on_phnco_keeps_nco`.
+Pre-existing **cumulated** doubles on the parent (N=C=O: an atom with two
+doubles) are **fixed framework**: drop those atoms from the residual before
+rematch — exclusive one-partner matching cannot express cumulated demand.
+Ordinary parent doubles (vinyl C=C, carbonyl C=O) stay in the residual for path
+rematch (styrene / enone Hydrogenation). Only edit-new doubles (forced leaf/edge
+from the endpoint edits) seed [`KekuleConstraints`](../../crates/xenosite-forest/src/kekule.rs).
+Status: approved. Tests: `quinone_formation_add_carbonyl_on_phnco_keeps_nco` /
+`hydrogenation_styrene_vinyl_ring_path_emits_exocyclic`.
+
+**Saturate→residual π:** when a saturate site still has a double/triple into the
+residual (styrene vinyl CH2 end), demote that edge before rematch — same
+consumption as a shared saturate–saturate edge. Leaving it mints allenes.
+Status: approved. Tests: `hydrogenation_styrene_vinyl_ring_path_emits_exocyclic`.
+
+**Conjugating C–C singles:** a single bond between two π centers joins the
+component (styrene vinyl–ipso, enone, quinone, glyoxal). Aromatic–aromatic
+singles still refuse (biphenyl). Status: approved. Tests:
+`styrene_vinyl_joins_ring_biphenyl_does_not` /
+`hydrogenation_styrene_vinyl_ring_path_emits_exocyclic`.
 
 Carbonyls, imines, methides, and halogen→oxo replacements are the same
 **forced leaf / forced edge** shape with different element and SMARTS — not

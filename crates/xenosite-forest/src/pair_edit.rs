@@ -380,64 +380,88 @@ impl PairCandidate {
             fill_closed_shell_h(&mut rw, a);
         }
         let residual = residual_pi_graph(mol, &self.system, &saturate);
-        // Two saturate ends sharing a π bond (aldehyde C=O, ethene C=C, amide
-        // C=O on a larger conjugated system): drop that bond. The one-edge
-        // special case below covers empty residual; non-empty residual must
-        // still saturate the shared edge before Kekulé rematch (APAP amide →
-        // hemiaminal) — residual never contains the saturate–saturate bond.
-        let mut shared_edge_saturated = false;
+        // Saturate sites consume incident π bonds before residual rematch:
+        // (1) shared saturate–saturate edge (aldehyde C=O, ethene, amide);
+        // (2) saturate→residual edges (styrene vinyl C=C when only the CH2
+        //     end is a path_end — else rematch keeps C=C and mints allenes).
+        let mut saturated_pi = false;
+        let mut demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
+            let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) else {
+                return false;
+            };
+            if !matches!(
+                bond.order,
+                BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic
+            ) {
+                return false;
+            }
+            rw.set_bond_order(
+                bond_idx,
+                if bond.order == BondOrder::Triple {
+                    BondOrder::Double
+                } else {
+                    BondOrder::Single
+                },
+            );
+            true
+        };
         if saturate.len() == 2 {
             let mut ends = saturate.iter().copied();
             let a = ends.next().unwrap();
             let b = ends.next().unwrap();
-            if let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) {
-                if matches!(
-                    bond.order,
-                    BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic
-                ) {
-                    rw.set_bond_order(
-                        bond_idx,
-                        if bond.order == BondOrder::Triple {
-                            BondOrder::Double
-                        } else {
-                            BondOrder::Single
-                        },
-                    );
-                    for &atom in &saturate {
-                        fill_closed_shell_h(&mut rw, atom);
-                    }
-                    shared_edge_saturated = true;
+            if demote_pi(&mut rw, a, b) {
+                saturated_pi = true;
+            }
+        }
+        for &s in &saturate {
+            let nbrs: Vec<usize> = rw
+                .neighbors(atom_idx(s))
+                .map(|(n, _)| atom_usize(n))
+                .collect();
+            for n in nbrs {
+                if residual.atoms.contains(&n) && demote_pi(&mut rw, s, n) {
+                    saturated_pi = true;
                 }
             }
         }
-        // Shared-edge saturate changes valence vs parent — include those atoms
-        // in the charge/H baseline for move_charge_with_bonds.
-        if shared_edge_saturated {
+        if saturated_pi {
+            for &atom in &saturate {
+                fill_closed_shell_h(&mut rw, atom);
+            }
             settle.extend(saturate.iter().copied());
         }
         let all_forced = residual.perceive_forced_doubles(&rw);
-        // Pre-existing doubles on the parent (N=C=O, etc.) are fixed framework:
-        // drop their atoms from the residual (demand already placed). Do not
-        // exclusive-seed them — cumulated doubles conflict under one-partner
-        // matching (HEURISTICS forced leaf/edge = edit perception). Edit-new
-        // doubles (add_carbonyl O, phenol C=O) remain forced seeds.
+        // Cumulated parent doubles (N=C=O: central C has two doubles) cannot
+        // exclusive-seed under one-partner matching — drop those atoms from the
+        // residual (fixed framework). Ordinary parent doubles (vinyl C=C,
+        // carbonyl C=O) stay in the residual for path rematch (styrene H).
+        // Edit-new doubles (add_carbonyl O, phenol C=O) remain forced seeds.
+        let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
         let parent_doubles: BTreeSet<(usize, usize)> = mol
             .bonds()
             .filter_map(|(_, bond)| {
-                (bond.order == BondOrder::Double).then_some(bond_key(
-                    atom_usize(bond.atom1),
-                    atom_usize(bond.atom2),
-                ))
+                (bond.order == BondOrder::Double).then(|| {
+                    let a = atom_usize(bond.atom1);
+                    let b = atom_usize(bond.atom2);
+                    *parent_double_deg.entry(a).or_default() += 1;
+                    *parent_double_deg.entry(b).or_default() += 1;
+                    bond_key(a, b)
+                })
             })
             .collect();
         let mut edit_forced = BTreeSet::new();
         let mut framework_forced = BTreeSet::new();
         for &edge in &all_forced {
-            if parent_doubles.contains(&edge) {
+            let (a, b) = edge;
+            let cumulated = parent_doubles.contains(&edge)
+                && (parent_double_deg.get(&a).copied().unwrap_or(0) >= 2
+                    || parent_double_deg.get(&b).copied().unwrap_or(0) >= 2);
+            if cumulated {
                 framework_forced.insert(edge);
-            } else {
+            } else if !parent_doubles.contains(&edge) {
                 edit_forced.insert(edge);
             }
+            // else: ordinary parent double — rematch in residual, no exclusive seed
         }
         let residual_match = residual.after_forced_doubles(&framework_forced);
         // Empty residual after the shared-edge drop: done (one-edge path_end).
@@ -1308,6 +1332,28 @@ mod tests {
         assert!(
             products.iter().any(|p| canon_of(p).unwrap() == want),
             "APAP amide path_end should emit hemiaminal; got {products:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_styrene_vinyl_ring_path_emits_exocyclic() {
+        // C=C–c conjugation joins vinyl to the ring so path_end (vinyl, ortho)
+        // rematches to the exocyclic ethylidene diene (Python parity).
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("C=Cc1ccccc1").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of("CC=C1C=CC=CC1").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "styrene vinyl–ring H should emit exocyclic diene; got {emissions:?}"
         );
     }
 }
