@@ -15,8 +15,7 @@
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
 //! `--nofilter`), `--paths N` (emit up to N plans; default 1),
 //! `--score LABEL` (`soft` or `combine-metric` e.g. `close×improve-both`),
-//! `--matrix` (run all 9 match variants + soft; summary ranked by miss/bill/time),
-//! `--mcs-extend` (opt-in: atom_diff uses MCS+placeable grow; default bare MCS).
+//! `--matrix` (run all 9 match variants + soft; summary ranked by miss/bill/time).
 //!
 //! Pair with:
 //! ```text
@@ -29,7 +28,7 @@ use std::time::{Duration, Instant};
 
 use xenosite_forest::{
     FindPathConfig, HeapScoreMode, MatchCombine, MatchMetric, MatchScoreSpec, PathCounters,
-    canon_of, find_path_with, phase_one, set_use_mcs_extend, use_mcs_extend,
+    canon_of, find_path_with, phase_one,
 };
 
 const MAX_NODES: usize = 800;
@@ -418,8 +417,6 @@ fn main() {
     let budget = parse_budget(&args, if nofilter { 60 } else { 30 });
     let max_paths = parse_paths(&args);
     let heap_score = parse_score(&args);
-    let mcs_extend_on = args.iter().any(|a| a == "--mcs-extend");
-    set_use_mcs_extend(mcs_extend_on);
 
     println!(
         "Rust find_path PhaseOne  max_nodes={MAX_NODES}  max_paths={max_paths}  best-of-{REPEATS}"
@@ -435,8 +432,7 @@ fn main() {
 
     if matrix {
         println!(
-            "(release; filter-only={filter_only}; mcs_extend={}; score matrix 3×3 + soft; budget={}s)",
-            use_mcs_extend(),
+            "(release; filter-only={filter_only}; score matrix 3×3 + soft; budget={}s)",
             budget.as_secs()
         );
         let mut modes: Vec<HeapScoreMode> = MatchScoreSpec::matrix()
@@ -463,9 +459,8 @@ fn main() {
     }
 
     println!(
-        "(release; tagged ForestMol; filter-only={filter_only}; heap_score={}; mcs_extend={}; budget={}s)",
+        "(release; tagged ForestMol; filter-only={filter_only}; heap_score={}; budget={}s)",
         heap_score.label(),
-        use_mcs_extend(),
         budget.as_secs()
     );
 

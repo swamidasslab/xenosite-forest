@@ -182,3 +182,15 @@ in `hop_match_score` / `hop_cost_gain`. A target hit is atom_diff cost 0 /
 formula distance 0; closeness already prefers it. Local `target_hit` remains for
 closer / seen / yield early-stop only.
 
+## find_path expand `mcs_extend` opt-in
+
+Status: approved.
+
+Tried process-wide `USE_MCS_EXTEND` / `find_path_bench --mcs-extend` and a
+PatternInfo-gated `FindPathConfig.mcs_extend` so every expand `atom_diff` used
+MCS then placeable grow. Full extend on PhaseOne+EpoxideHydration regressed hard
+filter bill **273→449** (veratrole 60→216). Cut entirely — not an opt-in.
+Expand and failed-lift rematch stay bare MCS. Lift seeds still call
+`extend_mapping_where_possible`; [`mcs_extend`](../../crates/xenosite-forest/src/atom_diff.rs)
+/`atom_diff_mcs_extend` remain for lift/gold/tests only.
+

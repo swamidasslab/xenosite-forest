@@ -1,14 +1,13 @@
 //! Reactant→target local diff for candidate filtering.
 //!
 //! Parity door for Python `find_path.atom_diff` / `_site_could_help` /
-//! `_pattern_could_help`. Default align is bare chematic MCS
-//! (`BondCompare::Any`); opt-in [`mcs_extend`] adds placeable grow.
-//! Lift rematch always uses [`mcs_extend`]. Multi-placement views merge so a
-//! step that helps any ring is not refused. Filters read [`crate::pattern::Effect`]
-//! on deferred candidates — no filter closures required.
+//! `_pattern_could_help`. Fresh expand alignment is bare chematic MCS
+//! (`BondCompare::Any`). Lift rematch uses [`mcs_extend`] (MCS + placeable
+//! grow). Multi-placement views merge so a step that helps any ring is not
+//! refused. Filters read [`crate::pattern::Effect`] on deferred candidates —
+//! no filter closures required.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use chematic::core::BondOrder;
 use chematic::perception::ring_atom_flags;
@@ -18,22 +17,6 @@ use crate::candidate::Candidate;
 use crate::mol::{Molecule, atom_idx, atom_usize, ranks};
 use crate::pair_edit::PairCandidate;
 use crate::pattern::Effect;
-
-/// When true, [`atom_diff`] aligns with [`mcs_extend`] (MCS + placeable grow).
-/// Default **false**: bare MCS. Full extend on every expand regressed hard
-/// PhaseOne bill 273→449; keep extend for lift rematch only (see
-/// [`best_diff_from_lifted_maps`]). Opt-in via [`set_use_mcs_extend`] /
-/// `find_path_bench --mcs-extend`.
-pub static USE_MCS_EXTEND: AtomicBool = AtomicBool::new(false);
-
-/// Process-wide alignment door for ablations / benches.
-pub fn set_use_mcs_extend(on: bool) {
-    USE_MCS_EXTEND.store(on, Ordering::Relaxed);
-}
-
-pub fn use_mcs_extend() -> bool {
-    USE_MCS_EXTEND.load(Ordering::Relaxed)
-}
 
 fn hydrogens(mol: &Molecule, idx: usize) -> i32 {
     // `implicit_hydrogen_count` already returns bracket `hydrogen_count` when
@@ -356,13 +339,9 @@ pub fn mcs_bare(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, u
     mcs_seed_mappings(reactant, target)
 }
 
-/// Forest alignment: [`mcs_extend`] when [`use_mcs_extend`], else bare MCS.
+/// Fresh expand alignment: bare MCS (same as [`mcs_bare`]).
 pub fn mcs_align(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
-    if use_mcs_extend() {
-        mcs_extend(reactant, target)
-    } else {
-        mcs_bare(reactant, target)
-    }
+    mcs_bare(reactant, target)
 }
 
 /// Chematic MCS placements only (no extend). Seed for [`mcs_extend`].
@@ -570,7 +549,7 @@ pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
 }
 
 /// Always [`mcs_extend`] then [`atom_diff_from_mappings`] (lift-rematch gold /
-/// tests). Independent of [`USE_MCS_EXTEND`].
+/// tests). Expand [`atom_diff`] stays bare MCS.
 pub fn atom_diff_mcs_extend(reactant: &Molecule, target: &Molecule) -> AtomDiff {
     atom_diff_from_mappings(reactant, target, mcs_extend(reactant, target))
 }
@@ -697,8 +676,8 @@ fn best_diff_from_lifted_maps(
     if !zero_maps.is_empty() {
         return Some((atom_diff_from_mappings(mol, target, zero_maps), false));
     }
-    // Not sure → same alignment door as [`atom_diff`] (bare MCS by default;
-    // mcs_extend when USE_MCS_EXTEND). Caller counts mcs_lift_rematch.
+    // Not sure → fresh bare MCS (same as expand [`atom_diff`]). Caller counts
+    // mcs_lift_rematch. Placeable grow already ran on the lift seeds above.
     Some((atom_diff(mol, target), true))
 }
 
@@ -1901,42 +1880,25 @@ mod tests {
     }
 
     #[test]
-    fn ethene_to_glycol_two_step_with_atom_diff() {
-        // Needs mcs_extend so ethene→epoxide drops n_extra toward OCCO
-        // (see epoxide_toward_diol_drops_with_heavier_n_extra).
-        use crate::find_path::{find_path_with, FindPathConfig, PathCounters};
-        use crate::rules::{epoxidation, epoxide_opening};
-        use crate::ruleset::RuleSet;
-        set_use_mcs_extend(true);
-        let eo = RuleSet::compose(Some("EO".into()), [epoxidation(), epoxide_opening()]);
-        let mut counters = PathCounters::default();
-        let hits = find_path_with(
-            "C=C",
-            "OCCO",
-            &eo,
-            &mut counters,
-            FindPathConfig {
-                max_paths: 1,
-                max_nodes: 50,
-                use_atom_diff: true,
-                ..Default::default()
-            },
-            |_| true,
-        )
-        .unwrap()
-        .collect_all()
-        .unwrap();
-        set_use_mcs_extend(false);
-        assert_eq!(hits.len(), 1, "should reach glycol under atom_diff");
-        let rules: Vec<_> = hits[0]
-            .steps
-            .iter()
-            .map(|s| s.leaf_rule())
-            .collect();
-        assert_eq!(
-            rules,
-            [Some("Epoxidation"), Some("EpoxideOpening")],
-            "{rules:?}"
+    fn ethene_epoxide_toward_glycol_needs_extend_views() {
+        // Bare expand atom_diff does not place the epoxide O on a target
+        // hydroxyl; mcs_extend views do (cost drop is lift/gold territory,
+        // not find_path expand). See epoxide_toward_diol_drops_with_heavier_n_extra.
+        use crate::rules::epoxidation;
+        use crate::forest_mol::ForestMol;
+        let parent = ForestMol::parse("C=C").unwrap();
+        let target = parse_mol("OCCO").unwrap();
+        let c = epoxidation()
+            .candidates(parent.mol())
+            .next()
+            .unwrap()
+            .unwrap();
+        let epox = parent.adopt_product(c.materialize_mols(parent.mol()).unwrap()[0].clone());
+        let bare = atom_diff(epox.mol(), &target);
+        let extended = atom_diff_mcs_extend(epox.mol(), &target);
+        assert!(
+            extended.n_extra < bare.n_extra || extended.cost() < bare.cost(),
+            "extend should improve ethene-epoxide vs glycol: bare={bare:?} ext={extended:?}"
         );
     }
 
@@ -1988,15 +1950,11 @@ mod tests {
     }
 
     #[test]
-    fn mcs_align_respects_use_mcs_extend_flag() {
+    fn mcs_align_is_bare_mcs() {
         let epox = parse_mol("O1C2(C=CC(=CC12)OC)O").unwrap();
         let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
-        set_use_mcs_extend(false);
-        assert!(!use_mcs_extend());
         assert_eq!(mcs_align(&epox, &target), mcs_bare(&epox, &target));
-        set_use_mcs_extend(true);
-        assert_eq!(mcs_align(&epox, &target), mcs_extend(&epox, &target));
-        set_use_mcs_extend(false); // restore default
+        assert_ne!(mcs_bare(&epox, &target), mcs_extend(&epox, &target));
     }
 
     #[test]
