@@ -227,17 +227,33 @@ pub fn find_path_ms1(
             };
 
             let delta = cand.pattern.effect.resolved_delta_formula();
-            // Soft pre-filter: catalog H bags can disagree with sanitized mass
-            // (hydroxyl +O −H vs live +O). Only refuse when predicted error
-            // grows *and* heavy-only prediction also looks worse.
-            let mut heavy_delta = delta.clone();
-            heavy_delta.remove("H");
-            let pred_mz = predicted_mz_after_delta(&walk.mol, &heavy_delta, config.adduct)
-                .or_else(|| predicted_mz_after_delta(&walk.mol, &delta, config.adduct));
-            if let Some(pred_mz) = pred_mz {
-                let pred_err = mz_abs_error(pred_mz, config.mz);
-                if pred_err > walk.mz_err + 1e-9 && pred_err > config.tol_da {
-                    continue;
+            // Soft pre-filter (non-cleavage only): try full declared delta and
+            // heavy-only (strip H). Hydroxyl bags are +O −H while live mols are
+            // +O — heavy wins. H-only nets (epoxide rearrange +2H) need full.
+            // Cleavage leave bags do not predict either fragment's mono mass —
+            // skip the hint and let materialize + closer decide.
+            if !cand.pattern.effect.cleaves {
+                let full_mz = predicted_mz_after_delta(&walk.mol, &delta, config.adduct);
+                let mut heavy_delta = delta.clone();
+                heavy_delta.remove("H");
+                let heavy_mz = if heavy_delta != delta {
+                    predicted_mz_after_delta(&walk.mol, &heavy_delta, config.adduct)
+                } else {
+                    None
+                };
+                let pred_mz = match (full_mz, heavy_mz) {
+                    (Some(a), Some(b)) => {
+                        let ea = mz_abs_error(a, config.mz);
+                        let eb = mz_abs_error(b, config.mz);
+                        Some(if ea <= eb { a } else { b })
+                    }
+                    (a, b) => a.or(b),
+                };
+                if let Some(pred_mz) = pred_mz {
+                    let pred_err = mz_abs_error(pred_mz, config.mz);
+                    if pred_err > walk.mz_err + 1e-9 && pred_err > config.tol_da {
+                        continue;
+                    }
                 }
             }
 
@@ -313,13 +329,348 @@ mod tests {
     use super::*;
     use crate::canonical_plan::ApplyN;
     use crate::forest::molecule_formula;
-    use crate::mass::{Ms1Adduct, mz_of, mz_within};
+    use crate::mass::{Ms1Adduct, mz_of, mz_of_mol, mz_within};
     use crate::mol::parse_mol;
-    use crate::rules::hydroxylation;
+    use crate::rules::{
+        dealkylation, dehydrogenation, epoxidation, epoxide_hydration, epoxide_opening,
+        hydroxylation, nitrogen_oxidation, phase_one, sulfur_oxidation,
+    };
+    use crate::ruleset::RuleSet;
+
+    /// Apply `leaf` once to `reactant`; return distinct (csmi, mz) products.
+    fn products_from_apply(reactant: &str, set: &RuleSet) -> Vec<(String, f64)> {
+        let parent = ForestMol::parse(reactant).unwrap();
+        let mol = parent.mol();
+        let mut out = Vec::new();
+        for cand in set.candidates(mol) {
+            let cand = cand.unwrap();
+            let pieces = cand.materialize_mols(mol).unwrap();
+            if pieces.is_empty() {
+                continue;
+            }
+            let child = parent.adopt_product(pieces[0].clone());
+            let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).unwrap();
+            out.push((child.csmi().as_ref().to_string(), mz));
+        }
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out.dedup_by(|a, b| a.0 == b.0);
+        out
+    }
+
+    /// Materialize products from `set`, then assert each product CSMI appears
+    /// in `find_path_ms1` hits when targeting that product's [M+H]⁺ m/z.
+    fn assert_applied_products_in_ms1(
+        reactant: &str,
+        set: &RuleSet,
+        pool_arms: &[&str],
+        count: u16,
+    ) {
+        let products = products_from_apply(reactant, set);
+        assert!(
+            !products.is_empty(),
+            "{reactant} + {:?} produced nothing",
+            set.name
+        );
+        let pools = [ApplyN::new(pool_arms.iter().copied(), count)];
+        for (csmi, mz) in &products {
+            let mut counters = PathCounters::default();
+            let hits = find_path_ms1(
+                reactant,
+                set,
+                &pools,
+                &mut counters,
+                Ms1Config {
+                    mz: *mz,
+                    tol_da: 0.001,
+                    adduct: Ms1Adduct::MPlusH,
+                    max_paths: 16,
+                    max_nodes: 400,
+                },
+            )
+            .unwrap();
+            assert!(
+                hits.iter().any(|h| h.smiles == *csmi),
+                "{reactant} → {csmi} (mz={mz}) missing from MS1 hits {:?}; billed={}",
+                hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
+                counters.billed()
+            );
+        }
+    }
+
+    #[test]
+    fn applied_hydroxylation_products_appear_in_ms1() {
+        assert_applied_products_in_ms1("CC", &hydroxylation(), &["Hydroxylation"], 1);
+        assert_applied_products_in_ms1("c1ccccc1", &hydroxylation(), &["Hydroxylation"], 1);
+        // Propane: primary + secondary alcohols share mass; both must hit.
+        assert_applied_products_in_ms1("CCC", &hydroxylation(), &["Hydroxylation"], 1);
+    }
+
+    #[test]
+    fn applied_epoxidation_product_appears_in_ms1() {
+        assert_applied_products_in_ms1("C=C", &epoxidation(), &["Epoxidation"], 1);
+    }
+
+    #[test]
+    fn applied_epoxide_hydration_product_appears_in_ms1() {
+        assert_applied_products_in_ms1("C=C", &epoxide_hydration(), &["EpoxideHydration"], 1);
+    }
+
+    #[test]
+    fn applied_epoxide_opening_products_appear_in_ms1() {
+        // rearrange (+2H → ethanol) and hydrate (+O+2H → glycol).
+        assert_applied_products_in_ms1("C1OC1", &epoxide_opening(), &["EpoxideOpening"], 1);
+    }
+
+    #[test]
+    fn applied_sulfur_oxidation_products_appear_in_ms1() {
+        assert_applied_products_in_ms1("CCS", &sulfur_oxidation(), &["SulfurOxidation"], 1);
+    }
+
+    #[test]
+    fn applied_nitrogen_oxidation_products_appear_in_ms1() {
+        assert_applied_products_in_ms1("CN", &nitrogen_oxidation(), &["NitrogenOxidation"], 1);
+    }
+
+    #[test]
+    fn applied_dehydrogenation_products_appear_in_ms1() {
+        assert_applied_products_in_ms1("CCO", &dehydrogenation(), &["Dehydrogenation"], 1);
+    }
+
+    /// Apply `leaves` in order; return final (csmi, mz).
+    fn chain_apply(reactant: &str, leaves: &[&str]) -> (String, f64) {
+        let mut cur = ForestMol::parse(reactant).unwrap();
+        for leaf in leaves {
+            let set = crate::rules::leaf_rule(leaf).unwrap_or_else(|| panic!("missing {leaf}"));
+            let mol = cur.mol();
+            let mut next = None;
+            for cand in set.candidates(mol) {
+                let cand = cand.unwrap();
+                let pieces = cand.materialize_mols(mol).unwrap();
+                if pieces.is_empty() {
+                    continue;
+                }
+                next = Some(cur.adopt_product(pieces[0].clone()));
+                break;
+            }
+            cur = next.unwrap_or_else(|| panic!("{reactant} chain failed at {leaf}"));
+        }
+        let mz = mz_of_mol(cur.mol(), Ms1Adduct::MPlusH).unwrap();
+        (cur.csmi().as_ref().to_string(), mz)
+    }
+
+    fn assert_chain_in_ms1(
+        reactant: &str,
+        set: &RuleSet,
+        pool_arms: &[&str],
+        count: u16,
+        leaves: &[&str],
+        max_nodes: usize,
+    ) {
+        let (csmi, mz) = chain_apply(reactant, leaves);
+        let pools = [ApplyN::new(pool_arms.iter().copied(), count)];
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            reactant,
+            set,
+            &pools,
+            &mut counters,
+            Ms1Config {
+                mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 16,
+                max_nodes,
+            },
+        )
+        .unwrap();
+        assert!(
+            hits.iter().any(|h| h.smiles == csmi),
+            "chain {leaves:?} → {csmi} (mz={mz}) missing from {:?}; billed={}",
+            hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
+            counters.billed()
+        );
+    }
+
+    #[test]
+    fn harder_two_hydroxylations_ethane_and_benzene() {
+        assert_chain_in_ms1(
+            "CC",
+            &hydroxylation(),
+            &["Hydroxylation"],
+            2,
+            &["Hydroxylation", "Hydroxylation"],
+            200,
+        );
+        assert_chain_in_ms1(
+            "c1ccccc1",
+            &hydroxylation(),
+            &["Hydroxylation"],
+            2,
+            &["Hydroxylation", "Hydroxylation"],
+            200,
+        );
+        assert_chain_in_ms1(
+            "CCC",
+            &hydroxylation(),
+            &["Hydroxylation"],
+            2,
+            &["Hydroxylation", "Hydroxylation"],
+            400,
+        );
+    }
+
+    #[test]
+    fn harder_ethene_epoxidation_then_opening() {
+        // Two elementary hops under PhaseOne OR pool.
+        assert_chain_in_ms1(
+            "C=C",
+            &phase_one(),
+            &[
+                "Epoxidation",
+                "EpoxideOpening",
+                "EpoxideHydration",
+                "Hydroxylation",
+            ],
+            2,
+            &["Epoxidation", "EpoxideOpening"],
+            800,
+        );
+    }
+
+    #[test]
+    fn harder_ethene_to_glycol_via_phase_one_or_pool() {
+        // One-hop EpoxideHydration inside a broad PhaseOne OR pool (count=1).
+        let glycol = ForestMol::parse("OCCO").unwrap();
+        let mz = mz_of_mol(glycol.mol(), Ms1Adduct::MPlusH).unwrap();
+        let pools = [ApplyN::new(
+            [
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideOpening",
+                "EpoxideHydration",
+            ],
+            1,
+        )];
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            "C=C",
+            &phase_one(),
+            &pools,
+            &mut counters,
+            Ms1Config {
+                mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 8,
+                max_nodes: 800,
+            },
+        )
+        .unwrap();
+        assert!(
+            hits.iter().any(|h| h.smiles == glycol.csmi().as_ref()),
+            "glycol missing from {:?}; billed={}",
+            hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
+            counters.billed()
+        );
+    }
+
+    #[test]
+    fn harder_anisole_dealkylation_phenol_in_ms1() {
+        // Cleavage: soft delta hint skipped; keep-side phenol must still hit.
+        let set = dealkylation();
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let mut phenol = None;
+        for cand in set.candidates(parent.mol()) {
+            let cand = cand.unwrap();
+            if !cand.pattern.effect.cleaves {
+                continue;
+            }
+            for p in cand.materialize_mols(parent.mol()).unwrap() {
+                let child = parent.adopt_product(p);
+                let f = molecule_formula(child.mol());
+                if f.counts.get("C") == Some(&6)
+                    && f.counts.get("O") == Some(&1)
+                    && f.counts.get("H") == Some(&6)
+                {
+                    let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).unwrap();
+                    phenol = Some((child.csmi().as_ref().to_string(), mz));
+                    break;
+                }
+            }
+            if phenol.is_some() {
+                break;
+            }
+        }
+        let (csmi, mz) = phenol.expect("anisole dealk should emit phenol");
+        let pools = [ApplyN::new(["Dealkylation"], 1)];
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            "COc1ccccc1",
+            &set,
+            &pools,
+            &mut counters,
+            Ms1Config {
+                mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 16,
+                max_nodes: 800,
+            },
+        )
+        .unwrap();
+        assert!(
+            hits.iter().any(|h| h.smiles == csmi),
+            "phenol {csmi} missing from {:?}; billed={}",
+            hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
+            counters.billed()
+        );
+    }
+
+    /// Fuzz-style property: for each (reactant, leaf) pair, every distinct
+    /// first-fragment product of applying the leaf is recoverable by MS1 at
+    /// that product's [M+H]⁺ (ApplyN count=1 on the leaf name).
+    #[test]
+    fn fuzz_applied_products_recoverable_by_ms1() {
+        let cases: &[(&str, &str)] = &[
+            ("CC", "Hydroxylation"),
+            ("CCC", "Hydroxylation"),
+            ("c1ccccc1", "Hydroxylation"),
+            ("CCO", "Hydroxylation"),
+            ("C=C", "Epoxidation"),
+            ("C=C", "EpoxideHydration"),
+            ("C/C=C/C", "Epoxidation"),
+            ("C1OC1", "EpoxideOpening"),
+            ("CC1OC1C", "EpoxideOpening"),
+            ("CCS", "SulfurOxidation"),
+            ("CSC", "SulfurOxidation"),
+            ("CN", "NitrogenOxidation"),
+            ("CCN", "NitrogenOxidation"),
+            ("CCO", "Dehydrogenation"),
+            ("CC(O)C", "Dehydrogenation"),
+            ("COc1ccccc1", "Dealkylation"),
+            ("C=C", "Hydrogenation"),
+            ("C#C", "Hydrogenation"),
+        ];
+        let mut checked = 0usize;
+        for &(reactant, leaf) in cases {
+            let Some(set) = crate::rules::leaf_rule(leaf) else {
+                panic!("missing leaf {leaf}");
+            };
+            let products = products_from_apply(reactant, &set);
+            if products.is_empty() {
+                continue;
+            }
+            assert_applied_products_in_ms1(reactant, &set, &[leaf], 1);
+            checked += products.len();
+        }
+        assert!(
+            checked >= 20,
+            "fuzz property covered too few products: {checked}"
+        );
+    }
 
     #[test]
     fn ethene_to_glycol_ms1_one_epoxide_hydration() {
-        use crate::rules::epoxide_hydration;
         let glycol = molecule_formula(&parse_mol("OCCO").unwrap());
         let mz = mz_of(&glycol, Ms1Adduct::MPlusH).unwrap();
         let pools = [ApplyN::new(["EpoxideHydration"], 1)];
