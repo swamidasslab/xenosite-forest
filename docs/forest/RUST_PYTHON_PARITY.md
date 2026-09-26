@@ -255,6 +255,8 @@ implemented.
 | 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
 | 14 | ``unique_csmi_compliant`` + CSMI-dup parametric test | **done** | C11 — only that test xfails non-compliant; hard-fail if compliant |
 | 15 | Product-identical distinct sites + Dealk other-side double-emit | **open** | C13 — not decided; options: ``product_equiv`` field vs SMARTS partition |
+| 16 | Chematic atom-tracking migrate; drop vendored patch | **blocked on parity** | TODO.md § After parity — pass tracking tests, remove `vendor/chematic` |
+| 17 | Centralize ForestMol cache + copy/edit behind ForestMol methods | **blocked on parity** | TODO.md § After parity — private-to-find-strays; keep user-visible cache |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):
 ``tests/forest/probe_d1_diff.py`` / ``artifacts/d1_*`` — Dealkylation-heavy;

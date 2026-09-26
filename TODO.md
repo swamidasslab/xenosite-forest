@@ -18,3 +18,26 @@
 - Use ``sanitize_dropped`` to find remaining rules/SMARTS that still clean-fail after include_sites / QF plan-only enum; further pre-clean rejects if needed
 - Short-circuit mol edits that would yield invalid structures before sanitize/clean (edits are costly; reject early)
 - Speed up `clean` / `_sanitize_kekulize` (dominant Full wall cost: sanitize + kekulize + SMILES round-trip per product)
+
+## After Rust↔Python leaf parity (execute once parity suite is green)
+
+Do **not** start these while work order #4–12 / parametric product parity is still
+red. Tracked also in `docs/forest/RUST_PYTHON_PARITY.md` work order #16–17.
+
+1. **Chematic atom tracking (upstream landed).** Migrate off the vendored
+   chematic patch (`vendor/chematic` +
+   `patches/chematic-v1.0.21-atom-tag-visit-order.patch` /
+   `./scripts/vendor-chematic.sh`) onto the released Chematic atom-tag /
+   visit-order API. Pass atom-tracking tests (`AtomTracker` /
+   `stamp` / `src_to_new` / `adopt_born` / `write_parse` and successors).
+   Remove the vendored submodule and patch once green. See
+   `docs/forest/RUST.md` § Atom identity.
+
+2. **Centralize ForestMol cache access and copy/edit.** Every read/write of
+   the forest mol cache (structure / ranks / systems / resonance / …) and
+   every copy/edit path that must invalidate or preserve cache correctly
+   goes through `ForestMol` methods — Python `mol.xf` / Rust `ForestMol`
+   alike. Outside accessors need a compelling reason. Temporarily make the
+   cache private (or rename) to surface stray mutators/readers, then restore
+   a **user-visible** cache surface for Python scripting (not hidden from
+   interactive use — just not mutated ad hoc from free functions).

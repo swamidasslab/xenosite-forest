@@ -203,11 +203,17 @@ Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --
 
 ## Atom identity (vendored chematic patch)
 
-Chematic on crates.io still has no atom userdata and no public SMILES visit
-order. This repo vendors `chematic` @ `v1.0.21` as a **sparse submodule**
-(`vendor/chematic`) and applies
+Chematic on crates.io historically lacked atom userdata and a public SMILES
+visit order. This repo still vendors `chematic` @ `v1.0.21` as a **sparse
+submodule** (`vendor/chematic`) and applies
 [`patches/chematic-v1.0.21-atom-tag-visit-order.patch`](../../patches/chematic-v1.0.21-atom-tag-visit-order.patch)
 via `./scripts/vendor-chematic.sh`.
+
+**Post-parity (do not start early):** Chematic upstream has landed atom
+tracking. After Rust↔Python leaf product parity is green
+([RUST_PYTHON_PARITY](RUST_PYTHON_PARITY.md) work order #16 / [TODO.md](../../TODO.md)):
+migrate to the released API, pass tracking tests, remove the vendored
+submodule and patch.
 
 The patch adds:
 
