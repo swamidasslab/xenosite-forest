@@ -1646,16 +1646,95 @@ def _sanitize_piece(frag: Mol) -> bool:
     A nitrogen with two double bonds is dropped even when it sanitizes.
     Closed-shell prefer: refuse ``[NH+]=`` iminium and ``[N-]`` anions
     (mirrors Rust ``accept_product``).
+
+    When kekulize fails on aromatic→S-OH (thiophene), do **not** clear H and
+    re-sanitize into a fully saturated ring (``O[SH]1CCCC1``). Write a
+    conjugated diene kekulé first (Rust ``O[SH]1C=CC=C1``) — C10.
     """
 
-    if not SanitizeMol(frag, catchErrors=True):
+    failed = SanitizeMol(frag, catchErrors=True)
+    if not failed:
         return not _nitrogen_two_doubles(frag) and not _nitrogen_charge_junk(frag)
+    if int(failed) == int(SanitizeFlags.SANITIZE_KEKULIZE):
+        if _kekulize_aromatic_soh_ring(frag):
+            failed2 = SanitizeMol(frag, catchErrors=True)
+            if not failed2:
+                return not _nitrogen_two_doubles(frag) and not _nitrogen_charge_junk(
+                    frag
+                )
     for atom in frag.GetAtoms():
         atom.SetNumExplicitHs(0)
         atom.SetNoImplicit(False)
     if SanitizeMol(frag, catchErrors=True):
         return False
     return not _nitrogen_two_doubles(frag) and not _nitrogen_charge_junk(frag)
+
+
+def _kekulize_aromatic_soh_ring(frag: Mol) -> bool:
+    """Write a 1,3-diene kekulé for aromatic S–OH rings that fail sanitize.
+
+    Thiophene ``Os1cccc1`` cannot kekulize as aromatic; clearing H and
+    re-sanitizing saturates to ``O[SH]1CCCC1``. Prefer the conjugated
+    diene ``O[SH]1C=CC=C1`` (Rust emit). Returns True when a diene was written.
+    """
+
+    from rdkit.Chem import GetSymmSSSR
+
+    aromatic_before = any(a.GetIsAromatic() for a in frag.GetAtoms())
+    if not aromatic_before:
+        return False
+    rings = list(GetSymmSSSR(frag))
+    soh = None
+    for atom in frag.GetAtoms():
+        if atom.GetAtomicNum() != 16:
+            continue
+        if not any(nbr.GetAtomicNum() == 8 for nbr in atom.GetNeighbors()):
+            continue
+        soh = atom.GetIdx()
+        break
+    if soh is None:
+        return False
+    ring = next((list(r) for r in rings if soh in r and len(r) == 5), None)
+    if ring is None:
+        return False
+    for atom in frag.GetAtoms():
+        atom.SetIsAromatic(False)
+    for bond in frag.GetBonds():
+        bond.SetIsAromatic(False)
+        if bond.GetBondType() == BondType.AROMATIC:
+            bond.SetBondType(BondType.SINGLE)
+    # Walk the C4 path opposite S; assign alternating doubles.
+    carbons = [i for i in ring if frag.GetAtomWithIdx(i).GetAtomicNum() == 6]
+    if len(carbons) != 4:
+        return False
+    # Order carbons around the ring starting from a S-neighbor.
+    s_nbrs = [
+        n.GetIdx()
+        for n in frag.GetAtomWithIdx(soh).GetNeighbors()
+        if n.GetAtomicNum() == 6
+    ]
+    if len(s_nbrs) != 2:
+        return False
+    ordered = [s_nbrs[0]]
+    prev, cur = soh, s_nbrs[0]
+    while len(ordered) < 4:
+        nbrs = [
+            n.GetIdx()
+            for n in frag.GetAtomWithIdx(cur).GetNeighbors()
+            if n.GetAtomicNum() == 6 and n.GetIdx() != prev
+        ]
+        if not nbrs:
+            return False
+        nxt = nbrs[0]
+        ordered.append(nxt)
+        prev, cur = cur, nxt
+    for i in (0, 2):
+        a, b = ordered[i], ordered[i + 1]
+        bond = frag.GetBondBetweenAtoms(a, b)
+        if bond is None:
+            return False
+        bond.SetBondType(BondType.DOUBLE)
+    return True
 
 
 def _nitrogen_charge_junk(frag: Mol) -> bool:
