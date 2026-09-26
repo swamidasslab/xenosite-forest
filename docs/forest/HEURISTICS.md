@@ -219,6 +219,18 @@ stays cached after first read. Emission identity for check/yield is
 
 Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`, `test_parity.py` (anisole dealk).
 
+## Product-identical distinct sites / Dealk other-side double-emit
+
+Status: **not decided**. See [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) Choice **C13**.
+
+Automorphism-equivalent sites already emit once with ``orbit`` / ``site_orbit``.
+Ester Dealkylation (two directed ``quaternary_alcohol`` sites on the bridging
+O, unequal ranks, one product bag) and similar epoxide cases are a different
+class. Options: ``product_equiv`` field on SiteInfo (canonical by site sort) vs
+SMARTS/``when`` partition vs PatternInfo fold flag. Do not widen undirected
+unique-edit for all ``directed_bond`` (regioisomers). Do not treat silent
+``unique_csmi`` as the design.
+
 ## Antipattern: global `_kekule_forms` on SmirksReactionRule
 
 Status: **not approved**. Materializing every Kekulé form inside plain `SmirksReactionRule.metabolites` is combinatorial expansion — that is why `ResonanceRule` exists. Match once on the aromatic parent; react on a cached Kekulé parent selected by SMARTS-implied bond order. Do not reintroduce an all-forms loop or an easy opt-in that restores the tax. `_kekule_forms` may remain for tests / helpers that need the list explicitly.

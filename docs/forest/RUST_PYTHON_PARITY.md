@@ -128,12 +128,13 @@ identity is a safety net, not the design.
 ``SiteDeduplicationWarning`` (check layer: same pattern + CSMI set + site
 ranks) is the unique-edit-miss signal that often accompanies a yield drop.
 Quiet yield drops (unequal ranks, same CSMI) are still soft failures under
-this choice.
+this choice until C13 (product-identical distinct sites) picks a schema —
+silent yield CSMI is not the long-term design for that class either.
 
 Parity / regression: ``tests/forest/test_csmi_dedup_soft_failure.py`` is
 parametric over ``PARITY_FUZZ_MOLS`` × Python leaves. Known hits may use
-temporary ``pytest.xfail`` until partition / unique-edit fixes land — xfail
-is not approval. Status: **approved** (goal).
+temporary ``pytest.xfail`` until partition / unique-edit / C13 fixes land —
+xfail is not approval. Status: **approved** (goal).
 
 ### C12 — C7 resolution: fix partition / unique-edit, not “no dedup”
 
@@ -158,6 +159,79 @@ Investigation of the C7 citation (Hydrogenation ``C=C`` py 2 vs rs 1):
 
 Status: **approved** (supersedes C7’s undecided fork).
 
+### C13 — Product-identical distinct sites; Dealk one-side polymorphism
+
+Two related gaps where ``unique_csmi`` quietly collapses (C11 soft failure)
+or where pattern data over-emits. **Not decided** — need a schema/data
+answer before code. Do not invent a silent branch.
+
+#### A. Genuinely two sites → one product bag
+
+Example (corpus): Dealkylation ``quaternary_alcohol`` on aspirin
+``CC(=O)Oc1ccccc1C(=O)O``:
+
+- directed site ``(1, 3)`` ranks ``(8, 9)`` — acetyl C–O
+- directed site ``(4, 3)`` ranks ``(8, 11)`` — aryl C–O
+- same emission CSMI frozenset ``{CC(=O)O, O=C(O)c1ccccc1O}``
+
+Unequal ranks ⇒ not a unique-edit miss (no ``SiteDeduplicationWarning``);
+yield CSMI still drops one. Same shape may appear for symmetric epoxide
+hydration / opening when both carbons are chemically distinct embeddings
+but products coincide (symmetric cases often already collapse via
+``topol_equiv`` / unique-edit ``orbit`` — HEURISTICS pass-down orbits).
+
+Automorphism-equivalent sites are **already** handled: one canonical emit +
+``SiteInfo.orbit`` / ``Emission.site_orbit`` (HEURISTICS approved). This
+gap is the **other** class: topologically distinct sites, identical
+products.
+
+#### B. Dealk map-1 polymorphism vs the other side
+
+Dealkylation encodes carbon-side polymorphism as separate ``PatternInfo``
+rows (H-count × alcohol/carbonyl/carboxylic) with ``when`` on the partner
+(map 2 = N/O/S). That is good data. The failure mode: both carbons on a
+bridging heteroatom can play map 1 (ester O bonded to two ``#6H0``), so the
+**other** side of the same linker double-emits under the same pattern name
+even when the chemistry outcome is one cleavage. Methyl vs aryl on
+``Ph–O–Me`` correctly stay distinct (different patterns / products); the
+bad case is both sides quaternary (ester) with one product bag.
+
+``directed_bond`` must stay for regioisomers that **differ** in product
+(DIVERGENCES / HEURISTICS). Undirected unique-edit for all Dealk is
+**not** a candidate.
+
+#### Options under consideration (pick later; do not ship a branch)
+
+1. **Canonical site + ``product_equiv`` on SiteInfo** (user sketch): after
+   apply, under ``(rule, pattern)``, group emissions with equal fragment
+   CSMI frozenset; emit once at lex-smallest site key; record the other
+   sites on a new field (name TBD: ``product_equiv`` / ``equiv_sites``).
+   Distinct from unique-edit ``orbit`` (automorphism class). Discovery
+   still uses product identity; yield is explicit one + data, not silent
+   ``unique_csmi`` drop. Epoxide / ester both fit if they land in this
+   class.
+
+2. **SMARTS / ``when`` partition** so only one side of a Y-linker matches
+   for product-symmetric cleavages (e.g. ester carbonyl-side only). Pure
+   sites/patterns/whens; no product-layer fold. Risk: missing a real
+   regioisomer when products would have differed; must be pattern-local.
+
+3. **PatternInfo flag** that directed embeddings sharing map 2 (leave
+   partner) are product-folded when products match — data on the rule,
+   still needs apply or a proven identity. Close to (1) with a narrower
+   key.
+
+4. **Rely on ``unique_csmi``** for this class only. **Not approved** as the
+   design (C11); at most a temporary xfail until (1)–(3) lands.
+
+Related: ``cleave_side_group`` folds **across rules** at expand; it does
+not solve within-leaf directed double-emit. ``canonical_emitted_sites`` is
+automorphism lex remap, not product-class fold.
+
+Status: **not decided**. Tracker: work order #15. Soft-fail xfail for
+aspirin Dealkylation stays under C11 until this choice is approved and
+implemented.
+
 ---
 
 ## Work order (tackle in this sequence)
@@ -179,6 +253,7 @@ Status: **approved** (supersedes C7’s undecided fork).
 | 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |
 | 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
 | 14 | Parametric ``unique_csmi`` yield-drop / SiteDeduplicationWarning | **done** (xfail soft hits) | C11 — ``test_csmi_dedup_soft_failure``; clear xfails when fixed |
+| 15 | Product-identical distinct sites + Dealk other-side double-emit | **open** | C13 — not decided; options: ``product_equiv`` field vs SMARTS partition |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):
 ``tests/forest/probe_d1_diff.py`` / ``artifacts/d1_*`` — Dealkylation-heavy;

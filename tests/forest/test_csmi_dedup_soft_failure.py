@@ -30,11 +30,12 @@ from .rule_parity_pairs import python_leaf_classes, python_parity_exception
 pytestmark = pytest.mark.allow_formula_delta_mismatch
 
 # Temporary soft failures (C11). Drop an entry when unique-edit / pattern
-# partition stops relying on yield CSMI for that (rule, mol).
+# partition / C13 product-equiv handling stops relying on yield CSMI.
 _XFAIL_CSMI_DEDUP: frozenset[tuple[str, str]] = frozenset(
     {
-        # Quiet yield drop (no SiteDeduplicationWarning): unequal-rank iso
-        # under the same pattern token — still a C11 soft failure.
+        # C13 class A: product-identical distinct directed sites (ester
+        # quaternary_alcohol on both carbons of bridging O). Unequal ranks —
+        # not SiteDeduplicationWarning; quiet unique_csmi drop only.
         ("Dealkylation", "CC(=O)Oc1ccccc1C(=O)O"),
         # Unique-edit miss + yield drop (halide/At geminal overlaps).
         ("OxidativeDehalogenation", "ClC(I)Cl"),
