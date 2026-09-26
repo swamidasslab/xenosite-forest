@@ -9,8 +9,10 @@
 //! - [`align_shells`] — two [`MoleculeShells`] + a reactant→target map → the
 //!   **same atom shape** with **deltas** (target − reactant) on aligned atoms,
 //!   plus how many heavy atoms sit outside the alignment on each side.
-//! - **Cost** — at a site, Σ over atoms of normalized distance between
-//!   `current + δ` and target ([`site_shell_cost`]). Each shell contributes
+//! - **Cost** — residual between **projected** and **target**, not |δ| itself
+//!   ([`site_shell_cost`]). Sign: δ is always **product − reactant**
+//!   ([`align_shells`] / [`edit_shells`]); `projected = current + δ`. Cost is
+//!   Σ normalized |projected − target|. Each shell contributes
 //!   `L1 / Σ max(|a|,|b|)` ∈ [0,1] ([`shell_norm_l1`]); plus |Δaromatic| ∈ {0,1}
 //!   as a dearomatization hint. Per atom ≤ 4 (≤ 3 when aligned n0 matches).
 //!   Site atoms matched as a **multiset** (orbit / MCS swap safe). `δ = 0` is
@@ -215,8 +217,8 @@ impl AlignedShells {
 
     /// Magnitude of stored deltas: Σ |δ| on kept atoms + cleaved + added.
     ///
-    /// Site / search cost is [`site_shell_cost`] (Σ |current + δ − target|), not
-    /// this magnitude.
+    /// Site / search cost is [`site_shell_cost`] (Σ |projected − target| with
+    /// `projected = current + δ`), not this magnitude.
     pub fn delta_magnitude(&self) -> usize {
         self.atoms
             .values()
@@ -417,6 +419,11 @@ fn shell_add(base: &Shell, delta: &Shell) -> Shell {
     out
 }
 
+/// Apply a signed neighborhood δ: `projected = current + δ`.
+///
+/// δ must be **product − reactant** (same sign as [`align_shells`]). Negating δ
+/// walks away from the product; cost then compares that wrong projection to
+/// target and stays high.
 fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> AtomNeighborhood {
     AtomNeighborhood {
         aromatic: current.aromatic + delta.aromatic,
@@ -433,8 +440,10 @@ pub struct SiteShellCostOpts {
     pub dearomatic: bool,
 }
 
-/// Site cost: Σ normalized |current + δ − target| at `site_atoms`.
+/// Site cost: Σ normalized |projected − target| at `site_atoms`.
 ///
+/// `projected = current + δ` with δ signed **product − reactant**. The quantity
+/// compared is the residual between projected and target — not |δ| alone.
 /// Defaults to dearomatization hint on. See [`site_shell_cost_opts`].
 pub fn site_shell_cost(
     current: &MoleculeShells,
@@ -455,9 +464,11 @@ pub fn site_shell_cost(
 
 /// [`site_shell_cost`] with explicit [`SiteShellCostOpts`].
 ///
-/// Each atom contributes [`AtomNeighborhood::norm_l1_opts`]. Projected site
-/// neighborhoods are matched to target as a **multiset** (greedy). Close pairs:
-/// pass both ends. Cleaving sites should pass [`site_atoms_with_leave`].
+/// Builds the **projected** site bag (`current + δ`), then measures distance to
+/// the **target** bag ([`AtomNeighborhood::norm_l1_opts`], greedy multiset).
+/// Close pairs: pass both ends. Cleaving sites should pass
+/// [`site_atoms_with_leave`]. Prefer [`site_shell_cost_best_map`] when multiple
+/// MCS maps are available.
 pub fn site_shell_cost_opts(
     current: &MoleculeShells,
     delta: Option<&AlignedShells>,
@@ -487,6 +498,7 @@ pub fn site_shell_cost_opts(
             continue;
         }
 
+        // projected = current + δ  (δ = product − reactant); cost vs target below.
         let projected_env = match delta {
             Some(d) => apply_neighborhood(cur, d.atoms.get(&r).unwrap_or(&zero)),
             None => cur.clone(),
@@ -495,6 +507,27 @@ pub fn site_shell_cost_opts(
     }
 
     neighborhood_bag_norm_l1(&projected, &target_envs, opts.dearomatic)
+}
+
+/// [`site_shell_cost_opts`] minimized over reactant→target maps (MCS placements).
+///
+/// Unique-edit orbit / MCS orientation can assign different target mates to the
+/// same site atoms; take the **minimum** residual so a bad orientation does not
+/// inflate cost.
+pub fn site_shell_cost_best_map(
+    current: &MoleculeShells,
+    delta: Option<&AlignedShells>,
+    target: &MoleculeShells,
+    maps: &[BTreeMap<usize, usize>],
+    site_atoms: &[usize],
+    opts: SiteShellCostOpts,
+) -> f64 {
+    if maps.is_empty() {
+        return 0.0;
+    }
+    maps.iter()
+        .map(|m| site_shell_cost_opts(current, delta, target, m, site_atoms, opts))
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// Expand `site_atoms` with heavies on the leaving side of a cleavage bond.
@@ -815,6 +848,33 @@ mod tests {
         atoms
     }
 
+    fn shell_negate(shell: &Shell) -> Shell {
+        shell.iter().map(|(k, &v)| (k.clone(), -v)).collect()
+    }
+
+    fn negate_neighborhood(env: &AtomNeighborhood) -> AtomNeighborhood {
+        AtomNeighborhood {
+            aromatic: -env.aromatic,
+            n0: shell_negate(&env.n0),
+            n1: shell_negate(&env.n1),
+            n2: shell_negate(&env.n2),
+        }
+    }
+
+    /// Flip every atom δ to reactant − product (wrong sign for projection).
+    fn negate_aligned(align: &AlignedShells) -> AlignedShells {
+        AlignedShells {
+            atoms: align
+                .atoms
+                .iter()
+                .map(|(&k, v)| (k, negate_neighborhood(v)))
+                .collect(),
+            alignment: align.alignment.clone(),
+            unaligned_reactant: align.unaligned_reactant,
+            unaligned_target: align.unaligned_target,
+        }
+    }
+
     #[test]
     fn ethane_carbon_shells_include_h() {
         let ethane = parse_mol("CC").unwrap();
@@ -938,8 +998,53 @@ mod tests {
     }
 
     #[test]
+    fn delta_sign_is_product_minus_reactant() {
+        // δ := product − reactant; projected = current + δ; cost = |projected − target|.
+        // Negating δ (reactant − product) must not land on target.
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
+        let map = atom_diff(parent.mol(), &target).mapping;
+        let set = dealkylation();
+        let cands = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let c = cands
+            .iter()
+            .find(|c| c.pattern.name.contains("methyl_alcohol"))
+            .expect("methyl_alcohol");
+        let atoms = site_atoms_cand(c);
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let edit = edit_shells(&parent, &child);
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+
+        let right = site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms);
+        assert!(
+            right < 1e-12,
+            "product−reactant δ: projected ≈ target ({right})"
+        );
+
+        let flipped = negate_aligned(&edit);
+        let wrong = site_shell_cost(&cur, Some(&flipped), &tgt, &map, &atoms);
+        assert!(
+            wrong > 0.5,
+            "reactant−product δ must miss target (got {wrong})"
+        );
+
+        // Full residual align as δ is also product−reactant → lands at 0.
+        let align = aligned_shells_mol(parent.mol(), &target);
+        assert!(site_shell_cost(&cur, Some(&align), &tgt, &map, &atoms) < 1e-12);
+        let flipped_align = negate_aligned(&align);
+        assert!(
+            site_shell_cost(&cur, Some(&flipped_align), &tgt, &map, &atoms) > 0.5,
+            "negated residual align must miss"
+        );
+    }
+
+    #[test]
     fn hydroxylation_orbit_bag_matches_applied() {
-        // MCS may label either ethane carbon as the attachment; bag is order-invariant.
         let parent = ForestMol::parse("CC").unwrap();
         let target = parse_mol("CCO").unwrap();
         let align = aligned_shells_mol(parent.mol(), &target);

@@ -1,6 +1,7 @@
 //! Verify site shell bags: forecast (reactant→target at site) vs applied edit.
 //!
-//! Cost at a site is Σ |current + δ − target| (`site_shell_cost`). Bags must
+//! Cost at a site is Σ |projected − target| (`site_shell_cost`), with
+//! `projected = current + δ` and δ = product − reactant. Bags must
 //! match exactly; mismatches are reported (Error mode aborts the example).
 //! Close pairs use the joint site atom list.
 //!

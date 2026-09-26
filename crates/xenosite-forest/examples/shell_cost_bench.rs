@@ -86,9 +86,9 @@ enum CostKind {
     MultisetNormShells,
     /// Multiset Σ norm|current−target|; shells + |Δaromatic| (δ=0).
     MultisetNormDear,
-    /// Σ |current + editδ − target| (norm shells); keep iff residual drops vs δ=0.
+    /// Σ |projected − target| (norm shells); projected=current+editδ; keep iff drop.
     EditResidualNorm,
-    /// Σ |current + editδ − target| (norm+dear); keep iff residual drops vs δ=0.
+    /// Σ |projected − target| (norm+dear); projected=current+editδ; keep iff drop.
     EditResidualDear,
 }
 
@@ -114,8 +114,8 @@ impl Mode {
             CostKind::MultisetRaw => "Σ|cur−tgt| (δ=0)",
             CostKind::MultisetNormShells => "norm|cur−tgt| shells",
             CostKind::MultisetNormDear => "norm|cur−tgt|+dear",
-            CostKind::EditResidualNorm => "Σ|cur+editδ−tgt| norm drop?",
-            CostKind::EditResidualDear => "Σ|cur+editδ−tgt| dear drop?",
+            CostKind::EditResidualNorm => "Σ|proj−tgt| editδ drop?",
+            CostKind::EditResidualDear => "Σ|proj−tgt| dear drop?",
         });
         if self.leave {
             parts.push("+leave");
