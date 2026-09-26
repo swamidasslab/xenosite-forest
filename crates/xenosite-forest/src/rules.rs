@@ -1414,7 +1414,9 @@ pub fn nitrogen_oxidation() -> RuleSet {
             ),
             smirks_row(
                 "n_oxide",
-                "[#7v3H0:1]>>[*&H0&+:1][O-]",
+                // Chematic aromatic N is X2 (not v3); RDKit still matches v3H0.
+                // Union keeps tertiary aliphatic and pyridine-like aromatic.
+                "[#7v3H0,#7X2H0:1]>>[*&H0&+:1][O-]",
                 SiteKind::Atom,
                 vec![1],
                 Effect {
@@ -2228,6 +2230,22 @@ mod tests {
                 .iter()
                 .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == phenol) }),
             "{emissions:?}"
+        );
+    }
+
+    #[test]
+    fn nitrogen_oxidation_pyridine_emits_n_oxide() {
+        let mol = parse_mol("c1ccncc1").unwrap();
+        let emissions = nitrogen_oxidation()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let want = canon_of("[O-][n+]1ccccc1").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "pyridine N-oxide; got {emissions:?}"
         );
     }
 

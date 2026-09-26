@@ -3890,7 +3890,7 @@ class NitrogenOxidation(SmirksReactionRule):
             _describe(adds="O", h=2, symbol="N", name="nitroso"),
         ),
         (
-            Smirks("[#7v3H0:1]>>[*&H0&+:1][O-]"),
+            Smirks("[#7v3H0,#7X2H0:1]>>[*&H0&+:1][O-]"),
             _describe(adds="O", h=0, symbol="N", name="n_oxide"),
         ),
     )
