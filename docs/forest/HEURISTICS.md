@@ -244,6 +244,20 @@ xfail if non-compliant + hit. Other suites do not xfail on this flag.
 
 Status: **not approved**. Materializing every Kekulé form inside plain `SmirksReactionRule.metabolites` is combinatorial expansion — that is why `ResonanceRule` exists. Match once on the aromatic parent; react on a cached Kekulé parent selected by SMARTS-implied bond order. Do not reintroduce an all-forms loop or an easy opt-in that restores the tax. `_kekule_forms` may remain for tests / helpers that need the list explicitly.
 
+## Chematic bond-flip walk for ResonancePair path edits
+
+Status: **not approved** (do not migrate).
+
+Chematic exposes aromatic **kekulization** (`chematic_core::kekulize` /
+`kekulize_inplace`) and low-level `set_bond_order` / `with_bond_order`. It does
+**not** offer a conjugated-path flip / resonance-move API. ResonancePair needs
+odd alternating-path discovery between two ends, then single↔double flip along
+that path after end edits (`swap_bonds_along_path` / Rust `flip_path`). Replacing
+that with re-kekulize would pick *some* matching, not the intentional path
+between the chosen ends. Sanitize / C10 product failures are not fixed by this
+swap; keep the hand walk on both sides for parity. Revisit only if Chematic
+gains an explicit path-flip / electrocyclic primitive.
+
 ## Narrowing SMARTS vs ``swap_group`` (ResonancePair)
 
 Status: **not approved** as a replacement for ``swap_group`` / name-default groups. Hydroxylation-style H-count partitions fix *nested same-atom* SMARTS that double-emit under ``unique_csmi``. Pair same-role couples are different: two path ends that both match the same edit (hydroquinone ``phenol_end``×2, benzene ``add_carbonyl_o``×2, diene ``path_end``×2, QF ``dealkylate``×2, …) are real chemistry and stay unordered via resolved group (= ``name``). Narrowing SMARTS so those couples never co-apply would drop pathways. Keep resolved groups + nauty ordered/unordered. Residual: map ranks still distinguish dealkylate embeddings.
