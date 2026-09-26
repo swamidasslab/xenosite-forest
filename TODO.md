@@ -45,3 +45,13 @@ red. Tracked also in `docs/forest/RUST_PYTHON_PARITY.md` work order #16–17.
    cache private (or rename) to surface stray mutators/readers, then restore
    a **user-visible** cache surface for Python scripting (not hidden from
    interactive use — just not mutated ad hoc from free functions).
+
+3. **Non-enzymatic rearrangements ruleset.** Named catalog (e.g.
+   `Rearrangements`) for chemistry that is not Phase-I enzymatic
+   metabolize: **TautomerRule** (develop past stub), **AzoSplitting**, and
+   **ring-closure** rules (design/validate). Include this set by default in
+   **find** variants (`find_path` / guided search defaults) so paths can use
+   rearrangements; **do not** include it in **enumerate** variants (bfs/dfs
+   metabolite enumerate stays Phase-I / conjugation oriented). Develop and
+   validate each leaf before wiring the default. Tracker:
+   `docs/forest/RUST_PYTHON_PARITY.md` work order #21.

@@ -272,6 +272,7 @@ gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 | 18 | ``exclusive_partner`` bridging N/O: tests + corpus + Rust↔Py parity | **done** | C14 — Python ``test_exclusive_partner`` + Rust ``pair_edit`` refuse tests; corpus bridging N/O extras |
 | 19 | Shared methide alkyl partner (same CH2 bridge) | **open** | C14 deliberately leaves ``partner=="C"`` off; decide if chemistry needs its own Effect bit |
 | 20 | Pair-close / identical-partner corpus + meta-test green | **done** | ortho catechol/diamine/…; ``test_parity_fuzz_mols_cover_close_pair_ends`` green |
+| 21 | Non-enzymatic rearrangements ruleset (find default, not enumerate) | **blocked on parity** | TODO.md § After parity #3 — TautomerRule + AzoSplitting + ring-closure; find variants include; enumerate excludes |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):
 ``tests/forest/probe_d1_diff.py`` / ``artifacts/d1_*`` — Dealkylation-heavy;
