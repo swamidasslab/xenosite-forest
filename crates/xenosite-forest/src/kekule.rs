@@ -1466,7 +1466,23 @@ pub fn reactant_parent(
     let want = smirks_mapped_bond_order(smirks).unwrap_or(2.0);
     let want_code: u8 = if want >= 1.5 { 2 } else { 1 };
     ensure_kekule_parents(mol, left, right, cache);
-    Ok(parent_for_bond(mol, cache, left, right, want_code).unwrap_or_else(|| mol.clone()))
+    let Some(parent) = parent_for_bond(mol, cache, left, right, want_code) else {
+        return Ok(mol.clone());
+    };
+    // Prefer aromatic parent when Kekulé writing raises |charge|
+    // (isocyanate N=C=O → O=C[N-]Ar). Closed-shell prefer (C10 / C16 leave).
+    let parent_mag: i32 = parent
+        .atoms()
+        .map(|(_, a)| a.charge.unsigned_abs() as i32)
+        .sum();
+    let mol_mag: i32 = mol
+        .atoms()
+        .map(|(_, a)| a.charge.unsigned_abs() as i32)
+        .sum();
+    if parent_mag > mol_mag {
+        return Ok(mol.clone());
+    }
+    Ok(parent)
 }
 
 #[cfg(test)]

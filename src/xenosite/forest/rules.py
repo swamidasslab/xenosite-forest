@@ -2270,7 +2270,15 @@ def _reactant_parent(
     parent = parent_for_bond(cache, left, right, order)
     # No assignment with that order (charged rings, awkward systems): keep the
     # aromatic parent so the site is not dropped.
-    return mol if parent is None else parent
+    if parent is None:
+        return mol
+    # Prefer aromatic parent when every Kekulé writing raises |charge|
+    # (isocyanate N=C=O → O=C[N-]Ar). Closed-shell prefer (C10 / C16 leave).
+    parent_mag = sum(abs(a.GetFormalCharge()) for a in parent.GetAtoms())
+    mol_mag = sum(abs(a.GetFormalCharge()) for a in mol.GetAtoms())
+    if parent_mag > mol_mag:
+        return mol
+    return parent
 
 
 class ResonanceRule(SmirksReactionRule):
