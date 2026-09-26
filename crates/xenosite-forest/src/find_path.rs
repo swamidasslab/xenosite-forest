@@ -253,7 +253,7 @@ pub struct MatchScoreSpec {
 }
 
 impl MatchScoreSpec {
-    /// Default recipe: close × improve on atom+formula.
+    /// Default recipe / current best: close × improve on atom+formula.
     pub const fn close_improve_both() -> Self {
         Self {
             combine: MatchCombine::CloseImprove,
@@ -305,7 +305,8 @@ pub enum HeapScoreMode {
     /// Soft stack: `search_bias`, site H-progress, `cost_gain`, then `seq`.
     /// Opt-in via `FindPathConfig` / `--score soft`.
     SoftStack,
-    /// Match-family score from [`MatchScoreSpec`] (default: close×improve × both).
+    /// Match-family score from [`MatchScoreSpec`] (default / current best:
+    /// close×improve × both).
     Match(MatchScoreSpec),
 }
 
@@ -316,7 +317,7 @@ impl Default for HeapScoreMode {
 }
 
 impl HeapScoreMode {
-    /// Default match recipe (close × improve on formula+atom).
+    /// Default / current best match recipe (close × improve on formula+atom).
     pub const fn match_close_improve() -> Self {
         Self::Match(MatchScoreSpec::close_improve_both())
     }
