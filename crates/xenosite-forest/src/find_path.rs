@@ -442,6 +442,32 @@ impl HeapScoreMode {
             Self::Match(spec) => spec.label(),
         }
     }
+
+    /// Parse a bench / CLI score label (`log-neg-pc`, `soft`, `add-both`, …).
+    pub fn from_label(label: &str) -> Option<Self> {
+        if label == "soft" {
+            return Some(Self::SoftStack);
+        }
+        for combine in [
+            MatchCombine::Close,
+            MatchCombine::Improve,
+            MatchCombine::Add,
+            MatchCombine::Product,
+            MatchCombine::LinNegC,
+            MatchCombine::LinNegPC,
+            MatchCombine::LinPNeg2C,
+            MatchCombine::LinNegPNeg2C,
+            MatchCombine::LogNegPC,
+        ] {
+            for metric in [MatchMetric::Atom, MatchMetric::Formula, MatchMetric::Both] {
+                let spec = MatchScoreSpec { combine, metric };
+                if spec.label() == label {
+                    return Some(Self::Match(spec));
+                }
+            }
+        }
+        None
+    }
 }
 
 /// Closeness scale shared by Product multiply and log-space Add/Close.
@@ -2829,6 +2855,23 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn heap_score_from_label_roundtrips() {
+        assert_eq!(
+            HeapScoreMode::from_label("log-neg-pc"),
+            Some(HeapScoreMode::match_log_neg_pc())
+        );
+        assert_eq!(
+            HeapScoreMode::from_label("soft"),
+            Some(HeapScoreMode::SoftStack)
+        );
+        assert_eq!(
+            HeapScoreMode::from_label("add-both"),
+            Some(HeapScoreMode::match_add())
+        );
+        assert!(HeapScoreMode::from_label("nope").is_none());
     }
 
     #[test]

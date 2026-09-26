@@ -43,6 +43,15 @@ The Rust `ForestMol` is the payload. Bindings do **not** reimplement the cache.
 
 **PyO3** (`--features python`, native only — CPython C-API, not WASM):
 
+```bash
+maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
+```
+
+Exposes `ForestMol` / `RuleSet` / `metabolize`, plus **`xenosite_forest.find_path`**
+(PhaseOne chematic search). Python package re-exports that as
+``xenosite.forest.find_path_rust`` (optional; raises if the wheel is missing).
+Live RDKit ``xenosite.forest.find_path`` is unchanged.
+
 ```rust
 #[pyclass(name = "ForestMol", unsendable)]
 pub struct PyForestMol {

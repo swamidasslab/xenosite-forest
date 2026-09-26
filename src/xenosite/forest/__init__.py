@@ -34,6 +34,7 @@ from .find_path import (
     dfs,
     find_path,
 )
+from .find_path_rust import find_path_rust, native_available
 from .phaseone import PhaseOneQF, PhaseOneRS, metabolize, reaction_labels
 from .rulesets import PhaseOne, RuleSet
 
@@ -46,6 +47,8 @@ __all__ = [
     "bfs",
     "dfs",
     "find_path",
+    "find_path_rust",
+    "native_available",
     "PathOutcome",
     "PathCounters",
     "PathSearchCounters",

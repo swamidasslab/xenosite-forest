@@ -12,10 +12,12 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
+use crate::find_path::{FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
 use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
+use crate::rules::phase_one;
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
 fn py_err(err: impl std::fmt::Display) -> PyErr {
@@ -419,12 +421,103 @@ fn metabolize_with_python(
     Ok(emissions)
 }
 
+/// Native chematic ``find_path`` (PhaseOne). Returns ``(hits, counters)``.
+///
+/// Each hit is ``{"smiles": str, "steps": [{"rule": str, "site": [...]}]``.
+/// Counters is a plain dict of the billed fields. Separate from the Python
+/// RDKit ``xenosite.forest.find_path`` walk.
+#[pyfunction]
+#[pyo3(signature = (
+    reactant,
+    target,
+    *,
+    max_paths=1,
+    max_nodes=800,
+    use_atom_diff=true,
+    lazy_closer=false,
+    diversity=false,
+    drop_skeleton_twins=true,
+    score="log-neg-pc",
+))]
+fn find_path(
+    py: Python<'_>,
+    reactant: &str,
+    target: &str,
+    max_paths: usize,
+    max_nodes: usize,
+    use_atom_diff: bool,
+    lazy_closer: bool,
+    diversity: bool,
+    drop_skeleton_twins: bool,
+    score: &str,
+) -> PyResult<(Vec<Py<PyAny>>, Py<PyAny>)> {
+    let heap_score = HeapScoreMode::from_label(score).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "unknown score {score:?}; try log-neg-pc, soft, add-both, …"
+        ))
+    })?;
+    let config = FindPathConfig {
+        max_paths,
+        max_nodes,
+        use_atom_diff,
+        lazy_closer,
+        heap_score,
+        drop_skeleton_twins,
+        diversity,
+    };
+    let rules = phase_one();
+    let mut counters = PathCounters::default();
+    let hits = find_path_with(reactant, target, &rules, &mut counters, config, |_| true)
+        .map_err(py_err)?
+        .collect_all()
+        .map_err(py_err)?;
+
+    let mut out = Vec::with_capacity(hits.len());
+    for hit in hits {
+        let steps: Vec<Py<PyAny>> = hit
+            .plan
+            .iter()
+            .map(|step| {
+                let site: Vec<String> = step
+                    .site
+                    .iter()
+                    .map(|a| match a {
+                        crate::PlanAtom::Index(i) => i.to_string(),
+                        other => format!("{other:?}"),
+                    })
+                    .collect();
+                let d = pyo3::types::PyDict::new(py);
+                d.set_item("rule", step.rule.as_str())?;
+                d.set_item("site", site)?;
+                Ok::<_, PyErr>(d.unbind().into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        let d = pyo3::types::PyDict::new(py);
+        d.set_item("smiles", hit.smiles.as_str())?;
+        d.set_item("steps", steps)?;
+        out.push(d.unbind().into_any());
+    }
+
+    let c = pyo3::types::PyDict::new(py);
+    c.set_item("nodes", counters.nodes)?;
+    c.set_item("mol_edits", counters.mol_edits)?;
+    c.set_item("expansions", counters.expansions)?;
+    c.set_item("billed", counters.billed())?;
+    c.set_item("dropped_duplicate_plan", counters.dropped_duplicate_plan)?;
+    c.set_item("dropped_exact_plan", counters.dropped_exact_plan)?;
+    c.set_item("dropped_skeleton_twin", counters.dropped_skeleton_twin)?;
+    c.set_item("diversity_repush", counters.diversity_repush)?;
+    c.set_item("unstable_csmi_key", counters.unstable_csmi_key)?;
+    Ok((out, c.unbind().into_any()))
+}
+
 #[pymodule]
 fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyForestMol>()?;
     m.add_class::<PyFormula>()?;
     m.add_class::<PyPatternInfo>()?;
     m.add_class::<PyRuleSet>()?;
+    m.add_function(wrap_pyfunction!(find_path, m)?)?;
     Ok(())
 }
 
