@@ -146,14 +146,14 @@ def test_noncompliant_still_hits_somewhere(rule_name: str) -> None:
     cls = python_leaf_classes()[rule_name]
     rule = instantiate_rule(cls)
     assert not rule.unique_csmi_compliant
-    # Prefer designated covers for this rule; fall back to full corpus mols.
-    mols = [s for r, s in parity_rule_mol_cases([rule_name])] or list(PARITY_FUZZ_MOLS)
-    for smiles in mols:
+    # Sweep the full corpus: a non-compliant flag must still be justified by a
+    # hit somewhere, not only on designated CoverIntent mols for this rule.
+    for smiles in PARITY_FUZZ_MOLS:
         n_dup, n_warn = _csmi_dup_hits(rule, smiles)
         if n_dup > 0 or n_warn > 0:
             return
     raise AssertionError(
-        f"{rule_name} is unique_csmi_compliant=False but corpus has no "
+        f"{rule_name} is unique_csmi_compliant=False but PARITY_FUZZ_MOLS has no "
         f"CSMI dup / SiteDeduplicationWarning — set unique_csmi_compliant=True"
     )
 
