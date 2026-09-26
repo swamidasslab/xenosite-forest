@@ -303,6 +303,49 @@ aromatic scope; rule ↔ full-conj + must-match + correct `move_charge`). Then
 path-overlay is a materialization cleanup that unifies charge-follow with
 reactant overlays — not the product-set fix.
 
+## BCC / small-component Kekulé factorization (share crate)
+
+Status: **not approved** to drop in the share crate or to replace path
+discovery with its global CSP; **not decided** for (a) BCC-local state tables
+inside one conjugated system as an enumerator refinement, or (b) atom-demand /
+allowed charge states as *data* that standardizes parent bags.
+
+Share ([Kekulé Decomposition Rules](https://chatgpt.com/share/6ab82c0e-ed18-83ea-89fa-f908d31ecccd)):
+Kekulé = edge selection under atom demand; graph → biconnected edge
+components; each component summarized by boundary-atom usage; global
+compatibility is a CSP (“boundary use sums to demand”). Charge splitting is
+`add_atom_states` + `RequireNetCharge`. Claimed sizes: benzene 2, naphthalene
+3, pyrrole-like 1, Cp⁻ mobile skipped-site 5 at net −1. Local enum is
+exponential per component (bitmask guard; large fused blocks want matching/DP).
+
+**Efficiency claim (2–3 states each vs whole system):** true when a conjugated
+system *has articulations* (rings / chains joined at cut vertices) so the
+product of small BCC tables beats one perfect-matching over the whole block.
+Forest already avoids whole-molecule `2^n` phenyl products by assigning **one
+conjugated component** on demand (`SystemKey` / `ensure_kekule_parents`);
+biaryl singles do not join rings. Fused PAHs are usually one BCC — naphthalene
+stays 3 as a unit; factorization does not shrink that. Wins are oligomers and
+multi-ring drugs joined through conjugated bridges, not single fused cores.
+
+**Parent standardization:** atom-demand + allowed valence/charge states as
+schema is closer to “data, not branches” than today’s split (Python
+carbons-only `_write_assignment` vs Rust `atom_must_be_matched` + post-hoc
+`move_charge_with_bonds`). That *could* align bags if demands are named on
+the records both doors read. The share crate itself does not: no chematic/
+RDKit mol bridge, no aromatic-vs-conjugated door scope, no SMIRKS map seed.
+Door mismatch (pair conjugated ↔ RMS; pair aromatic ↔ ring-only; rule ↔
+full-conj) remains the parity blocker; BCC enum does not fix APAP
+neutral-amide vs `O−`/`N+` bags.
+
+**Path flipping:** the share enumerates valid global writings; it does not
+discover an odd alternating path between two ResonancePair ends. Replacing
+path discovery with “pick a CSP solution” stays **not approved** (same as
+ResonanceMolSupplier / re-kekulize above). BCC tables *could* support the
+already-not-decided path-constrained overlay: fix bond orders along the
+path, solve only BCCs that touch it, leave the rest. That is materialization
+cleanup after bags match — not a product-set fix and not a reason to vend
+the share zip into `xenosite-forest`.
+
 ## Chematic product-side ``#`` expand → organic aliphatic + aromatic
 
 Status: **approved** (forest apply workaround; upstream issue drafted).
