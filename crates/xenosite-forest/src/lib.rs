@@ -104,7 +104,7 @@ pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
     bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o, leave_oo,
-    merge_delta_formula, named_leave_formula,
+    merge_delta_formula, named_leave_formula, site_map_aromatic,
 };
 pub use rules::{all_rules, catalog_names, default_ruleset, leaf_rule, phase_one};
 pub use ruleset::{

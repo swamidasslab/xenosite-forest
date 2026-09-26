@@ -437,7 +437,9 @@ fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> A
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SiteShellCostOpts {
     /// When set, each atom also pays |Δaromatic| ∈ {0,1} between projected and
-    /// target (aromatic-bit mismatch). Off by default — still under trial.
+    /// target (aromatic-bit mismatch). Prefer on when the candidate's resolved
+    /// [`crate::pattern::Effect::dearomatizes`] is true (Epoxidation on
+    /// aromatic sites, DH/QF ends). Ablation may force it for all sites.
     pub dearomatic: bool,
 }
 
@@ -830,9 +832,10 @@ pub fn format_shell(shell: &Shell) -> String {
 mod tests {
     use super::*;
     use crate::atom_diff::atom_diff;
-    use crate::mol::parse_mol;
+    use crate::forest_mol::ForestMol;
+    use crate::mol::{atom_idx, parse_mol};
     use crate::rules::dehydrogenation;
-    use crate::rules::{dealkylation, hydroxylation};
+    use crate::rules::{dealkylation, epoxidation, hydroxylation};
 
     fn site_atoms_cand(c: &crate::candidate::Candidate) -> Vec<usize> {
         let mut atoms: Vec<usize> = c
@@ -1108,6 +1111,48 @@ mod tests {
         let joint = site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms);
         assert!(joint < 1e-12);
         let _ = solo;
+    }
+
+    #[test]
+    fn epoxidation_aromatic_residual_drops_with_dearomatic() {
+        let parent = ForestMol::parse("COc1ccc(O)cc1").unwrap();
+        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let ad = atom_diff(parent.mol(), &target);
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+        let set = epoxidation();
+        let c = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.site == 4)
+            .expect("epoxide at site 4");
+        assert!(
+            c.pattern.effect.dearomatizes,
+            "aromatic MeOPhOH site must resolve dearomatizes"
+        );
+        let atoms = site_atoms_cand(&c);
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let edit = edit_shells(&parent, &child);
+        let opts = SiteShellCostOpts {
+            dearomatic: c.pattern.effect.dearomatizes,
+        };
+        let before = site_shell_cost_opts(&cur, None, &tgt, &ad.mapping, &atoms, opts);
+        let after = site_shell_cost_opts(&cur, Some(&edit), &tgt, &ad.mapping, &atoms, opts);
+        assert!(
+            before > after + 1e-12,
+            "dearomatic residual should drop: {before:.3} → {after:.3}"
+        );
+        let shells_only = SiteShellCostOpts::default();
+        let before_s = site_shell_cost_opts(&cur, None, &tgt, &ad.mapping, &atoms, shells_only);
+        let after_s =
+            site_shell_cost_opts(&cur, Some(&edit), &tgt, &ad.mapping, &atoms, shells_only);
+        assert!(
+            (before_s - after_s).abs() < 1e-9,
+            "shells-only stays flat without PatternInfo dearomatizes: {before_s:.3} → {after_s:.3}"
+        );
     }
 
     #[test]

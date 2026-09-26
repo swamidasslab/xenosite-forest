@@ -1244,6 +1244,10 @@ pub fn sulfur_reduction() -> RuleSet {
 }
 
 /// `Epoxidation` from Python `xenosite.forest.rules`.
+///
+/// `dearomatizes` is capability: aromatic C=C/C=N epoxidation clears the ring
+/// bit at the site (shell residual needs |Δaromatic|). Resolved false on
+/// aliphatic matches via [`PatternInfo::resolve_for_match`].
 pub fn epoxidation() -> RuleSet {
     RuleSet::new(
         Some("Epoxidation".into()),
@@ -1257,7 +1261,7 @@ pub fn epoxidation() -> RuleSet {
                 removes: None,
                 cleaves: false,
                 methide: false,
-                dearomatizes: false,
+                dearomatizes: true,
                 leave_count: None,
                 partner: None,
                 ..Default::default()
@@ -1946,6 +1950,45 @@ mod tests {
             );
         }
         assert_eq!(hydroxylation().patterns()[0].search_bias, 0);
+    }
+
+    #[test]
+    fn epoxidation_dearomatizes_capability_resolves_on_aromatic_site() {
+        let set = epoxidation();
+        let info = &set.patterns()[0];
+        assert!(
+            info.effect.dearomatizes,
+            "catalog capability must declare dearomatizes"
+        );
+
+        let benzene = parse_mol("c1ccccc1").unwrap();
+        let arom = set
+            .candidates(&benzene)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!arom.is_empty(), "{arom:?}");
+        assert!(
+            arom.iter().all(|c| c.pattern.effect.dearomatizes),
+            "aromatic site resolves dearomatizes; got {:?}",
+            arom.iter()
+                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .collect::<Vec<_>>()
+        );
+
+        let ethene = parse_mol("C=C").unwrap();
+        let aliph = set
+            .candidates(&ethene)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!aliph.is_empty(), "{aliph:?}");
+        assert!(
+            aliph.iter().all(|c| !c.pattern.effect.dearomatizes),
+            "aliphatic site resolves dearomatizes=false; got {:?}",
+            aliph
+                .iter()
+                .map(|c| (c.site, c.pattern.effect.dearomatizes))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

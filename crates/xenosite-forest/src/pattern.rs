@@ -5,6 +5,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::mol::{Molecule, atom_idx};
+
 /// What kind of site this pattern names. Discovery indexes follow this.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SiteKind {
@@ -344,6 +346,21 @@ impl PatternInfo {
         self
     }
 
+    /// Resolve match-time [`Effect`] bits against the **context** mol.
+    ///
+    /// Catalog [`Effect::dearomatizes`] is capability (same as ResonancePair
+    /// ends). The resolved bit is true only when some [`Self::site_map`] atom
+    /// is aromatic on `mol` — Python `resolve_effect` /
+    /// `merge_effects(..., system_aromatic)`. Call with the aromatic parent,
+    /// not a Kekulé supplier form (flags may be cleared there).
+    pub fn resolve_for_match(&self, mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Self {
+        let mut out = self.clone();
+        if out.effect.dearomatizes {
+            out.effect.dearomatizes = site_map_aromatic(mol, mapped, &out.site_map);
+        }
+        out
+    }
+
     /// First map in [`Self::site_map`], or 1.
     pub fn primary_map(&self) -> u16 {
         self.site_map.first().copied().unwrap_or(1)
@@ -362,6 +379,15 @@ impl PatternInfo {
             self.possibilities.iter().collect()
         }
     }
+}
+
+/// True when any [`PatternInfo::site_map`] atom is aromatic on `mol`.
+pub fn site_map_aromatic(mol: &Molecule, mapped: &BTreeMap<u16, usize>, site_map: &[u16]) -> bool {
+    site_map.iter().any(|m| {
+        mapped
+            .get(m)
+            .is_some_and(|&i| mol.atom(atom_idx(i)).aromatic)
+    })
 }
 
 /// How cleavage sides participate in cross-rule Or fold keys.

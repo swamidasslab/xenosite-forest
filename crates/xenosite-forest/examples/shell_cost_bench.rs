@@ -129,9 +129,9 @@ impl Mode {
         parts.join(" ")
     }
 
-    fn opts(self) -> SiteShellCostOpts {
+    fn opts_for_effect(self, dearomatizes: bool) -> SiteShellCostOpts {
         SiteShellCostOpts {
-            dearomatic: self.aromatic_delta,
+            dearomatic: self.aromatic_delta || dearomatizes,
         }
     }
 }
@@ -192,6 +192,8 @@ struct FnHit {
 }
 
 fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
+    // PatternInfo.site_map only — same atoms as candidate_could_help / emit.
+    // Unique-edit orbit is the collapsed class of primary-map hits, not the site.
     let mut atoms: Vec<usize> = c
         .pattern
         .site_map
@@ -200,9 +202,6 @@ fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
         .collect();
     if atoms.is_empty() {
         atoms.push(c.site);
-    }
-    for &i in &c.orbit {
-        atoms.push(i);
     }
     atoms.sort_unstable();
     atoms.dedup();
@@ -233,21 +232,33 @@ fn residual(
     tgt: &xenosite_forest::MoleculeShells,
     map: &std::collections::BTreeMap<usize, usize>,
     atoms: &[usize],
+    dearomatizes: bool,
 ) -> f64 {
-    site_shell_cost_opts(cur, delta, tgt, map, atoms, mode.opts())
+    site_shell_cost_opts(
+        cur,
+        delta,
+        tgt,
+        map,
+        atoms,
+        mode.opts_for_effect(dearomatizes),
+    )
 }
 
 fn residual_after_edit(
     mode: Mode,
     parent: &ForestMol,
     child: &ForestMol,
-    cur: &xenosite_forest::MoleculeShells,
-    tgt: &xenosite_forest::MoleculeShells,
+    shells: (
+        &xenosite_forest::MoleculeShells,
+        &xenosite_forest::MoleculeShells,
+    ),
     map: &std::collections::BTreeMap<usize, usize>,
     atoms: &[usize],
+    dearomatizes: bool,
 ) -> f64 {
+    let (cur, tgt) = shells;
     let edit = edit_shells(parent, child);
-    residual(mode, Some(&edit), cur, tgt, map, atoms)
+    residual(mode, Some(&edit), cur, tgt, map, atoms, dearomatizes)
 }
 
 fn site_cost_legacy(mode: Mode, align: &xenosite_forest::AlignedShells, atoms: &[usize]) -> f64 {
@@ -285,26 +296,32 @@ fn eval_suite(
 
         let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
 
-        for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
+        for c in set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+        {
             let leave_n = c.pattern.effect.leave_count.map(|n| n as usize);
             let atoms = expand_atoms(
-                &ra,
+                parent.mol(),
                 &site_atoms_cand(&c),
                 mode.leave && c.pattern.effect.cleaves,
                 leave_n,
                 &ad.cleavage_bonds,
             );
-            let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
+            let gate = candidate_could_help_on(&c, &ad, Some(parent.mol()), Some(&rb));
+            let dear = c.pattern.effect.dearomatizes;
             let (score, rank_cost) = if proj {
-                let before = residual(mode, None, &cur, &tgt, &map, &atoms);
-                let Ok(pieces) = c.materialize_mols(&ra) else {
+                let before = residual(mode, None, &cur, &tgt, &map, &atoms, dear);
+                let Ok(pieces) = c.materialize_mols(parent.mol()) else {
                     continue;
                 };
                 if pieces.is_empty() {
                     continue;
                 }
                 let child = parent.adopt_product(pieces[0].clone());
-                let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
+                let after =
+                    residual_after_edit(mode, &parent, &child, (&cur, &tgt), &map, &atoms, dear);
                 let keep = before > after + 1e-12;
                 if collect_fn && gate && !keep {
                     fns.push(FnHit {
@@ -333,24 +350,26 @@ fn eval_suite(
         }
 
         for p in set
-            .pair_candidates(&ra)
+            .pair_candidates(parent.mol())
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
         {
             let mut atoms = p.plan_site_atoms();
             atoms.sort_unstable();
             atoms.dedup();
-            let gate = pair_could_help(&p, &ad, &ra, &rb);
+            let gate = pair_could_help(&p, &ad, parent.mol(), &rb);
+            let dear = p.effect.dearomatizes;
             let (score, rank_cost) = if proj {
-                let before = residual(mode, None, &cur, &tgt, &map, &atoms);
-                let Ok(pieces) = p.materialize_mols(&ra) else {
+                let before = residual(mode, None, &cur, &tgt, &map, &atoms, dear);
+                let Ok(pieces) = p.materialize_mols(parent.mol()) else {
                     continue;
                 };
                 if pieces.is_empty() {
                     continue;
                 }
                 let child = parent.adopt_product(pieces[0].clone());
-                let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
+                let after =
+                    residual_after_edit(mode, &parent, &child, (&cur, &tgt), &map, &atoms, dear);
                 let keep = before > after + 1e-12;
                 if collect_fn && gate && !keep {
                     fns.push(FnHit {

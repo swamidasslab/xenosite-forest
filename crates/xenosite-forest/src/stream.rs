@@ -144,10 +144,11 @@ pub(crate) fn pattern_candidate_batch(
             let Some(&site) = hit.mapped.get(&pattern.primary_map()) else {
                 continue;
             };
+            // Resolve on aromatic context `mol`, not the Kekulé form.
             out.push(Candidate {
                 site,
                 orbit: hit.orbit,
-                pattern: pattern.clone(),
+                pattern: pattern.resolve_for_match(mol, &hit.mapped),
                 rule_path: vec![set.name.clone()],
                 mapped: hit.mapped,
                 parent: ParentRef::Form(Box::new(forms[form_i].clone())),
@@ -161,7 +162,7 @@ pub(crate) fn pattern_candidate_batch(
             out.push(Candidate {
                 site,
                 orbit: hit.orbit,
-                pattern: pattern.clone(),
+                pattern: pattern.resolve_for_match(mol, &hit.mapped),
                 rule_path: vec![set.name.clone()],
                 mapped: hit.mapped,
                 parent: ParentRef::Context,
