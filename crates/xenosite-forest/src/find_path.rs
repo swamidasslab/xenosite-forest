@@ -252,6 +252,9 @@ pub enum MatchCombine {
     LinPNeg2C,
     /// Linear: Σ `−parent − 2·child`.
     LinNegPNeg2C,
+    /// Log costs, no improve clamp: Σ `−ln(1+child) − ln(1+parent)`.
+    /// Separates bad children; does not use `max(0, p−c)`.
+    LogNegPC,
 }
 
 /// Which distance(s) feed the match score.
@@ -317,6 +320,9 @@ impl MatchScoreSpec {
             (MatchCombine::LinNegPNeg2C, MatchMetric::Atom) => "lin-neg-p-neg2c-atom",
             (MatchCombine::LinNegPNeg2C, MatchMetric::Formula) => "lin-neg-p-neg2c-formula",
             (MatchCombine::LinNegPNeg2C, MatchMetric::Both) => "lin-neg-p-neg2c",
+            (MatchCombine::LogNegPC, MatchMetric::Atom) => "log-neg-pc-atom",
+            (MatchCombine::LogNegPC, MatchMetric::Formula) => "log-neg-pc-formula",
+            (MatchCombine::LogNegPC, MatchMetric::Both) => "log-neg-pc",
         }
     }
 
@@ -502,6 +508,34 @@ fn linear_cost_score(
     score
 }
 
+/// Σ `−ln(1+child) − ln(1+parent)` over active metrics (no `max(0,p−c)`).
+fn log_neg_pc_score(
+    parent_formula_dist: usize,
+    child_formula_dist: usize,
+    parent_atom_cost: Option<usize>,
+    child_atom_cost: Option<usize>,
+    metric: MatchMetric,
+) -> i64 {
+    let use_formula = matches!(metric, MatchMetric::Formula | MatchMetric::Both);
+    let use_atom = matches!(metric, MatchMetric::Atom | MatchMetric::Both);
+    let mut score = 0i64;
+    if use_formula {
+        score += neg_log1p_score(child_formula_dist) + neg_log1p_score(parent_formula_dist);
+    }
+    if use_atom {
+        match (parent_atom_cost, child_atom_cost) {
+            (Some(p), Some(c)) => {
+                score += neg_log1p_score(c) + neg_log1p_score(p);
+            }
+            (None, Some(c)) => {
+                score += neg_log1p_score(c);
+            }
+            _ => {}
+        }
+    }
+    score
+}
+
 pub fn hop_match_score(
     spec: MatchScoreSpec,
     parent_formula_dist: usize,
@@ -529,6 +563,15 @@ pub fn hop_match_score(
             spec.metric,
         );
     }
+    if matches!(spec.combine, MatchCombine::LogNegPC) {
+        return log_neg_pc_score(
+            parent_formula_dist,
+            child_formula_dist,
+            parent_atom_cost,
+            child_atom_cost,
+            spec.metric,
+        );
+    }
 
     let (imps, closes) = match_factors(
         parent_formula_dist,
@@ -548,7 +591,8 @@ pub fn hop_match_score(
         | MatchCombine::LinNegC
         | MatchCombine::LinNegPC
         | MatchCombine::LinPNeg2C
-        | MatchCombine::LinNegPNeg2C => unreachable!("handled above"),
+        | MatchCombine::LinNegPNeg2C
+        | MatchCombine::LogNegPC => unreachable!("handled above"),
     }
 }
 

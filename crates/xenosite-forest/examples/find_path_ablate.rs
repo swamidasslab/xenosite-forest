@@ -410,6 +410,17 @@ fn main() {
             },
         },
         Variant {
+            label: "log-neg-pc",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                heap_score: HeapScoreMode::Match(MatchScoreSpec {
+                    combine: MatchCombine::LogNegPC,
+                    metric: MatchMetric::Both,
+                }),
+                ..base_cfg
+            },
+        },
+        Variant {
             label: "no-skeleton",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {

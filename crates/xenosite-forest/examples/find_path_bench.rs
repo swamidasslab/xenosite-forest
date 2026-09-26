@@ -261,8 +261,12 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             combine: MatchCombine::LinNegPNeg2C,
             metric: MatchMetric::Both,
         }),
+        "log-neg-pc" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::LogNegPC,
+            metric: MatchMetric::Both,
+        }),
         other => panic!(
-            "unknown --score {other} (soft|add-both|product-both|lin-neg-c|lin-neg-pc|lin-p-neg2c|lin-neg-p-neg2c|…)"
+            "unknown --score {other} (soft|add-both|product-both|log-neg-pc|lin-*|…)"
         ),
     }
 }
