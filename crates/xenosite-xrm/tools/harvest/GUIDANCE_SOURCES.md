@@ -41,6 +41,7 @@ with SSSOM crosswalks.
 | **DrugBank** metabolites | Clinical xenobiotic examples | Licensed dump / scrape policy check |
 | **PubChem Pathway / BioAssay** | Additional example pairs | PUG + annotations |
 | **Swamidass papers** (Rainbow, Forest, quinone) | 21 types, quinone subtypes, Forest rulesets | Already mirrored in SKOS spines |
+| **Forest `rules.py` SMIRKS** (static text harvest) | Reactant/product SMARTS + pattern names for validation / candidate assignments | `tools/harvest_forest_smarts.py` → `data/candidates/forest-smarts.jsonl` (namer never imports forest) |
 
 ## Design rules when promoting
 

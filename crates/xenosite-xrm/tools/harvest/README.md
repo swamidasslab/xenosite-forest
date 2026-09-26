@@ -35,6 +35,10 @@ python3 crates/xenosite-xrm/tools/harvest/harvest_candidates.py \
   --out crates/xenosite-xrm/data/candidates/round-001.jsonl \
   --sources seed,chebi,pubchem,kegg,rhea,go,reactome
 
+# Forest SMIRKS/SMARTS (static text parse of rules.py — no RDKit, no namer import):
+python3 crates/xenosite-xrm/tools/harvest_forest_smarts.py
+# → data/candidates/forest-smarts.jsonl  (validation + promote-after-review)
+
 # Faster / offline-ish: seed + cached fixtures only
 python3 crates/xenosite-xrm/tools/harvest/harvest_candidates.py \
   --out crates/xenosite-xrm/data/candidates/seed-only.jsonl \
