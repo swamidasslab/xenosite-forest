@@ -116,6 +116,13 @@ fn products_from_apply(reactant: &str, leaf: &str) -> Vec<(String, f64)> {
     out
 }
 
+/// [M+H]⁺ after CSMI round-trip (matches hit / adopt sanitization).
+fn mz_of_sanitized(mol: &xenosite_forest::mol::Molecule, adduct: Ms1Adduct) -> Option<f64> {
+    let csmi = canon_smiles(mol);
+    let parsed = ForestMol::parse(&csmi).ok()?;
+    mz_of_mol(parsed.mol(), adduct)
+}
+
 /// Every emitted hit's product(s) must satisfy the target m/z.
 ///
 /// Replays each plan linearization: sole products must all lie within tol;
@@ -162,7 +169,7 @@ fn assert_hits_mz_ok(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64)
             }
             any_replay = true;
             if products.len() == 1 {
-                let pmz = mz_of_mol(&products[0], Ms1Adduct::MPlusH).expect("plan product mz");
+                let pmz = mz_of_sanitized(&products[0], Ms1Adduct::MPlusH).expect("plan product mz");
                 assert!(
                     mz_within(pmz, mz, tol_da),
                     "plan lin{li} product mz={pmz} outside tol of {mz}"
@@ -171,13 +178,13 @@ fn assert_hits_mz_ok(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64)
                 // Mass-identical isomers all at target, or cleavage leave
                 // fragments off-target (then hit species must appear at mz).
                 let all_at_target = products.iter().all(|p| {
-                    mz_of_mol(p, Ms1Adduct::MPlusH)
+                    mz_of_sanitized(p, Ms1Adduct::MPlusH)
                         .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
                 });
                 if !all_at_target {
                     let hit_ok = products.iter().any(|p| {
                         canon_smiles(p) == h.smiles
-                            && mz_of_mol(p, Ms1Adduct::MPlusH)
+                            && mz_of_sanitized(p, Ms1Adduct::MPlusH)
                                 .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
                     });
                     assert!(

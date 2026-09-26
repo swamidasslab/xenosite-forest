@@ -337,6 +337,16 @@ mod tests {
     };
     use crate::ruleset::RuleSet;
 
+    /// [M+H]⁺ after CSMI round-trip (matches hit / adopt sanitization).
+    ///
+    /// Raw `Step::apply` molecules can keep pre-aromatic H counts; scoring the
+    /// re-parsed CSMI aligns plan-replay mass with `ForestMol` products.
+    fn mz_of_sanitized(mol: &crate::mol::Molecule, adduct: Ms1Adduct) -> Option<f64> {
+        let csmi = canon_smiles(mol);
+        let parsed = ForestMol::parse(&csmi).ok()?;
+        mz_of_mol(parsed.mol(), adduct)
+    }
+
     /// Every emitted hit's product(s) must satisfy the target m/z.
     ///
     /// - `hit.smiles` and the last path-step product lie within `tol_da`.
@@ -409,7 +419,7 @@ mod tests {
                         continue;
                     }
                     if lin_products.len() == 1 {
-                        let pmz = mz_of_mol(&lin_products[0], Ms1Adduct::MPlusH).unwrap();
+                        let pmz = mz_of_sanitized(&lin_products[0], Ms1Adduct::MPlusH).unwrap();
                         assert!(
                             mz_within(pmz, mz, tol_da),
                             "plan lin{li} product mz={pmz} outside tol of {mz} (hit {})",
@@ -417,13 +427,13 @@ mod tests {
                         );
                     } else {
                         let all_at_target = lin_products.iter().all(|p| {
-                            mz_of_mol(p, Ms1Adduct::MPlusH)
+                            mz_of_sanitized(p, Ms1Adduct::MPlusH)
                                 .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
                         });
                         if !all_at_target {
                             let hit_ok = lin_products.iter().any(|p| {
                                 canon_smiles(p) == h.smiles
-                                    && mz_of_mol(p, Ms1Adduct::MPlusH)
+                                    && mz_of_sanitized(p, Ms1Adduct::MPlusH)
                                         .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
                             });
                             assert!(
