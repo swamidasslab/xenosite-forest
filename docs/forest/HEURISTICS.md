@@ -316,6 +316,16 @@ products Rust already got right (e.g. C16 QF N=C=X dealkylate) is also a
 signal when changing Kekulé / pair materialize or moving Python onto Rust
 Kekulé — do not “fix” parity by dropping Rust-ahead chemistry.
 
+**Python → Rust Kekulé (parents):** on a probe set (benzene, naphthalene,
+hydroquinone, anisole, PhNCO, pyridine, pyrrole) Rust `kekule_forms` counts
+match Python `ResonanceMolSupplier` / `_kekule_forms`. The demonstrable
+accuracy edge is **constraint materialize + closed-shell emit** (C16 PhNCO
+dealkylate leave + imine; Python path-flip only add_carbonyls), not parent
+bag cardinality. Status: **not decided** to replace Python
+`ResonanceMolSupplier` with Rust parents until a sanitize-drop / closed-shell
+/ no-regression delta on parent *use* is shown; prefer teaching Python the
+π-constraint pair path (or calling Rust) over a blind parent swap.
+
 The primitive is **not** “carbonyl chemistry.” Carbonyl is one instance of a
 small constraint vocabulary. Name these on `Edit` / Effect / PatternInfo data
 when needed; prefer perceiving them from the edited graph:
