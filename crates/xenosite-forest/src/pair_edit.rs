@@ -12,7 +12,7 @@ use chematic::perception::find_sssr;
 
 use crate::kekule::{
     KekuleConfig, KekuleConstraints, PiGraph, bond_order_sums, conjugated_component,
-    move_charge_with_bonds, with_atom_explicit_h,
+    move_charge_with_bonds,
 };
 use crate::mol::{ForestError, Molecule, aromatize, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
@@ -108,15 +108,6 @@ fn residual_pi_graph(
         }
     }
     PiGraph::new(keep, bonds)
-}
-
-fn bump_h(mol: &mut Molecule, atom: usize, delta: i8) {
-    let idx = atom_idx(atom);
-    // implicit_hydrogen_count already returns stored hydrogen_count when set.
-    let total = mol.implicit_hydrogen_count(idx) as i16 + delta as i16;
-    if total >= 0 {
-        *mol = with_atom_explicit_h(mol, idx, total as u8);
-    }
 }
 
 /// Capability OR, resolved against whether the conjugated system is aromatic.
@@ -390,6 +381,11 @@ impl PairCandidate {
         }
         let residual = residual_pi_graph(mol, &self.system, &saturate);
         let forced = residual.perceive_forced_doubles(&rw);
+        // keep+keep with nothing left to match (e.g. ethene path_end) would
+        // rebuild the reactant — refuse vacuous π work.
+        if forced.is_empty() && residual.bonds.is_empty() {
+            return Ok(Vec::new());
+        }
         let config = KekuleConfig::for_constraints();
         let constraints = KekuleConstraints::new()
             .with_forced(forced.clone())
@@ -448,8 +444,11 @@ impl PairCandidate {
                     product = product.with_atom_aromatic(atom_idx(atom), false);
                 }
             }
+            // Saturate sites: H from final bond orders (closed shell), not a
+            // blind +1 on top of the pre-match settle — that minted [CH3] on
+            // aromatic path_end hydrogenation (benzene → cyclohexadiene).
             for &atom in &saturate {
-                bump_h(&mut product, atom, 1);
+                fill_closed_shell_h(&mut product, atom);
             }
             move_charge_with_bonds(&mut product, &before, &was_aromatic);
             // Stamp surviving aromatic 2-core; leave the rest localized.
@@ -1096,6 +1095,34 @@ mod tests {
             aromatic.len(),
             6,
             "fused ring remains aromatic after partial collapse: {aromatic:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_benzene_path_end_emits_cyclohexadiene() {
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        assert!(!cands.is_empty(), "path_end pairs on benzene");
+        let want_13 = canon_of("C1=CCC=CC1").unwrap();
+        let want_14 = canon_of("C1=CCCC=C1").unwrap();
+        let products: Vec<String> = cands
+            .iter()
+            .flat_map(|c| c.materialize(&mol).unwrap_or_default())
+            .collect();
+        let csmi: Vec<_> = products
+            .iter()
+            .map(|p| canon_of(p).unwrap())
+            .collect();
+        assert!(
+            csmi.iter().any(|p| *p == want_13) && csmi.iter().any(|p| *p == want_14),
+            "benzene H path_end should emit both cyclohexadienes; got {products:?}"
         );
     }
 }
