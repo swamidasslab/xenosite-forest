@@ -13,9 +13,9 @@ use std::collections::BTreeSet;
 use std::time::Instant;
 
 use xenosite_forest::{
-    FindPathConfig, PathCounters, SiteShellCostOpts, aligned_shells, atom_diff,
-    candidate_could_help_on, find_path_with, molecule_shells, pair_could_help, parse_mol,
-    phase_one, site_atoms_with_leave, site_shell_cost_opts,
+    FindPathConfig, ForestMol, PathCounters, SiteShellCostOpts, aligned_shells, atom_diff,
+    candidate_could_help_on, edit_shells, find_path_with, molecule_shells, pair_could_help,
+    parse_mol, phase_one, site_atoms_with_leave, site_shell_cost_opts,
 };
 
 const MID: &[(&str, &str, &str)] = &[
@@ -80,12 +80,16 @@ enum CostKind {
     AtSitesLegacy,
     /// Current `at_sites().cost()` = Σ|δ| + cleaved + added.
     AtSitesCleaved,
-    /// Multiset Σ |current−target| via [`AtomNeighborhood::l1`] (raw site shell cost).
+    /// Multiset Σ |current−target| (δ=0).
     MultisetRaw,
-    /// Multiset Σ norm|current−target|; shells only.
+    /// Multiset Σ norm|current−target|; shells only (δ=0).
     MultisetNormShells,
-    /// Multiset Σ norm|current−target|; shells + |Δaromatic|.
+    /// Multiset Σ norm|current−target|; shells + |Δaromatic| (δ=0).
     MultisetNormDear,
+    /// Σ |current + editδ − target| (norm shells); keep iff residual drops vs δ=0.
+    EditResidualNorm,
+    /// Σ |current + editδ − target| (norm+dear); keep iff residual drops vs δ=0.
+    EditResidualDear,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,9 +111,11 @@ impl Mode {
         parts.push(match self.kind {
             CostKind::AtSitesLegacy => "at_sites Σ|δ| (legacy)",
             CostKind::AtSitesCleaved => "at_sites Σ|δ|+cleaved",
-            CostKind::MultisetRaw => "site_shell Σ|cur−tgt|",
-            CostKind::MultisetNormShells => "site_shell norm shells",
-            CostKind::MultisetNormDear => "site_shell norm+dear",
+            CostKind::MultisetRaw => "Σ|cur−tgt| (δ=0)",
+            CostKind::MultisetNormShells => "norm|cur−tgt| shells",
+            CostKind::MultisetNormDear => "norm|cur−tgt|+dear",
+            CostKind::EditResidualNorm => "Σ|cur+editδ−tgt| norm drop?",
+            CostKind::EditResidualDear => "Σ|cur+editδ−tgt| dear drop?",
         });
         if self.leave {
             parts.push("+leave");
@@ -272,14 +278,77 @@ fn site_cost(
             atoms,
             SiteShellCostOpts { dearomatic: true },
         ),
+        CostKind::EditResidualNorm | CostKind::EditResidualDear => {
+            // Caller must use residual_after_edit; placeholder.
+            multiset_raw_cost(cur, tgt, map, atoms)
+        }
+    }
+}
+
+fn residual_after_edit(
+    mode: Mode,
+    parent: &ForestMol,
+    child: &ForestMol,
+    cur: &xenosite_forest::MoleculeShells,
+    tgt: &xenosite_forest::MoleculeShells,
+    map: &std::collections::BTreeMap<usize, usize>,
+    atoms: &[usize],
+) -> f64 {
+    let edit = edit_shells(parent, child);
+    let dearomatic = matches!(mode.kind, CostKind::EditResidualDear);
+    site_shell_cost_opts(
+        cur,
+        Some(&edit),
+        tgt,
+        map,
+        atoms,
+        SiteShellCostOpts { dearomatic },
+    )
+}
+
+fn is_edit_residual(kind: CostKind) -> bool {
+    matches!(
+        kind,
+        CostKind::EditResidualNorm | CostKind::EditResidualDear
+    )
+}
+
+fn cost_now(
+    mode: Mode,
+    align: &xenosite_forest::AlignedShells,
+    cur: &xenosite_forest::MoleculeShells,
+    tgt: &xenosite_forest::MoleculeShells,
+    map: &std::collections::BTreeMap<usize, usize>,
+    atoms: &[usize],
+) -> f64 {
+    match mode.kind {
+        CostKind::EditResidualNorm => site_shell_cost_opts(
+            cur,
+            None,
+            tgt,
+            map,
+            atoms,
+            SiteShellCostOpts { dearomatic: false },
+        ),
+        CostKind::EditResidualDear => site_shell_cost_opts(
+            cur,
+            None,
+            tgt,
+            map,
+            atoms,
+            SiteShellCostOpts { dearomatic: true },
+        ),
+        _ => site_cost(mode, align, cur, tgt, map, atoms),
     }
 }
 
 fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
     let mut stats = GateStats::default();
     let set = phase_one();
+    let edit_mode = is_edit_residual(mode.kind);
     for &(_name, reactant, target) in cases {
         let ra = parse_mol(reactant).unwrap();
+        let parent = ForestMol::parse(reactant).unwrap();
         let rb = parse_mol(target).unwrap();
         let align = aligned_shells(&ra, &rb);
         let cur = molecule_shells(&ra);
@@ -298,8 +367,31 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
                 &ad.cleavage_bonds,
             );
             let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
-            let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
-            scored.push((cost, gate, atoms));
+            let (score, rank_cost) = if edit_mode {
+                let now = cost_now(mode, &align, &cur, &tgt, &map, &atoms);
+                let Ok(pieces) = c.materialize_mols(&ra) else {
+                    continue;
+                };
+                if pieces.is_empty() {
+                    continue;
+                }
+                let child = parent.adopt_product(pieces[0].clone());
+                let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
+                // Keep iff residual drops (current+δ closer to target than current).
+                let keep_score = if now > after + 1e-12 { 1.0 } else { 0.0 };
+                (keep_score, now - after)
+            } else {
+                let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
+                (cost, cost)
+            };
+            scored.push((rank_cost, gate, atoms));
+            let shell = score > 1e-12;
+            match (gate, shell) {
+                (true, true) => stats.tp += 1,
+                (false, false) => stats.tn += 1,
+                (false, true) => stats.fp += 1,
+                (true, false) => stats.fn_ += 1,
+            }
         }
         for p in set
             .pair_candidates(&ra)
@@ -310,12 +402,24 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
             atoms.sort_unstable();
             atoms.dedup();
             let gate = pair_could_help(&p, &ad, &ra, &rb);
-            let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
-            scored.push((cost, gate, atoms));
-        }
-
-        for &(cost, gate, _) in &scored {
-            let shell = cost > 1e-12;
+            let (score, rank_cost) = if edit_mode {
+                let now = cost_now(mode, &align, &cur, &tgt, &map, &atoms);
+                let Ok(pieces) = p.materialize_mols(&ra) else {
+                    continue;
+                };
+                if pieces.is_empty() {
+                    continue;
+                }
+                let child = parent.adopt_product(pieces[0].clone());
+                let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
+                let keep_score = if now > after + 1e-12 { 1.0 } else { 0.0 };
+                (keep_score, now - after)
+            } else {
+                let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
+                (cost, cost)
+            };
+            scored.push((rank_cost, gate, atoms));
+            let shell = score > 1e-12;
             match (gate, shell) {
                 (true, true) => stats.tp += 1,
                 (false, false) => stats.tn += 1,
@@ -324,7 +428,7 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
             }
         }
 
-        // hop0 rank among gate-kept (needs a path).
+        // hop0 rank among gate-kept (needs a path). Higher rank_cost = more progress.
         let mut counters = PathCounters::default();
         let config = FindPathConfig {
             max_nodes: 800,
@@ -350,7 +454,31 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
                     None,
                     &ad.cleavage_bonds,
                 );
-                let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
+                let hop_cost = site_cost(
+                    Mode {
+                        leave: mode.leave,
+                        kind: match mode.kind {
+                            CostKind::EditResidualNorm => CostKind::MultisetNormShells,
+                            CostKind::EditResidualDear => CostKind::MultisetNormDear,
+                            k => k,
+                        },
+                    },
+                    &align,
+                    &cur,
+                    &tgt,
+                    &map,
+                    &atoms,
+                );
+                // For edit-residual modes, rank by progress among gate-kept.
+                let hop_rank_val = if edit_mode {
+                    scored
+                        .iter()
+                        .find(|(_, g, a)| *g && a == &atoms)
+                        .map(|(c, _, _)| *c)
+                        .unwrap_or(0.0)
+                } else {
+                    hop_cost
+                };
                 let mut gate_costs: Vec<f64> = scored
                     .iter()
                     .filter(|(_, g, _)| *g)
@@ -359,7 +487,11 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
                 gate_costs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
                 if !gate_costs.is_empty() {
                     stats.known += 1;
-                    let rank = gate_costs.iter().filter(|&&c| c > cost + 1e-9).count() + 1;
+                    let rank = gate_costs
+                        .iter()
+                        .filter(|&&c| c > hop_rank_val + 1e-9)
+                        .count()
+                        + 1;
                     if rank == 1 {
                         stats.top1 += 1;
                     }
@@ -491,6 +623,20 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
                     kind: CostKind::MultisetNormDear,
                 },
             ));
+            out.push((
+                "+editδ residual-drop (norm)".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::EditResidualNorm,
+                },
+            ));
+            out.push((
+                "+editδ residual-drop (dear)".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::EditResidualDear,
+                },
+            ));
         }
         CostKind::MultisetNormShells => {
             out.push((
@@ -500,6 +646,13 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
                     kind: CostKind::MultisetNormDear,
                 },
             ));
+            out.push((
+                "+editδ residual-drop".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::EditResidualNorm,
+                },
+            ));
         }
         CostKind::MultisetNormDear => {
             out.push((
@@ -507,6 +660,31 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
                 Mode {
                     leave: base.leave,
                     kind: CostKind::MultisetNormShells,
+                },
+            ));
+            out.push((
+                "+editδ residual-drop".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::EditResidualDear,
+                },
+            ));
+        }
+        CostKind::EditResidualNorm => {
+            out.push((
+                "+dearomatic on residual".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::EditResidualDear,
+                },
+            ));
+        }
+        CostKind::EditResidualDear => {
+            out.push((
+                "−dearomatic on residual".into(),
+                Mode {
+                    leave: base.leave,
+                    kind: CostKind::EditResidualNorm,
                 },
             ));
         }
