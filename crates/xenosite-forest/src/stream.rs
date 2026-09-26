@@ -144,6 +144,7 @@ pub(crate) fn pattern_candidate_batch(
             let Some(&site) = hit.mapped.get(&pattern.primary_map()) else {
                 continue;
             };
+            // Resolve on aromatic context `mol`, not the Kekulé form.
             out.push(Candidate {
                 site,
                 orbit: hit.orbit,

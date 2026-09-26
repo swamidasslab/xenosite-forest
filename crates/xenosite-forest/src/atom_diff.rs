@@ -1,9 +1,10 @@
 //! Reactant→target local diff for candidate filtering.
 //!
 //! Parity door for Python `find_path.atom_diff` / `_site_could_help` /
-//! `_pattern_could_help`. Aligns via chematic MCS with `BondCompare::Any`
-//! (Python `rdFMCS` CompareAny). Multi-placement views merge so a step that
-//! helps any ring is not refused. Filters read [`crate::pattern::Effect`]
+//! `_pattern_could_help`. Aligns via [`mcs_extend`]: chematic MCS
+//! (`BondCompare::Any`) then placeable grow onto free same-element target
+//! atoms (same rules as lift extend). Multi-placement views merge so a step
+//! that helps any ring is not refused. Filters read [`crate::pattern::Effect`]
 //! on deferred candidates — no filter closures required.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -87,13 +88,19 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // MCS map gaps (×3) + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a
-        // cost term: `formula_l1` counts it like any element; H at atoms is via
+        // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a cost
+        // term: `formula_l1` counts it like any element; H at atoms is via
         // [`Self::atom_h_delta`] (no cache).
-        3 * self.cleaved.len()
-            + 3 * self.n_extra
-            + 3 * self.cleavage_bonds.len()
-            + self.aromatic_delta.len()
+        //
+        // `n_extra` (unmapped target heavies) weighs more than cleaved /
+        // cleavage_bonds so placing a missing atom is not cancelled 1:1 by
+        // opening a ring bond (ethene→epoxide toward a diol was lateral at ×3).
+        field_cost_parts(
+            self.cleaved.len(),
+            self.n_extra,
+            self.cleavage_bonds.len(),
+            self.aromatic_delta.len(),
+        )
     }
 
     /// Target−reactant H for `atom` under this view's primary mapping.
@@ -292,8 +299,43 @@ fn mapping_score(reactant: &Molecule, target: &Molecule, aligned: &BTreeMap<usiz
     score
 }
 
-/// All MCS placements: one alignment per distinct reactant atom set.
-fn mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
+/// All alignments: chematic MCS seed, then placeable extend on each placement.
+///
+/// This is the forest alignment door — [`atom_diff`] and lift rematch use it
+/// instead of raw MCS. Extend grows unmapped reactant heavies onto free
+/// same-element target atoms bonded to mapped neighbor images (and a
+/// single-neighbor fallback when the MCS left a multi-valent atom off a
+/// mono-valent partner, e.g. epoxide O → hydroxyl).
+pub fn mcs_extend(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
+    let seeds = mcs_seed_mappings(reactant, target);
+    if seeds.is_empty() {
+        return Vec::new();
+    }
+    let mut best: HashMap<BTreeSet<usize>, (usize, i32, BTreeMap<usize, usize>)> = HashMap::new();
+    for mut aligned in seeds {
+        extend_mapping_where_possible(reactant, target, &mut aligned);
+        if aligned.is_empty() {
+            continue;
+        }
+        let key: BTreeSet<usize> = aligned.keys().copied().collect();
+        let size = aligned.len();
+        let score = mapping_score(reactant, target, &aligned);
+        match best.get(&key) {
+            Some((held_size, held_score, _))
+                if *held_size > size || (*held_size == size && *held_score >= score) => {}
+            _ => {
+                best.insert(key, (size, score, aligned));
+            }
+        }
+    }
+    let mut ranked: Vec<_> = best.into_values().collect();
+    // Larger extended map first, then mapping_score.
+    ranked.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+    ranked.into_iter().map(|(_, _, m)| m).collect()
+}
+
+/// Chematic MCS placements only (no extend). Seed for [`mcs_extend`].
+fn mcs_seed_mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
     let cfg = McsConfig {
         bond_compare: BondCompare::Any,
         // match_bonds=false so the QueryMolecule embeds on both aromatic and
@@ -492,7 +534,7 @@ fn merge_views(mut views: Vec<AtomDiff>) -> AtomDiff {
 
 /// Pair reactant atoms with target atoms and record the local change.
 pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
-    let maps = mappings(reactant, target);
+    let maps = mcs_extend(reactant, target);
     if maps.is_empty() {
         return AtomDiff {
             reactant_heavy: heavy_atom_count(reactant),
@@ -570,8 +612,9 @@ fn unmapped_heavy_atoms(mol: &Molecule, mapping: &BTreeMap<usize, usize>) -> Vec
 /// unmapped heavies adjacent to the mapped core).
 ///
 /// Same placement rules as [`extend_mapping_for_added`]: free same-element
-/// target atoms bonded to every mapped neighbor image (with single-neighbor
-/// rematch when MCS orientation is flipped).
+/// target atoms bonded to mapped neighbor images (prefer every mapped
+/// neighbor; else any one — connected grow). Used by [`mcs_extend`] after
+/// every MCS seed and by lift.
 pub fn extend_mapping_where_possible(
     child: &Molecule,
     target: &Molecule,
@@ -596,7 +639,7 @@ pub fn extend_mapping_where_possible(
 /// 1. Extend each tag-lifted seed where the mapping gap is placeable.
 /// 2. If any extended map has `field_cost == 0`, keep it (guaranteed — skip MCS).
 /// 3. Otherwise do **not** Aut-chase or trust a non-zero lift — return a fresh
-///    MCS (caller counts `mcs_lift_rematch`). No double work.
+///    [`mcs_extend`] (caller counts `mcs_lift_rematch`). No double work.
 fn best_diff_from_lifted_maps(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
@@ -686,7 +729,27 @@ pub fn residual_cost_after_site_cast(
         aromatic_delta.retain(|a| !scope.contains(a));
     }
 
-    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len() + aromatic_delta.len()
+    field_cost_parts(
+        cleaved.len(),
+        n_extra,
+        cleavage_bonds.len(),
+        aromatic_delta.len(),
+    )
+}
+
+/// Weights for [`AtomDiff::field_cost`] / cast residual.
+///
+/// Cleaved and cleavage bonds stay at 3. Unmapped target heavies (`n_extra`) use
+/// 4 so a missing-atom fill is not cancelled by one new cleavage bond.
+fn field_cost_parts(
+    cleaved: usize,
+    n_extra: usize,
+    cleavage_bonds: usize,
+    aromatic_delta: usize,
+) -> usize {
+    const GAP: usize = 3;
+    const EXTRA: usize = 4;
+    GAP * cleaved + EXTRA * n_extra + GAP * cleavage_bonds + aromatic_delta
 }
 
 /// Heavy child atoms whose tags are not on `parent` (local additions).
@@ -789,6 +852,31 @@ fn place_added_atom(
         }
     }
     if let Some(&best) = direct.iter().min() {
+        return Some(best);
+    }
+
+    // Not adjacent to every mapped neighbor image (e.g. epoxide O → hydroxyl):
+    // place next to any one mapped neighbor — connected grow, same spirit as
+    // MCS with BondCompare::Any (extra child bonds need not exist on target).
+    let mut any_nbr = Vec::new();
+    for t_cand in 0..target.atom_count() {
+        if image.contains(&t_cand) {
+            continue;
+        }
+        if target.atom(atom_idx(t_cand)).element.atomic_number() != z {
+            continue;
+        }
+        let ok = mapped_nbrs.iter().any(|&n| {
+            let t_n = mapping[&n];
+            target
+                .bond_between(atom_idx(t_cand), atom_idx(t_n))
+                .is_some()
+        });
+        if ok {
+            any_nbr.push(t_cand);
+        }
+    }
+    if let Some(&best) = any_nbr.iter().min() {
         return Some(best);
     }
 
@@ -1748,6 +1836,118 @@ mod tests {
         assert!(
             !diff.loses_aromaticity.is_empty() || any_needs_oxygen(&target, &diff),
             "{diff:?}"
+        );
+    }
+
+    #[test]
+    fn epoxide_toward_diol_drops_with_heavier_n_extra() {
+        // C=C→OCCO: n_extra 2→1 and +1 cleavage_bond. Equal ×3 was lateral;
+        // EXTRA=4 makes placing the O win: 8 → 7.
+        use crate::forest_mol::ForestMol;
+        use crate::rules::epoxidation;
+        let parent = ForestMol::parse("C=C").unwrap();
+        let target = parse_mol("OCCO").unwrap();
+        let before = atom_diff(parent.mol(), &target);
+        assert_eq!(before.n_extra, 2);
+        assert!(before.cleavage_bonds.is_empty());
+        assert_eq!(before.cost(), 8, "2 n_extra ×4 = 8");
+        let c = epoxidation()
+            .candidates(parent.mol())
+            .next()
+            .unwrap()
+            .unwrap();
+        let epox = parent.adopt_product(c.materialize_mols(parent.mol()).unwrap()[0].clone());
+        let after = atom_diff(epox.mol(), &target);
+        assert_eq!(after.n_extra, 1, "{after:?}");
+        assert_eq!(after.cleavage_bonds.len(), 1, "{after:?}");
+        assert_eq!(after.cost(), 7, "1 n_extra ×4 + 1 bond ×3 = 7");
+        assert!(
+            after.cost() < before.cost(),
+            "epoxide hop must not be lateral: {} → {}",
+            before.cost(),
+            after.cost()
+        );
+    }
+
+    #[test]
+    fn ethene_to_glycol_two_step_with_atom_diff() {
+        use crate::find_path::{find_path_with, FindPathConfig, PathCounters};
+        use crate::rules::{epoxidation, epoxide_opening};
+        use crate::ruleset::RuleSet;
+        let eo = RuleSet::compose(Some("EO".into()), [epoxidation(), epoxide_opening()]);
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "C=C",
+            "OCCO",
+            &eo,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 50,
+                use_atom_diff: true,
+                ..Default::default()
+            },
+            |_| true,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(hits.len(), 1, "should reach glycol under atom_diff");
+        let rules: Vec<_> = hits[0]
+            .steps
+            .iter()
+            .map(|s| s.leaf_rule())
+            .collect();
+        assert_eq!(
+            rules,
+            [Some("Epoxidation"), Some("EpoxideOpening")],
+            "{rules:?}"
+        );
+    }
+
+    #[test]
+    fn epoxide_o_extends_onto_target_hydroxyl() {
+        // Epoxide product of MeOPhOH (site that was an FN under bare MCS primary).
+        let epox = parse_mol("O1C2(C=CC(=CC12)OC)O").unwrap();
+        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let maps = mcs_extend(&epox, &target);
+        assert!(!maps.is_empty(), "mcs_extend should return placements");
+        let primary = &maps[0];
+        let epoxide_o: Vec<usize> = epox
+            .atoms()
+            .filter_map(|(idx, a)| {
+                let i = atom_usize(idx);
+                (a.element.atomic_number() == 8 && epox.neighbors(atom_idx(i)).count() == 2)
+                    .then_some(i)
+            })
+            .collect();
+        assert!(
+            !epoxide_o.is_empty(),
+            "expected a degree-2 oxygen (epoxide)"
+        );
+        let mapped_epox_o = epoxide_o.iter().find(|&&i| primary.contains_key(&i));
+        assert!(
+            mapped_epox_o.is_some(),
+            "mcs_extend should map epoxide O onto a target O; primary O maps={:?}",
+            epox.atoms()
+                .filter(|(_, a)| a.element.atomic_number() == 8)
+                .map(|(idx, _)| {
+                    let i = atom_usize(idx);
+                    (i, primary.get(&i).copied())
+                })
+                .collect::<Vec<_>>()
+        );
+        let &eo = mapped_epox_o.unwrap();
+        let t = primary[&eo];
+        assert_eq!(
+            target.atom(atom_idx(t)).element.atomic_number(),
+            8,
+            "epoxide O should map to a target oxygen"
+        );
+        let diff = atom_diff(&epox, &target);
+        assert!(
+            diff.mapping.contains_key(&eo) || diff.mappings.iter().any(|m| m.contains_key(&eo)),
+            "atom_diff views should keep the extended epoxide O map"
         );
     }
 

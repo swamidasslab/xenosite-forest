@@ -346,6 +346,8 @@ impl PatternInfo {
         self
     }
 
+    /// Resolve match-time [`Effect`] bits against the **context** mol.
+    ///
     /// Catalog [`Effect::dearomatizes`] is capability (same as ResonancePair
     /// ends). The resolved bit is true only when some [`Self::site_map`] atom
     /// is aromatic on `mol` — Python `resolve_effect` /

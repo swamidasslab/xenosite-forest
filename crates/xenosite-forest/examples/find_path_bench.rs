@@ -14,7 +14,7 @@
 //! Flags: `--filter-only` (default), `--nofilter`, `--eager`, `--budget-secs N`
 //! (skip remaining rows once wall exceeds N; default 30 for filter, 60 with
 //! `--nofilter`), `--paths N` (emit up to N plans; default 1),
-//! `--score LABEL` (`soft` or `combine-metric` e.g. `product-both`),
+//! `--score LABEL` (`soft` or `combine-metric` e.g. `close×improve-both`),
 //! `--matrix` (run all 9 match variants + soft; summary ranked by miss/bill/time).
 //!
 //! Pair with:
@@ -203,9 +203,13 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
         "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
         "match" | "default" | "log-neg-pc" => HeapScoreMode::match_log_neg_pc(),
         "add" | "add-both" => HeapScoreMode::match_add(),
-        "product" | "product-both" | "match-product" => {
-            HeapScoreMode::Match(MatchScoreSpec::product_both())
-        }
+        "product"
+        | "product-both"
+        | "match-product"
+        | "close×improve"
+        | "close×improve-both"
+        | "close-x-improve"
+        | "close-x-improve-both" => HeapScoreMode::Match(MatchScoreSpec::product_both()),
         "close" | "dist" | "close-both" => HeapScoreMode::Match(MatchScoreSpec {
             combine: MatchCombine::Close,
             metric: MatchMetric::Both,
@@ -222,14 +226,18 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             combine: MatchCombine::Add,
             metric: MatchMetric::Formula,
         }),
-        "product-atom" => HeapScoreMode::Match(MatchScoreSpec {
-            combine: MatchCombine::Product,
-            metric: MatchMetric::Atom,
-        }),
-        "product-formula" => HeapScoreMode::Match(MatchScoreSpec {
-            combine: MatchCombine::Product,
-            metric: MatchMetric::Formula,
-        }),
+        "product-atom" | "close×improve-atom" | "close-x-improve-atom" => {
+            HeapScoreMode::Match(MatchScoreSpec {
+                combine: MatchCombine::Product,
+                metric: MatchMetric::Atom,
+            })
+        }
+        "product-formula" | "close×improve-formula" | "close-x-improve-formula" => {
+            HeapScoreMode::Match(MatchScoreSpec {
+                combine: MatchCombine::Product,
+                metric: MatchMetric::Formula,
+            })
+        }
         "close-atom" => HeapScoreMode::Match(MatchScoreSpec {
             combine: MatchCombine::Close,
             metric: MatchMetric::Atom,
@@ -263,7 +271,7 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             metric: MatchMetric::Both,
         }),
         other => panic!(
-            "unknown --score {other} (soft|add-both|product-both|log-neg-pc|lin-*|…)"
+            "unknown --score {other} (soft|add-both|product-both|log-neg-pc|close×improve-both|lin-*|…)"
         ),
     }
 }

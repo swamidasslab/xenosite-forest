@@ -1245,8 +1245,9 @@ pub fn sulfur_reduction() -> RuleSet {
 
 /// `Epoxidation` from Python `xenosite.forest.rules`.
 ///
-/// Catalog `dearomatizes` is capability; aliphatic matches resolve false via
-/// [`PatternInfo::resolve_for_match`].
+/// `dearomatizes` is capability: aromatic C=C/C=N epoxidation clears the ring
+/// bit at the site (shell residual needs |Δaromatic|). Resolved false on
+/// aliphatic matches via [`PatternInfo::resolve_for_match`].
 pub fn epoxidation() -> RuleSet {
     RuleSet::new(
         Some("Epoxidation".into()),

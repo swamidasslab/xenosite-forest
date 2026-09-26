@@ -52,7 +52,7 @@ pub use atom_diff::{
     candidate_could_help, candidate_could_help_on, candidate_order_key, candidate_order_key_on,
     dh_neighbors_match_any_view, dh_product_ends_match, extend_mapping_for_added,
     extend_mapping_where_possible, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
-    pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
+    mcs_extend, pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
     projected_unaligned_reductions, residual_cost_after_site_cast, site_h_progress,
     site_h_progress_best_placement, site_shell_forecast, try_atom_diff_for_child,
     try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked, try_lift_cleaved_child,
@@ -89,10 +89,11 @@ pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
-    SiteShellCostOpts, SiteShellMismatch, align_shells, atom_neighborhood, check_site_shell_bags,
-    edit_shells, edit_site_bag, forecast_site_bag, format_shell, molecule_shells, shell_l1,
-    shell_norm_l1, site_atoms_with_leave, site_delta_forecast, site_shell_cost,
-    site_shell_cost_best_map, site_shell_cost_opts,
+    SiteShellCostOpts, SiteShellMismatch, align_shells, aligned_shells_h_closer_no_n2,
+    atom_neighborhood, check_site_shell_bags, edit_shells, edit_site_bag, forecast_site_bag,
+    format_shell, molecule_shells, molecule_shells_h_closer_no_n2, neighborhood_h_closer_no_n2,
+    shell_l1, shell_norm_l1, site_atoms_with_leave, site_delta_forecast, site_shell_cost,
+    site_shell_cost_best_map, site_shell_cost_leave, site_shell_cost_opts,
 };
 pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
