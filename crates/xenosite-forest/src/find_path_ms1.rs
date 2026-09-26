@@ -861,6 +861,171 @@ mod tests {
         );
     }
 
+    /// One-hop span across Phase I leaves (oxidation, reduction, cleavage,
+    /// hydrolysis). Complements the hydroxylation / epoxide multi-hop cases.
+    #[test]
+    fn harder_span_one_hop_heteroatom_and_redox() {
+        assert_chain_in_ms1(
+            "CCS",
+            &sulfur_oxidation(),
+            &["SulfurOxidation"],
+            1,
+            &["SulfurOxidation"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "CN",
+            &nitrogen_oxidation(),
+            &["NitrogenOxidation"],
+            1,
+            &["NitrogenOxidation"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "CCO",
+            &dehydrogenation(),
+            &["Dehydrogenation"],
+            1,
+            &["Dehydrogenation"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "C#C",
+            &crate::rules::hydrogenation(),
+            &["Hydrogenation"],
+            1,
+            &["Hydrogenation"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "Clc1ccccc1",
+            &crate::rules::oxidative_dehalogenation(),
+            &["OxidativeDehalogenation"],
+            1,
+            &["OxidativeDehalogenation"],
+            2000,
+        );
+        assert_chain_in_ms1(
+            "Clc1ccccc1",
+            &crate::rules::reductive_dehalogenation(),
+            &["ReductiveDehalogenation"],
+            1,
+            &["ReductiveDehalogenation"],
+            2000,
+        );
+        assert_chain_in_ms1(
+            "CC(=O)OC",
+            &crate::rules::hydrolysis(),
+            &["Hydrolysis"],
+            1,
+            &["Hydrolysis"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "CCO",
+            &crate::rules::dehydration(),
+            &["Dehydration"],
+            1,
+            &["Dehydration"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "CS(=O)C",
+            &crate::rules::sulfur_reduction(),
+            &["SulfurReduction"],
+            1,
+            &["SulfurReduction"],
+            800,
+        );
+        assert_chain_in_ms1(
+            "O=Nc1ccccc1",
+            &crate::rules::nitrogen_reduction(),
+            &["NitrogenReduction"],
+            1,
+            &["NitrogenReduction"],
+            2000,
+        );
+        assert_chain_in_ms1(
+            "c1ccc2c(c1)C(=O)c1ccccc1C2=O",
+            &crate::rules::oxygen_reduction(),
+            &["OxygenReduction"],
+            1,
+            &["OxygenReduction"],
+            3000,
+        );
+        assert_chain_in_ms1(
+            "c1ccc2c(c1)OCO2",
+            &crate::rules::benzodioxole_reduction(),
+            &["BenzodioxoleReduction"],
+            1,
+            &["BenzodioxoleReduction"],
+            2000,
+        );
+    }
+
+    #[test]
+    fn harder_span_ethane_hydroxylation_then_dehydrogenation() {
+        assert_chain_in_ms1(
+            "CC",
+            &phase_one(),
+            &["Hydroxylation", "Dehydrogenation"],
+            2,
+            &["Hydroxylation", "Dehydrogenation"],
+            3000,
+        );
+    }
+
+    #[test]
+    fn harder_span_butene_epoxidation_then_opening() {
+        assert_chain_in_ms1(
+            "C/C=C/C",
+            &phase_one(),
+            &[
+                "Epoxidation",
+                "EpoxideOpening",
+                "EpoxideHydration",
+                "Hydroxylation",
+            ],
+            2,
+            &["Epoxidation", "EpoxideOpening"],
+            4000,
+        );
+    }
+
+    #[test]
+    fn harder_span_chlorobenzene_oxdehal_under_phase_one_or() {
+        assert_chain_in_ms1(
+            "Clc1ccccc1",
+            &phase_one(),
+            &[
+                "OxidativeDehalogenation",
+                "Hydroxylation",
+                "ReductiveDehalogenation",
+                "Epoxidation",
+            ],
+            1,
+            &["OxidativeDehalogenation"],
+            4000,
+        );
+    }
+
+    #[test]
+    fn harder_span_ethanethiol_sox_under_phase_one_or() {
+        assert_chain_in_ms1(
+            "CCS",
+            &phase_one(),
+            &[
+                "SulfurOxidation",
+                "Hydroxylation",
+                "Dehydrogenation",
+                "Dealkylation",
+            ],
+            1,
+            &["SulfurOxidation"],
+            3000,
+        );
+    }
+
     /// Deterministic regression corpus for the apply→MS1 property.
     /// Full proptest draw lives in `tests/ms1_apply_fuzz.rs`.
     #[test]
@@ -889,6 +1054,16 @@ mod tests {
             ("CN(C)c1ccccc1", "NDealkylation"),
             ("C=C", "Hydrogenation"),
             ("C#C", "Hydrogenation"),
+            ("Clc1ccccc1", "OxidativeDehalogenation"),
+            ("Clc1ccccc1", "ReductiveDehalogenation"),
+            ("CC(=O)OC", "Hydrolysis"),
+            ("CCO", "Dehydration"),
+            ("CS(=O)C", "SulfurReduction"),
+            ("O=Nc1ccccc1", "NitrogenReduction"),
+            ("c1ccc2c(c1)C(=O)c1ccccc1C2=O", "OxygenReduction"),
+            ("c1ccc2c(c1)OCO2", "BenzodioxoleReduction"),
+            ("Brc1ccccc1", "OxidativeDehalogenation"),
+            ("CC(=O)NCC", "Hydrolysis"),
         ];
         let mut checked = 0usize;
         for &(reactant, leaf) in cases {
@@ -903,7 +1078,7 @@ mod tests {
             checked += products.len();
         }
         assert!(
-            checked >= 20,
+            checked >= 28,
             "fuzz property covered too few products: {checked}"
         );
     }

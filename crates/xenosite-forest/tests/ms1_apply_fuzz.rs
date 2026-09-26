@@ -51,6 +51,14 @@ fn reactant_corpus() -> impl Strategy<Value = &'static str> {
         Just("COc1ccccc1"),
         Just("COc1ccc(OC)cc1"),
         Just("CC(O)C"),
+        Just("Clc1ccccc1"),
+        Just("Brc1ccccc1"),
+        Just("CC(=O)OC"),
+        Just("CC(=O)NCC"),
+        Just("CS(=O)C"),
+        Just("O=Nc1ccccc1"),
+        Just("c1ccc2c(c1)C(=O)c1ccccc1C2=O"),
+        Just("c1ccc2c(c1)OCO2"),
     ]
 }
 
@@ -67,6 +75,14 @@ fn leaf_corpus() -> impl Strategy<Value = &'static str> {
         Just("Dealkylation"),
         Just("NDealkylation"),
         Just("Hydrogenation"),
+        Just("OxidativeDehalogenation"),
+        Just("ReductiveDehalogenation"),
+        Just("Hydrolysis"),
+        Just("Dehydration"),
+        Just("SulfurReduction"),
+        Just("NitrogenReduction"),
+        Just("OxygenReduction"),
+        Just("BenzodioxoleReduction"),
     ]
 }
 
