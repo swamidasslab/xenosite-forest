@@ -168,3 +168,17 @@ run through the same expand / `order_key` / atom_diff / leave_count path as othe
 reactions. Redundancy collapse belongs in plan yield keys / Or-Maybe fold / a
 richer heap key, not a second cleavage predicate in the expansion loop.
 
+## find_path novel_site soft-demote + target_hit heap tier
+
+Status: approved.
+
+After a yield, expand soft-demoted hops whose pattern+site already appeared in a
+yielded path (`deprioritize_known_site`, heap `novel_site`, expand `order_key`
+bit, `PathCounters::deprioritized_known_site`). Ablation: demotion on roughly
+doubled hard multipath bill with no miss gain. Removed entirely — not an opt-in.
+
+Also dropped the separate `target_hit` bool on the heap key and the hit sentinel
+in `hop_match_score` / `hop_cost_gain`. A target hit is atom_diff cost 0 /
+formula distance 0; closeness already prefers it. Local `target_hit` remains for
+closer / seen / yield early-stop only.
+

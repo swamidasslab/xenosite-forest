@@ -122,7 +122,6 @@ struct Row {
     hits: usize,
     seconds: f64,
     billed: usize,
-    deprio: usize,
     drop_dup: usize,
     drop_exact: usize,
     drop_skel: usize,
@@ -134,7 +133,6 @@ struct Suite {
     misses: usize,
     total_bill: usize,
     total_secs: f64,
-    total_deprio: usize,
     total_drop_dup: usize,
     total_drop_exact: usize,
     total_drop_skel: usize,
@@ -179,7 +177,6 @@ fn run_one(
             hits: hits.len(),
             seconds,
             billed: counters.billed(),
-            deprio: counters.deprioritized_known_site,
             drop_dup: counters.dropped_duplicate_plan,
             drop_exact: counters.dropped_exact_plan,
             drop_skel: counters.dropped_skeleton_twin,
@@ -207,7 +204,6 @@ fn run_suite(
     let mut misses = 0;
     let mut total_bill = 0;
     let mut total_secs = 0.0;
-    let mut total_deprio = 0;
     let mut total_drop_dup = 0;
     let mut total_drop_exact = 0;
     let mut total_drop_skel = 0;
@@ -223,7 +219,6 @@ fn run_suite(
                     hits: 0,
                     seconds: 0.0,
                     billed: 0,
-                    deprio: 0,
                     drop_dup: 0,
                     drop_exact: 0,
                     drop_skel: 0,
@@ -234,7 +229,6 @@ fn run_suite(
         let row = run_one(reactant, target, rules, variant.config, repeats);
         total_secs += row.seconds;
         total_bill += row.billed;
-        total_deprio += row.deprio;
         total_drop_dup += row.drop_dup;
         total_drop_exact += row.drop_exact;
         total_drop_skel += row.drop_skel;
@@ -248,7 +242,6 @@ fn run_suite(
         misses,
         total_bill,
         total_secs,
-        total_deprio,
         total_drop_dup,
         total_drop_exact,
         total_drop_skel,
@@ -260,8 +253,8 @@ fn print_suite(suite: &Suite, detail: bool) {
     if detail {
         println!("\n=== {} ===", suite.label);
         println!(
-            "{:<32} {:>4} {:>5} {:>9} {:>6} {:>7} {:>8} {:>8} {:>8}",
-            "case", "hit", "hits", "seconds", "bill", "deprio", "drop_dup", "exact", "skel"
+            "{:<32} {:>4} {:>5} {:>9} {:>6} {:>8} {:>8} {:>8}",
+            "case", "hit", "hits", "seconds", "bill", "drop_dup", "exact", "skel"
         );
         for (name, row) in &suite.rows {
             if row.hits == 0 && row.seconds == 0.0 && !row.hit {
@@ -269,13 +262,12 @@ fn print_suite(suite: &Suite, detail: bool) {
                 continue;
             }
             println!(
-                "{:<32} {:>4} {:>5} {:>9.3} {:>6} {:>7} {:>8} {:>8} {:>8}",
+                "{:<32} {:>4} {:>5} {:>9.3} {:>6} {:>8} {:>8} {:>8}",
                 name,
                 if row.hit { "ok" } else { "MISS" },
                 row.hits,
                 row.seconds,
                 row.billed,
-                row.deprio,
                 row.drop_dup,
                 row.drop_exact,
                 row.drop_skel
@@ -287,22 +279,20 @@ fn print_suite(suite: &Suite, detail: bool) {
 fn print_summary(suites: &[Suite], baseline: &Suite) {
     println!("\n=== ablation summary (Δbill / Δsecs vs baseline) ===");
     println!(
-        "{:<18} {:>5} {:>8} {:>9} {:>8} {:>9} {:>7} {:>8} {:>8} {:>8}",
-        "variant", "miss", "bill", "Δbill", "seconds", "Δsecs", "deprio", "drop_dup", "exact",
-        "skel"
+        "{:<18} {:>5} {:>8} {:>9} {:>8} {:>9} {:>8} {:>8} {:>8}",
+        "variant", "miss", "bill", "Δbill", "seconds", "Δsecs", "drop_dup", "exact", "skel"
     );
     for s in suites {
         let db = s.total_bill as i64 - baseline.total_bill as i64;
         let ds = s.total_secs - baseline.total_secs;
         println!(
-            "{:<18} {:>5} {:>8} {:>+8} {:>9.3} {:>+9.3} {:>7} {:>8} {:>8} {:>8}",
+            "{:<18} {:>5} {:>8} {:>+8} {:>9.3} {:>+9.3} {:>8} {:>8} {:>8}",
             s.label,
             s.misses,
             s.total_bill,
             db,
             s.total_secs,
             ds,
-            s.total_deprio,
             s.total_drop_dup,
             s.total_drop_exact,
             s.total_drop_skel
@@ -375,14 +365,6 @@ fn main() {
                     combine: MatchCombine::Close,
                     metric: MatchMetric::Atom,
                 }),
-                ..base_cfg
-            },
-        },
-        Variant {
-            label: "with-novel",
-            rules: RulesKind::PhaseOne,
-            config: FindPathConfig {
-                deprioritize_known_site: true,
                 ..base_cfg
             },
         },

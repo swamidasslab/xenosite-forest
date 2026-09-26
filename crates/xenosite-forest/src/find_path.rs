@@ -47,9 +47,6 @@ pub struct PathCounters {
     /// Counted only — not used to drop or abort (that lever over-collapsed
     /// multipath; HEURISTICS).
     pub signal_contained_plan: usize,
-    /// Child walks enqueued with lower heap priority because the hop's
-    /// pattern+site already appears in a yielded path.
-    pub deprioritized_known_site: usize,
     /// Expand skipped: O-add then O-remove (or reverse) with **equal** site
     /// sets (orbit-aware for singletons). Allowed when sites differ.
     pub blocked_circular_oxygen: usize,
@@ -302,7 +299,7 @@ impl MatchScoreSpec {
     }
 }
 
-/// How the find_path frontier ranks walks (after `target_hit` / `novel_site`).
+/// How the find_path frontier ranks walks (score, then `seq`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeapScoreMode {
     /// Soft stack: `search_bias`, site H-progress, `cost_gain`, then `seq`.
@@ -336,18 +333,14 @@ impl HeapScoreMode {
 ///
 /// Per active metric: improvement = max(0, parent − child) + 1; closeness =
 /// `SCALE / (1 + child)`. Inactive metric factors are 1. Combine is close /
-/// improve / product. Target hit uses a sentinel above any finite score.
+/// improve / product. A target hit is just cost/formula 0 — no hit sentinel.
 pub fn hop_match_score(
     spec: MatchScoreSpec,
-    target_hit: bool,
     parent_formula_dist: usize,
     child_formula_dist: usize,
     parent_atom_cost: Option<usize>,
     child_atom_cost: Option<usize>,
 ) -> i64 {
-    if target_hit {
-        return i64::MAX / 4;
-    }
     const SCALE: i64 = 1_000_000;
     let use_formula = matches!(spec.metric, MatchMetric::Formula | MatchMetric::Both);
     let use_atom = matches!(spec.metric, MatchMetric::Atom | MatchMetric::Both);
@@ -391,7 +384,6 @@ pub fn hop_match_score(
 
 /// Convenience: [`MatchScoreSpec::product_both`] (default match recipe).
 pub fn hop_match_product_score(
-    target_hit: bool,
     parent_formula_dist: usize,
     child_formula_dist: usize,
     parent_atom_cost: Option<usize>,
@@ -399,7 +391,6 @@ pub fn hop_match_product_score(
 ) -> i64 {
     hop_match_score(
         MatchScoreSpec::product_both(),
-        target_hit,
         parent_formula_dist,
         child_formula_dist,
         parent_atom_cost,
@@ -409,7 +400,6 @@ pub fn hop_match_product_score(
 
 fn match_score_for(
     mode: HeapScoreMode,
-    target_hit: bool,
     parent_formula_dist: usize,
     child_formula_dist: usize,
     parent_atom_cost: Option<usize>,
@@ -419,7 +409,6 @@ fn match_score_for(
         HeapScoreMode::SoftStack => 0,
         HeapScoreMode::Match(spec) => hop_match_score(
             spec,
-            target_hit,
             parent_formula_dist,
             child_formula_dist,
             parent_atom_cost,
@@ -428,17 +417,13 @@ fn match_score_for(
     }
 }
 
-/// Heap entry: hits first, then novel sites vs yielded plans, then the mode's
-/// soft score(s), then `seq` as a pure tiebreak. Pop is plain
-/// [`BinaryHeap::pop`] — best Ord value only (no DFS/BFS alternation).
-/// BinaryHeap is max-heap.
+/// Heap entry: mode score(s), then `seq` as a pure tiebreak. Target hits rank
+/// via atom_diff / formula closeness (cost 0), not a bool tier or score
+/// sentinel. Pop is plain [`BinaryHeap::pop`] — best Ord value only (no
+/// DFS/BFS alternation). BinaryHeap is max-heap.
 #[derive(Clone)]
 struct HeapItem {
     mode: HeapScoreMode,
-    target_hit: bool,
-    /// `false` when this hop's pattern+site already appears in a yielded path.
-    /// Deprioritize only — never drop or abort (HEURISTICS).
-    novel_site: bool,
     /// SoftStack: from [`PatternInfo::search_bias`] (higher preferred).
     search_bias: i8,
     /// SoftStack: site H-progress vs parent diff (higher preferred).
@@ -454,8 +439,6 @@ struct HeapItem {
 impl PartialEq for HeapItem {
     fn eq(&self, other: &Self) -> bool {
         self.mode == other.mode
-            && self.target_hit == other.target_hit
-            && self.novel_site == other.novel_site
             && self.search_bias == other.search_bias
             && self.site_progress == other.site_progress
             && self.cost_gain == other.cost_gain
@@ -474,19 +457,16 @@ impl PartialOrd for HeapItem {
 
 impl Ord for HeapItem {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.target_hit
-            .cmp(&other.target_hit)
-            .then_with(|| self.novel_site.cmp(&other.novel_site))
-            .then_with(|| match self.mode {
-                HeapScoreMode::SoftStack => self
-                    .search_bias
-                    .cmp(&other.search_bias)
-                    .then_with(|| self.site_progress.cmp(&other.site_progress))
-                    .then_with(|| self.cost_gain.cmp(&other.cost_gain)),
-                HeapScoreMode::Match(_) => self.match_score.cmp(&other.match_score),
-            })
-            // Tiebreak only — higher seq preferred among equal scores.
-            .then_with(|| self.seq.cmp(&other.seq))
+        match self.mode {
+            HeapScoreMode::SoftStack => self
+                .search_bias
+                .cmp(&other.search_bias)
+                .then_with(|| self.site_progress.cmp(&other.site_progress))
+                .then_with(|| self.cost_gain.cmp(&other.cost_gain)),
+            HeapScoreMode::Match(_) => self.match_score.cmp(&other.match_score),
+        }
+        // Tiebreak only — higher seq preferred among equal scores.
+        .then_with(|| self.seq.cmp(&other.seq))
     }
 }
 
@@ -733,12 +713,9 @@ fn cost_closer(parent_cost: usize, child_cost: usize, target_hit: bool) -> bool 
 }
 
 /// Parent-relative atom_diff cost drop for the heap. Higher preferred.
-/// Target hit ranks above any finite gain. ≤0 counters DFS vs positive peers.
+/// ≤0 counters DFS vs positive peers. A target hit is just child_cost 0.
 /// Requires known costs — callers compute child diff when parent cost is known.
-fn hop_cost_gain(target_hit: bool, parent_cost: Option<usize>, child_cost: Option<usize>) -> i32 {
-    if target_hit {
-        return i32::MAX / 4;
-    }
+fn hop_cost_gain(parent_cost: Option<usize>, child_cost: Option<usize>) -> i32 {
     match (parent_cost, child_cost) {
         (Some(p), Some(c)) => p as i32 - c as i32,
         _ => 0,
@@ -758,12 +735,8 @@ pub struct FindPathConfig {
     /// Default **false**: child cost is already resolved at enqueue for heap
     /// `cost_gain`, so refuse non-closer there (DFS among improvers only).
     pub lazy_closer: bool,
-    /// Frontier ranking after hit / novel-site tiers.
+    /// Frontier ranking (score, then seq).
     pub heap_score: HeapScoreMode,
-    /// Soft-demote expand hops whose pattern+site already appears in a yielded
-    /// path (HEURISTICS novel_site). Default **false** — ablation showed it
-    /// burns hard multipath bill; set true to restore.
-    pub deprioritize_known_site: bool,
     /// Yield-drop remapped free-step twins via [`Deps::same_rule_maybe_skeleton`]
     /// beside exact [`Deps::same_linearizations`]. Ablation: set false for
     /// exact-only.
@@ -779,8 +752,6 @@ impl Default for FindPathConfig {
             use_atom_diff: true,
             lazy_closer: false,
             heap_score: HeapScoreMode::match_product(),
-            // Ablation: on hurt hard multipath bill; default off.
-            deprioritize_known_site: false,
             drop_skeleton_twins: true,
         }
     }
@@ -848,61 +819,6 @@ fn record_yield_plan_signals(
     if found.iter().any(|h| h.plan.dominates_extension_of(plan)) {
         counters.signal_contained_plan += 1;
     }
-}
-
-/// Pattern name → site atoms from already-yielded path steps (unique-edit
-/// orbit). Soft-demote matching expand hops — not prune. Key is pattern+site,
-/// not bare site or leaf rule (same atom under another pattern stays novel).
-fn yielded_plan_sites(found: &[PathOutcome]) -> std::collections::HashMap<String, HashSet<usize>> {
-    let mut out: std::collections::HashMap<String, HashSet<usize>> =
-        std::collections::HashMap::new();
-    for h in found {
-        for step in &h.steps {
-            let atoms = if step.site_orbit.is_empty() {
-                std::slice::from_ref(&step.site)
-            } else {
-                step.site_orbit.as_slice()
-            };
-            out.entry(step.pattern_name.clone())
-                .or_default()
-                .extend(atoms.iter().copied());
-        }
-    }
-    out
-}
-
-/// True when this hop's pattern + site (or unique-edit orbit) is absent from
-/// yielded plans. Empty `known` → always novel.
-fn hop_site_is_novel(
-    pattern_name: &str,
-    site: usize,
-    site_orbit: &[usize],
-    known: &std::collections::HashMap<String, HashSet<usize>>,
-) -> bool {
-    if known.is_empty() {
-        return true;
-    }
-    let Some(atoms) = known.get(pattern_name) else {
-        return true;
-    };
-    let site_atoms: &[usize] = if site_orbit.is_empty() {
-        std::slice::from_ref(&site)
-    } else {
-        site_orbit
-    };
-    !site_atoms.iter().any(|a| atoms.contains(a))
-}
-
-fn emission_site_is_novel(
-    emission: &ForestEmission,
-    known: &std::collections::HashMap<String, HashSet<usize>>,
-) -> bool {
-    hop_site_is_novel(
-        &emission.pattern_name,
-        emission.site,
-        &emission.site_orbit,
-        known,
-    )
 }
 
 fn oxygen_site_from_parts(site: usize, orbit: &[usize], atoms: BTreeSet<usize>) -> OxygenSite {
@@ -1031,7 +947,6 @@ where
     K: Fn(&Candidate) -> bool,
 {
     let start = ForestMol::parse(reactant)?;
-    let start_csmi = start.csmi();
     let target_csmi = canon_of(target)?;
     let target_mol = parse_mol(&target_csmi)?;
     let target_ha = target_mol
@@ -1048,14 +963,11 @@ where
     let start_formula_dist = crate::forest::formula_l1(&start.formula(), &target_formula);
     heap.push(HeapItem {
         mode: config.heap_score,
-        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
-        novel_site: true,
         search_bias: 0,
         site_progress: 0,
         cost_gain: 0,
         match_score: match_score_for(
             config.heap_score,
-            start_csmi.as_ref() == target_csmi.as_str(),
             start_formula_dist,
             start_formula_dist,
             None,
@@ -1141,7 +1053,6 @@ where
             use_atom_diff,
             lazy_closer,
             heap_score,
-            deprioritize_known_site,
             drop_skeleton_twins,
         } = self.config;
 
@@ -1195,13 +1106,6 @@ where
             let mut hits_from_here = 0usize;
             // Cross-rule cleave Or: enqueue each (fold_key, continue_csmi) once.
             let mut seen_cleave_continues: HashSet<(CleaveFoldKey, String)> = HashSet::new();
-            // Empty map → hop_site_is_novel always true (ablation off).
-            let known_sites = if deprioritize_known_site {
-                yielded_plan_sites(&self.yielded)
-            } else {
-                std::collections::HashMap::new()
-            };
-            let mut deprio_known = 0usize;
             let mut unstable_csmi = 0usize;
             // Local: Expand already borrows `self.counters` for the loop.
             let mut mcs_lift_fb = 0usize;
@@ -1215,7 +1119,6 @@ where
                     target: &self.target_mol,
                     keep: &self.keep,
                     diff: diff.as_ref(),
-                    known_sites: &known_sites,
                     o_added: &walk.o_added,
                     o_removed: &walk.o_removed,
                 },
@@ -1235,7 +1138,6 @@ where
                         return Some(Err(e));
                     }
                 };
-                let novel_site = emission_site_is_novel(&emission, &known_sites);
                 let keeps = keep_fragments(
                     &walk.mol,
                     &emission.products,
@@ -1340,11 +1242,7 @@ where
                     steps.push(PathStep::from_emission(&emission, kept_csmi.clone(), sides));
                     let mut plan = walk.plan.clone();
                     plan.extend(emission.plan.iter().cloned());
-                    if !novel_site {
-                        deprio_known += 1;
-                    }
                     let cost_gain = hop_cost_gain(
-                        target_hit,
                         parent_cost,
                         child_diff.as_ref().map(|d| d.cost()),
                     );
@@ -1353,7 +1251,6 @@ where
                     let child_f = crate::forest::formula_l1(&kept.formula(), &self.target_formula);
                     let match_score = match_score_for(
                         heap_score,
-                        target_hit,
                         parent_f,
                         child_f,
                         parent_cost,
@@ -1362,8 +1259,6 @@ where
                     let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
                         mode: heap_score,
-                        target_hit,
-                        novel_site,
                         search_bias: emission.search_bias,
                         site_progress: emission.site_progress,
                         cost_gain,
@@ -1394,7 +1289,6 @@ where
                     break;
                 }
             }
-            self.counters.deprioritized_known_site += deprio_known;
             self.counters.unstable_csmi_key += unstable_csmi;
             self.counters.mcs_lift_fallback += mcs_lift_fb;
             self.counters.mcs_lift_rematch += mcs_lift_rm;
@@ -1466,7 +1360,6 @@ struct ExpandInput<'a, K> {
     target: &'a crate::Molecule,
     keep: &'a K,
     diff: Option<&'a crate::atom_diff::AtomDiff>,
-    known_sites: &'a std::collections::HashMap<String, HashSet<usize>>,
     o_added: &'a [OxygenSite],
     o_removed: &'a [OxygenSite],
 }
@@ -1501,7 +1394,6 @@ where
             target,
             keep,
             diff,
-            known_sites,
             o_added,
             o_removed,
         } = input;
@@ -1528,32 +1420,11 @@ where
         }
         if let Some(d) = diff {
             deferred.sort_by_key(|cand| {
-                let novel =
-                    hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
                 let (a, b, cname, h_prog, pname) =
                     crate::atom_diff::candidate_order_key_on(cand, d, Some(mol), Some(target));
-                // Novel pattern+site before those already in yielded plans.
                 // Higher search_bias first (negated so sort ascending prefers high).
                 // Then site H-progress (already negated in key: applying helps).
-                (
-                    a,
-                    b,
-                    cname,
-                    !novel as u8,
-                    -cand.pattern.search_bias,
-                    h_prog,
-                    pname,
-                )
-            });
-        } else if !known_sites.is_empty() {
-            deferred.sort_by_key(|cand| {
-                let novel =
-                    hop_site_is_novel(&cand.pattern.name, cand.site, &cand.orbit, known_sites);
-                (
-                    !novel as u8,
-                    -cand.pattern.search_bias,
-                    cand.pattern.name.clone(),
-                )
+                (a, b, cname, -cand.pattern.search_bias, h_prog, pname)
             });
         }
         Ok(Self {
@@ -1919,8 +1790,6 @@ where
     let ancestors = root_ancestors(&start);
     heap.push(HeapItem {
         mode: config.heap_score,
-        target_hit: start_csmi.as_ref() == target_csmi.as_str(),
-        novel_site: true,
         search_bias: 0,
         site_progress: 0,
         cost_gain: 0,
@@ -1987,7 +1856,6 @@ where
         let FindPathConfig {
             max_paths,
             max_nodes,
-            deprioritize_known_site,
             drop_skeleton_twins,
             ..
         } = self.config;
@@ -2022,11 +1890,6 @@ where
             let mol = walk.mol.mol();
             self.counters.expansions += 1;
             let mut hits_from_here = 0usize;
-            let known_sites = if deprioritize_known_site {
-                yielded_plan_sites(&self.yielded)
-            } else {
-                std::collections::HashMap::new()
-            };
 
             // Pull metabolize one emission at a time — no full list.
             let emissions =
@@ -2041,12 +1904,6 @@ where
                     }
                 };
                 self.counters.mol_edits += 1;
-                let novel_site = hop_site_is_novel(
-                    &emission.pattern_name,
-                    emission.site,
-                    &emission.site_orbit,
-                    &known_sites,
-                );
                 // Filter-path emissions are CSMI strings (no tag continuity). Prefer
                 // find_path_with + Candidate materialize for tagged walks.
                 let products: Result<Vec<_>, _> = emission
@@ -2116,14 +1973,9 @@ where
                     });
                     let mut plan = walk.plan.clone();
                     plan.extend(emission.plan.iter().cloned());
-                    if !novel_site {
-                        self.counters.deprioritized_known_site += 1;
-                    }
                     let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
                         mode: self.config.heap_score,
-                        target_hit,
-                        novel_site,
                         search_bias: emission.search_bias,
                         site_progress: 0,
                         // No atom_diff on this path — HA closer already gated.
@@ -2174,8 +2026,6 @@ mod tests {
         // Among equal soft scores, higher seq pops first (Ord tiebreak).
         let older = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2196,8 +2046,6 @@ mod tests {
         };
         let newer = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2229,8 +2077,6 @@ mod tests {
         };
         let mk = |seq| HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2253,8 +2099,6 @@ mod tests {
         // Good scores override DFS: demoted bias loses even if enqueued later.
         let demoted = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: -1,
             site_progress: 0,
             cost_gain: 1,
@@ -2275,8 +2119,6 @@ mod tests {
         };
         let preferred = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2296,8 +2138,6 @@ mod tests {
         // Site H-progress overrides DFS among equal search_bias.
         let low = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2318,8 +2158,6 @@ mod tests {
         };
         let high = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 2,
             cost_gain: 1,
@@ -2339,8 +2177,6 @@ mod tests {
         // Non-positive cost_gain loses to an older positive peer despite LIFO.
         let flat_newer = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 0,
@@ -2361,8 +2197,6 @@ mod tests {
         };
         let gain_older = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2383,8 +2217,6 @@ mod tests {
     fn heap_prefers_larger_cost_gain_over_seq() {
         let small_newer = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 1,
@@ -2405,8 +2237,6 @@ mod tests {
         };
         let big_older = HeapItem {
             mode: HeapScoreMode::SoftStack,
-            target_hit: false,
-            novel_site: true,
             search_bias: 0,
             site_progress: 0,
             cost_gain: 3,
@@ -2423,25 +2253,26 @@ mod tests {
 
     #[test]
     fn hop_cost_gain_is_parent_minus_child() {
-        assert!(hop_cost_gain(true, Some(5), Some(5)) > hop_cost_gain(false, Some(5), Some(0)));
-        assert_eq!(hop_cost_gain(false, Some(5), Some(4)), 1);
-        assert_eq!(hop_cost_gain(false, Some(5), Some(5)), 0);
-        assert_eq!(hop_cost_gain(false, Some(5), Some(6)), -1);
-        assert_eq!(hop_cost_gain(false, Some(5), None), 0);
+        assert_eq!(hop_cost_gain(Some(5), Some(0)), 5);
+        assert_eq!(hop_cost_gain(Some(5), Some(4)), 1);
+        assert_eq!(hop_cost_gain(Some(5), Some(5)), 0);
+        assert_eq!(hop_cost_gain(Some(5), Some(6)), -1);
+        assert_eq!(hop_cost_gain(Some(5), None), 0);
     }
 
     #[test]
     fn match_product_prefers_joint_improvement_and_closeness() {
         // Better atom+formula improvement at same closeness → higher score.
-        let flat = hop_match_product_score(false, 4, 4, Some(10), Some(10));
-        let better = hop_match_product_score(false, 4, 2, Some(10), Some(5));
+        let flat = hop_match_product_score(4, 4, Some(10), Some(10));
+        let better = hop_match_product_score(4, 2, Some(10), Some(5));
         assert!(better > flat, "better={better} flat={flat}");
         // Closer child beats farther at equal improvement.
-        let close = hop_match_product_score(false, 6, 4, Some(12), Some(10));
-        let far = hop_match_product_score(false, 8, 6, Some(14), Some(12));
+        let close = hop_match_product_score(6, 4, Some(12), Some(10));
+        let far = hop_match_product_score(8, 6, Some(14), Some(12));
         // Both improve by 2 formula + 2 atom; closer residual wins.
         assert!(close > far, "close={close} far={far}");
-        assert!(hop_match_product_score(true, 9, 9, Some(9), Some(9)) > better);
+        // Exact match (cost/formula 0) outranks a partial improvement via closeness.
+        assert!(hop_match_product_score(9, 0, Some(9), Some(0)) > better);
     }
 
     #[test]
@@ -2464,22 +2295,22 @@ mod tests {
             metric: MatchMetric::Formula,
         };
         // Same residual, different hop gain: improve ranks the gain; close ties.
-        let gain = hop_match_score(improve_both, false, 8, 4, Some(20), Some(10));
-        let flat = hop_match_score(improve_both, false, 4, 4, Some(10), Some(10));
+        let gain = hop_match_score(improve_both, 8, 4, Some(20), Some(10));
+        let flat = hop_match_score(improve_both, 4, 4, Some(10), Some(10));
         assert!(gain > flat);
-        let close_a = hop_match_score(close_both, false, 8, 4, Some(20), Some(10));
-        let close_b = hop_match_score(close_both, false, 4, 4, Some(10), Some(10));
+        let close_a = hop_match_score(close_both, 8, 4, Some(20), Some(10));
+        let close_b = hop_match_score(close_both, 4, 4, Some(10), Some(10));
         assert_eq!(close_a, close_b, "close ignores hop gain at equal residual");
         // Atom-only ignores formula; formula-only ignores atom.
-        let atom = hop_match_score(product_atom, false, 0, 9, Some(10), Some(2));
-        let atom_same_a = hop_match_score(product_atom, false, 9, 0, Some(10), Some(2));
+        let atom = hop_match_score(product_atom, 0, 9, Some(10), Some(2));
+        let atom_same_a = hop_match_score(product_atom, 9, 0, Some(10), Some(2));
         assert_eq!(atom, atom_same_a);
-        let formula = hop_match_score(product_formula, false, 10, 2, Some(0), Some(9));
-        let formula_same_a = hop_match_score(product_formula, false, 10, 2, Some(9), Some(0));
+        let formula = hop_match_score(product_formula, 10, 2, Some(0), Some(9));
+        let formula_same_a = hop_match_score(product_formula, 10, 2, Some(9), Some(0));
         assert_eq!(formula, formula_same_a);
         // Default product-both still beats flat when both axes improve.
-        let joint = hop_match_score(both_product, false, 4, 2, Some(10), Some(5));
-        let joint_flat = hop_match_score(both_product, false, 4, 4, Some(10), Some(10));
+        let joint = hop_match_score(both_product, 4, 2, Some(10), Some(5));
+        let joint_flat = hop_match_score(both_product, 4, 4, Some(10), Some(10));
         assert!(joint > joint_flat);
         assert_eq!(MatchScoreSpec::matrix().len(), 9);
     }
@@ -3025,30 +2856,6 @@ mod tests {
         assert_eq!(counters.dropped_duplicate_plan, 0);
         assert_eq!(counters.dropped_skeleton_twin, 0);
         assert!(!plan_already_yielded(&found, &twin, false));
-    }
-
-    #[test]
-    fn hop_site_novel_reads_yielded_pattern_and_site() {
-        let found = vec![PathOutcome {
-            steps: vec![PathStep {
-                rule_path: vec![Some("Dealkylation".into())],
-                pattern_name: "O-Me".into(),
-                site: 3,
-                site_orbit: vec![3, 5],
-                product: "C".into(),
-                sides: vec![],
-            }],
-            plan: as_deps([]),
-            smiles: "C".into(),
-        }];
-        let known = yielded_plan_sites(&found);
-        // Same pattern + orbit atom → known.
-        assert!(!hop_site_is_novel("O-Me", 5, &[], &known));
-        // Same pattern, other site → novel.
-        assert!(hop_site_is_novel("O-Me", 9, &[], &known));
-        // Different pattern at same atom → novel.
-        assert!(hop_site_is_novel("N-Me", 3, &[], &known));
-        assert!(hop_site_is_novel("phenol", 3, &[], &known));
     }
 
     #[test]

@@ -162,7 +162,7 @@ fn dump(name: &str, start: &str, target: &str, lazy_closer: bool) {
         }
     }
     println!(
-        "hits={}  n_lin_sum={n_lin_sum}  same_lin_pairs={same_lin_pairs}  skeleton_pairs={skeleton_pairs}  nodes={}  mol_edits={}  drop_dup={}  drop_exact={}  drop_skel={}  signal_contained={}  deprio_site={}  unstable_csmi={}  plan_drops={}  wall={ms:.0} ms",
+        "hits={}  n_lin_sum={n_lin_sum}  same_lin_pairs={same_lin_pairs}  skeleton_pairs={skeleton_pairs}  nodes={}  mol_edits={}  drop_dup={}  drop_exact={}  drop_skel={}  signal_contained={}  unstable_csmi={}  plan_drops={}  wall={ms:.0} ms",
         hits.len(),
         counters.nodes,
         counters.mol_edits,
@@ -170,7 +170,6 @@ fn dump(name: &str, start: &str, target: &str, lazy_closer: bool) {
         counters.dropped_exact_plan,
         counters.dropped_skeleton_twin,
         counters.signal_contained_plan,
-        counters.deprioritized_known_site,
         counters.unstable_csmi_key,
         counters.plan_drops()
     );
