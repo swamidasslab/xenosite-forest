@@ -66,12 +66,12 @@ pub use atom_diff::{
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
-    ApplyN, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom,
-    Step, align_deps_indices, apply_n_distinct_products, apply_n_n_distinct_products, as_deps,
-    bind_deps, canonical_dependency_edges, eligible_sites_for_apply_n,
-    epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
-    identity_plan_at_indexes, identity_plan_with_orbit, label_at, plan_for_leaf,
-    quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
+    ApplyN, ApplyNEmitStats, ApplyNProduct, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps,
+    Linearization, Maybe, PlanAtom, Step, align_deps_indices, apply_n_distinct_products,
+    apply_n_emit_products, apply_n_n_distinct_products, as_deps, bind_deps,
+    canonical_dependency_edges, eligible_sites_for_apply_n, epoxide_hydration_canonical_plan,
+    identity_canonical_plan, identity_plan, identity_plan_at_indexes, identity_plan_with_orbit,
+    label_at, plan_for_leaf, quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
 };
 pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,

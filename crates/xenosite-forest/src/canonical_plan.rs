@@ -12,7 +12,7 @@
 //! Replay: [`Deps::linearizations`] → [`Linearization::apply`] through named
 //! elementary rules at resolved sites.
 
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::ops::Deref;
 
 use crate::ForestError;
@@ -443,69 +443,150 @@ pub fn eligible_sites_for_apply_n(
     Ok(eligible.into_iter().collect())
 }
 
-/// Apply each orbit-deduped site combination for `pool` under `ruleset`.
+/// One distinct ApplyN product plus the step plans that cover paths to it.
 ///
-/// For every combination, tries each linear order of sites; at each site picks
-/// the first arm candidate whose site lies in that atom's current orbit.
-/// Returns sorted unique product CSMIs (distinct products for the ApplyN count).
+/// Each [`Deps`] has free elementary steps (no precedes) for one Aut-deduped
+/// site combination. [`Deps::linearizations`] are the ordered paths; several
+/// plans appear only when distinct site combos collapse to the same CSMI.
+#[derive(Clone, Debug)]
+pub struct ApplyNProduct {
+    pub smiles: String,
+    pub plans: Vec<Deps>,
+}
+
+impl ApplyNProduct {
+    /// Sum of [`Deps::n_linearizations`] over covering plans.
+    pub fn n_covering_linearizations(&self) -> usize {
+        self.plans.iter().map(Deps::n_linearizations).sum()
+    }
+}
+
+/// Counts from [`apply_n_emit_products`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ApplyNEmitStats {
+    pub n_eligible_sites: usize,
+    pub n_combinations: usize,
+    pub n_products: usize,
+    pub n_plans: usize,
+    /// Σ plan linearizations (paths covered across all products).
+    pub n_covering_linearizations: usize,
+}
+
+/// Emit distinct products for `pool`, each with covering step plans.
+///
+/// **Efficient:** one materialize pass per Aut-deduped site combination (sorted
+/// tag order), not `k!` apply orders. Paths to a product are the free-plan
+/// linearizations on its covering [`Deps`] (and any extra combos that share
+/// the CSMI).
+pub fn apply_n_emit_products(
+    reactant: &str,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<(Vec<ApplyNProduct>, ApplyNEmitStats), ForestError> {
+    let start = crate::ForestMol::parse(reactant)?;
+    let eligible = eligible_sites_for_apply_n(start.mol(), ruleset, pool)?;
+    let combos = pool.site_combinations(start.mol(), &eligible);
+    let mut by_csmi: BTreeMap<String, Vec<Deps>> = BTreeMap::new();
+
+    for combo in &combos {
+        let mut tags: Vec<crate::labels::Tag> = combo
+            .iter()
+            .map(|&i| label_at(start.mol(), i))
+            .collect::<Result<_, _>>()?;
+        tags.sort_by_key(|t| t.0);
+        let Some((smiles, steps)) = apply_combo_sorted(&start, ruleset, pool, &tags)? else {
+            continue;
+        };
+        // Free plan: no precedes — linearizations cover all step orders.
+        let plan = Deps::bind(steps);
+        let entry = by_csmi.entry(smiles).or_default();
+        if !entry.iter().any(|p| p.same_linearizations(&plan)) {
+            entry.push(plan);
+        }
+    }
+
+    let products: Vec<ApplyNProduct> = by_csmi
+        .into_iter()
+        .map(|(smiles, plans)| ApplyNProduct { smiles, plans })
+        .collect();
+    let stats = ApplyNEmitStats {
+        n_eligible_sites: eligible.len(),
+        n_combinations: combos.len(),
+        n_products: products.len(),
+        n_plans: products.iter().map(|p| p.plans.len()).sum(),
+        n_covering_linearizations: products
+            .iter()
+            .map(ApplyNProduct::n_covering_linearizations)
+            .sum(),
+    };
+    Ok((products, stats))
+}
+
+/// Apply `tags` in given order; return product CSMI and elementary steps.
+fn apply_combo_sorted(
+    start: &crate::ForestMol,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+    tags: &[crate::labels::Tag],
+) -> Result<Option<(String, Vec<Step>)>, ForestError> {
+    let mut cur = start.clone();
+    let mut steps = Vec::with_capacity(tags.len());
+    for &tag in tags {
+        let Some(idx) = cur.index_of(tag) else {
+            return Ok(None);
+        };
+        let gens = cur.atom_bond_generators();
+        let n = cur.mol().atom_count();
+        let mut applied = false;
+        for cand in ruleset.candidates(cur.mol()) {
+            let cand = cand?;
+            let rule = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
+            if !pool.allows(rule) {
+                continue;
+            }
+            let wanted: HashSet<usize> = [idx].into_iter().collect();
+            let Some(cand) = remap_candidate_to_wanted(&cand, &wanted, &gens, n) else {
+                continue;
+            };
+            let pieces = cand.materialize_mols(cur.mol())?;
+            if pieces.is_empty() {
+                continue;
+            }
+            let piece = if cand.pattern.effect.cleaves && pieces.len() > 1 {
+                // Keep the largest fragment (MS1 continue side); leave goes to Maybe.
+                pieces
+                    .into_iter()
+                    .max_by_key(|p| p.atom_count())
+                    .expect("non-empty")
+            } else {
+                pieces.into_iter().next().expect("non-empty")
+            };
+            let orbit_labels: Vec<usize> = crate::orbits::atom_orbit_with_gens(&gens, n, idx)
+                .into_iter()
+                .filter_map(|i| cur.tag_of(i).map(|t| t.0 as usize))
+                .collect();
+            steps.push(
+                Step::new(rule, [PlanAtom::label(tag)]).with_orbit(orbit_labels),
+            );
+            cur = cur.adopt_product(piece);
+            applied = true;
+            break;
+        }
+        if !applied {
+            return Ok(None);
+        }
+    }
+    Ok(Some((cur.csmi().as_ref().to_string(), steps)))
+}
+
+/// Sorted unique product CSMIs for `pool` (see [`apply_n_emit_products`]).
 pub fn apply_n_distinct_products(
     reactant: &str,
     ruleset: &crate::ruleset::RuleSet,
     pool: &ApplyN,
 ) -> Result<Vec<String>, ForestError> {
-    let start = crate::ForestMol::parse(reactant)?;
-    let eligible = eligible_sites_for_apply_n(start.mol(), ruleset, pool)?;
-    let combos = pool.site_combinations(start.mol(), &eligible);
-    let mut products = BTreeSet::new();
-    for combo in combos {
-        // Tags pin sites across hops (indexes shuffle).
-        let tags: Vec<crate::labels::Tag> = combo
-            .iter()
-            .map(|&i| label_at(start.mol(), i))
-            .collect::<Result<_, _>>()?;
-        for order in permute_indices(tags.len()) {
-            let mut cur = start.clone();
-            let mut ok = true;
-            for &oi in &order {
-                let tag = tags[oi];
-                let Some(idx) = cur.index_of(tag) else {
-                    ok = false;
-                    break;
-                };
-                let gens = cur.atom_bond_generators();
-                let n = cur.mol().atom_count();
-                let mut applied = false;
-                for cand in ruleset.candidates(cur.mol()) {
-                    let cand = cand?;
-                    let rule = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
-                    if !pool.allows(rule) {
-                        continue;
-                    }
-                    let wanted: HashSet<usize> = [idx].into_iter().collect();
-                    let Some(cand) =
-                        remap_candidate_to_wanted(&cand, &wanted, &gens, n)
-                    else {
-                        continue;
-                    };
-                    let pieces = cand.materialize_mols(cur.mol())?;
-                    if pieces.is_empty() {
-                        continue;
-                    }
-                    cur = cur.adopt_product(pieces[0].clone());
-                    applied = true;
-                    break;
-                }
-                if !applied {
-                    ok = false;
-                    break;
-                }
-            }
-            if ok {
-                products.insert(cur.csmi().as_ref().to_string());
-            }
-        }
-    }
-    Ok(products.into_iter().collect())
+    let (products, _) = apply_n_emit_products(reactant, ruleset, pool)?;
+    Ok(products.into_iter().map(|p| p.smiles).collect())
 }
 
 /// Number of distinct products from [`apply_n_distinct_products`].
@@ -514,33 +595,7 @@ pub fn apply_n_n_distinct_products(
     ruleset: &crate::ruleset::RuleSet,
     pool: &ApplyN,
 ) -> Result<usize, ForestError> {
-    Ok(apply_n_distinct_products(reactant, ruleset, pool)?.len())
-}
-
-fn permute_indices(n: usize) -> Vec<Vec<usize>> {
-    if n == 0 {
-        return vec![Vec::new()];
-    }
-    let mut elems: Vec<usize> = (0..n).collect();
-    let mut out = Vec::new();
-    heap_permute(&mut elems, n, &mut out);
-    out
-}
-
-fn heap_permute(elems: &mut [usize], k: usize, out: &mut Vec<Vec<usize>>) {
-    if k == 1 {
-        out.push(elems.to_vec());
-        return;
-    }
-    heap_permute(elems, k - 1, out);
-    for i in 0..k - 1 {
-        if k % 2 == 0 {
-            elems.swap(i, k - 1);
-        } else {
-            elems.swap(0, k - 1);
-        }
-        heap_permute(elems, k - 1, out);
-    }
+    Ok(apply_n_emit_products(reactant, ruleset, pool)?.1.n_products)
 }
 
 impl Maybe {
@@ -2073,13 +2128,37 @@ mod tests {
         let eligible = eligible_sites_for_apply_n(mol.mol(), &set, &pool).unwrap();
         assert_eq!(eligible.len(), 6);
         assert_eq!(pool.n_combinations(mol.mol(), &eligible), 3);
-        let products = apply_n_distinct_products("c1ccccc1", &set, &pool).unwrap();
-        assert_eq!(
-            products.len(),
-            3,
-            "ortho/meta/para diols: {products:?}"
-        );
+        let (products, stats) = apply_n_emit_products("c1ccccc1", &set, &pool).unwrap();
+        assert_eq!(stats.n_combinations, 3);
+        assert_eq!(stats.n_products, 3, "{products:?}");
+        assert_eq!(products.len(), 3);
+        // Each product: one free 2-step plan → 2 linearizations (path orders).
+        for p in &products {
+            assert_eq!(p.plans.len(), 1, "{}", p.smiles);
+            assert_eq!(p.n_covering_linearizations(), 2, "{}", p.smiles);
+            assert!(
+                p.plans[0].reaches("c1ccccc1", &p.smiles).unwrap(),
+                "{} plan={:?}",
+                p.smiles,
+                p.plans[0]
+            );
+        }
+        assert_eq!(stats.n_covering_linearizations, 6);
         assert_eq!(apply_n_n_distinct_products("c1ccccc1", &set, &pool).unwrap(), 3);
+    }
+
+    #[test]
+    fn apply_n_emit_covers_paths_without_permuting_applies() {
+        // Ethane OH×2: one combo, one product; free plan has 2 lins.
+        let set = crate::rules::hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let (products, stats) = apply_n_emit_products("CC", &set, &pool).unwrap();
+        assert_eq!(stats.n_combinations, 1);
+        assert_eq!(stats.n_products, 1, "{:?}", products.iter().map(|p| &p.smiles).collect::<Vec<_>>());
+        assert_eq!(products[0].n_covering_linearizations(), 2);
+        let (n_lin, n_prod) = products[0].plans[0].replay_stats("CC").unwrap();
+        assert_eq!(n_lin, 2);
+        assert_eq!(n_prod, 1);
     }
 
     #[test]
