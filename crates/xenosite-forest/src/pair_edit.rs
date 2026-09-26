@@ -839,4 +839,121 @@ mod tests {
             "cleaving hop must name QuinoneFormation and list both fragments"
         );
     }
+
+    fn qf_pair_endpoints() -> Vec<PatternInfo> {
+        quinone_formation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn quinone_formation_declares_exclusive_partner_on_hetero_arms() {
+        let set = quinone_formation();
+        let by_name: std::collections::BTreeMap<_, _> = set
+            .patterns()
+            .into_iter()
+            .map(|p| (p.name.as_str(), p))
+            .collect();
+        for name in [
+            "single_to_double",
+            "replace_halogen",
+            "iminium",
+            "dealkylate",
+        ] {
+            let p = by_name.get(name).unwrap_or_else(|| panic!("missing {name}"));
+            assert!(
+                p.effect.exclusive_partner,
+                "{name} should set exclusive_partner"
+            );
+        }
+        let methide = by_name.get("methide_end").unwrap();
+        assert!(
+            !methide.effect.exclusive_partner,
+            "methide alkyl partner stays off exclusive_partner"
+        );
+        assert_eq!(methide.effect.partner.as_deref(), Some("C"));
+    }
+
+    #[test]
+    fn shared_exclusive_partner_detects_bridging_atom() {
+        let endpoints = qf_pair_endpoints();
+        let std = endpoints
+            .iter()
+            .find(|p| p.name == "single_to_double")
+            .unwrap();
+        assert!(std.effect.exclusive_partner);
+        // Site map 1 = ring C; map 2 = partner heteroatom. Same partner atom
+        // on both ends → refuse.
+        let mut map1 = BTreeMap::new();
+        map1.insert(1, 0);
+        map1.insert(2, 10);
+        let mut map2 = BTreeMap::new();
+        map2.insert(1, 5);
+        map2.insert(2, 10);
+        assert!(shared_exclusive_partner(&map1, std, &map2, std));
+        // Distinct partners (catechol-style) → allow.
+        map2.insert(2, 11);
+        assert!(!shared_exclusive_partner(&map1, std, &map2, std));
+    }
+
+    #[test]
+    fn bridging_n_pair_candidates_do_not_share_exclusive_partner() {
+        for smiles in [
+            "c1ccc(N(C)c2ccccc2)cc1",
+            "c1ccc2c(c1)Nc1ccccc1C2",
+            "c1ccc2c(c1)Nc1ccccc1O2",
+        ] {
+            let mol = parse_mol(smiles).unwrap();
+            let endpoints = qf_pair_endpoints();
+            let cands = pair_candidates(&mol, &endpoints).unwrap();
+            for c in &cands {
+                assert!(
+                    !shared_exclusive_partner(&c.map1, &c.left, &c.map2, &c.right),
+                    "{smiles}: survivor {} still shares exclusive partner",
+                    c.pattern_name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn catechol_identical_o_partners_still_emit() {
+        let mol = parse_mol("Oc1ccccc1O").unwrap();
+        let endpoints = qf_pair_endpoints();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let saw_phenol_pair = cands.iter().any(|c| {
+            c.left.effect.partner.as_deref() == Some("O")
+                && c.right.effect.partner.as_deref() == Some("O")
+                && c.left.effect.exclusive_partner
+                && c.right.effect.exclusive_partner
+        });
+        // Partner string may live only after resolve_effect — check PatternInfo
+        // on QF single_to_double: partner is None in Rust catalog (Python sets
+        // via possibilities). Distinct O atoms: maps differ on map 2.
+        let saw_distinct_o = cands.iter().any(|c| {
+            c.left.name == "single_to_double"
+                && c.right.name == "single_to_double"
+                && c.map1.get(&2) != c.map2.get(&2)
+                && c.map1.get(&2).is_some()
+                && c.map2.get(&2).is_some()
+        });
+        assert!(
+            saw_phenol_pair || saw_distinct_o,
+            "expected ortho catechol pair with distinct O partners; got {:?}",
+            cands
+                .iter()
+                .map(|c| (
+                    c.pattern_name.as_str(),
+                    c.map1.clone(),
+                    c.map2.clone(),
+                    c.left.effect.partner.clone(),
+                    c.right.effect.partner.clone(),
+                ))
+                .collect::<Vec<_>>()
+        );
+        assert!(!cands.is_empty(), "catechol should still emit pair candidates");
+    }
 }

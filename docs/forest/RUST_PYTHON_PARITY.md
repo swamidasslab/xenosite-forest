@@ -269,9 +269,9 @@ gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 | 15 | Product-identical distinct sites + Dealk other-side double-emit | **open** | C13 — not decided; options: ``product_equiv`` field vs SMARTS partition |
 | 16 | Chematic atom-tracking migrate; drop vendored patch | **blocked on parity** | TODO.md § After parity — pass tracking tests, remove `vendor/chematic` |
 | 17 | Centralize ForestMol cache + copy/edit behind ForestMol methods | **blocked on parity** | TODO.md § After parity — private-to-find-strays; keep user-visible cache |
-| 18 | ``exclusive_partner`` bridging N/O: tests + corpus + Rust↔Py parity | **in progress** | C14 — schema/gate landed; need unit tests, bridging-N/O corpus cover, confirm Rust couple refuse matches Python |
+| 18 | ``exclusive_partner`` bridging N/O: tests + corpus + Rust↔Py parity | **done** | C14 — Python ``test_exclusive_partner`` + Rust ``pair_edit`` refuse tests; corpus bridging N/O extras |
 | 19 | Shared methide alkyl partner (same CH2 bridge) | **open** | C14 deliberately leaves ``partner=="C"`` off; decide if chemistry needs its own Effect bit |
-| 20 | Pair-close / identical-partner corpus + meta-test green | **in progress** | ortho catechol/diamine/…; ``test_parity_fuzz_mols_cover_close_pair_ends`` |
+| 20 | Pair-close / identical-partner corpus + meta-test green | **done** | ortho catechol/diamine/…; ``test_parity_fuzz_mols_cover_close_pair_ends`` green |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):
 ``tests/forest/probe_d1_diff.py`` / ``artifacts/d1_*`` — Dealkylation-heavy;
