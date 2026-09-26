@@ -39,7 +39,21 @@ pub fn accept_product(mol: &Molecule) -> bool {
     if nitrogen_two_doubles(mol) {
         return false;
     }
+    if oxygen_oxonium(mol) {
+        return false;
+    }
     closed_shell(mol)
+}
+
+/// Protonated carbonyl / phenol oxonium (`=[OH+]`): closed-shell prefer
+/// neutral (HEURISTICS C10 — not a sanitize rescue, a refuse).
+fn oxygen_oxonium(mol: &Molecule) -> bool {
+    for (_idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() == 8 && atom.charge > 0 {
+            return true;
+        }
+    }
+    false
 }
 
 /// Organic C/N/O atoms have enough bonds+H for a closed shell (no radicals).

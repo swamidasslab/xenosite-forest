@@ -381,9 +381,50 @@ impl PairCandidate {
         }
         let residual = residual_pi_graph(mol, &self.system, &saturate);
         let forced = residual.perceive_forced_doubles(&rw);
-        // keep+keep with nothing left to match (e.g. ethene path_end) would
-        // rebuild the reactant — refuse vacuous π work.
+        // Two saturate ends sharing a bond (aldehyde C=O, ethene C=C): residual
+        // is empty, but the π bond between them must drop to single — path-end
+        // hydrogenation of a one-edge system. Vacuous keep+keep with *no* such
+        // edge still refuses (identity rebuild).
         if forced.is_empty() && residual.bonds.is_empty() {
+            if saturate.len() == 2 {
+                let mut ends = saturate.iter().copied();
+                let a = ends.next().unwrap();
+                let b = ends.next().unwrap();
+                if let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) {
+                    if matches!(bond.order, BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic)
+                    {
+                        let mut product = rw.clone();
+                        product.set_bond_order(
+                            bond_idx,
+                            if bond.order == BondOrder::Triple {
+                                BondOrder::Double
+                            } else {
+                                BondOrder::Single
+                            },
+                        );
+                        for &atom in &saturate {
+                            fill_closed_shell_h(&mut product, atom);
+                        }
+                        let parent_csmi = canon_smiles(mol);
+                        let checked = aromatize(&product);
+                        let mut products = Vec::new();
+                        let mut local_csmi = BTreeSet::new();
+                        for frag in checked.fragments() {
+                            if !accept_product(&frag) {
+                                continue;
+                            }
+                            let smiles = canon_smiles(&frag);
+                            if smiles == parent_csmi {
+                                continue;
+                            }
+                            if local_csmi.insert(smiles) {
+                                products.push(frag);
+                            }
+                        }
+                        return Ok(products);
+                    }
+                }
+            }
             return Ok(Vec::new());
         }
         let config = KekuleConfig::for_constraints();
@@ -1147,9 +1188,37 @@ mod tests {
             .iter()
             .flat_map(|c| c.materialize(&mol).unwrap_or_default())
             .collect();
+        let parent = canon_of("C=C").unwrap();
         assert!(
-            products.is_empty(),
+            products.iter().all(|p| canon_of(p).unwrap() != parent),
             "ethene path_end must not rebuild reactant; got {products:?}"
+        );
+        let ethane = canon_of("CC").unwrap();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == ethane),
+            "ethene path_end should saturate to ethane; got {products:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_acetaldehyde_path_end_emits_ethanol() {
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("CC=O").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let want = canon_of("CCO").unwrap();
+        let products: Vec<String> = cands
+            .iter()
+            .flat_map(|c| c.materialize(&mol).unwrap_or_default())
+            .collect();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == want),
+            "acetaldehyde path_end should emit ethanol; got {products:?}"
         );
     }
 }
