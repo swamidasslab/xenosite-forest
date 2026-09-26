@@ -2249,6 +2249,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn hydrolysis_valerolactone_emits_hydroxy_acid() {
+        let mol = parse_mol("O=C1CCCCO1").unwrap();
+        let emissions = hydrolysis()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let hydroxy_acid = canon_of("O=C(O)CCCCO").unwrap();
+        let hydroxy_aldehyde = canon_of("O=CCCCCO").unwrap();
+        let products: Vec<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().map(|p| canon_of(p).unwrap()))
+            .collect();
+        assert!(
+            products.iter().any(|p| p == &hydroxy_acid),
+            "add_water hydroxy acid; got {products:?}"
+        );
+        assert!(
+            products.iter().any(|p| p == &hydroxy_aldehyde),
+            "cleave hydroxy aldehyde; got {products:?}"
+        );
+    }
+
     /// Organic product `C(=O)C` must acetylate aliphatic and aromatic
     /// heteroatom sites (specialize `O`/`N`/`S` vs `n`).
     #[test]

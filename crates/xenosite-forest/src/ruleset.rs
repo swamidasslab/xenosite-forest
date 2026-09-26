@@ -358,15 +358,21 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
     Ok(product)
 }
 
-/// Cleavage product oxygenates map 1 (`O-`, `O=`, or carboxylic).
+/// Cleavage product oxygenates a carbon (`O-`, `O=`, or carboxylic), or
+/// hydrolysis-style cut of map 2–3 (optional OH on the carbonyl carbon).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RingOpenOxygenate {
     Alcohol,
     Carbonyl,
     Carboxylic,
+    /// Ester/amide/lactone: cleave map2–map3; add OH on map2.
+    HydrolysisAddWater,
+    /// Same cut without adding water (aldehyde + alcohol pieces).
+    HydrolysisCleave,
 }
 
-/// Detect `>>(O-[*:1].[*:2])` / `>>([*:2].[*:1]-O)` / carbonyl / carboxylic forms.
+/// Detect `>>(O-[*:1].[*:2])` / `>>([*:2].[*:1]-O)` / carbonyl / carboxylic /
+/// hydrolysis `[*:2](O).[*:3]` forms.
 fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
     let product = smirks.split_once(">>")?.1.trim();
     let product = product
@@ -375,6 +381,13 @@ fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
         .unwrap_or(product);
     if !product.contains('.') {
         return None;
+    }
+    // Hydrolysis before generic carbonyl/alcohol (uses map 2/3, not map 1).
+    if product.contains("[*:2](O)") {
+        return Some(RingOpenOxygenate::HydrolysisAddWater);
+    }
+    if product.contains("[*:2].[*:3]") && product.contains("[*:1]=") {
+        return Some(RingOpenOxygenate::HydrolysisCleave);
     }
     // Carboxylic before bare carbonyl (`(=O)O` contains `=O`).
     if product.contains("[*:1](=O)O") {
@@ -391,7 +404,7 @@ fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
 
 /// Chematic cleavage SMIRKS (`A.B`) drops ring atoms and can fail to apply on
 /// open chains (methyl acetate cc_quat). Break the mapped bond and oxygenate
-/// map 1 on the live graph; split into fragments when the cut disconnects.
+/// on the live graph; split into fragments when the cut disconnects.
 fn cleave_oxygenate(
     mol: &Molecule,
     mapped: &BTreeMap<u16, usize>,
@@ -399,7 +412,18 @@ fn cleave_oxygenate(
 ) -> Option<Vec<Molecule>> {
     use crate::valence::{edited_valence_atoms, fill_closed_shell_h};
 
-    let (&left, &right) = (mapped.get(&1)?, mapped.get(&2)?);
+    let (left, right, oxygenate) = match mode {
+        RingOpenOxygenate::HydrolysisAddWater | RingOpenOxygenate::HydrolysisCleave => {
+            let carbon = *mapped.get(&2)?;
+            let hetero = *mapped.get(&3)?;
+            (carbon, hetero, carbon)
+        }
+        _ => {
+            let left = *mapped.get(&1)?;
+            let right = *mapped.get(&2)?;
+            (left, right, left)
+        }
+    };
     let (bond_idx, bond) = mol.bond_between(atom_idx(left), atom_idx(right))?;
     // Oxygenate cleavage is a σ-bond cut (Me–O, ring Kekulé single, or the
     // aromatic bond when no single parent exists). Do not cleave a carbonyl
@@ -410,32 +434,33 @@ fn cleave_oxygenate(
     }
     let mut product = mol.with_bond_removed(bond_idx);
     match mode {
-        RingOpenOxygenate::Alcohol => {
+        RingOpenOxygenate::Alcohol | RingOpenOxygenate::HydrolysisAddWater => {
             let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
             product = next;
             product
-                .add_bond(atom_idx(left), oxygen, BondOrder::Single)
+                .add_bond(atom_idx(oxygenate), oxygen, BondOrder::Single)
                 .ok()?;
         }
         RingOpenOxygenate::Carbonyl => {
             let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
             product = next;
             product
-                .add_bond(atom_idx(left), oxygen, BondOrder::Double)
+                .add_bond(atom_idx(oxygenate), oxygen, BondOrder::Double)
                 .ok()?;
         }
         RingOpenOxygenate::Carboxylic => {
             let (next, oxo) = product.with_atom_added(Atom::organic(Element::O));
             product = next;
             product
-                .add_bond(atom_idx(left), oxo, BondOrder::Double)
+                .add_bond(atom_idx(oxygenate), oxo, BondOrder::Double)
                 .ok()?;
             let (next, hydroxy) = product.with_atom_added(Atom::organic(Element::O));
             product = next;
             product
-                .add_bond(atom_idx(left), hydroxy, BondOrder::Single)
+                .add_bond(atom_idx(oxygenate), hydroxy, BondOrder::Single)
                 .ok()?;
         }
+        RingOpenOxygenate::HydrolysisCleave => {}
     }
     // Bracket H on the cleaved atoms (e.g. pyrrole [nH]) is stale after the
     // bond break; clear so chematic recomputes implicit H (aniline NH2).
@@ -476,8 +501,17 @@ fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
 }
 
 fn mapped_bond_in_ring(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> bool {
-    let (Some(&left), Some(&right)) = (mapped.get(&1), mapped.get(&2)) else {
-        return false;
+    // Hydrolysis site is map 2–3 (carbonyl C–hetero); dealk / cc_quat is 1–2.
+    let (left, right) = if mapped.contains_key(&3) {
+        let (Some(&a), Some(&b)) = (mapped.get(&2), mapped.get(&3)) else {
+            return false;
+        };
+        (a, b)
+    } else {
+        let (Some(&a), Some(&b)) = (mapped.get(&1), mapped.get(&2)) else {
+            return false;
+        };
+        (a, b)
     };
     atoms_share_ring(mol, left, right)
 }
@@ -546,13 +580,24 @@ fn apply_edit_mols_raw(
             // SMIRKS first (anisole O-dealk); fall back to graph edit when
             // chematic apply is empty (methyl acetate).
             if let Some(mode) = mode {
-                if mapped_bond_in_ring(&work, mapped) {
+                // Hydrolysis graph edit is authoritative (chematic A.B drops the
+                // ring hetero). Prefer it on ring cuts and for Hydrolysis* modes
+                // on open esters before SMIRKS junk.
+                let prefer_graph = mapped_bond_in_ring(&work, mapped)
+                    || matches!(
+                        mode,
+                        RingOpenOxygenate::HydrolysisAddWater
+                            | RingOpenOxygenate::HydrolysisCleave
+                    );
+                if prefer_graph {
                     if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
                         return Ok(products);
                     }
-                    // Ring oxygenate refused — do not fall through to aromatic
-                    // SMIRKS junk (thiophene `O=CC=CS` / unparseable `:ccs`).
-                    return Ok(Vec::new());
+                    if mapped_bond_in_ring(&work, mapped) {
+                        // Ring oxygenate refused — do not fall through to aromatic
+                        // SMIRKS junk (thiophene `O=CC=CS` / unparseable `:ccs`).
+                        return Ok(Vec::new());
+                    }
                 }
             }
             let smirks_products = apply_smirks_at(smirks, &work, mapped)?;
@@ -1053,5 +1098,29 @@ mod tests {
         assert!(refuse.is_empty());
         let products = cands[0].materialize(&mol).unwrap();
         assert_eq!(canon_of(&products[0]).unwrap(), canon_of("CCO").unwrap());
+    }
+}
+
+#[cfg(test)]
+mod hydrolysis_mode_tests {
+    use super::ring_open_oxygenate_mode;
+    use super::RingOpenOxygenate;
+
+    #[test]
+    fn detects_hydrolysis_add_water() {
+        let s = "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])";
+        assert_eq!(
+            ring_open_oxygenate_mode(s),
+            Some(RingOpenOxygenate::HydrolysisAddWater)
+        );
+    }
+
+    #[test]
+    fn detects_hydrolysis_cleave() {
+        let s = "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2].[*:3])";
+        assert_eq!(
+            ring_open_oxygenate_mode(s),
+            Some(RingOpenOxygenate::HydrolysisCleave)
+        );
     }
 }
