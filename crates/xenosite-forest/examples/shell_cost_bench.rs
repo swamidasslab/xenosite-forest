@@ -12,7 +12,7 @@ use std::time::Instant;
 
 use xenosite_forest::{
     FindPathConfig, PathCounters, atom_diff, candidate_could_help_on, find_path_with,
-    molecule_shells, pair_could_help, parse_mol, phase_one, site_shell_cost,
+    molecule_shells, pair_could_help, parse_mol, phase_one, site_atoms_with_leave, site_shell_cost,
 };
 
 const MID: &[(&str, &str, &str)] = &[
@@ -125,7 +125,11 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
 
     let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
     for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
-        let atoms = site_atoms_cand(&c);
+        let mut atoms = site_atoms_cand(&c);
+        if c.pattern.effect.cleaves {
+            let leave_n = c.pattern.effect.leave_count.map(|n| n as usize);
+            atoms = site_atoms_with_leave(&ra, &atoms, leave_n, &ad.cleavage_bonds);
+        }
         let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
         let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
         scored.push((cost, gate, atoms));
@@ -139,6 +143,7 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
         let mut atoms = p.plan_site_atoms();
         atoms.sort_unstable();
         atoms.dedup();
+        // Close pairs: joint ends already; no leave fragment.
         let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
         scored.push((cost, gate, atoms));
     }
@@ -221,6 +226,10 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
                 };
                 atoms.sort_unstable();
                 atoms.dedup();
+                // Cleavage hops: fold in leaving-fragment heavies.
+                if !step.sides.is_empty() || ad.has_cleavage() {
+                    atoms = site_atoms_with_leave(&ra, &atoms, None, &ad.cleavage_bonds);
+                }
                 let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
                 hop0_site_cost = Some(cost);
                 let mut gate_costs: Vec<f64> = scored
@@ -228,9 +237,7 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
                     .filter(|(_, g, _)| *g)
                     .map(|(c, _, _)| *c)
                     .collect();
-                gate_costs.sort_by(|a, b| {
-                    b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
-                });
+                gate_costs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
                 let n = gate_costs.len();
                 // Rank by cost value among gate-kept (1 = highest residual).
                 let rank = gate_costs.iter().filter(|&&c| c > cost + 1e-9).count() + 1;
@@ -362,7 +369,7 @@ fn main() {
     let cases = if hard { HARD } else { MID };
     let title = if hard { "HARD" } else { "MID" };
     println!(
-        "shell_cost_bench — site_shell_cost Σ norm|current−target|; keep iff cost>0\n"
+        "shell_cost_bench — site_shell_cost Σ norm|current−target| (+leave); keep iff cost>0\n"
     );
     let t0 = Instant::now();
     let rows: Vec<Row> = cases.iter().map(|(n, r, t)| eval_case(n, r, t)).collect();

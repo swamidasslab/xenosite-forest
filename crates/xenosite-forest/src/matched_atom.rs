@@ -415,7 +415,8 @@ fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> A
 /// Projected site neighborhoods are matched to target site neighborhoods as a
 /// **multiset** (greedy), so unique-edit orbit mates / MCS orientation swaps do
 /// not inflate cost. Close pairs: pass **both** ends so mutual n1/n2 effects
-/// stay in one comparison.
+/// stay in one comparison. Cleaving sites should pass
+/// [`site_atoms_with_leave`] so the leaving fragment is in the bag.
 ///
 /// - `delta == None`: distance of current to target at the site.
 /// - `delta` = an edit (or residual align): residual after applying that δ.
@@ -455,13 +456,102 @@ pub fn site_shell_cost(
             None => cur.clone(),
         };
         projected.push(projected_env);
-
-        // Unmapped leave still present (δ kept it / no δ): no target mate was
-        // pushed; unmatched projected pays abs_norm below.
-        let _ = mapped;
     }
 
     neighborhood_bag_norm_l1(&projected, &target_envs)
+}
+
+/// Expand `site_atoms` with heavies on the leaving side of a cleavage bond.
+///
+/// When `site_atoms` already holds both bond ends, the smaller side (or the side
+/// whose heavy count matches `leave_count`) is unioned in. When only one end is
+/// known (unique-edit orbit), `cleavage_bonds` supplies the partner. No-op when
+/// no cleavage bond touches the site.
+pub fn site_atoms_with_leave(
+    mol: &Molecule,
+    site_atoms: &[usize],
+    leave_count: Option<usize>,
+    cleavage_bonds: &BTreeSet<(usize, usize)>,
+) -> Vec<usize> {
+    let mut out: BTreeSet<usize> = site_atoms.iter().copied().collect();
+    let site: HashSet<usize> = site_atoms.iter().copied().collect();
+
+    let mut bonds: Vec<(usize, usize)> = Vec::new();
+    // Prefer an explicit bonded pair inside the site.
+    if site_atoms.len() >= 2 {
+        for i in 0..site_atoms.len() {
+            for j in (i + 1)..site_atoms.len() {
+                let a = site_atoms[i];
+                let b = site_atoms[j];
+                if mol.bond_between(atom_idx(a), atom_idx(b)).is_some() {
+                    bonds.push(bond_key_usize(a, b));
+                }
+            }
+        }
+    }
+    if bonds.is_empty() {
+        for &(a, b) in cleavage_bonds {
+            if site.contains(&a) || site.contains(&b) {
+                bonds.push((a, b));
+            }
+        }
+    }
+    // Fall back: any heavy neighbor of a singleton site (open leave).
+    if bonds.is_empty() && site_atoms.len() == 1 {
+        let a = site_atoms[0];
+        for (nbr, _) in mol.neighbors(atom_idx(a)) {
+            let b = atom_usize(nbr);
+            if mol.atom(nbr).element.atomic_number() > 1 {
+                bonds.push(bond_key_usize(a, b));
+            }
+        }
+    }
+
+    for (a, b) in bonds {
+        let side_a = heavy_side(mol, a, b);
+        let side_b = heavy_side(mol, b, a);
+        let leave = pick_leave_side(&side_a, &side_b, leave_count);
+        out.extend(leave);
+    }
+    let mut v: Vec<usize> = out.into_iter().collect();
+    v.sort_unstable();
+    v
+}
+
+fn bond_key_usize(a: usize, b: usize) -> (usize, usize) {
+    if a < b { (a, b) } else { (b, a) }
+}
+
+fn heavy_side(mol: &Molecule, start: usize, blocked: usize) -> Vec<usize> {
+    let mut seen = HashSet::from([start]);
+    let mut stack = vec![start];
+    while let Some(idx) = stack.pop() {
+        for (nbr, _) in mol.neighbors(atom_idx(idx)) {
+            let n = atom_usize(nbr);
+            if n == blocked || !seen.insert(n) {
+                continue;
+            }
+            if mol.atom(nbr).element.atomic_number() <= 1 {
+                continue;
+            }
+            stack.push(n);
+        }
+    }
+    seen.into_iter()
+        .filter(|&i| mol.atom(atom_idx(i)).element.atomic_number() > 1)
+        .collect()
+}
+
+fn pick_leave_side<'a>(a: &'a [usize], b: &'a [usize], leave_count: Option<usize>) -> &'a [usize] {
+    if let Some(n) = leave_count {
+        if a.len() == n && b.len() != n {
+            return a;
+        }
+        if b.len() == n && a.len() != n {
+            return b;
+        }
+    }
+    if a.len() <= b.len() { a } else { b }
 }
 
 /// Greedy multiset normalized L1 between two neighborhood bags.
@@ -867,6 +957,37 @@ mod tests {
         let joint = site_shell_cost(&cur, Some(&edit), &tgt, &map, &atoms);
         assert!(joint < 1e-12);
         let _ = solo;
+    }
+
+    #[test]
+    fn site_atoms_with_leave_includes_methyl() {
+        let mol = parse_mol("COc1ccccc1").unwrap();
+        let diff = atom_diff(&mol, &parse_mol("Oc1ccccc1").unwrap());
+        // O–Me bond: find methyl (C with 1 heavy neighbor) and oxygen.
+        let mut me = None;
+        let mut oxy = None;
+        for i in 0..mol.atom_count() {
+            if mol.atom(atom_idx(i)).element.atomic_number() <= 1 {
+                continue;
+            }
+            let sym = mol.atom(atom_idx(i)).element.symbol();
+            let heavy_n = mol
+                .neighbors(atom_idx(i))
+                .filter(|(n, _)| mol.atom(*n).element.atomic_number() > 1)
+                .count();
+            if sym == "C" && heavy_n == 1 {
+                me = Some(i);
+            }
+            if sym == "O" {
+                oxy = Some(i);
+            }
+        }
+        let me = me.expect("methyl");
+        let oxy = oxy.expect("oxygen");
+        // Unique-edit style: only heteroatom in the seed → leave expands to Me.
+        let expanded = site_atoms_with_leave(&mol, &[oxy], Some(1), &diff.cleavage_bonds);
+        assert!(expanded.contains(&me), "leave Me missing: {expanded:?}");
+        assert!(expanded.contains(&oxy), "{expanded:?}");
     }
 
     fn aligned_shells_mol(a: &Molecule, b: &Molecule) -> AlignedShells {
