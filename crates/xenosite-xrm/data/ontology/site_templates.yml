@@ -1,0 +1,173 @@
+# Localization / display-name templates — NOT ontology concepts.
+# Used by AnnotationBundle::site_label and future name generators.
+templates:
+- id: xrm:1600147
+  name: canonical site name template
+  definition: Template for generating localized site names dynamically.
+  synonyms:
+  - site_label template
+  - canonical_site_name_template
+- id: xrm:1600148
+  name: attachment atom template
+  definition: Template for conjugation attachment-atom localization.
+  synonyms:
+  - attachment_atom_template
+- id: xrm:1600149
+  name: map-number localization
+  definition: Localization by atom-map number.
+  synonyms:
+  - '@map localization'
+  - map_number_localization
+- id: xrm:1600150
+  name: atom-index localization
+  definition: Localization by reactant atom index when maps absent.
+  synonyms:
+  - atom_index_localization
+- id: xrm:1600200
+  name: atom site template
+  definition: Template localizing a reaction to an atom site.
+  synonyms:
+  - atom_site
+  - atom_site_template
+- id: xrm:1600201
+  name: bond site template
+  definition: Template localizing a reaction to a bond site.
+  synonyms:
+  - bond_site
+  - bond_site_template
+- id: xrm:1600202
+  name: ring site template
+  definition: Template localizing a reaction to a ring site.
+  synonyms:
+  - ring_site
+  - ring_site_template
+- id: xrm:1600203
+  name: attachment atom template O
+  definition: Template for O-attachment localization.
+  synonyms:
+  - attachment_atom_template_o
+- id: xrm:1600204
+  name: attachment atom template N
+  definition: Template for N-attachment localization.
+  synonyms:
+  - attachment_atom_template_n
+- id: xrm:1600205
+  name: attachment atom template S
+  definition: Template for S-attachment localization.
+  synonyms:
+  - attachment_atom_template_s
+- id: xrm:1600206
+  name: attachment atom template C
+  definition: Template for C-attachment localization.
+  synonyms:
+  - attachment_atom_template_c
+- id: xrm:1600207
+  name: attachment atom template acyl
+  definition: Template for acyl-attachment localization.
+  synonyms:
+  - attachment_atom_template_acyl
+- id: xrm:1600208
+  name: canonical site name
+  definition: Canonical generated site-localized display name.
+  synonyms:
+  - canonical_site_name
+- id: xrm:1600209
+  name: map-number site label
+  definition: Site label using atom-map numbers (e.g. @1).
+  synonyms:
+  - map_number_site_label
+- id: xrm:1600210
+  name: element-index site label
+  definition: Site label using element + index (e.g. C7).
+  synonyms:
+  - element_index_site_label
+- id: xrm:1600211
+  name: motif-localized name template
+  definition: Motif-aware localized name (e.g. para on anisole).
+  synonyms:
+  - motif_localized_name_template
+- id: xrm:1600212
+  name: product-class name template
+  definition: Product-class display name (e.g. phenol formation).
+  synonyms:
+  - product_class_name_template
+- id: xrm:1600213
+  name: medchem tag name template
+  definition: Med-chem liability display phrase.
+  synonyms:
+  - medchem_tag_name_template
+- id: xrm:1600214
+  name: regio descriptor template
+  definition: Ortho/meta/para (or similar) regio descriptor.
+  synonyms:
+  - regio_descriptor_template
+- id: xrm:1600215
+  name: stereo descriptor template
+  definition: Stereo descriptor in a localized name.
+  synonyms:
+  - stereo_descriptor_template
+- id: xrm:1600216
+  name: multi-site list template
+  definition: Template listing multiple localized sites.
+  synonyms:
+  - multi_site_list_template
+- id: xrm:1600217
+  name: bond endpoints template
+  definition: Template naming both ends of a bond site.
+  synonyms:
+  - bond_endpoints_template
+- id: xrm:1600218
+  name: ring index template
+  definition: Template naming a ring by index/system.
+  synonyms:
+  - ring_index_template
+- id: xrm:1600219
+  name: heteroatom symbol template
+  definition: Template inserting N/O/S/halogen symbol.
+  synonyms:
+  - heteroatom_symbol_template
+- id: xrm:1600220
+  name: chain position template
+  definition: Template for ω / ω-1 / terminal position names.
+  synonyms:
+  - chain_position_template
+- id: xrm:1600221
+  name: benzylic position template
+  definition: Template for benzylic position naming.
+  synonyms:
+  - benzylic_position_template
+- id: xrm:1600222
+  name: allylic position template
+  definition: Template for allylic position naming.
+  synonyms:
+  - allylic_position_template
+- id: xrm:1600223
+  name: aniline nitrogen template
+  definition: Template for aniline N localization.
+  synonyms:
+  - aniline_nitrogen_template
+- id: xrm:1600224
+  name: phenol oxygen template
+  definition: Template for phenolic O localization.
+  synonyms:
+  - phenol_oxygen_template
+- id: xrm:1600225
+  name: tertiary amine nitrogen template
+  definition: Template for tertiary amine N localization.
+  synonyms:
+  - tertiary_amine_nitrogen_template
+- id: xrm:1600226
+  name: site environment phrase template
+  definition: Phrase combining site environment + reaction.
+  synonyms:
+  - site_environment_phrase_template
+- id: xrm:1600227
+  name: underspecified site template
+  definition: Display when site localization is ambiguous.
+  synonyms:
+  - underspecified_site_template
+- id: xrm:1900106
+  name: site template expansion
+  definition: Localized label generated from a site template (not a concept).
+  synonyms:
+  - site_template_expansion

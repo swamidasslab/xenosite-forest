@@ -40,7 +40,7 @@ chemical transformation and phase I family).
 | Evidence / assertion | 30–50 | MS, NMR, predicted/observed/curated/conflict |
 | Biological context | 40–80 | Enzyme/tissue/species/matrix (orthogonal) |
 | Rule/model provenance | 20–40 | SMARTS, Rainbow class, XenoNet, legacy model |
-| Localization templates | 20–40 | Templates only — not per-atom enumerations |
+| Localization templates | — | Not SKOS; see [`site_templates.yml`](site_templates.yml) |
 | Leaving group | 20–40 | Departing methyl/ethyl/halide/carboxylate/… fragments |
 | Pharmacological role | 10–25 | Active/inactive metabolite, prodrug (metabolism-specific) |
 | Annotation about | 5–15 | about parent / product / reaction (not combinatorial) |

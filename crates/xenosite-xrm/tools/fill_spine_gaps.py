@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Fill under-band spines with well-motivated leaves; expand localization templates.
+"""Fill under-band spines with well-motivated metabolism leaves.
 
 Does not trim high spines. Extra clear terms remain welcome.
+Localization templates are not SKOS — see data/ontology/site_templates.yml.
 """
 
 from __future__ import annotations
@@ -18,7 +19,6 @@ NEXT = {
     "reactive": 1500200,
     "bio": 2100200,
     "prov": 1900200,
-    "loc": 1600200,
     "product_status": 1800200,
 }
 
@@ -149,38 +149,8 @@ def main():
     ]:
         add(pref, "xrm:1900000", definition, syn or None, "prov")
 
-    # Localization templates (need ~15–30; not per-atom enumerations)
-    for pref, definition, syn in [
-        ("atom site template", "Template localizing a reaction to an atom site.", ["atom_site"]),
-        ("bond site template", "Template localizing a reaction to a bond site.", ["bond_site"]),
-        ("ring site template", "Template localizing a reaction to a ring site.", ["ring_site"]),
-        ("attachment atom template O", "Template for O-attachment localization.", []),
-        ("attachment atom template N", "Template for N-attachment localization.", []),
-        ("attachment atom template S", "Template for S-attachment localization.", []),
-        ("attachment atom template C", "Template for C-attachment localization.", []),
-        ("attachment atom template acyl", "Template for acyl-attachment localization.", []),
-        ("canonical site name", "Canonical generated site-localized display name.", ["canonical_site_name"]),
-        ("map-number site label", "Site label using atom-map numbers (e.g. @1).", []),
-        ("element-index site label", "Site label using element + index (e.g. C7).", []),
-        ("motif-localized name template", "Motif-aware localized name (e.g. para on anisole).", []),
-        ("product-class name template", "Product-class display name (e.g. phenol formation).", []),
-        ("medchem tag name template", "Med-chem liability display phrase.", []),
-        ("regio descriptor template", "Ortho/meta/para (or similar) regio descriptor.", []),
-        ("stereo descriptor template", "Stereo descriptor in a localized name.", []),
-        ("multi-site list template", "Template listing multiple localized sites.", []),
-        ("bond endpoints template", "Template naming both ends of a bond site.", []),
-        ("ring index template", "Template naming a ring by index/system.", []),
-        ("heteroatom symbol template", "Template inserting N/O/S/halogen symbol.", []),
-        ("chain position template", "Template for ω / ω-1 / terminal position names.", []),
-        ("benzylic position template", "Template for benzylic position naming.", []),
-        ("allylic position template", "Template for allylic position naming.", []),
-        ("aniline nitrogen template", "Template for aniline N localization.", []),
-        ("phenol oxygen template", "Template for phenolic O localization.", []),
-        ("tertiary amine nitrogen template", "Template for tertiary amine N localization.", []),
-        ("site environment phrase template", "Phrase combining site environment + reaction.", []),
-        ("underspecified site template", "Display when site localization is ambiguous.", []),
-    ]:
-        add(pref, "xrm:1600000", definition, syn or None, "loc")
+    # Localization / display-name templates are NOT SKOS concepts.
+    # They live in data/ontology/site_templates.yml (see SCOPE.md).
 
     # Cross-spine related_match for pathway logic examples
     by_label = {c["preferred_label"]: c for c in doc["concepts"]}

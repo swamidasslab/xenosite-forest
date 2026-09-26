@@ -217,10 +217,8 @@ def main():
         ("alpha to nitrogen", "Carbon alpha to nitrogen.", []),
         ("alpha to oxygen", "Carbon alpha to oxygen.", []),
         ("alpha to sulfur", "Carbon alpha to sulfur.", []),
-        ("vinyl carbon", "Vinylic carbon environment.", []),
-        ("alkyne carbon", "Alkynyl carbon environment.", []),
-        ("sp3 carbon", "Saturated carbon site environment.", []),
-        ("sp2 carbon", "Unsaturated carbon site environment.", []),
+        # Bare hybridization / vinyl / alkyne carbons are out of scope
+        # (general chem); see data/ontology/SCOPE.md.
     ]:
         add(pref, "xrm:1600000", definition, syn or None, "site")
 
@@ -370,14 +368,8 @@ def main():
     ]:
         add(pref, "xrm:1900000", definition, syn or None, "prov")
 
-    # localization templates (concepts for templates, not per-atom enumerations)
-    for pref, definition, syn in [
-        ("canonical site name template", "Template for generating localized site names dynamically.", ["site_label template"]),
-        ("attachment atom template", "Template for conjugation attachment-atom localization.", []),
-        ("map-number localization", "Localization by atom-map number.", ["@map localization"]),
-        ("atom-index localization", "Localization by reactant atom index when maps absent.", []),
-    ]:
-        add(pref, "xrm:1600000", definition, syn or None, "site")
+    # Localization / display-name templates are NOT SKOS concepts.
+    # They live in data/ontology/site_templates.yml (see SCOPE.md).
 
     # Cross-spine related links (SKOS relatedMatch) for a few key pairs
     def find_id(label):
