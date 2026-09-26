@@ -91,7 +91,7 @@
 {"id":"asg:tag-active-metabolite","emit":["xrm:2300010","xrm:2400011","xrm:2300000"],"tags_any":["chem:active-metabolite","chem:pharmacologically-active-metabolite"]}
 {"id":"asg:tag-inactive-metabolite","emit":["xrm:2300011","xrm:2400011","xrm:2300000"],"tags_any":["chem:inactive-metabolite","chem:pharmacologically-inactive-metabolite"]}
 {"id":"asg:tag-prodrug","emit":["xrm:2300012","xrm:2400010","xrm:2300000"],"tags_any":["chem:prodrug"]}
-{"id":"asg:tag-prodrug-activation","emit":["xrm:2300013","xrm:2300012","xrm:2400012","xrm:2300000"],"tags_any":["chem:prodrug-activation"]}
+{"id":"asg:tag-prodrug-activation","emit":["xrm:1400127","xrm:2300012","xrm:2400012","xrm:2300000"],"tags_any":["chem:prodrug-activation"]}
 {"id":"asg:tag-active-parent","emit":["xrm:2300014","xrm:2400010","xrm:2300000"],"tags_any":["chem:active-parent"]}
 {"id":"asg:tag-about-parent","emit":["xrm:2400010","xrm:2400000"],"tags_any":["chem:about-parent"]}
 {"id":"asg:tag-about-product","emit":["xrm:2400011","xrm:2400000"],"tags_any":["chem:about-product"]}

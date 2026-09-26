@@ -3283,7 +3283,10 @@
       "altLabel": [
         "prodrug_activation"
       ],
-      "broader": "xrm:1400000",
+      "broader": [
+        "xrm:1400000",
+        "xrm:2300000"
+      ],
       "relatedMatch": "xrm:2300012"
     },
     {

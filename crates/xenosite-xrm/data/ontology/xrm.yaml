@@ -2213,6 +2213,7 @@ concepts:
   definition: Metabolic activation of a prodrug.
   parents:
   - xrm:1400000
+  - xrm:2300000
   synonyms:
   - prodrug_activation
   related_match:
