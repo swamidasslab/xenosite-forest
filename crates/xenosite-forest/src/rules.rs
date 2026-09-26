@@ -1299,6 +1299,9 @@ pub fn epoxide_hydration() -> RuleSet {
         )],
     )
     .with_canonical_plan(crate::canonical_plan::epoxide_hydration_canonical_plan)
+    .with_parity_exception(
+        "Rust-only PhaseOne leaf (epoxide→diol one-hop); Python PhaseOne omits it",
+    )
 }
 
 /// `SulfurOxidation` from Python `xenosite.forest.rules`.

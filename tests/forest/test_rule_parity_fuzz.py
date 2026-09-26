@@ -1,26 +1,24 @@
-"""Rust↔RDKit leaf-rule product parity fuzz.
+"""Rust↔RDKit leaf-rule product parity (parametric over a bounded corpus).
 
-Randomly samples ``(mol, rule)`` from :data:`PARITY_FUZZ_MOLS` × shared leaf
-catalog. For each draw:
+Bounded ``PARITY_FUZZ_MOLS`` × paired leaves → ``pytest.mark.parametrize``,
+not Hypothesis. For each ``(rule, mol)``:
 
-1. Collect candidates / emissions on both engines.
+1. Collect emissions on both engines.
 2. Collapse sites by **that engine's** topological ranks (orbits).
-3. Assert the same number of unique topological sites.
-4. Apply (metabolize) and compare product sets after **RDKit** CSMI.
+3. Assert equal unique topological site→product bags.
+4. Assert equal product sets after **RDKit** CSMI.
 
-The corpus meta-test (:mod:`test_rule_parity_corpus`) must stay green: every
-pattern / every ``when`` has a covering mol in ``PARITY_FUZZ_MOLS``.
+Pairing / exceptions: :mod:`test_rule_parity_pairs` (attribute data on rules).
+Corpus coverage: :mod:`test_rule_parity_corpus` (every pattern / every when).
 """
 
 from __future__ import annotations
 
-import os
 from collections import Counter
 from collections.abc import Iterable
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, strategies as st
 from rdkit import Chem
 from rdkit.Chem.rdmolops import RemoveStereochemistry
 
@@ -28,24 +26,14 @@ from xenosite.forest.find_path_rust import native_available
 from xenosite.forest.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.forest.rules import ReactionRule
 
-from .pattern_info_inventory import (
-    PATTERNLESS_REACTION_RULE_BASES,
-    discover_reaction_rule_classes,
-    instantiate_rule,
-)
+from .pattern_info_inventory import instantiate_rule
 from .rule_parity_corpus import PARITY_FUZZ_MOLS
+from .rule_parity_pairs import paired_rule_names, python_leaf_classes
 
 pytestmark = pytest.mark.skipif(
     not native_available(),
     reason="xenosite-forest-native not installed",
 )
-
-
-def _fuzz_examples(default: int) -> int:
-    raw = os.environ.get("PARITY_FUZZ_EXAMPLES")
-    if raw is None:
-        return default
-    return max(1, int(raw))
 
 
 def _rdkit_csmi(smiles_or_mol: Any) -> str | None:
@@ -80,46 +68,16 @@ def _topo_key(ranks: dict[int, int] | list[int], atoms: Iterable[int], kind: str
         return int(ranks[i])
 
     vals = [rank(i) for i in atoms]
-    if kind in {"bond", "atom_pair"}:
-        return tuple(sorted(vals))
-    if kind == "directed_bond":
-        # Public Python site is undirected frozenset; keep undirected key.
+    if kind in {"bond", "atom_pair", "directed_bond"}:
         return tuple(sorted(vals))
     if len(vals) == 1:
         return (vals[0],)
     return tuple(sorted(vals))
 
 
-def _shared_leaf_rules() -> list[tuple[str, type[ReactionRule]]]:
-    """Concrete Python leaves that also exist as Rust ``leaf_rule`` names."""
-
-    import xenosite_forest as native  # type: ignore[import-not-found]
-
-    rust_names = set(native.RuleSet.catalog_names())
-    out: list[tuple[str, type[ReactionRule]]] = []
-    for cls in discover_reaction_rule_classes():
-        if cls in PATTERNLESS_REACTION_RULE_BASES:
-            continue
-        name = cls.__name__
-        if name in rust_names:
-            out.append((name, cls))
-    return sorted(out, key=lambda t: t[0])
-
-
-_SHARED_LEAVES = _shared_leaf_rules() if native_available() else []
-_LEAF_NAMES = [name for name, _ in _SHARED_LEAVES]
-_LEAF_BY_NAME = dict(_SHARED_LEAVES)
-
-
 def _python_emissions(
     rule: ReactionRule, smiles: str, kind: str
-) -> tuple[Counter[tuple], set[str]]:
-    """``(topo_site → product-frozenset counter keys, all product CSMIs)``.
-
-    Returns a Counter over frozensets of RDKit CSMIs (one entry per unique
-    topological site). Sites that emit nothing after CSMI filter are dropped.
-    """
-
+) -> tuple[Counter, set[str]]:
     mol = MolFromSmiles(smiles)
     assert mol is not None, smiles
     ranks = mol.xf.topol_equiv
@@ -127,9 +85,7 @@ def _python_emissions(
     all_products: set[str] = set()
     for products, info in rule.metabolize(mol):
         site = info.get("discovered_site", info["site"])
-        if isinstance(site, (set, frozenset)):
-            atoms = list(site)
-        elif isinstance(site, tuple):
+        if isinstance(site, (set, frozenset, tuple)):
             atoms = list(site)
         else:
             atoms = [int(site)]
@@ -139,7 +95,6 @@ def _python_emissions(
             csmi = _rdkit_csmi(product)
             if csmi is None:
                 continue
-            # Cleavage: one emission may list several fragments; keep each.
             bucket.add(csmi)
             all_products.add(csmi)
     site_product_bags = Counter(
@@ -150,7 +105,7 @@ def _python_emissions(
 
 def _rust_emissions(
     rule_name: str, smiles: str, kind: str
-) -> tuple[Counter[tuple], set[str]]:
+) -> tuple[Counter, set[str]]:
     import xenosite_forest as native  # type: ignore[import-not-found]
 
     rs = native.RuleSet.leaf(rule_name)
@@ -163,7 +118,6 @@ def _rust_emissions(
         key = _topo_key(ranks, atoms, kind)
         bucket = by_topo.setdefault(key, set())
         for product in products:
-            # Cleavage products may be multi-fragment SMILES; split then CSMI.
             for piece in product.split("."):
                 csmi = _rdkit_csmi(piece)
                 if csmi is None:
@@ -177,7 +131,7 @@ def _rust_emissions(
 
 
 def _assert_parity(rule_name: str, smiles: str) -> None:
-    cls = _LEAF_BY_NAME[rule_name]
+    cls = python_leaf_classes()[rule_name]
     rule = instantiate_rule(cls)
     kind = _site_kind(rule)
     py_sites, py_prods = _python_emissions(rule, smiles, kind)
@@ -207,24 +161,32 @@ def _assert_parity(rule_name: str, smiles: str) -> None:
         )
 
 
-@settings(max_examples=_fuzz_examples(80), deadline=60_000, derandomize=True)
-@given(
-    smiles=st.sampled_from(PARITY_FUZZ_MOLS),
-    rule_name=st.sampled_from(_LEAF_NAMES or ["Hydroxylation"]),
-)
-def test_fuzz_leaf_rule_product_parity(smiles: str, rule_name: str) -> None:
-    if not _LEAF_NAMES:
-        pytest.skip("no shared leaf rules")
+def _paired_names() -> list[str]:
+    if not native_available():
+        return []
+    return paired_rule_names()
+
+
+_PAIRED = _paired_names()
+
+
+@pytest.mark.parametrize("rule_name", _PAIRED or ["Hydroxylation"])
+@pytest.mark.parametrize("smiles", PARITY_FUZZ_MOLS)
+def test_leaf_rule_product_parity(rule_name: str, smiles: str) -> None:
+    """Every paired leaf × every corpus mol: sites by topology, products by RDKit CSMI."""
+
+    if not _PAIRED:
+        pytest.skip("no paired leaf rules")
     _assert_parity(rule_name, smiles)
 
 
-@pytest.mark.parametrize("rule_name", _LEAF_NAMES or ["Hydroxylation"])
-def test_smoke_leaf_parity_on_example_substrate(rule_name: str) -> None:
-    """One guaranteed hit per shared leaf (``_example_substrates``)."""
+@pytest.mark.parametrize("rule_name", _PAIRED or ["Hydroxylation"])
+def test_leaf_parity_on_example_substrate(rule_name: str) -> None:
+    """One guaranteed hit per paired leaf (``_example_substrates``)."""
 
-    if not _LEAF_NAMES:
-        pytest.skip("no shared leaf rules")
-    cls = _LEAF_BY_NAME[rule_name]
+    if not _PAIRED:
+        pytest.skip("no paired leaf rules")
+    cls = python_leaf_classes()[rule_name]
     examples = getattr(cls, "_example_substrates", ()) or ()
     assert examples, f"{rule_name} lacks _example_substrates"
     _assert_parity(rule_name, examples[0])

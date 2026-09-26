@@ -151,6 +151,11 @@ class ReactionRule:
     # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
     # TODO: expand so examples cover all patterns/whens on this rule.
     _example_substrates: tuple[str, ...] = ()
+    # Cross-language parity excuse (class data). ``None`` ⇒ must have a
+    # same-named Rust ``leaf_rule`` and match products under the parity fuzz.
+    # Non-empty string ⇒ unpaired or intentionally divergent; tests read this
+    # attribute and do not hardcode exception name lists.
+    rust_parity_exception: str | None = None
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -3482,7 +3487,7 @@ class TautomerRule(ResonancePairRule):
     sites_on = "atom_pairs"
     site_kind: RuleSiteKind = "atom_pair"
     _example_substrates: tuple[str, ...] = ()
-
+    rust_parity_exception = "design stub; not ported to Rust"
 
     name = "TautomerRule"
     longname = "Tautomerization"
@@ -3972,7 +3977,10 @@ class ConjugationRule(SmirksReactionRule):
     sites_on = "atoms"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO',)
-
+    rust_parity_exception = (
+        "base conjugation container; leaf ports are Acetylation / "
+        "Sulfation / Glucuronidation / Glutathionation"
+    )
 
     is_terminal_rule: bool = True
     as_star: bool = True
@@ -4047,6 +4055,7 @@ class Acetylation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Nc1ccccc1')
+    rust_parity_exception = None
 
 
 class Sulfation(ConjugationRule):
@@ -4058,6 +4067,7 @@ class Sulfation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
+    rust_parity_exception = None
 
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
@@ -4094,6 +4104,7 @@ class Glucuronidation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
+    rust_parity_exception = None
 
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
@@ -4139,6 +4150,7 @@ class Glutathionation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('C=C', 'C1OC1')
+    rust_parity_exception = None
 
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (

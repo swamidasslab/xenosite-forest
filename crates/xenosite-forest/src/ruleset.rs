@@ -106,12 +106,18 @@ pub struct RuleSet {
     /// Leaf-owned expander for [`Self::canonical_plan`] (Python method).
     plan_fn: Option<CanonicalPlanFn>,
     members: Vec<RuleMember>,
+    /// Cross-language parity excuse (data). ``None`` ⇒ must pair with a
+    /// same-named Python leaf and match products. Non-empty ⇒ unpaired or
+    /// intentionally divergent; reason is the string (test bodies do not
+    /// hardcode exception lists).
+    pub parity_exception: Option<String>,
 }
 
 impl PartialEq for RuleSet {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.members == other.members
+            && self.parity_exception == other.parity_exception
             && match (self.plan_fn, other.plan_fn) {
                 (None, None) => true,
                 (Some(a), Some(b)) => std::ptr::fn_addr_eq(a, b),
@@ -128,6 +134,7 @@ impl RuleSet {
             name,
             plan_fn: None,
             members: patterns.into_iter().map(RuleMember::Pattern).collect(),
+            parity_exception: None,
         }
     }
 
@@ -137,12 +144,20 @@ impl RuleSet {
             name,
             plan_fn: None,
             members: sets.into_iter().map(RuleMember::Set).collect(),
+            parity_exception: None,
         }
     }
 
     /// Attach a plan expander (composite leaves: return elementary rule steps).
     pub fn with_canonical_plan(mut self, f: CanonicalPlanFn) -> Self {
         self.plan_fn = Some(f);
+        self
+    }
+
+    /// Mark this leaf as excused from Rust↔Python product parity (or as
+    /// intentionally unpaired). Reason is required; empty is rejected by tests.
+    pub fn with_parity_exception(mut self, reason: impl Into<String>) -> Self {
+        self.parity_exception = Some(reason.into());
         self
     }
 
