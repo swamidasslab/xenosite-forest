@@ -52,6 +52,16 @@ Each [`Term`](src/term.rs) includes ontology identity, pref/alt labels, broader/
 3. **Assignment without forest imports** — structural SMARTS / formula delta / opaque tags only.
 4. **Phase I / Phase II expected**; enzyme names excluded from primary output.
 
+## Feedback samples
+
+Regenerate the proposed-term panel after ontology/assignment edits:
+
+```bash
+cargo run -p xenosite-xrm --example sample_terms -- --write
+```
+
+Output: [`data/samples/round-001.md`](data/samples/round-001.md). Comment on that file (or open an issue citing the case label) to steer the next round.
+
 ## Tests
 
 ```bash

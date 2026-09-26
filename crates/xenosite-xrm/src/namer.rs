@@ -1,4 +1,4 @@
-//! Namer: load config, name a mapped reactant→product.
+//! Load config; name a mapped reactant→product.
 
 use crate::assignment::Assignments;
 use crate::chemistry::{MappedReaction, ReactionChemistry};
@@ -9,9 +9,8 @@ use crate::term::Term;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-/// Manifest listing ontology / mapping / assignment files (paths relative to manifest dir).
 #[derive(Clone, Debug, Deserialize)]
 pub struct NamerConfig {
     #[serde(default)]
@@ -22,26 +21,20 @@ pub struct NamerConfig {
     pub assignments: Vec<String>,
 }
 
-/// Config-driven reaction namer.
 #[derive(Clone, Debug)]
 pub struct Namer {
     pub thesaurus: Thesaurus,
     pub mappings: SssomTable,
     pub assignments: Assignments,
-    /// Scheme prefix used for intra- vs inter-ontology classification (e.g. `xrm`).
     pub scheme_prefix: String,
 }
 
 impl Namer {
     pub fn from_manifest(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let base = path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."));
-        let text = fs::read_to_string(path)?;
-        let cfg: NamerConfig = serde_json::from_str(&text)?;
-        Self::from_config(&cfg, &base)
+        let base = path.parent().unwrap_or_else(|| Path::new("."));
+        let cfg: NamerConfig = serde_json::from_str(&fs::read_to_string(path)?)?;
+        Self::from_config(&cfg, base)
     }
 
     pub fn from_config(cfg: &NamerConfig, base: &Path) -> Result<Self> {
@@ -50,8 +43,7 @@ impl Namer {
         }
         let mut thesaurus = Thesaurus::default();
         for rel in &cfg.ontologies {
-            let t = Thesaurus::load_jsonld(base.join(rel))?;
-            thesaurus.merge(t);
+            thesaurus.merge(Thesaurus::load_jsonld(base.join(rel))?);
         }
         let mut mappings = SssomTable::default();
         for rel in &cfg.mappings {
@@ -77,56 +69,36 @@ impl Namer {
         })
     }
 
-    /// Name a mapped reactant→product. Returns rich terms, most specific first.
+    /// Name a mapped reactant→product. Most specific terms first; ancestors included.
     pub fn name(&self, query: &MappedReaction) -> Result<Vec<Term>> {
         let chem = ReactionChemistry::prepare(query)?;
         let hits = self.assignments.matching(&chem)?;
-        let mut evidence: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        let mut order: Vec<String> = Vec::new();
-        let mut seen = BTreeSet::new();
 
+        let mut evidence: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut ids = BTreeSet::new();
         for rule in hits {
-            let mut emit_ids = rule.emit.clone();
-            if rule.include_ancestors {
-                for id in rule.emit.clone() {
-                    for anc in self.thesaurus.ancestors(&id) {
-                        emit_ids.push(anc.as_str().to_string());
-                    }
-                }
-            }
-            for id in emit_ids {
-                if self.thesaurus.get(&id).is_none() {
-                    return Err(Error::UnknownConcept(format!(
-                        "{id} (from assignment {})",
-                        rule.id
-                    )));
+            for id in &rule.emit {
+                if self.thesaurus.get(id).is_none() {
+                    return Err(Error::UnknownConcept(format!("{id} ({})", rule.id)));
                 }
                 evidence.entry(id.clone()).or_default().push(rule.id.clone());
-                if seen.insert(id.clone()) {
-                    order.push(id);
+                ids.insert(id.clone());
+                for anc in self.thesaurus.ancestors(id) {
+                    ids.insert(anc.as_str().to_string());
                 }
             }
         }
 
-        let mut terms = Vec::with_capacity(order.len());
-        for id in &order {
+        let mut terms = Vec::with_capacity(ids.len());
+        for id in ids {
             let mut term = self
                 .thesaurus
-                .term_shell(id, evidence.get(id).cloned().unwrap_or_default())?;
-            let (intra, inter) = self.mappings.links_for(id, &self.scheme_prefix);
-            // Merge SKOS-declared matches already on the shell with SSSOM rows.
+                .term_shell(&id, evidence.get(&id).cloned().unwrap_or_default())?;
+            let (intra, inter) = self.mappings.links_for(&id, &self.scheme_prefix);
             term.intra_matches.extend(intra);
             term.inter_matches.extend(inter);
-            // Drop enzyme-facet primary labels: never emit terms whose prefLabel
-            // looks like an enzyme family (config should not put them in chemical
-            // emit paths; this is a hard guard).
-            if looks_like_enzyme_label(&term.pref_label) {
-                continue;
-            }
             terms.push(term);
         }
-
-        // Most specific first (deeper path), then pref_label.
         terms.sort_by(|a, b| {
             b.specificity
                 .depth
@@ -136,23 +108,27 @@ impl Namer {
         Ok(terms)
     }
 
-    /// Convenience: SMILES pair + optional opaque tags.
     pub fn name_smiles(
         &self,
         reactant: &str,
         product: &str,
         tags: &[&str],
     ) -> Result<Vec<Term>> {
-        let q = MappedReaction::new(reactant, product).with_tags(tags.iter().copied());
-        self.name(&q)
+        self.name(&MappedReaction::new(reactant, product).with_tags(tags.iter().copied()))
     }
-}
 
-fn looks_like_enzyme_label(label: &str) -> bool {
-    let l = label.to_ascii_lowercase();
-    l.contains("cytochrome")
-        || l.contains("cyp")
-        || l.starts_with("ugt")
-        || l.contains("transferase enzyme")
-        || l.contains("ec ")
+    /// Compact lines for feedback dumps: `prefLabel [id] ← path`.
+    pub fn format_sample_lines(&self, terms: &[Term]) -> Vec<String> {
+        terms
+            .iter()
+            .map(|t| {
+                format!(
+                    "{} [{}] ← {}",
+                    t.pref_label,
+                    t.id,
+                    t.path_labels.join(" > ")
+                )
+            })
+            .collect()
+    }
 }

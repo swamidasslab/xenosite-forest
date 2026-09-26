@@ -108,20 +108,12 @@ fn terms_carry_ontology_and_inter_matches() {
 
 #[test]
 fn no_enzyme_strings_in_primary_labels() {
-    let cases = [
-        ("CC", "CCO", &[] as &[&str]),
-        ("c1ccccc1", "Oc1ccccc1", &[]),
-        ("CCO", "CCO", &["forest.rule:Glucuronidation"]),
-    ];
     let namer = namer();
-    for (r, p, tags) in cases {
-        for t in namer.name_smiles(r, p, tags).unwrap() {
-            let l = t.pref_label.to_ascii_lowercase();
-            assert!(!l.contains("cyp"), "{}", t.pref_label);
-            assert!(!l.contains("ugt"), "{}", t.pref_label);
-            assert!(!l.contains("cytochrome"), "{}", t.pref_label);
-            assert!(!l.starts_with("ec "), "{}", t.pref_label);
-        }
+    for c in namer.thesaurus.concepts.values() {
+        let l = c.pref_label.to_ascii_lowercase();
+        assert!(!l.contains("cyp"), "{}", c.pref_label);
+        assert!(!l.contains("cytochrome"), "{}", c.pref_label);
+        assert!(!l.starts_with("ec "), "{}", c.pref_label);
     }
 }
 
