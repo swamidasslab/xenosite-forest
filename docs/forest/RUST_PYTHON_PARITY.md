@@ -256,7 +256,7 @@ gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 | 2 | Expose rulesets + ``find_path`` + enumerate to Python | **done** | C9; doors wired |
 | 3 | Parametric parity (bounded corpus × paired leaves), not Hypothesis | **done** | C5 |
 | 4 | **Pair / dual-door unique-edit: partition SMIRKS↔pair overlap** | **open** | C12 — fix data/unique-edit (not no-dedup); H alkene+path_end |
-| 5 | Acetylation: chematic SMIRKS apply miss | **done** | Product ``[*:1]C(=O)C`` (organic); ``[#6](=[#8])[#6]`` expands to bracket forms that miss. Reactant keeps ``#``; tests cover aliphatic + aromatic heteroatom specialize branches. Issue draft: ``CHEMATIC_ISSUE_acetyl_atomic_product.md`` |
+| 5 | Acetylation: chematic SMIRKS apply miss | **done** | Product keeps ``[#6](=[#8])[#6]``; Rust ``organic_product_variants`` expands ``#`` to organic aliphatic then aromatic (bracket expand misses). Issue: ``CHEMATIC_ISSUE_acetyl_atomic_product.md`` |
 | 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **open** | recursive SMARTS / P valence? |
 | 7 | AzoSplitting / ThiopheneSulfurOxidation: Rust empty on aromatic examples | **open** | ResonanceRule ``=,:`` / Kekulé |
 | 8 | NitrogenReduction: Rust empty on ``CCNO`` (hydroxylamine) | **open** | Resonance / pattern arm |

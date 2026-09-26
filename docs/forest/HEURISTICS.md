@@ -266,6 +266,24 @@ post-flip gates (H adjust, valence / two-double N, re-aromatized system drop).
 Sanitize / C10 failures are usually end-edit / SMIRKS products, not missing a
 library flip. Revisit only if a library gains an explicit path-flip primitive.
 
+## Chematic product-side ``#`` expand → organic aliphatic + aromatic
+
+Status: **approved** (forest apply workaround; upstream issue drafted).
+
+Chematic `expand_atomic_number_primitives` turns product `[#6](=[#8])[#6]` into
+**bracket** `[C]`/`[c]`/`[O]`/`[o]` spellings that miss on apply or leave
+residual brackets. Forest `organic_product_variants` / `apply_smirks_at`
+instead rewrite product `#` to **organic-subset** aliphatic then aromatic
+(`C`/`c`, `O`/`o`, …). Aliphatic-all is tried first; aromatic forms are
+included when the aliphatic spelling does not apply — equivalent `#` branch
+coverage without keeping chemically wrong aromatic products when aliphatic
+already succeeds (`accept_product` still gates). Catalog SMARTS keep `#` on
+both sides (Acetylation product is again `[*:1][#6](=[#8])[#6]`). Do not
+hand-replace catalog `#` with organic-only spelling unless aromatic is
+chemically impossible and documented.
+
+Tracker: RUST_PYTHON_PARITY #5; `CHEMATIC_ISSUE_acetyl_atomic_product.md`.
+
 ## Narrowing SMARTS vs ``swap_group`` (ResonancePair)
 
 Status: **not approved** as a replacement for ``swap_group`` / name-default groups. Hydroxylation-style H-count partitions fix *nested same-atom* SMARTS that double-emit under ``unique_csmi``. Pair same-role couples are different: two path ends that both match the same edit (hydroquinone ``phenol_end``×2, benzene ``add_carbonyl_o``×2, diene ``path_end``×2, QF ``dealkylate``×2, …) are real chemistry and stay unordered via resolved group (= ``name``). Narrowing SMARTS so those couples never co-apply would drop pathways. Keep resolved groups + nauty ordered/unordered. Residual: map ranks still distinguish dealkylate embeddings.

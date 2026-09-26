@@ -4059,11 +4059,12 @@ class ConjugationRule(SmirksReactionRule):
     star_label: str | None = None
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
-            # Organic-subset product: chematic expand of ``[#6](=[#8])[#6]``
-            # yields bracket ``[C]``/``[c]`` forms that miss (parity #5).
-            # Acetyl carbons are aliphatic; reactant keeps ``#`` so aliphatic
-            # and aromatic heteroatom sites both match (see tests).
-            Smirks("[#7,#8,#16;h:1]>>[*:1]C(=O)C"),
+            # Product keeps atomic ``[#6](=[#8])[#6]``. Rust apply expands
+            # product ``#`` to organic aliphatic then aromatic spellings
+            # (chematic bracket expand misses — parity #5). Acetyl carbons
+            # stay aliphatic; aromatic product forms are fallback only.
+            # Reactant ``#`` covers aliphatic and aromatic heteroatoms.
+            Smirks("[#7,#8,#16;h:1]>>[*:1][#6](=[#8])[#6]"),
             _describe(
                 *branches(_whens(1, (7, 8, 16)), adds="CCO", removes="H"),
                 pin=(1,),

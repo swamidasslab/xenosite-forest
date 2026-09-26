@@ -1502,12 +1502,10 @@ pub fn acetylation() -> RuleSet {
         Some("Acetylation".into()),
         [smirks_row(
             "acetyl",
-            // Organic-subset product: chematic expand of ``[#6](=[#8])[#6]``
-            // yields bracket ``[C]``/``[c]`` forms that do not apply cleanly
-            // (RUST_PYTHON_PARITY #5). New acetyl atoms are aliphatic; reactant
-            // still uses ``#`` so specialize covers aliphatic and aromatic
-            // heteroatom branches (see smirks tests).
-            "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1]C(=O)C",
+            // Product keeps ``[#6](=[#8])[#6]``. Apply expands product ``#`` to
+            // organic aliphatic then aromatic (chematic bracket expand misses).
+            // Reactant ``#`` covers aliphatic and aromatic heteroatom branches.
+            "[#7h1,#7h2,#8h1,#16h1:1]>>[*:1][#6](=[#8])[#6]",
             SiteKind::Atom,
             vec![1],
             Effect {

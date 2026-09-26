@@ -81,6 +81,13 @@ relative to `C(=O)C`.
   or leftover `[C]`/`[c]` in the product).
 - Hand-written organic `C(=O)C` applies and yields `CC(=O)OCC` from ethanol.
 
+## Forest workaround
+
+`organic_product_variants` rewrites product `#` to organic-subset aliphatic
+then aromatic (`C`/`c`, …) and tries those forms in `apply_smirks_at` —
+aliphatic first so chemically correct acetyl wins; aromatic forms included
+when aliphatic does not apply. Catalog SMARTS keep `[*:1][#6](=[#8])[#6]`.
+
 ## Environment
 
 - chematic version: v1.0.21 (vendored sparse checkout in xenosite-forest)

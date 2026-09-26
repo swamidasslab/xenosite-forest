@@ -129,6 +129,7 @@ _PAIR_CLOSE_EXTRAS: tuple[str, ...] = (
     "c1ccc(N(C)c2ccccc2)cc1",  # N-methyl diphenylamine — shared N
     "c1ccc2c(c1)Nc1ccccc1C2",  # dihydroacridine — bridging NH
     "c1ccc2c(c1)Nc1ccccc1O2",  # phenoxazine — bridging N (+ O)
+    "[nH]1cccc1",  # pyrrole — aromatic heteroatom `#` / specialize `n`
 )
 
 PARITY_FUZZ_MOLS: tuple[str, ...] = tuple(
