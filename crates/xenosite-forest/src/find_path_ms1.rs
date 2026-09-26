@@ -969,6 +969,8 @@ mod tests {
         let set = hard_span_ruleset();
         let pools = [ApplyN::new(pool_arms.iter().copied(), leaves.len() as u16)];
         let mut counters = PathCounters::default();
+        // 64 paths: crowded isobars (e.g. eugenol Dealk+OH ranks ~24) must still
+        // surface the applied chain metabolite among hits.
         let hits = find_path_ms1(
             reactant,
             &set,
@@ -978,7 +980,7 @@ mod tests {
                 mz,
                 tol_da: 0.001,
                 adduct: Ms1Adduct::MPlusH,
-                max_paths: 24,
+                max_paths: 64,
                 max_nodes,
             },
         )
@@ -1130,8 +1132,7 @@ mod tests {
             12000,
             true,
         );
-        // Oxdehal / cleavage-first: MS1 recovery required; plan replay still soft
-        // (site labels / multi-effect leaves).
+        // Cleavage + other: MS1 recovery and plan replay required.
         assert_hard_chain_in_ms1(
             "Clc1ccccc1",
             &[
@@ -1143,7 +1144,7 @@ mod tests {
             ],
             &["OxidativeDehalogenation", "Hydroxylation"],
             12000,
-            false,
+            true,
         );
         assert_hard_chain_in_ms1(
             "Brc1ccccc1",
@@ -1155,7 +1156,7 @@ mod tests {
             ],
             &["OxidativeDehalogenation", "Hydroxylation"],
             12000,
-            false,
+            true,
         );
         assert_hard_chain_in_ms1(
             "COc1ccccc1",
@@ -1167,14 +1168,14 @@ mod tests {
             ],
             &["Dealkylation", "Hydroxylation"],
             15000,
-            false,
+            true,
         );
         assert_hard_chain_in_ms1(
             "COc1ccc(OC)cc1",
             &["Dealkylation", "Hydroxylation", "Epoxidation"],
             &["Dealkylation", "Hydroxylation"],
             15000,
-            false,
+            true,
         );
         assert_hard_chain_in_ms1(
             "c1ccc2c(c1)OCO2",
@@ -1186,7 +1187,7 @@ mod tests {
             ],
             &["BenzodioxoleReduction", "Hydroxylation"],
             10000,
-            false,
+            true,
         );
         assert_hard_chain_in_ms1(
             "CCCCc1ccccc1",
@@ -1198,7 +1199,7 @@ mod tests {
             ],
             &["Hydroxylation", "Dehydrogenation"],
             12000,
-            false,
+            true,
         );
         // Alkyne → ene → diol: EpoxideHydration expands with WillAdd deps;
         // Opening names both carbons so replay survives hydrogenation tags.
@@ -1220,6 +1221,136 @@ mod tests {
             &["Hydrogenation", "Epoxidation"],
             8000,
             false, // identity Epoxidation is one-atom site; bond replay soft
+        );
+    }
+
+    /// Cleavage plus a follow-on Phase I step: recover the chain metabolite and
+    /// require plan replay (Dealk/OxDehal/Benzodioxole with OH, DH, or Hyd).
+    #[test]
+    fn hard_span_cleavage_plus_other_steps() {
+        // O-dealkylation then hydroxylation / redox / epoxide hydration
+        assert_hard_chain_in_ms1(
+            "COc1ccccc1",
+            &[
+                "Dealkylation",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dehydrogenation",
+            ],
+            &["Dealkylation", "Hydroxylation"],
+            15000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccccc1",
+            &["Dealkylation", "Dehydrogenation", "Hydroxylation"],
+            &["Dealkylation", "Dehydrogenation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccccc1",
+            &[
+                "Dealkylation",
+                "EpoxideHydration",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
+            &["Dealkylation", "EpoxideHydration"],
+            15000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccc(OC)cc1",
+            &["Dealkylation", "Hydroxylation", "Epoxidation"],
+            &["Dealkylation", "Hydroxylation"],
+            15000,
+            true,
+        );
+        // Eugenol: isobar-crowded Dealk+OH (needs room among max_paths hits)
+        assert_hard_chain_in_ms1(
+            "COc1cc(CC=C)ccc1O",
+            &[
+                "Dealkylation",
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+                "Dehydrogenation",
+            ],
+            &["Dealkylation", "Hydroxylation"],
+            20000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1cc(CC=C)ccc1O",
+            &[
+                "Dealkylation",
+                "EpoxideHydration",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
+            &["Dealkylation", "EpoxideHydration"],
+            18000,
+            true,
+        );
+        // Oxdehal then hydroxylation (rearrange keeps X; +OH → halo-catechol)
+        assert_hard_chain_in_ms1(
+            "Clc1ccccc1",
+            &[
+                "OxidativeDehalogenation",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dehydrogenation",
+            ],
+            &["OxidativeDehalogenation", "Hydroxylation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "Brc1ccccc1",
+            &[
+                "OxidativeDehalogenation",
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+            ],
+            &["OxidativeDehalogenation", "Hydroxylation"],
+            12000,
+            true,
+        );
+        // Benzodioxole cleavage then hydroxylation
+        assert_hard_chain_in_ms1(
+            "c1ccc2c(c1)OCO2",
+            &[
+                "BenzodioxoleReduction",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dehydrogenation",
+            ],
+            &["BenzodioxoleReduction", "Hydroxylation"],
+            10000,
+            true,
+        );
+        // Hydroxylation then cleavage (label-stable order)
+        assert_hard_chain_in_ms1(
+            "COc1ccccc1",
+            &["Dealkylation", "Hydroxylation", "Epoxidation"],
+            &["Hydroxylation", "Dealkylation"],
+            15000,
+            true,
+        );
+        // Phenacetin-like: O-dealk then ring hydroxylation
+        assert_hard_chain_in_ms1(
+            "CCOc1ccc(NC(C)=O)cc1",
+            &[
+                "Dealkylation",
+                "Hydroxylation",
+                "Hydrolysis",
+                "NDealkylation",
+            ],
+            &["Dealkylation", "Hydroxylation"],
+            15000,
+            true,
         );
     }
 

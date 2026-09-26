@@ -344,38 +344,112 @@ fn chain_two_largest(reactant: &str, leaf_a: &str, leaf_b: &str) -> Option<(Stri
     Some((cur.csmi().as_ref().to_string(), mz))
 }
 
+/// Two-hop mixed-leaf cases: apply-largest chain product must appear in MS1 hits.
+/// Eugenol Dealk+OH is isobar-crowded (rank ~24); keep `max_paths` ≥ 32.
+const MIXED_TWO_HOP_CASES: &[(&str, &str, &str)] = &[
+    ("C=C", "EpoxideHydration", "Dehydrogenation"),
+    ("C#C", "Hydrogenation", "EpoxideHydration"),
+    ("C#C", "Hydrogenation", "Epoxidation"),
+    ("C/C=C/C", "EpoxideHydration", "Dehydrogenation"),
+    ("CCS", "SulfurOxidation", "Hydroxylation"),
+    ("CSC", "SulfurOxidation", "Hydroxylation"),
+    ("CN", "NitrogenOxidation", "Hydroxylation"),
+    ("CCN", "NitrogenOxidation", "Hydroxylation"),
+    ("CCO", "Dehydrogenation", "Hydroxylation"),
+    ("CCC", "Hydroxylation", "Dehydrogenation"),
+    ("Clc1ccccc1", "OxidativeDehalogenation", "Hydroxylation"),
+    ("Brc1ccccc1", "OxidativeDehalogenation", "Hydroxylation"),
+    ("Cc1ccccc1", "Hydroxylation", "Hydroxylation"),
+    ("Oc1ccccc1", "Hydroxylation", "Hydroxylation"),
+    ("CCCCc1ccccc1", "Hydroxylation", "Dehydrogenation"),
+    ("CCCCc1ccccc1", "Hydroxylation", "Hydroxylation"),
+    ("COc1ccccc1", "Dealkylation", "Hydroxylation"),
+    ("COc1ccc(OC)cc1", "Dealkylation", "Hydroxylation"),
+    ("CSc1ccccc1", "SulfurOxidation", "Hydroxylation"),
+    (
+        "c1ccc2c(c1)C(=O)c1ccccc1C2=O",
+        "OxygenReduction",
+        "Hydroxylation",
+    ),
+    ("c1ccc2c(c1)OCO2", "BenzodioxoleReduction", "Hydroxylation"),
+    ("c1ccc2[nH]ccc2c1", "Hydroxylation", "Hydroxylation"),
+    ("O=c1ccc2ccccc2o1", "Hydroxylation", "Hydroxylation"),
+    ("COc1cc(CC=C)ccc1O", "Dealkylation", "Hydroxylation"),
+    ("COc1ccc2c(OC)cccc2c1", "Dealkylation", "Dealkylation"),
+    // Cleavage + other Phase I steps (not only OH).
+    ("COc1ccccc1", "Dealkylation", "Dehydrogenation"),
+    ("COc1ccccc1", "Dealkylation", "EpoxideHydration"),
+    ("COc1cc(CC=C)ccc1O", "Dealkylation", "EpoxideHydration"),
+];
+
 fn mixed_two_hop_corpus() -> impl Strategy<Value = (&'static str, &'static str, &'static str)> {
-    prop_oneof![
-        Just(("C=C", "EpoxideHydration", "Dehydrogenation")),
-        Just(("C#C", "Hydrogenation", "EpoxideHydration")),
-        Just(("C#C", "Hydrogenation", "Epoxidation")),
-        Just(("C/C=C/C", "EpoxideHydration", "Dehydrogenation")),
-        Just(("CCS", "SulfurOxidation", "Hydroxylation")),
-        Just(("CSC", "SulfurOxidation", "Hydroxylation")),
-        Just(("CN", "NitrogenOxidation", "Hydroxylation")),
-        Just(("CCN", "NitrogenOxidation", "Hydroxylation")),
-        Just(("CCO", "Dehydrogenation", "Hydroxylation")),
-        Just(("CCC", "Hydroxylation", "Dehydrogenation")),
-        Just(("Clc1ccccc1", "OxidativeDehalogenation", "Hydroxylation")),
-        Just(("Brc1ccccc1", "OxidativeDehalogenation", "Hydroxylation")),
-        Just(("Cc1ccccc1", "Hydroxylation", "Hydroxylation")),
-        Just(("Oc1ccccc1", "Hydroxylation", "Hydroxylation")),
-        Just(("CCCCc1ccccc1", "Hydroxylation", "Dehydrogenation")),
-        Just(("CCCCc1ccccc1", "Hydroxylation", "Hydroxylation")),
-        Just(("COc1ccccc1", "Dealkylation", "Hydroxylation")),
-        Just(("COc1ccc(OC)cc1", "Dealkylation", "Hydroxylation")),
-        Just(("CSc1ccccc1", "SulfurOxidation", "Hydroxylation")),
-        Just((
-            "c1ccc2c(c1)C(=O)c1ccccc1C2=O",
-            "OxygenReduction",
-            "Hydroxylation"
-        )),
-        Just(("c1ccc2c(c1)OCO2", "BenzodioxoleReduction", "Hydroxylation")),
-        Just(("c1ccc2[nH]ccc2c1", "Hydroxylation", "Hydroxylation")),
-        Just(("O=c1ccc2ccccc2o1", "Hydroxylation", "Hydroxylation")),
-        Just(("COc1cc(CC=C)ccc1O", "Dealkylation", "Hydroxylation")),
-        Just(("COc1ccc2c(OC)cccc2c1", "Dealkylation", "Dealkylation")),
-    ]
+    prop::sample::select(MIXED_TWO_HOP_CASES.to_vec())
+}
+
+/// MS1 settings that recover crowded isobar metabolites (e.g. eugenol Dealk+OH).
+const MIXED_TWO_HOP_MAX_PATHS: usize = 64;
+const MIXED_TWO_HOP_MAX_NODES: usize = 20000;
+
+fn assert_mixed_two_hop_expected_found(reactant: &str, leaf_a: &str, leaf_b: &str) {
+    let (csmi, mz) = chain_two_largest(reactant, leaf_a, leaf_b)
+        .unwrap_or_else(|| panic!("no chain for {reactant} {leaf_a}+{leaf_b}"));
+    let arms = [
+        leaf_a,
+        leaf_b,
+        "Hydroxylation",
+        "Epoxidation",
+        "EpoxideHydration",
+        "Dehydrogenation",
+        "Dealkylation",
+        "SulfurOxidation",
+        "NitrogenOxidation",
+        "OxidativeDehalogenation",
+        "Hydrogenation",
+        "OxygenReduction",
+        "BenzodioxoleReduction",
+    ];
+    let set = xenosite_forest::RuleSet::compose(
+        Some("FuzzHard".into()),
+        arms.iter().filter_map(|n| leaf_rule(n)),
+    );
+    let pools = [ApplyN::new(arms.iter().copied(), 2)];
+    let mut counters = PathCounters::default();
+    let hits = find_path_ms1(
+        reactant,
+        &set,
+        &pools,
+        &mut counters,
+        Ms1Config {
+            mz,
+            tol_da: 0.001,
+            adduct: Ms1Adduct::MPlusH,
+            max_paths: MIXED_TWO_HOP_MAX_PATHS,
+            max_nodes: MIXED_TWO_HOP_MAX_NODES,
+        },
+    )
+    .expect("find_path_ms1");
+    assert!(
+        hits.iter().any(|h| h.smiles == csmi),
+        "{reactant} {leaf_a}+{leaf_b} → {csmi} missing from {:?}; billed={}",
+        hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
+        counters.billed()
+    );
+    let matched: Vec<_> = hits.iter().filter(|h| h.smiles == csmi).collect();
+    assert!(
+        matched
+            .iter()
+            .any(|h| h.plan.reaches(reactant, &csmi).unwrap_or(false)),
+        "{reactant} {leaf_a}+{leaf_b} hit {csmi} but plan does not replay; plans={:?}",
+        matched.iter().map(|h| &h.plan).collect::<Vec<_>>()
+    );
+}
+
+/// Deterministic: every mixed two-hop corpus metabolite must be found (and replay).
+#[test]
+fn mixed_two_hop_expected_metabolites_found() {
+    for &(reactant, leaf_a, leaf_b) in MIXED_TWO_HOP_CASES {
+        assert_mixed_two_hop_expected_found(reactant, leaf_a, leaf_b);
+    }
 }
 
 proptest! {
@@ -421,8 +495,8 @@ proptest! {
                 mz,
                 tol_da: 0.001,
                 adduct: Ms1Adduct::MPlusH,
-                max_paths: 24,
-                max_nodes: 12000,
+                max_paths: MIXED_TWO_HOP_MAX_PATHS,
+                max_nodes: MIXED_TWO_HOP_MAX_NODES,
             },
         )
         .expect("find_path_ms1");
@@ -432,9 +506,8 @@ proptest! {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
-        // Mass: every hit at target; path mz-error monotonic. Plan replay for
-        // the matched CSMI when deps bind (composite WillAdd); cleavage-first
-        // OR isobars may still soft-replay.
+        // Mass: every hit at target; path mz-error monotonic. Plan must replay
+        // the matched chain CSMI (cleavage + other hops included).
         let start = ForestMol::parse(reactant).expect("reactant");
         let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).expect("start mz");
         for h in &hits {
@@ -462,19 +535,10 @@ proptest! {
         }
         let matched: Vec<_> = hits.iter().filter(|h| h.smiles == csmi).collect();
         prop_assert!(!matched.is_empty());
-        let any_reach = matched
-            .iter()
-            .any(|h| h.plan.reaches(reactant, &csmi).unwrap_or(false));
-        let cleavage = leaf_a == "Dealkylation"
-            || leaf_b == "Dealkylation"
-            || leaf_a == "NDealkylation"
-            || leaf_b == "NDealkylation"
-            || leaf_a == "BenzodioxoleReduction"
-            || leaf_b == "BenzodioxoleReduction"
-            || leaf_a == "OxidativeDehalogenation"
-            || leaf_b == "OxidativeDehalogenation";
         prop_assert!(
-            any_reach || cleavage,
+            matched
+                .iter()
+                .any(|h| h.plan.reaches(reactant, &csmi).unwrap_or(false)),
             "{reactant} {leaf_a}+{leaf_b} hit {csmi} but plan does not replay"
         );
     }
