@@ -418,6 +418,14 @@ fn main() {
             },
         },
         Variant {
+            label: "no-diversity",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                diversity: false,
+                ..base_cfg
+            },
+        },
+        Variant {
             label: "no-skeleton",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {

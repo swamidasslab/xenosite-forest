@@ -14,13 +14,14 @@
 //! impossible → `mcs_lift_fallback` (expect zero).
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, BinaryHeap, HashSet};
+use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::rc::Rc;
 
 use crate::ForestError;
 use crate::candidate::Candidate;
 use crate::canonical_plan::{CanonicalStep, CleavageSide, Deps, Maybe, as_deps};
 use crate::forest_mol::ForestMol;
+use crate::labels::Tag;
 use crate::mol::{canon_of, parse_mol};
 use crate::pattern::{CleaveFoldKey, CleaveSideSig, PatternInfo, SiteInfo};
 use crate::rules::default_ruleset;
@@ -64,6 +65,8 @@ pub struct PathCounters {
     /// Extended lift was not cost 0 → used fresh MCS instead (no Aut chase).
     /// Counted for derisk; not a Drop assert yet.
     pub mcs_lift_rematch: usize,
+    /// Match diversity: heap item re-pushed because `−log(n+1)` went stale.
+    pub diversity_repush: usize,
     /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
     #[cfg(test)]
     pub allow_formula_delta_mismatch: bool,
@@ -364,6 +367,41 @@ impl MatchScoreSpec {
     }
 }
 
+/// Site-application identity for the diversity term: rule + parent site tags +
+/// tags minted for atoms the effect added.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct DiversityKey {
+    rule: String,
+    site_tags: BTreeSet<Tag>,
+    added_tags: BTreeSet<Tag>,
+}
+
+fn diversity_key_for(
+    parent: &ForestMol,
+    product: &ForestMol,
+    pattern_name: &str,
+    site_atoms: &BTreeSet<usize>,
+) -> DiversityKey {
+    let site_tags: BTreeSet<Tag> = site_atoms
+        .iter()
+        .filter_map(|&i| parent.tag_of(i))
+        .collect();
+    let added_tags: BTreeSet<Tag> = (0..product.mol().atom_count())
+        .filter_map(|i| product.tag_of(i))
+        .filter(|tag| parent.index_of(*tag).is_none())
+        .collect();
+    DiversityKey {
+        rule: pattern_name.to_string(),
+        site_tags,
+        added_tags,
+    }
+}
+
+/// Fixed-point `−ln(n+1)` diversity penalty (same scale as [`neg_log1p_score`]).
+pub fn diversity_penalty(times_applied: usize) -> i64 {
+    neg_log1p_score(times_applied)
+}
+
 /// How the find_path frontier ranks walks (score, then `seq`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HeapScoreMode {
@@ -371,6 +409,7 @@ pub enum HeapScoreMode {
     /// Opt-in via `FindPathConfig` / `--score soft`.
     SoftStack,
     /// Match-family score from [`MatchScoreSpec`] (default: log-neg-pc).
+    /// Ord key: `(score + diversity, score)`, then `seq`.
     Match(MatchScoreSpec),
 }
 
@@ -663,6 +702,10 @@ fn match_score_for(
 /// via atom_diff / formula closeness (cost 0), not a bool tier or score
 /// sentinel. Pop is plain [`BinaryHeap::pop`] — best Ord value only (no
 /// DFS/BFS alternation). BinaryHeap is max-heap.
+///
+/// Match Ord: `(match_priority, match_score)` where
+/// `match_priority = match_score + diversity_penalty(n)` and `n` is how often
+/// that [`DiversityKey`] has already been accepted. SoftStack ignores both.
 #[derive(Clone)]
 struct HeapItem {
     mode: HeapScoreMode,
@@ -672,8 +715,12 @@ struct HeapItem {
     site_progress: i32,
     /// SoftStack: `parent_cost - child_cost` (higher preferred).
     cost_gain: i32,
-    /// Match-family score from [`MatchScoreSpec`].
+    /// Match-family base score from [`MatchScoreSpec`] (no diversity).
     match_score: i64,
+    /// Match Ord primary: `match_score + −ln(n+1)` at enqueue / last refresh.
+    match_priority: i64,
+    /// Hop that created this walk (`None` = root). Match diversity only.
+    diversity_key: Option<DiversityKey>,
     seq: usize,
     walk: Walk,
 }
@@ -685,6 +732,7 @@ impl PartialEq for HeapItem {
             && self.site_progress == other.site_progress
             && self.cost_gain == other.cost_gain
             && self.match_score == other.match_score
+            && self.match_priority == other.match_priority
             && self.seq == other.seq
     }
 }
@@ -705,7 +753,10 @@ impl Ord for HeapItem {
                 .cmp(&other.search_bias)
                 .then_with(|| self.site_progress.cmp(&other.site_progress))
                 .then_with(|| self.cost_gain.cmp(&other.cost_gain)),
-            HeapScoreMode::Match(_) => self.match_score.cmp(&other.match_score),
+            HeapScoreMode::Match(_) => self
+                .match_priority
+                .cmp(&other.match_priority)
+                .then_with(|| self.match_score.cmp(&other.match_score)),
         }
         // Tiebreak only — higher seq preferred among equal scores.
         .then_with(|| self.seq.cmp(&other.seq))
@@ -983,6 +1034,10 @@ pub struct FindPathConfig {
     /// beside exact [`Deps::same_linearizations`]. Ablation: set false for
     /// exact-only.
     pub drop_skeleton_twins: bool,
+    /// Match diversity: count accepted applications per site key, add
+    /// `−ln(n+1)` into the heap primary (`score + diversity`). On pop, refresh
+    /// or accept. SoftStack ignores. Default **true**.
+    pub diversity: bool,
 }
 
 impl Default for FindPathConfig {
@@ -995,6 +1050,7 @@ impl Default for FindPathConfig {
             lazy_closer: false,
             heap_score: HeapScoreMode::match_log_neg_pc(),
             drop_skeleton_twins: true,
+            diversity: true,
         }
     }
 }
@@ -1203,18 +1259,21 @@ where
     let ancestors = root_ancestors(&start);
     let target_formula = crate::forest::molecule_formula(&target_mol);
     let start_formula_dist = crate::forest::formula_l1(&start.formula(), &target_formula);
+    let match_score = match_score_for(
+        config.heap_score,
+        start_formula_dist,
+        start_formula_dist,
+        None,
+        None,
+    );
     heap.push(HeapItem {
         mode: config.heap_score,
         search_bias: 0,
         site_progress: 0,
         cost_gain: 0,
-        match_score: match_score_for(
-            config.heap_score,
-            start_formula_dist,
-            start_formula_dist,
-            None,
-            None,
-        ),
+        match_score,
+        match_priority: match_score,
+        diversity_key: None,
         seq,
         walk: Walk {
             mol: start,
@@ -1243,6 +1302,7 @@ where
         heap,
         seq,
         seen,
+        diversity_counts: HashMap::new(),
         yielded: Vec::new(),
         done: false,
     })
@@ -1264,6 +1324,8 @@ pub struct FindPath<'a, 'b, K> {
     heap: BinaryHeap<HeapItem>,
     seq: usize,
     seen: HashSet<String>,
+    /// Accepted applications per diversity key (Match + `config.diversity`).
+    diversity_counts: HashMap<DiversityKey, usize>,
     /// Already-yielded hits (for [`plan_already_yielded`] only).
     yielded: Vec<PathOutcome>,
     done: bool,
@@ -1296,11 +1358,28 @@ where
             lazy_closer,
             heap_score,
             drop_skeleton_twins,
+            diversity,
         } = self.config;
 
-        while let Some(item) = self.heap.pop() {
+        while let Some(mut item) = self.heap.pop() {
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
+            }
+            // Lazy diversity: priority must still equal score + −ln(n+1).
+            if diversity {
+                if let (HeapScoreMode::Match(_), Some(key)) =
+                    (item.mode, item.diversity_key.clone())
+                {
+                    let n = self.diversity_counts.get(&key).copied().unwrap_or(0);
+                    let fresh = item.match_score.saturating_add(diversity_penalty(n));
+                    if fresh != item.match_priority {
+                        item.match_priority = fresh;
+                        self.heap.push(item);
+                        self.counters.diversity_repush += 1;
+                        continue;
+                    }
+                    *self.diversity_counts.entry(key).or_insert(0) += 1;
+                }
             }
             let walk = item.walk;
             let here = walk.mol.csmi();
@@ -1498,6 +1577,24 @@ where
                         parent_cost,
                         child_diff.as_ref().map(|d| d.cost()),
                     );
+                    let diversity_key = if diversity && matches!(heap_score, HeapScoreMode::Match(_))
+                    {
+                        Some(diversity_key_for(
+                            &walk.mol,
+                            &kept,
+                            &emission.pattern_name,
+                            &emission.site_atoms,
+                        ))
+                    } else {
+                        None
+                    };
+                    let match_priority = match &diversity_key {
+                        Some(key) => {
+                            let n = self.diversity_counts.get(key).copied().unwrap_or(0);
+                            match_score.saturating_add(diversity_penalty(n))
+                        }
+                        None => match_score,
+                    };
                     let ancestors = with_child_ancestor(&walk.ancestors, &kept);
                     self.heap.push(HeapItem {
                         mode: heap_score,
@@ -1505,6 +1602,8 @@ where
                         site_progress: emission.site_progress,
                         cost_gain,
                         match_score,
+                        match_priority,
+                        diversity_key,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -2035,6 +2134,8 @@ where
         site_progress: 0,
         cost_gain: 0,
         match_score: 0,
+        match_priority: 0,
+        diversity_key: None,
         seq,
         walk: Walk {
             mol: start,
@@ -2222,6 +2323,8 @@ where
                         // No atom_diff on this path — HA closer already gated.
                         cost_gain: 0,
                         match_score: 0,
+                        match_priority: 0,
+                        diversity_key: None,
                         seq: self.seq,
                         walk: Walk {
                             mol: kept,
@@ -2271,6 +2374,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 1,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2291,6 +2397,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 2,
             walk: older.walk.clone(),
         };
@@ -2322,6 +2431,8 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+            match_priority: 0,
+            diversity_key: None,
             seq,
             walk: walk.clone(),
         };
@@ -2344,6 +2455,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2364,6 +2478,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 1,
             walk: demoted.walk.clone(),
         };
@@ -2383,6 +2500,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2403,6 +2523,9 @@ mod tests {
             site_progress: 2,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 1,
             walk: low.walk.clone(),
         };
@@ -2422,6 +2545,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 0,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2442,6 +2568,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 1,
             walk: flat_newer.walk.clone(),
         };
@@ -2462,6 +2591,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 1,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 99,
             walk: Walk {
                 mol: ForestMol::parse("CC").unwrap(),
@@ -2482,6 +2614,9 @@ mod tests {
             site_progress: 0,
             cost_gain: 3,
             match_score: 0,
+
+            match_priority: 0,
+            diversity_key: None,
             seq: 1,
             walk: small_newer.walk.clone(),
         };
@@ -2490,6 +2625,140 @@ mod tests {
         heap.push(big_older);
         assert_eq!(heap.pop().unwrap().cost_gain, 3);
         assert_eq!(heap.pop().unwrap().cost_gain, 1);
+    }
+
+    #[test]
+    fn diversity_penalty_is_neg_log1p() {
+        assert_eq!(diversity_penalty(0), 0);
+        assert_eq!(diversity_penalty(1), neg_log1p_score(1));
+        assert_eq!(diversity_penalty(4), neg_log1p_score(4));
+        assert!(diversity_penalty(2) < diversity_penalty(1));
+    }
+
+    #[test]
+    fn match_heap_key_is_priority_then_score() {
+        // Ord: (score + diversity, score). Higher priority wins; equal priority
+        // prefers higher base score.
+        let walk = Walk {
+            mol: ForestMol::parse("CC").unwrap(),
+            steps: vec![],
+            plan: vec![],
+            maybe: vec![],
+            opens: vec![],
+            o_added: vec![],
+            o_removed: vec![],
+            ancestors: HashSet::new(),
+            parent_cost: None,
+            diff: None,
+        };
+        let mode = HeapScoreMode::match_log_neg_pc();
+        let high_pri = HeapItem {
+            mode,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 0,
+            match_score: 10,
+            match_priority: 10 + diversity_penalty(0),
+            diversity_key: None,
+            seq: 1,
+            walk: walk.clone(),
+        };
+        let low_pri_better_score = HeapItem {
+            mode,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 0,
+            match_score: 100,
+            match_priority: 100 + diversity_penalty(5),
+            diversity_key: None,
+            seq: 2,
+            walk: walk.clone(),
+        };
+        // diversity_penalty(5) is largely negative → priority << 100.
+        assert!(high_pri > low_pri_better_score);
+
+        let same_pri_low_score = HeapItem {
+            mode,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 0,
+            match_score: 5,
+            match_priority: 10,
+            diversity_key: None,
+            seq: 3,
+            walk: walk.clone(),
+        };
+        let same_pri_high_score = HeapItem {
+            mode,
+            search_bias: 0,
+            site_progress: 0,
+            cost_gain: 0,
+            match_score: 10,
+            match_priority: 10,
+            diversity_key: None,
+            seq: 1,
+            walk,
+        };
+        assert!(same_pri_high_score > same_pri_low_score);
+    }
+
+    #[test]
+    fn diversity_key_uses_site_and_added_tags() {
+        let parent = ForestMol::parse("C").unwrap();
+        let site = parent.tag_of(0).unwrap();
+        // Index-stable apply: parent C → product atom 0; O at 1 is born.
+        let co = parse_mol("CO").unwrap();
+        assert_eq!(co.atom_count(), 2);
+        let product = parent.from_apply(co, &[Some(0)]);
+        let site_atoms: BTreeSet<usize> = [0].into_iter().collect();
+        let key = diversity_key_for(&parent, &product, "hydroxylation", &site_atoms);
+        assert_eq!(key.rule, "hydroxylation");
+        assert_eq!(key.site_tags, BTreeSet::from([site]));
+        assert_eq!(key.added_tags.len(), 1);
+        let added = *key.added_tags.iter().next().unwrap();
+        assert!(parent.index_of(added).is_none());
+        assert_eq!(product.tag_of(1), Some(added));
+    }
+
+    #[test]
+    fn diversity_off_matches_prior_default_on_simple_path() {
+        let rules = o_dealkylation();
+        let mut with = PathCounters::default();
+        let mut without = PathCounters::default();
+        let a = find_path_with(
+            "COc1ccccc1",
+            "Oc1ccccc1",
+            &rules,
+            &mut with,
+            FindPathConfig {
+                max_paths: 1,
+                diversity: true,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        let b = find_path_with(
+            "COc1ccccc1",
+            "Oc1ccccc1",
+            &rules,
+            &mut without,
+            FindPathConfig {
+                max_paths: 1,
+                diversity: false,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(b.len(), 1);
+        assert_eq!(a[0].smiles, b[0].smiles);
+        assert_eq!(without.diversity_repush, 0);
     }
 
     #[test]
@@ -2506,9 +2775,9 @@ mod tests {
         assert_eq!(neg_log1p_score(0), 0);
         assert!(neg_log1p_score(0) > neg_log1p_score(1));
         assert!(neg_log1p_score(1) > neg_log1p_score(10));
-        // log_close = ln(SCALE) + neg_log1p
+        // log_close = ln(SCALE) + neg_log1p (fixed-point rounding may differ by 1).
         let ln_scale = ln_fixed(MATCH_CLOSE_SCALE);
-        assert_eq!(log_close_term(3), ln_scale + neg_log1p_score(3));
+        assert!((log_close_term(3) - (ln_scale + neg_log1p_score(3))).abs() <= 1);
     }
 
     #[test]
