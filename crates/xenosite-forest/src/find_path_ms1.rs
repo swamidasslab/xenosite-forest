@@ -338,28 +338,42 @@ mod tests {
     use crate::ruleset::RuleSet;
 
     /// Every emitted hit's final product (and last path-step product) must
-    /// lie within `tol_da` of the target m/z. Intermediates need not.
-    fn assert_hits_satisfy_mz(hits: &[PathOutcome], mz: f64, tol_da: f64) {
+    /// lie within `tol_da` of the target m/z. Steps must get monotonically
+    /// closer. Intermediates need not equal the target mass.
+    fn assert_hits_satisfy_mz(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64) {
         assert!(!hits.is_empty(), "expected at least one MS1 hit");
+        let start = ForestMol::parse(reactant).unwrap();
+        let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).unwrap();
         for h in hits {
+            let mut prev_err = crate::mass::mz_abs_error(start_mz, mz);
+            for (i, step) in h.steps.iter().enumerate() {
+                let step_mol = ForestMol::parse(&step.product).unwrap();
+                let step_mz = mz_of_mol(step_mol.mol(), Ms1Adduct::MPlusH).unwrap();
+                let err = crate::mass::mz_abs_error(step_mz, mz);
+                assert!(
+                    err <= prev_err + 1e-6,
+                    "step {i} mz err grew: {prev_err} → {err} ({})",
+                    step.product
+                );
+                prev_err = err;
+                if i + 1 == h.steps.len() {
+                    assert!(
+                        mz_within(step_mz, mz, tol_da),
+                        "last step product {} mz={step_mz} outside tol of {mz}",
+                        step.product
+                    );
+                    assert_eq!(
+                        step.product, h.smiles,
+                        "last path step product must equal hit smiles"
+                    );
+                }
+            }
             let mol = ForestMol::parse(&h.smiles).unwrap();
             let got = mz_of_mol(mol.mol(), Ms1Adduct::MPlusH).unwrap();
             assert!(
                 mz_within(got, mz, tol_da),
                 "hit smiles {} mz={got} outside tol of target {mz}",
                 h.smiles
-            );
-            let last = h.steps.last().expect("hit has steps");
-            assert_eq!(
-                last.product, h.smiles,
-                "last path step product must equal hit smiles"
-            );
-            let step_mol = ForestMol::parse(&last.product).unwrap();
-            let step_mz = mz_of_mol(step_mol.mol(), Ms1Adduct::MPlusH).unwrap();
-            assert!(
-                mz_within(step_mz, mz, tol_da),
-                "last step product {} mz={step_mz} outside tol of {mz}",
-                last.product
             );
         }
     }
@@ -421,7 +435,7 @@ mod tests {
                 hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
                 counters.billed()
             );
-            assert_hits_satisfy_mz(&hits, *mz, 0.001);
+            assert_hits_satisfy_mz(&hits, reactant, *mz, 0.001);
         }
     }
 
@@ -517,7 +531,7 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
-        assert_hits_satisfy_mz(&hits, mz, 0.001);
+        assert_hits_satisfy_mz(&hits, reactant, mz, 0.001);
     }
 
     #[test]
@@ -601,7 +615,7 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
-        assert_hits_satisfy_mz(&hits, mz, 0.001);
+        assert_hits_satisfy_mz(&hits, "C=C", mz, 0.001);
     }
 
     #[test]
@@ -654,7 +668,7 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
-        assert_hits_satisfy_mz(&hits, mz, 0.001);
+        assert_hits_satisfy_mz(&hits, "COc1ccccc1", mz, 0.001);
     }
 
     #[test]
@@ -740,9 +754,8 @@ mod tests {
         );
     }
 
-    /// Fuzz-style property: for each (reactant, leaf) pair, every distinct
-    /// first-fragment product of applying the leaf is recoverable by MS1 at
-    /// that product's [M+H]⁺ (ApplyN count=1 on the leaf name).
+    /// Deterministic regression corpus for the apply→MS1 property.
+    /// Full proptest draw lives in `tests/ms1_apply_fuzz.rs`.
     #[test]
     fn fuzz_applied_products_recoverable_by_ms1() {
         let cases: &[(&str, &str)] = &[
