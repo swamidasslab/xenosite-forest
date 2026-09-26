@@ -72,6 +72,30 @@ const OH_CASES: &[Case] = &[
         depth: 2,
         order: EnumOrder::Bfs,
     },
+    Case {
+        name: "OH ethane d3 bfs",
+        smiles: "CC",
+        depth: 3,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "OH benzene d3 bfs",
+        smiles: "c1ccccc1",
+        depth: 3,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "OH toluene d3 bfs",
+        smiles: "Cc1ccccc1",
+        depth: 3,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "OH butylbenzene d3 bfs",
+        smiles: "c1ccc(CCCC)cc1",
+        depth: 3,
+        order: EnumOrder::Bfs,
+    },
 ];
 
 const PHASE_ONE_CASES: &[Case] = &[
@@ -79,6 +103,12 @@ const PHASE_ONE_CASES: &[Case] = &[
         name: "P1 ethane d2 bfs",
         smiles: "CC",
         depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 ethane d3 bfs",
+        smiles: "CC",
+        depth: 3,
         order: EnumOrder::Bfs,
     },
     Case {
@@ -100,6 +130,12 @@ const PHASE_ONE_CASES: &[Case] = &[
         order: EnumOrder::Dfs,
     },
     Case {
+        name: "P1 anisole d3 bfs",
+        smiles: "COc1ccccc1",
+        depth: 3,
+        order: EnumOrder::Bfs,
+    },
+    Case {
         name: "P1 eugenol d1 bfs",
         smiles: "COc1ccc(CC=C)cc1O",
         depth: 1,
@@ -118,6 +154,12 @@ const PHASE_ONE_CASES: &[Case] = &[
         order: EnumOrder::Bfs,
     },
     Case {
+        name: "P1 veratrole d3 bfs",
+        smiles: "COc1ccc(OC)cc1",
+        depth: 3,
+        order: EnumOrder::Bfs,
+    },
+    Case {
         name: "P1 phenacetin d2 bfs",
         smiles: "CCOc1ccc(NC(C)=O)cc1",
         depth: 2,
@@ -130,6 +172,7 @@ fn run_one(set: &RuleSet, case: &Case) -> (usize, f64) {
         order: case.order,
         max_depth: case.depth,
         max_nodes: 0,
+        ..EnumConfig::default()
     };
     // Warmup
     let _ = enumerate_metabolites(case.smiles, set, config.clone())

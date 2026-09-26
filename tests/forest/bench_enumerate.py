@@ -31,20 +31,27 @@ OH_CASES: list[tuple[str, str, int, str]] = [
     ("OH ethane d1 dfs", "CC", 1, "dfs"),
     ("OH ethane d2 bfs", "CC", 2, "bfs"),
     ("OH ethane d2 dfs", "CC", 2, "dfs"),
+    ("OH ethane d3 bfs", "CC", 3, "bfs"),
     ("OH benzene d2 bfs", "c1ccccc1", 2, "bfs"),
+    ("OH benzene d3 bfs", "c1ccccc1", 3, "bfs"),
     ("OH butylbenzene d2 bfs", "c1ccc(CCCC)cc1", 2, "bfs"),
     ("OH butylbenzene d2 dfs", "c1ccc(CCCC)cc1", 2, "dfs"),
+    ("OH butylbenzene d3 bfs", "c1ccc(CCCC)cc1", 3, "bfs"),
     ("OH toluene d2 bfs", "Cc1ccccc1", 2, "bfs"),
+    ("OH toluene d3 bfs", "Cc1ccccc1", 3, "bfs"),
 ]
 
 PHASE_ONE_CASES: list[tuple[str, str, int, str]] = [
     ("P1 ethane d2 bfs", "CC", 2, "bfs"),
+    ("P1 ethane d3 bfs", "CC", 3, "bfs"),
     ("P1 anisole d1 bfs", "COc1ccccc1", 1, "bfs"),
     ("P1 anisole d2 bfs", "COc1ccccc1", 2, "bfs"),
     ("P1 anisole d2 dfs", "COc1ccccc1", 2, "dfs"),
+    ("P1 anisole d3 bfs", "COc1ccccc1", 3, "bfs"),
     ("P1 eugenol d1 bfs", "COc1ccc(CC=C)cc1O", 1, "bfs"),
     ("P1 eugenol d2 bfs", "COc1ccc(CC=C)cc1O", 2, "bfs"),
     ("P1 veratrole d2 bfs", "COc1ccc(OC)cc1", 2, "bfs"),
+    ("P1 veratrole d3 bfs", "COc1ccc(OC)cc1", 3, "bfs"),
     ("P1 phenacetin d2 bfs", "CCOc1ccc(NC(C)=O)cc1", 2, "bfs"),
 ]
 
