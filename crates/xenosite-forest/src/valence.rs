@@ -86,22 +86,21 @@ fn oxygen_oxonium(mol: &Molecule) -> bool {
     false
 }
 
-/// Protonated iminium (`[NH+]=`): path-end rematch junk from neutral amides
-/// (APAP H → `CC(=O)[NH+]=C1…`). Nitro `N+` (no H) and pyridinium stay.
-/// Same closed-shell prefer as [`oxygen_oxonium`].
+/// Protonated iminium (`[NH+]=`) and quaternary iminium (`C[N+](C)=C`):
+/// path-end rematch junk from neutral amides / dialkylanilines
+/// (APAP H → `CC(=O)[NH+]=C1…`; `CN(C)c1ccc(O)cc1` → `C[N+](C)=C1…`).
+/// Nitro `N+` (doubles only to O) and pyridinium (no C=N+) stay.
+/// Closed-shell prefer (HEURISTICS C10).
 fn nitrogen_iminium(mol: &Molecule) -> bool {
     for (idx, atom) in mol.atoms() {
         if atom.element.atomic_number() != 7 || atom.charge <= 0 {
             continue;
         }
-        let has_double = mol.neighbors(idx).any(|(_nbr, bidx)| {
+        let double_to_carbon = mol.neighbors(idx).any(|(nbr, bidx)| {
             matches!(mol.bond(bidx).order, BondOrder::Double)
+                && mol.atom(nbr).element.atomic_number() == 6
         });
-        if !has_double {
-            continue;
-        }
-        let h = atom.hydrogen_count.unwrap_or_else(|| mol.implicit_hydrogen_count(idx));
-        if h > 0 {
+        if double_to_carbon {
             return true;
         }
     }
@@ -283,10 +282,13 @@ mod tests {
     }
 
     #[test]
-    fn iminium_is_kept() {
+    fn quaternary_iminium_is_refused() {
+        // C[N+](C)=C — path-end rematch junk from dialkylaniline H; closed-shell
+        // prefer (HEURISTICS C10). Nitro / pyridinium are not C=N+.
         let mol = parse_mol("C[N+](C)=C").unwrap();
         assert!(!nitrogen_two_doubles(&mol));
-        assert!(accept_product(&mol));
+        assert!(nitrogen_iminium(&mol));
+        assert!(!accept_product(&mol));
     }
 
     #[test]

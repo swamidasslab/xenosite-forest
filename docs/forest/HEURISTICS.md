@@ -388,7 +388,11 @@ freely. Status: approved. Tests:
 **Saturate→residual π:** when a saturate site still has a double/triple into the
 residual (styrene vinyl CH2 end), demote that edge before rematch — same
 consumption as a shared saturate–saturate edge. Leaving it mints allenes.
-Status: approved. Tests: `hydrogenation_styrene_vinyl_ring_path_emits_exocyclic`.
+**Skip cumulated framework** edges here: the shared saturate–saturate demote is
+the only way to saturate one half of N=C=O / N=C=S / N=C=N (else residual π
+consumes both cumulated doubles and PhNCO H emits empty / `[S-]` junk instead
+of `O=CNAr`). Status: approved. Tests: `hydrogenation_styrene_vinyl_ring_path_emits_exocyclic` /
+`hydrogenation_phnco_saturates_one_cumulated_double`.
 
 **Conjugating C–C singles:** a single bond between two π centers joins the
 component (styrene vinyl–ipso, enone, quinone, glyoxal). Aromatic–aromatic

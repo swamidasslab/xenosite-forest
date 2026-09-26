@@ -380,10 +380,35 @@ impl PairCandidate {
             fill_closed_shell_h(&mut rw, a);
         }
         let residual = residual_pi_graph(mol, &self.system, &saturate);
+        // Parent doubles + cumulated degree (N=C=O central C): needed before
+        // saturate→residual demote so framework edges are not consumed as
+        // styrene-style residual π (else both cumulated doubles fall and H on
+        // PhNCO emits empty / [S-] junk instead of O=CNAr).
+        let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
+        let parent_doubles: BTreeSet<(usize, usize)> = mol
+            .bonds()
+            .filter_map(|(_, bond)| {
+                (bond.order == BondOrder::Double).then(|| {
+                    let a = atom_usize(bond.atom1);
+                    let b = atom_usize(bond.atom2);
+                    *parent_double_deg.entry(a).or_default() += 1;
+                    *parent_double_deg.entry(b).or_default() += 1;
+                    bond_key(a, b)
+                })
+            })
+            .collect();
+        let is_cumulated_framework = |a: usize, b: usize| -> bool {
+            let edge = bond_key(a, b);
+            parent_doubles.contains(&edge)
+                && (parent_double_deg.get(&a).copied().unwrap_or(0) >= 2
+                    || parent_double_deg.get(&b).copied().unwrap_or(0) >= 2)
+        };
         // Saturate sites consume incident π bonds before residual rematch:
         // (1) shared saturate–saturate edge (aldehyde C=O, ethene, amide);
         // (2) saturate→residual edges (styrene vinyl C=C when only the CH2
         //     end is a path_end — else rematch keeps C=C and mints allenes).
+        //     Skip cumulated framework edges here: shared-edge demote (1) is
+        //     the only way to saturate one half of N=C=O / N=C=S / N=C=N.
         let mut shared_edge_saturated = false;
         let demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
             let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) else {
@@ -420,7 +445,13 @@ impl PairCandidate {
                 .map(|(n, _)| atom_usize(n))
                 .collect();
             for n in nbrs {
-                if residual.atoms.contains(&n) && demote_pi(&mut rw, s, n) {
+                if !residual.atoms.contains(&n) {
+                    continue;
+                }
+                if is_cumulated_framework(s, n) {
+                    continue;
+                }
+                if demote_pi(&mut rw, s, n) {
                     residual_pi_saturated = true;
                 }
             }
@@ -437,27 +468,11 @@ impl PairCandidate {
         // residual (fixed framework). Hetero parent doubles (other quinone C=O)
         // exclusive-seed; pure C=C rematch freely after blanking residual π.
         // Edit-new doubles (add_carbonyl O, phenol C=O) remain forced seeds.
-        let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
-        let parent_doubles: BTreeSet<(usize, usize)> = mol
-            .bonds()
-            .filter_map(|(_, bond)| {
-                (bond.order == BondOrder::Double).then(|| {
-                    let a = atom_usize(bond.atom1);
-                    let b = atom_usize(bond.atom2);
-                    *parent_double_deg.entry(a).or_default() += 1;
-                    *parent_double_deg.entry(b).or_default() += 1;
-                    bond_key(a, b)
-                })
-            })
-            .collect();
         let mut edit_forced = BTreeSet::new();
         let mut framework_forced = BTreeSet::new();
         for &edge in &all_forced {
             let (a, b) = edge;
-            let cumulated = parent_doubles.contains(&edge)
-                && (parent_double_deg.get(&a).copied().unwrap_or(0) >= 2
-                    || parent_double_deg.get(&b).copied().unwrap_or(0) >= 2);
-            if cumulated {
+            if is_cumulated_framework(a, b) {
                 // N=C=O: strip from residual (one-partner matching cannot
                 // express cumulated demand).
                 framework_forced.insert(edge);
@@ -1380,6 +1395,31 @@ mod tests {
                 .iter()
                 .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
             "styrene vinyl–ring H should emit exocyclic diene; got {emissions:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_phnco_saturates_one_cumulated_double() {
+        // Shared-edge saturate of one half of N=C=O must not residual-π demote
+        // the other cumulated framework double (HEURISTICS).
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("O=C=Nc1ccccc1").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let got: BTreeSet<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().map(|p| canon_of(p).unwrap()))
+            .collect();
+        let amide = canon_of("O=CNc1ccccc1").unwrap();
+        let iminol = canon_of("OC=Nc1ccccc1").unwrap();
+        assert!(
+            got.contains(&amide) || got.contains(&iminol),
+            "PhNCO H should saturate one cumulated double to amide/iminol; got {got:?}"
         );
     }
 
