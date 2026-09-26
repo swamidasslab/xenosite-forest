@@ -88,13 +88,19 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // MCS map gaps (×3) + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a
-        // cost term: `formula_l1` counts it like any element; H at atoms is via
+        // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a cost
+        // term: `formula_l1` counts it like any element; H at atoms is via
         // [`Self::atom_h_delta`] (no cache).
-        3 * self.cleaved.len()
-            + 3 * self.n_extra
-            + 3 * self.cleavage_bonds.len()
-            + self.aromatic_delta.len()
+        //
+        // `n_extra` (unmapped target heavies) weighs more than cleaved /
+        // cleavage_bonds so placing a missing atom is not cancelled 1:1 by
+        // opening a ring bond (ethene→epoxide toward a diol was lateral at ×3).
+        field_cost_parts(
+            self.cleaved.len(),
+            self.n_extra,
+            self.cleavage_bonds.len(),
+            self.aromatic_delta.len(),
+        )
     }
 
     /// Target−reactant H for `atom` under this view's primary mapping.
@@ -723,7 +729,27 @@ pub fn residual_cost_after_site_cast(
         aromatic_delta.retain(|a| !scope.contains(a));
     }
 
-    3 * cleaved.len() + 3 * n_extra + 3 * cleavage_bonds.len() + aromatic_delta.len()
+    field_cost_parts(
+        cleaved.len(),
+        n_extra,
+        cleavage_bonds.len(),
+        aromatic_delta.len(),
+    )
+}
+
+/// Weights for [`AtomDiff::field_cost`] / cast residual.
+///
+/// Cleaved and cleavage bonds stay at 3. Unmapped target heavies (`n_extra`) use
+/// 4 so a missing-atom fill is not cancelled by one new cleavage bond.
+fn field_cost_parts(
+    cleaved: usize,
+    n_extra: usize,
+    cleavage_bonds: usize,
+    aromatic_delta: usize,
+) -> usize {
+    const GAP: usize = 3;
+    const EXTRA: usize = 4;
+    GAP * cleaved + EXTRA * n_extra + GAP * cleavage_bonds + aromatic_delta
 }
 
 /// Heavy child atoms whose tags are not on `parent` (local additions).
@@ -1810,6 +1836,72 @@ mod tests {
         assert!(
             !diff.loses_aromaticity.is_empty() || any_needs_oxygen(&target, &diff),
             "{diff:?}"
+        );
+    }
+
+    #[test]
+    fn epoxide_toward_diol_drops_with_heavier_n_extra() {
+        // C=C→OCCO: n_extra 2→1 and +1 cleavage_bond. Equal ×3 was lateral;
+        // EXTRA=4 makes placing the O win: 8 → 7.
+        use crate::forest_mol::ForestMol;
+        use crate::rules::epoxidation;
+        let parent = ForestMol::parse("C=C").unwrap();
+        let target = parse_mol("OCCO").unwrap();
+        let before = atom_diff(parent.mol(), &target);
+        assert_eq!(before.n_extra, 2);
+        assert!(before.cleavage_bonds.is_empty());
+        assert_eq!(before.cost(), 8, "2 n_extra ×4 = 8");
+        let c = epoxidation()
+            .candidates(parent.mol())
+            .next()
+            .unwrap()
+            .unwrap();
+        let epox = parent.adopt_product(c.materialize_mols(parent.mol()).unwrap()[0].clone());
+        let after = atom_diff(epox.mol(), &target);
+        assert_eq!(after.n_extra, 1, "{after:?}");
+        assert_eq!(after.cleavage_bonds.len(), 1, "{after:?}");
+        assert_eq!(after.cost(), 7, "1 n_extra ×4 + 1 bond ×3 = 7");
+        assert!(
+            after.cost() < before.cost(),
+            "epoxide hop must not be lateral: {} → {}",
+            before.cost(),
+            after.cost()
+        );
+    }
+
+    #[test]
+    fn ethene_to_glycol_two_step_with_atom_diff() {
+        use crate::find_path::{find_path_with, FindPathConfig, PathCounters};
+        use crate::rules::{epoxidation, epoxide_opening};
+        use crate::ruleset::RuleSet;
+        let eo = RuleSet::compose(Some("EO".into()), [epoxidation(), epoxide_opening()]);
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "C=C",
+            "OCCO",
+            &eo,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 50,
+                use_atom_diff: true,
+                ..Default::default()
+            },
+            |_| true,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(hits.len(), 1, "should reach glycol under atom_diff");
+        let rules: Vec<_> = hits[0]
+            .steps
+            .iter()
+            .map(|s| s.leaf_rule())
+            .collect();
+        assert_eq!(
+            rules,
+            [Some("Epoxidation"), Some("EpoxideOpening")],
+            "{rules:?}"
         );
     }
 
