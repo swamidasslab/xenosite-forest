@@ -5,12 +5,11 @@
 //! ```
 
 use std::collections::BTreeSet;
-use std::time::Instant;
 
 use xenosite_forest::{FindPathConfig, PathCounters, PathOutcome, find_path_with, phase_one};
 
 const MAX_NODES: usize = 800;
-const MAX_PATHS: usize = 5;
+const MAX_PATHS: usize = 10;
 
 const HARD: &[(&str, &str, &str)] = &[
     (
@@ -82,13 +81,11 @@ struct Run {
     unique_rule_bags: usize,
     same_lin_pairs: usize,
     skeleton_pairs: usize,
-    secs: f64,
     plans: Vec<String>,
 }
 
 fn run_case(start: &str, target: &str, diversity: bool) -> Run {
     let mut counters = PathCounters::default();
-    let t0 = Instant::now();
     let hits = find_path_with(
         start,
         target,
@@ -105,7 +102,6 @@ fn run_case(start: &str, target: &str, diversity: bool) -> Run {
     .unwrap()
     .collect_all()
     .unwrap();
-    let secs = t0.elapsed().as_secs_f64();
     let mut step_sigs = BTreeSet::new();
     let mut rule_bags = BTreeSet::new();
     let mut same_lin_pairs = 0usize;
@@ -140,7 +136,6 @@ fn run_case(start: &str, target: &str, diversity: bool) -> Run {
         unique_rule_bags: rule_bags.len(),
         same_lin_pairs,
         skeleton_pairs,
-        secs,
         plans,
     }
 }
@@ -165,8 +160,8 @@ fn main() {
     let mut tot_on_skel_p = 0usize;
 
     for &(name, start, target) in HARD {
-        let off = run_case(name, start, target, false);
-        let on = run_case(name, start, target, true);
+        let off = run_case(start, target, false);
+        let on = run_case(start, target, true);
         for r in [&off, &on] {
             println!(
                 "{:<28} {:>4} {:>6} {:>5} {:>5} {:>5} {:>5} {:>6} {:>5} {:>5} {:>5} {:>7}",
