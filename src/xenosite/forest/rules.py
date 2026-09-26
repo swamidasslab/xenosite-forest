@@ -1257,7 +1257,10 @@ def react_at(
 ) -> list[Mol]:
     """Run ``smirks`` on one match. One call is one ``mol_edits``.
 
-    ``pin`` is the pattern's map numbers. Each of those atoms is stamped.
+    ``pin`` is the pattern's map numbers. Each of those atoms is stamped
+    with a temporary isotope (``8000 + map``) so RunReactants selects the
+    intended embedding. Pre-existing isotopes on those atoms are restored
+    after the pin is cleared — match-site labels must survive the edit.
     Absent ``pin`` stamps every mapped atom, which is the same list.
     """
 
@@ -1269,6 +1272,10 @@ def react_at(
     )
     if not chosen:
         chosen = tuple(mapped)
+    # Preserve real isotopes; the pin range (8000+) overwrites them briefly.
+    original_isotopes = {
+        mapno: mol.GetAtomWithIdx(mapped[mapno]).GetIsotope() for mapno in chosen
+    }
     stamped = rw_copy(mol)
     for mapno in chosen:
         stamped.GetAtomWithIdx(mapped[mapno]).SetIsotope(8000 + mapno)
@@ -1282,8 +1289,10 @@ def react_at(
     products: list[Mol] = []
     for prod in product_sets[0]:
         for atom in prod.GetAtoms():
-            if atom.GetIsotope() >= 8000:
-                atom.SetIsotope(0)
+            iso = atom.GetIsotope()
+            if iso >= 8000:
+                mapno = iso - 8000
+                atom.SetIsotope(original_isotopes.get(mapno, 0))
             atom.SetAtomMapNum(0)
         lifted = rule._lift_forest_labels(mol, prod)
         # Forest clean: one connected mol per piece, never a dotted product.

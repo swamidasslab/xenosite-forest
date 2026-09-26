@@ -330,7 +330,6 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
             CoverIntent('OxidativeDehalogenation', 'alcohol', 2, (1, 35, None)),
             CoverIntent('OxidativeDehalogenation', 'carboxylic', 2, (1, 35, None)),
             CoverIntent('ReductiveDehalogenation', 'cleave', 2, (1, 35, None)),
-            CoverIntent('ReductiveDehalogenation', 'alkene', 2, (1, 35, None)),
         ),
     ),
     ParityEntry(
@@ -429,6 +428,7 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         'CC(Br)C',
         (
             CoverIntent('OxidativeDehalogenation', 'carbonyl', 2, (1, 35, None)),
+            CoverIntent('ReductiveDehalogenation', 'alkene', 2, (1, 35, None)),
         ),
     ),
     ParityEntry(

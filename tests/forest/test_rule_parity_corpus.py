@@ -23,6 +23,10 @@ Cleaving patterns (``cleaves`` on the PatternInfo / possibility) must have a
 corpus mol where the SMARTS hits with a mapped atom in a ring whenever such
 a ring hit is reachable on a small probe set — grow ``PARITY_FUZZ_MOLS``, do
 not special-case rule names.
+
+Match-site isotopes must survive rule edits unchanged on every CoverIntent
+(full inventory coverage set): stamp non-pin isotopes on site atoms, metabolize,
+assert product atoms that keep those roots still carry the same mass number.
 """
 
 from __future__ import annotations
@@ -45,6 +49,7 @@ from .pattern_cover import (
     uncovered_possibilities,
 )
 from .pattern_info_inventory import (
+    instantiate_rule,
     iter_pattern_possibilities,
     possibility_key,
     when_key,
@@ -356,6 +361,107 @@ def test_parity_cover_intents_complete_inventory():
         lines.append(f"{len(extra)} CoverIntent keys not in inventory:")
         lines.extend(f"  {e}" for e in extra[:40])
     assert not lines, "\n".join(lines)
+
+
+def _flatten_site_atoms(site) -> set[int]:
+    """Public ``info['site']`` / CoverIntent site → flat atom index set."""
+
+    if site is None:
+        return set()
+    if isinstance(site, int):
+        return {int(site)}
+    out: set[int] = set()
+    for item in site:
+        if isinstance(item, int):
+            out.add(int(item))
+        else:
+            out.update(int(x) for x in item)
+    return out
+
+
+@pytest.mark.parametrize(
+    "rule,smiles,pattern,poss_i,when",
+    parity_cover_cases() or [("Hydroxylation", "CC", "h2", 0, None)],
+)
+def test_cover_intent_match_site_isotopes_survive(
+    rule: str, smiles: str, pattern: str, poss_i: int, when: object
+) -> None:
+    """Match-site isotopes survive metabolize on every CoverIntent mol.
+
+    Stamp unique mass numbers (outside the ``8000+`` RunReactants pin range)
+    on the covering hit's site atoms. After the rule edits, every product
+    atom whose ``atom_root`` is one of those sites must still carry the same
+    isotope. New atoms (no root) and cleaved-away roots are ignored.
+    """
+
+    if not parity_cover_cases():
+        pytest.skip("no cover intents")
+    from xenosite.forest.rules import _site_indexes
+
+    rows = [
+        r
+        for r in iter_pattern_possibilities()
+        if r.rule_cls.__name__ == rule
+        and (r.pattern_name or "?") == pattern
+        and r.poss_i == poss_i
+        and when_key(r.when) == when
+    ]
+    assert rows, f"no inventory row for {rule}/{pattern}#{poss_i}"
+    row = rows[0]
+    info = pattern_info_for(row)
+    reactant = row.smarts.split(">>", 1)[0]
+    hit = find_cover(info, reactant, poss_i, parse_mols([smiles]))
+    assert hit is not None, f"CoverIntent missing cover on {smiles!r}"
+    _cover_smi, _context, _work, mapped = hit
+    site_atoms = _flatten_site_atoms(_site_indexes(mapped, info))
+    assert site_atoms, f"empty site for {rule}/{pattern}"
+
+    mol = MolFromSmiles(smiles)
+    assert mol is not None
+    # 100+idx stays well below the 8000+ pin range used by react_at.
+    stamps = {idx: 100 + idx for idx in site_atoms}
+    for idx, iso in stamps.items():
+        mol.GetAtomWithIdx(idx).SetIsotope(iso)
+
+    rule_obj = instantiate_rule(row.rule_cls)
+    checked = 0
+    losses: list[str] = []
+    seen_roots: set[int] = set()
+    emissions = 0
+    for products, _em in rule_obj.metabolize(mol):
+        emissions += 1
+        for product in products:
+            tracing = product.xf.tracing
+            for atom in product.GetAtoms():
+                root = tracing.atom_root(atom.GetIdx())
+                if root is None or root not in stamps:
+                    continue
+                seen_roots.add(root)
+                checked += 1
+                got = atom.GetIsotope()
+                want = stamps[root]
+                if got != want:
+                    losses.append(
+                        f"{product.xf.csmi} atom={atom.GetIdx()} "
+                        f"{atom.GetSymbol()} iso={got} want={want} root={root}"
+                    )
+    assert not losses, (
+        f"{rule}/{pattern}#{poss_i} on {smiles!r}: match-site isotopes lost:\n"
+        + "\n".join(f"  {line}" for line in losses[:20])
+    )
+    if emissions == 0:
+        # Pair endpoint CoverIntents often match without a lone emission
+        # (need a second end). No product → nothing to check.
+        return
+    # Site atoms may be cleaved away (leave fragment / replace_halogen). That
+    # is fine when no surviving copy keeps a wrong isotope — only require a
+    # positive check when at least one stamped root remains in a product.
+    if checked == 0:
+        missing = sorted(site_atoms - seen_roots)
+        assert missing == sorted(site_atoms), (
+            f"{rule}/{pattern}#{poss_i} on {smiles!r}: no site isotopes checked "
+            f"but not all sites were absent from products (missing={missing})"
+        )
 
 
 @pytest.mark.parametrize(
