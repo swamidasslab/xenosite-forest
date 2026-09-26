@@ -8,7 +8,8 @@ Each :class:`~.rule_parity_corpus.ParityEntry` carries a list of
 :class:`~.rule_parity_corpus.CoverIntent` correspondences (rule / pattern /
 poss_i / when). Meta-tests verify intents hold and are inventory-complete.
 Parametric suites use those intents via :func:`~.rule_parity_corpus.parity_param_cases`
-(focused) or full cartesian under ``--parity-full`` / ``XENOSITE_PARITY_FULL``.
+(full rule×mol cartesian by default; focused under ``--parity-focused`` /
+``XENOSITE_PARITY_FULL=0``).
 
 Also requires ResonancePair **close-end** and **identical-partner** coverage
 (ortho catechols, crowded ethers, …) — geometries Python often mishandles

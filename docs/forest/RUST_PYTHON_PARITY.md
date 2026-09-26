@@ -17,8 +17,8 @@ Corpus completeness (every PatternInfo possibility / every ``when``):
 Pairing completeness: ``tests/forest/test_rule_parity_pairs.py``.
 
 Product/site parity: ``tests/forest/test_rule_parity_fuzz.py`` (parametric
-over focused cover ``(rule, mol)``; full cartesian with
-``--parity-full`` / ``XENOSITE_PARITY_FULL=1``).
+full rule×mol cartesian by default; focused CoverIntent-only with
+``pytest --parity-focused`` / ``XENOSITE_PARITY_FULL=0`` — CI may disable).
 
 Native doors: ``xenosite_forest.RuleSet`` (``leaf`` / ``phase_one`` /
 ``default_ruleset`` / ``all_rules`` / ``catalog_names``), ``find_path``
@@ -137,9 +137,9 @@ the rule is compliant. Non-compliant leaves emit every unique-edit survivor
 **Tests:** only ``tests/forest/test_csmi_dedup_soft_failure.py`` gates this —
 compliant → hard-fail on duplicate ``(rule, pattern, CSMI)`` keys or
 ``SiteDeduplicationWarning``; non-compliant → ``pytest.xfail`` on hits (and
-a meta check that the corpus still hits). Cases default to focused
-CoverIntent ``(rule, mol)``; full cartesian via ``--parity-full`` /
-``XENOSITE_PARITY_FULL``. Other suites do **not** xfail non-compliant rules.
+a meta check that the corpus still hits). Cases use full rule×mol
+cartesian by default; focused CoverIntent-only via ``--parity-focused`` /
+``XENOSITE_PARITY_FULL=0``. Other suites do **not** xfail non-compliant rules.
 
 ``SiteDeduplicationWarning`` remains the unique-edit-miss check signal.
 Quiet unequal-rank same-CSMI pairs are C13 until ``product_equiv`` / identity
