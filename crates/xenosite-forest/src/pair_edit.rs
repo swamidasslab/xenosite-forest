@@ -384,7 +384,7 @@ impl PairCandidate {
         // (1) shared saturate–saturate edge (aldehyde C=O, ethene, amide);
         // (2) saturate→residual edges (styrene vinyl C=C when only the CH2
         //     end is a path_end — else rematch keeps C=C and mints allenes).
-        let mut saturated_pi = false;
+        let mut shared_edge_saturated = false;
         let mut demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
             let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) else {
                 return false;
@@ -410,9 +410,10 @@ impl PairCandidate {
             let a = ends.next().unwrap();
             let b = ends.next().unwrap();
             if demote_pi(&mut rw, a, b) {
-                saturated_pi = true;
+                shared_edge_saturated = true;
             }
         }
+        let mut residual_pi_saturated = false;
         for &s in &saturate {
             let nbrs: Vec<usize> = rw
                 .neighbors(atom_idx(s))
@@ -420,11 +421,11 @@ impl PairCandidate {
                 .collect();
             for n in nbrs {
                 if residual.atoms.contains(&n) && demote_pi(&mut rw, s, n) {
-                    saturated_pi = true;
+                    residual_pi_saturated = true;
                 }
             }
         }
-        if saturated_pi {
+        if shared_edge_saturated || residual_pi_saturated {
             for &atom in &saturate {
                 fill_closed_shell_h(&mut rw, atom);
             }
@@ -464,35 +465,30 @@ impl PairCandidate {
             // else: ordinary parent double — rematch in residual, no exclusive seed
         }
         let residual_match = residual.after_forced_doubles(&framework_forced);
-        // Empty residual after the shared-edge drop: done (one-edge path_end).
-        // Vacuous keep+keep with no such edge still refuses (identity rebuild).
+        // Empty residual: one-edge path_end (shared π saturated) may emit.
+        // Vacuous keep+keep, or two carbonyl carbons that only demoted
+        // leaf C=O into an empty residual (glyoxal → glycol), refuse.
         if edit_forced.is_empty() && residual_match.bonds.is_empty() {
-            if saturate.len() == 2 {
-                let mut ends = saturate.iter().copied();
-                let a = ends.next().unwrap();
-                let b = ends.next().unwrap();
-                // Shared edge already saturated above — emit if the mol changed.
-                if rw.bond_between(atom_idx(a), atom_idx(b)).is_some() {
-                    let parent_csmi = canon_smiles(mol);
-                    let product_csmi = canon_smiles(&rw);
-                    if product_csmi != parent_csmi {
-                        let checked = aromatize(&rw);
-                        let mut products = Vec::new();
-                        let mut local_csmi = BTreeSet::new();
-                        for frag in checked.fragments() {
-                            if !accept_product(&frag) {
-                                continue;
-                            }
-                            let smiles = canon_smiles(&frag);
-                            if smiles == parent_csmi {
-                                continue;
-                            }
-                            if local_csmi.insert(smiles) {
-                                products.push(frag);
-                            }
+            if shared_edge_saturated {
+                let parent_csmi = canon_smiles(mol);
+                let product_csmi = canon_smiles(&rw);
+                if product_csmi != parent_csmi {
+                    let checked = aromatize(&rw);
+                    let mut products = Vec::new();
+                    let mut local_csmi = BTreeSet::new();
+                    for frag in checked.fragments() {
+                        if !accept_product(&frag) {
+                            continue;
                         }
-                        return Ok(products);
+                        let smiles = canon_smiles(&frag);
+                        if smiles == parent_csmi {
+                            continue;
+                        }
+                        if local_csmi.insert(smiles) {
+                            products.push(frag);
+                        }
                     }
+                    return Ok(products);
                 }
             }
             return Ok(Vec::new());
@@ -1354,6 +1350,36 @@ mod tests {
                 .iter()
                 .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
             "styrene vinyl–ring H should emit exocyclic diene; got {emissions:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_glyoxal_refuses_glycol_from_carbon_pair() {
+        // O=C–C=O carbons as path_ends must not collapse both carbonyls to
+        // ethylene glycol (empty residual after demoting leaf C=O). Python
+        // emits O=CCO / OC=CO only.
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("O=CC=O").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let glycol = canon_of("OCCO").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .all(|e| e.products.iter().all(|p| canon_of(p).unwrap() != glycol)),
+            "glyoxal must not emit glycol; got {emissions:?}"
+        );
+        let want = canon_of("OC=CO").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "glyoxal should emit enediol; got {emissions:?}"
         );
     }
 }

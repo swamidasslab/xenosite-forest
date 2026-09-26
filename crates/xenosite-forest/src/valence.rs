@@ -54,18 +54,21 @@ pub fn accept_product(mol: &Molecule) -> bool {
     closed_shell(mol)
 }
 
-/// Alkoxide / carboxylate / enolate (`CC[O-]`, `[O-]C(O)=`) from π rematch
-/// charge junk. Nitro / N-oxide / S-oxide `O-` (bonded to N or S) stay —
-/// zwitterions and nitro-reduction anions. Closed-shell prefer (HEURISTICS C10).
+/// Alkoxide / carboxylate / enolate (`CC[O-]`, `[O-]C(O)=`) and sulfoxide
+/// dianion junk (`C[S-](C)[O-]`). Keep `O-` on nitrogen (nitro / reduction
+/// anions) and on cationic S (S-oxide zwitterion). Closed-shell prefer
+/// (HEURISTICS C10).
 fn oxygen_anion_on_carbon(mol: &Molecule) -> bool {
     for (idx, atom) in mol.atoms() {
         if atom.element.atomic_number() != 8 || atom.charge >= 0 {
             continue;
         }
-        let on_n_or_s = mol.neighbors(idx).any(|(nbr, _)| {
-            matches!(mol.atom(nbr).element.atomic_number(), 7 | 16)
+        let allowed = mol.neighbors(idx).any(|(nbr, _)| {
+            let n = mol.atom(nbr);
+            let z = n.element.atomic_number();
+            z == 7 || (z == 16 && n.charge > 0)
         });
-        if !on_n_or_s {
+        if !allowed {
             return true;
         }
     }
@@ -290,6 +293,7 @@ mod tests {
     fn carbon_bound_oxide_refused_nitro_oxide_kept() {
         assert!(!accept_product(&parse_mol("CC[O-]").unwrap()));
         assert!(!accept_product(&parse_mol("[O-]C=C").unwrap()));
+        assert!(!accept_product(&parse_mol("C[S-](C)[O-]").unwrap()));
         assert!(accept_product(
             &parse_mol("[O-][N+](=O)c1ccccc1").unwrap()
         ));
