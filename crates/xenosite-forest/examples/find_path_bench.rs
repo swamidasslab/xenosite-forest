@@ -201,7 +201,8 @@ fn parse_paths(args: &[String]) -> usize {
 fn parse_score_label(label: &str) -> HeapScoreMode {
     match label {
         "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
-        "match" | "add" | "add-both" | "default" => HeapScoreMode::match_add(),
+        "match" | "default" | "log-neg-pc" => HeapScoreMode::match_log_neg_pc(),
+        "add" | "add-both" => HeapScoreMode::match_add(),
         "product" | "product-both" | "match-product" => {
             HeapScoreMode::Match(MatchScoreSpec::product_both())
         }
@@ -261,10 +262,6 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             combine: MatchCombine::LinNegPNeg2C,
             metric: MatchMetric::Both,
         }),
-        "log-neg-pc" => HeapScoreMode::Match(MatchScoreSpec {
-            combine: MatchCombine::LogNegPC,
-            metric: MatchMetric::Both,
-        }),
         other => panic!(
             "unknown --score {other} (soft|add-both|product-both|log-neg-pc|lin-*|…)"
         ),
@@ -275,7 +272,7 @@ fn parse_score(args: &[String]) -> HeapScoreMode {
     args.windows(2)
         .find(|w| w[0] == "--score")
         .map(|w| parse_score_label(&w[1]))
-        .unwrap_or_else(HeapScoreMode::match_add)
+        .unwrap_or_else(HeapScoreMode::match_log_neg_pc)
 }
 
 #[derive(Clone, Debug)]

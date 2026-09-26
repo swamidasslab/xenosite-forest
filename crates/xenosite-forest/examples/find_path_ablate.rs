@@ -337,9 +337,17 @@ fn main() {
 
     let mut variants = vec![
         Variant {
-            label: "add-both",
+            label: "log-neg-pc",
             rules: RulesKind::PhaseOne,
             config: base_cfg,
+        },
+        Variant {
+            label: "add-both",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                heap_score: HeapScoreMode::match_add(),
+                ..base_cfg
+            },
         },
         Variant {
             label: "lazy",
@@ -404,17 +412,6 @@ fn main() {
             config: FindPathConfig {
                 heap_score: HeapScoreMode::Match(MatchScoreSpec {
                     combine: MatchCombine::LinNegPNeg2C,
-                    metric: MatchMetric::Both,
-                }),
-                ..base_cfg
-            },
-        },
-        Variant {
-            label: "log-neg-pc",
-            rules: RulesKind::PhaseOne,
-            config: FindPathConfig {
-                heap_score: HeapScoreMode::Match(MatchScoreSpec {
-                    combine: MatchCombine::LogNegPC,
                     metric: MatchMetric::Both,
                 }),
                 ..base_cfg

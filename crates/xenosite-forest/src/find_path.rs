@@ -239,8 +239,7 @@ pub enum MatchCombine {
     Close,
     /// Σ `ln(max(0, parent−child)+1)` over active metrics.
     Improve,
-    /// Close + Improve = `ln` of the Product factors (default).
-    #[default]
+    /// Close + Improve = `ln` of the Product factors (ablation / former default).
     Add,
     /// Direct multiply of the same factors (ablation / `--score product-*`).
     Product,
@@ -253,7 +252,8 @@ pub enum MatchCombine {
     /// Linear: Σ `−parent − 2·child`.
     LinNegPNeg2C,
     /// Log costs, no improve clamp: Σ `−ln(1+child) − ln(1+parent)`.
-    /// Separates bad children; does not use `max(0, p−c)`.
+    /// Separates bad children; does not use `max(0, p−c)`. **Default.**
+    #[default]
     LogNegPC,
 }
 
@@ -277,7 +277,15 @@ pub struct MatchScoreSpec {
 }
 
 impl MatchScoreSpec {
-    /// Default: log-space product of close×imp factors (atom+formula).
+    /// Default live recipe: `−ln(1+child) − ln(1+parent)` (atom+formula).
+    pub const fn log_neg_pc() -> Self {
+        Self {
+            combine: MatchCombine::LogNegPC,
+            metric: MatchMetric::Both,
+        }
+    }
+
+    /// Former default: log-space product of close×imp factors (atom+formula).
     pub const fn add_both() -> Self {
         Self {
             combine: MatchCombine::Add,
@@ -362,25 +370,30 @@ pub enum HeapScoreMode {
     /// Soft stack: `search_bias`, site H-progress, `cost_gain`, then `seq`.
     /// Opt-in via `FindPathConfig` / `--score soft`.
     SoftStack,
-    /// Match-family score from [`MatchScoreSpec`] (default: add × both).
+    /// Match-family score from [`MatchScoreSpec`] (default: log-neg-pc).
     Match(MatchScoreSpec),
 }
 
 impl Default for HeapScoreMode {
     fn default() -> Self {
-        Self::Match(MatchScoreSpec::add_both())
+        Self::Match(MatchScoreSpec::log_neg_pc())
     }
 }
 
 impl HeapScoreMode {
-    /// Default match recipe (log of close×imp product, formula+atom).
+    /// Default match recipe (`−ln(1+c) − ln(1+p)`, formula+atom).
+    pub const fn match_log_neg_pc() -> Self {
+        Self::Match(MatchScoreSpec::log_neg_pc())
+    }
+
+    /// Former default: log of close×imp product.
     pub const fn match_add() -> Self {
         Self::Match(MatchScoreSpec::add_both())
     }
 
-    /// Alias of [`Self::match_add`] (old name; default is no longer product).
+    /// Alias of [`Self::match_log_neg_pc`].
     pub const fn match_product() -> Self {
-        Self::match_add()
+        Self::match_log_neg_pc()
     }
 
     pub fn label(self) -> &'static str {
@@ -980,7 +993,7 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: false,
-            heap_score: HeapScoreMode::match_add(),
+            heap_score: HeapScoreMode::match_log_neg_pc(),
             drop_skeleton_twins: true,
         }
     }
