@@ -330,3 +330,65 @@ fn site_localized_tags_disambiguate_multi_change() {
     assert_eq!(aryl.len(), 1, "{:?}", labels(&terms));
     assert_eq!(aryl[0].site.map_nums, vec![2]);
 }
+
+#[test]
+fn annotation_bundle_facets_without_combinatorial_concepts() {
+    let n = namer();
+    let bundles = n.annotate_smiles("CC", "CCO", &[]).unwrap();
+    assert!(!bundles.is_empty(), "{bundles:?}");
+    // At least one bundle carries phase I + a transformation + structural delta.
+    let hit = bundles.iter().find(|b| {
+        b.phase.as_deref() == Some("xrm:0000001")
+            && b.transformation.is_some()
+            && !b.structural_delta.is_empty()
+    });
+    assert!(hit.is_some(), "{bundles:?}");
+    let b = hit.unwrap();
+    assert!(
+        b.xmet_properties.iter().any(|p| p == "xmet:hasPhase"),
+        "{:?}",
+        b.xmet_properties
+    );
+    assert!(
+        b.xmet_properties
+            .iter()
+            .any(|p| p == "xmet:hasTransformation"),
+        "{:?}",
+        b.xmet_properties
+    );
+    // site_label is a display string, not a minted concept id.
+    let label = b.site_label.as_deref().unwrap_or("");
+    assert!(!label.is_empty(), "{b:?}");
+    assert!(!label.starts_with("xrm:"), "{label}");
+    assert!(
+        !n.thesaurus
+            .concepts
+            .values()
+            .any(|c| c.pref_label == "benzylic_phase_1_hydroxylation_clearance_liability")
+    );
+}
+
+#[test]
+fn annotation_bundle_site_label_uses_map_template() {
+    let bundles = namer()
+        .annotate_smiles(
+            "[CH3:1]c1ccc([CH3:2])cc1",
+            "O[CH2:1]c1ccc([CH3:2])cc1",
+            &["chem:benzylic-hydroxylation@1"],
+        )
+        .unwrap();
+    let localized = bundles
+        .iter()
+        .find(|b| b.site.map_nums == vec![1])
+        .expect("site @1 bundle");
+    let label = localized.site_label.as_deref().unwrap();
+    assert!(label.contains('@') || label.contains("benzylic"), "{label}");
+    assert!(
+        localized
+            .xmet_properties
+            .iter()
+            .any(|p| p == "xmet:localizesToSite"),
+        "{:?}",
+        localized.xmet_properties
+    );
+}

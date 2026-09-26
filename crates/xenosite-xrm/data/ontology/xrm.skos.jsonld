@@ -294,7 +294,9 @@
       "relatedMatch": [
         "xrm:8000003",
         "xrm:7800001",
-        "xrm:1500118"
+        "xrm:1500118",
+        "xrm:0000303",
+        "xrm:0000300"
       ]
     },
     {
@@ -397,7 +399,8 @@
         "xrm:7600003",
         "xrm:7400001",
         "xrm:7700001",
-        "xrm:1500012"
+        "xrm:1500012",
+        "xrm:1300117"
       ]
     },
     {
@@ -796,7 +799,8 @@
         "xrm:7500001",
         "xrm:7000001",
         "xrm:7900002",
-        "xrm:1500010"
+        "xrm:1500010",
+        "xrm:0000101"
       ]
     },
     {
@@ -825,7 +829,8 @@
       "broader": "xrm:0000300",
       "relatedMatch": [
         "xrm:8000005",
-        "xrm:1500011"
+        "xrm:1500011",
+        "xrm:0000101"
       ]
     },
     {
@@ -1358,7 +1363,10 @@
         "acyl glucuronide formation"
       ],
       "broader": "xrm:0001001",
-      "relatedMatch": "xrm:1500015"
+      "relatedMatch": [
+        "xrm:1500015",
+        "xrm:1400121"
+      ]
     },
     {
       "id": "xrm:0001005",
@@ -2322,6 +2330,129 @@
       "broader": "xrm:1200000"
     },
     {
+      "id": "xrm:1200200",
+      "type": "skos:Concept",
+      "prefLabel": "aromatic hydroxylation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow SO: aromatic hydroxylation class.",
+      "altLabel": [
+        "aryl hydroxylation class"
+      ],
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200201",
+      "type": "skos:Concept",
+      "prefLabel": "aliphatic hydroxylation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow SO: aliphatic hydroxylation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200202",
+      "type": "skos:Concept",
+      "prefLabel": "N-dealkylation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow UO: N-dealkylation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200203",
+      "type": "skos:Concept",
+      "prefLabel": "O-dealkylation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow UO: O-dealkylation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200204",
+      "type": "skos:Concept",
+      "prefLabel": "S-dealkylation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow UO: S-dealkylation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200205",
+      "type": "skos:Concept",
+      "prefLabel": "C-dealkylation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow UO: C-dealkylation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200206",
+      "type": "skos:Concept",
+      "prefLabel": "oxidative dehalogenation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow UO: oxidative dehalogenation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200207",
+      "type": "skos:Concept",
+      "prefLabel": "quinone formation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow DH-adjacent / Forest QF: quinone formation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200208",
+      "type": "skos:Concept",
+      "prefLabel": "iminium formation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow DH: iminium formation class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200209",
+      "type": "skos:Concept",
+      "prefLabel": "single-to-double bond dehydrogenation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow DH: single→double bond class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200210",
+      "type": "skos:Concept",
+      "prefLabel": "double-to-triple bond dehydrogenation class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow DH: double→triple bond class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200211",
+      "type": "skos:Concept",
+      "prefLabel": "ether hydrolysis class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow HD: ether hydrolysis class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200212",
+      "type": "skos:Concept",
+      "prefLabel": "cyanide hydrolysis class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow HD: cyanide hydrolysis class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200213",
+      "type": "skos:Concept",
+      "prefLabel": "sulfo reduction class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow RD: sulfo reduction class.",
+      "broader": "xrm:1200000"
+    },
+    {
+      "id": "xrm:1200214",
+      "type": "skos:Concept",
+      "prefLabel": "oxygen reduction class",
+      "inScheme": "xrm:scheme",
+      "definition": "Rainbow RD: oxygen/carbonyl reduction class.",
+      "broader": "xrm:1200000"
+    },
+    {
       "id": "xrm:1300000",
       "type": "skos:Concept",
       "prefLabel": "phase II conjugation family",
@@ -2625,7 +2756,8 @@
       "broader": [
         "xrm:1300000",
         "xrm:0000002"
-      ]
+      ],
+      "relatedMatch": "xrm:0000110"
     },
     {
       "id": "xrm:1300118",
@@ -2820,7 +2952,8 @@
       "altLabel": [
         "aromatic_soft_spot"
       ],
-      "broader": "xrm:1400000"
+      "broader": "xrm:1400000",
+      "relatedMatch": "xrm:1600102"
     },
     {
       "id": "xrm:1400101",
@@ -2842,7 +2975,8 @@
       "altLabel": [
         "amine_soft_spot"
       ],
-      "broader": "xrm:1400000"
+      "broader": "xrm:1400000",
+      "relatedMatch": "xrm:1600104"
     },
     {
       "id": "xrm:1400103",
@@ -3053,7 +3187,8 @@
       "altLabel": [
         "acyl_glucuronide_risk"
       ],
-      "broader": "xrm:1400000"
+      "broader": "xrm:1400000",
+      "relatedMatch": "xrm:0001004"
     },
     {
       "id": "xrm:1400122",
@@ -3643,6 +3778,337 @@
       "broader": "xrm:1500000"
     },
     {
+      "id": "xrm:1500200",
+      "type": "skos:Concept",
+      "prefLabel": "hydroquinone metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Hydroquinone product class.",
+      "altLabel": [
+        "hydroquinone_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500201",
+      "type": "skos:Concept",
+      "prefLabel": "aminophenol metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Aminophenol product class.",
+      "altLabel": [
+        "aminophenol_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500202",
+      "type": "skos:Concept",
+      "prefLabel": "nitrosoarenes",
+      "inScheme": "xrm:scheme",
+      "definition": "Nitrosoarene metabolite class.",
+      "altLabel": [
+        "nitrosoarene"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500203",
+      "type": "skos:Concept",
+      "prefLabel": "nitrenium ion",
+      "inScheme": "xrm:scheme",
+      "definition": "Nitrenium reactive intermediate.",
+      "altLabel": [
+        "nitrenium_ion"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500204",
+      "type": "skos:Concept",
+      "prefLabel": "carbocation intermediate",
+      "inScheme": "xrm:scheme",
+      "definition": "Carbocation metabolic intermediate.",
+      "altLabel": [
+        "carbocation_intermediate"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500205",
+      "type": "skos:Concept",
+      "prefLabel": "benzylic radical",
+      "inScheme": "xrm:scheme",
+      "definition": "Benzylic radical intermediate.",
+      "altLabel": [
+        "benzylic_radical"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500206",
+      "type": "skos:Concept",
+      "prefLabel": "thiyl radical",
+      "inScheme": "xrm:scheme",
+      "definition": "Thiyl radical intermediate.",
+      "altLabel": [
+        "thiyl_radical"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500207",
+      "type": "skos:Concept",
+      "prefLabel": "sulfenic acid",
+      "inScheme": "xrm:scheme",
+      "definition": "Sulfenic acid intermediate/product.",
+      "altLabel": [
+        "sulfenic_acid"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500208",
+      "type": "skos:Concept",
+      "prefLabel": "sulfinic acid metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Sulfinic acid metabolite.",
+      "altLabel": [
+        "sulfinic_acid_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500209",
+      "type": "skos:Concept",
+      "prefLabel": "sulfonic acid metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Sulfonic acid metabolite.",
+      "altLabel": [
+        "sulfonic_acid_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500210",
+      "type": "skos:Concept",
+      "prefLabel": "disulfide metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Disulfide metabolite product.",
+      "altLabel": [
+        "disulfide_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500211",
+      "type": "skos:Concept",
+      "prefLabel": "lactam metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Lactam ring metabolite.",
+      "altLabel": [
+        "lactam_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500212",
+      "type": "skos:Concept",
+      "prefLabel": "lactone metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Lactone ring metabolite.",
+      "altLabel": [
+        "lactone_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500213",
+      "type": "skos:Concept",
+      "prefLabel": "carboxylic acid glucuronide",
+      "inScheme": "xrm:scheme",
+      "definition": "Acyl-linked glucuronide of a carboxylic acid.",
+      "altLabel": [
+        "carboxylic_acid_glucuronide"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500214",
+      "type": "skos:Concept",
+      "prefLabel": "ether glucuronide",
+      "inScheme": "xrm:scheme",
+      "definition": "O-glucuronide of an alcohol/phenol.",
+      "altLabel": [
+        "ether_glucuronide"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500215",
+      "type": "skos:Concept",
+      "prefLabel": "N-glucuronide",
+      "inScheme": "xrm:scheme",
+      "definition": "N-linked glucuronide product.",
+      "altLabel": [
+        "n_glucuronide"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500216",
+      "type": "skos:Concept",
+      "prefLabel": "quaternary ammonium glucuronide",
+      "inScheme": "xrm:scheme",
+      "definition": "Quaternary N-glucuronide product.",
+      "altLabel": [
+        "quaternary_ammonium_glucuronide"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500217",
+      "type": "skos:Concept",
+      "prefLabel": "sulfate ester metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Sulfate ester conjugate product.",
+      "altLabel": [
+        "sulfate_ester_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500218",
+      "type": "skos:Concept",
+      "prefLabel": "cysteine adduct",
+      "inScheme": "xrm:scheme",
+      "definition": "Cysteine conjugate / adduct product.",
+      "altLabel": [
+        "cysteine_adduct"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500219",
+      "type": "skos:Concept",
+      "prefLabel": "N-acetylcysteine adduct",
+      "inScheme": "xrm:scheme",
+      "definition": "NAC / mercapturate-path adduct.",
+      "altLabel": [
+        "NAC adduct",
+        "n_acetylcysteine_adduct"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500220",
+      "type": "skos:Concept",
+      "prefLabel": "glycine conjugate",
+      "inScheme": "xrm:scheme",
+      "definition": "Glycine-conjugated metabolite.",
+      "altLabel": [
+        "glycine_conjugate"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500221",
+      "type": "skos:Concept",
+      "prefLabel": "taurine conjugate",
+      "inScheme": "xrm:scheme",
+      "definition": "Taurine-conjugated metabolite.",
+      "altLabel": [
+        "taurine_conjugate"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500222",
+      "type": "skos:Concept",
+      "prefLabel": "CoA conjugate",
+      "inScheme": "xrm:scheme",
+      "definition": "Coenzyme A conjugate intermediate/product.",
+      "altLabel": [
+        "coa_conjugate"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500223",
+      "type": "skos:Concept",
+      "prefLabel": "methylated metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Methyl-conjugated metabolite product.",
+      "altLabel": [
+        "methylated_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500224",
+      "type": "skos:Concept",
+      "prefLabel": "acetylated metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Acetyl-conjugated metabolite product.",
+      "altLabel": [
+        "acetylated_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500225",
+      "type": "skos:Concept",
+      "prefLabel": "dealkylated amine",
+      "inScheme": "xrm:scheme",
+      "definition": "Amine product after N-dealkylation.",
+      "altLabel": [
+        "dealkylated_amine"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500226",
+      "type": "skos:Concept",
+      "prefLabel": "dealkylated phenol",
+      "inScheme": "xrm:scheme",
+      "definition": "Phenol product after O-dealkylation.",
+      "altLabel": [
+        "dealkylated_phenol"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500227",
+      "type": "skos:Concept",
+      "prefLabel": "nor-metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "N- or O-dealkylated nor-metabolite.",
+      "altLabel": [
+        "nor_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500228",
+      "type": "skos:Concept",
+      "prefLabel": "carboxylic acid from alcohol",
+      "inScheme": "xrm:scheme",
+      "definition": "Carboxylic acid from alcohol oxidation cascade.",
+      "altLabel": [
+        "carboxylic_acid_from_alcohol"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
+      "id": "xrm:1500229",
+      "type": "skos:Concept",
+      "prefLabel": "ketone metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Ketone metabolite product class.",
+      "altLabel": [
+        "ketone_metabolite"
+      ],
+      "broader": "xrm:1500000"
+    },
+    {
       "id": "xrm:1600000",
       "type": "skos:Concept",
       "prefLabel": "site type",
@@ -3826,7 +4292,8 @@
       "altLabel": [
         "phenolic oxygen"
       ],
-      "broader": "xrm:1600000"
+      "broader": "xrm:1600000",
+      "relatedMatch": "xrm:1400100"
     },
     {
       "id": "xrm:1600103",
@@ -3848,7 +4315,8 @@
       "altLabel": [
         "tertiary_amine"
       ],
-      "broader": "xrm:1600000"
+      "broader": "xrm:1600000",
+      "relatedMatch": "xrm:1400102"
     },
     {
       "id": "xrm:1600105",
@@ -4323,6 +4791,317 @@
       "broader": "xrm:1600000"
     },
     {
+      "id": "xrm:1600200",
+      "type": "skos:Concept",
+      "prefLabel": "atom site template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template localizing a reaction to an atom site.",
+      "altLabel": [
+        "atom_site",
+        "atom_site_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600201",
+      "type": "skos:Concept",
+      "prefLabel": "bond site template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template localizing a reaction to a bond site.",
+      "altLabel": [
+        "bond_site",
+        "bond_site_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600202",
+      "type": "skos:Concept",
+      "prefLabel": "ring site template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template localizing a reaction to a ring site.",
+      "altLabel": [
+        "ring_site",
+        "ring_site_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600203",
+      "type": "skos:Concept",
+      "prefLabel": "attachment atom template O",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for O-attachment localization.",
+      "altLabel": [
+        "attachment_atom_template_o"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600204",
+      "type": "skos:Concept",
+      "prefLabel": "attachment atom template N",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for N-attachment localization.",
+      "altLabel": [
+        "attachment_atom_template_n"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600205",
+      "type": "skos:Concept",
+      "prefLabel": "attachment atom template S",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for S-attachment localization.",
+      "altLabel": [
+        "attachment_atom_template_s"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600206",
+      "type": "skos:Concept",
+      "prefLabel": "attachment atom template C",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for C-attachment localization.",
+      "altLabel": [
+        "attachment_atom_template_c"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600207",
+      "type": "skos:Concept",
+      "prefLabel": "attachment atom template acyl",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for acyl-attachment localization.",
+      "altLabel": [
+        "attachment_atom_template_acyl"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600208",
+      "type": "skos:Concept",
+      "prefLabel": "canonical site name",
+      "inScheme": "xrm:scheme",
+      "definition": "Canonical generated site-localized display name.",
+      "altLabel": [
+        "canonical_site_name"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600209",
+      "type": "skos:Concept",
+      "prefLabel": "map-number site label",
+      "inScheme": "xrm:scheme",
+      "definition": "Site label using atom-map numbers (e.g. @1).",
+      "altLabel": [
+        "map_number_site_label"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600210",
+      "type": "skos:Concept",
+      "prefLabel": "element-index site label",
+      "inScheme": "xrm:scheme",
+      "definition": "Site label using element + index (e.g. C7).",
+      "altLabel": [
+        "element_index_site_label"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600211",
+      "type": "skos:Concept",
+      "prefLabel": "motif-localized name template",
+      "inScheme": "xrm:scheme",
+      "definition": "Motif-aware localized name (e.g. para on anisole).",
+      "altLabel": [
+        "motif_localized_name_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600212",
+      "type": "skos:Concept",
+      "prefLabel": "product-class name template",
+      "inScheme": "xrm:scheme",
+      "definition": "Product-class display name (e.g. phenol formation).",
+      "altLabel": [
+        "product_class_name_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600213",
+      "type": "skos:Concept",
+      "prefLabel": "medchem tag name template",
+      "inScheme": "xrm:scheme",
+      "definition": "Med-chem liability display phrase.",
+      "altLabel": [
+        "medchem_tag_name_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600214",
+      "type": "skos:Concept",
+      "prefLabel": "regio descriptor template",
+      "inScheme": "xrm:scheme",
+      "definition": "Ortho/meta/para (or similar) regio descriptor.",
+      "altLabel": [
+        "regio_descriptor_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600215",
+      "type": "skos:Concept",
+      "prefLabel": "stereo descriptor template",
+      "inScheme": "xrm:scheme",
+      "definition": "Stereo descriptor in a localized name.",
+      "altLabel": [
+        "stereo_descriptor_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600216",
+      "type": "skos:Concept",
+      "prefLabel": "multi-site list template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template listing multiple localized sites.",
+      "altLabel": [
+        "multi_site_list_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600217",
+      "type": "skos:Concept",
+      "prefLabel": "bond endpoints template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template naming both ends of a bond site.",
+      "altLabel": [
+        "bond_endpoints_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600218",
+      "type": "skos:Concept",
+      "prefLabel": "ring index template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template naming a ring by index/system.",
+      "altLabel": [
+        "ring_index_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600219",
+      "type": "skos:Concept",
+      "prefLabel": "heteroatom symbol template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template inserting N/O/S/halogen symbol.",
+      "altLabel": [
+        "heteroatom_symbol_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600220",
+      "type": "skos:Concept",
+      "prefLabel": "chain position template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for ω / ω-1 / terminal position names.",
+      "altLabel": [
+        "chain_position_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600221",
+      "type": "skos:Concept",
+      "prefLabel": "benzylic position template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for benzylic position naming.",
+      "altLabel": [
+        "benzylic_position_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600222",
+      "type": "skos:Concept",
+      "prefLabel": "allylic position template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for allylic position naming.",
+      "altLabel": [
+        "allylic_position_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600223",
+      "type": "skos:Concept",
+      "prefLabel": "aniline nitrogen template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for aniline N localization.",
+      "altLabel": [
+        "aniline_nitrogen_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600224",
+      "type": "skos:Concept",
+      "prefLabel": "phenol oxygen template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for phenolic O localization.",
+      "altLabel": [
+        "phenol_oxygen_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600225",
+      "type": "skos:Concept",
+      "prefLabel": "tertiary amine nitrogen template",
+      "inScheme": "xrm:scheme",
+      "definition": "Template for tertiary amine N localization.",
+      "altLabel": [
+        "tertiary_amine_nitrogen_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600226",
+      "type": "skos:Concept",
+      "prefLabel": "site environment phrase template",
+      "inScheme": "xrm:scheme",
+      "definition": "Phrase combining site environment + reaction.",
+      "altLabel": [
+        "site_environment_phrase_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
+      "id": "xrm:1600227",
+      "type": "skos:Concept",
+      "prefLabel": "underspecified site template",
+      "inScheme": "xrm:scheme",
+      "definition": "Display when site localization is ambiguous.",
+      "altLabel": [
+        "underspecified_site_template"
+      ],
+      "broader": "xrm:1600000"
+    },
+    {
       "id": "xrm:1700000",
       "type": "skos:Concept",
       "prefLabel": "structural delta",
@@ -4704,6 +5483,9 @@
       "prefLabel": "SMARTS-derived tag",
       "inScheme": "xrm:scheme",
       "definition": "Tag assigned from reactant/product SMARTS.",
+      "altLabel": [
+        "smarts_derived_tag"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4712,6 +5494,9 @@
       "prefLabel": "formula-delta-derived tag",
       "inScheme": "xrm:scheme",
       "definition": "Tag assigned from elemental delta.",
+      "altLabel": [
+        "formula_delta_derived_tag"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4720,6 +5505,9 @@
       "prefLabel": "caller-tag-derived",
       "inScheme": "xrm:scheme",
       "definition": "Tag assigned from opaque caller CURIE/tag.",
+      "altLabel": [
+        "caller_tag_derived"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4728,6 +5516,9 @@
       "prefLabel": "Forest-map-derived tag",
       "inScheme": "xrm:scheme",
       "definition": "Tag assigned via Metabolic Forest map correspondence.",
+      "altLabel": [
+        "forest_map_derived_tag"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4736,6 +5527,9 @@
       "prefLabel": "exclusion rule",
       "inScheme": "xrm:scheme",
       "definition": "Negative / exclusion pattern applied.",
+      "altLabel": [
+        "exclusion_rule"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4744,6 +5538,9 @@
       "prefLabel": "Rainbow class derived",
       "inScheme": "xrm:scheme",
       "definition": "Tag derived from Rainbow Phase I class mapping.",
+      "altLabel": [
+        "rainbow_class_derived"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4752,6 +5549,9 @@
       "prefLabel": "XenoNet path derived",
       "inScheme": "xrm:scheme",
       "definition": "Tag derived from a multi-step XenoNet/Forest path.",
+      "altLabel": [
+        "xenonet_path_derived"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4760,6 +5560,9 @@
       "prefLabel": "legacy model output",
       "inScheme": "xrm:scheme",
       "definition": "Tag mapped from a legacy model output label.",
+      "altLabel": [
+        "legacy_model_output"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4768,6 +5571,9 @@
       "prefLabel": "harvest-derived synonym",
       "inScheme": "xrm:scheme",
       "definition": "Label/synonym promoted from offline harvest.",
+      "altLabel": [
+        "harvest_derived_synonym"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4776,6 +5582,9 @@
       "prefLabel": "manual curation",
       "inScheme": "xrm:scheme",
       "definition": "Tag asserted by manual curation.",
+      "altLabel": [
+        "manual_curation"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4784,6 +5593,9 @@
       "prefLabel": "priority override",
       "inScheme": "xrm:scheme",
       "definition": "Higher-priority rule overrode a broader tag.",
+      "altLabel": [
+        "priority_override"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -4792,6 +5604,230 @@
       "prefLabel": "site template expansion",
       "inScheme": "xrm:scheme",
       "definition": "Localized label generated from a site template (not a concept).",
+      "altLabel": [
+        "site_template_expansion"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900200",
+      "type": "skos:Concept",
+      "prefLabel": "repo rule derived",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag derived from a repository structure rule.",
+      "altLabel": [
+        "forest rule derived",
+        "repo_rule_derived"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900201",
+      "type": "skos:Concept",
+      "prefLabel": "SMARTS pattern match",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag from a matched SMARTS pattern.",
+      "altLabel": [
+        "smarts_pattern_match"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900202",
+      "type": "skos:Concept",
+      "prefLabel": "formula delta match",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag from elemental formula delta.",
+      "altLabel": [
+        "formula_delta_match"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900203",
+      "type": "skos:Concept",
+      "prefLabel": "caller CURIE match",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag from an opaque caller CURIE/tag.",
+      "altLabel": [
+        "caller_curie_match"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900204",
+      "type": "skos:Concept",
+      "prefLabel": "Rainbow SO class map",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped to Rainbow stable oxygenation class.",
+      "altLabel": [
+        "rainbow_so_class_map"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900205",
+      "type": "skos:Concept",
+      "prefLabel": "Rainbow UO class map",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped to Rainbow unstable oxygenation class.",
+      "altLabel": [
+        "rainbow_uo_class_map"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900206",
+      "type": "skos:Concept",
+      "prefLabel": "Rainbow DH class map",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped to Rainbow dehydrogenation class.",
+      "altLabel": [
+        "rainbow_dh_class_map"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900207",
+      "type": "skos:Concept",
+      "prefLabel": "Rainbow HD class map",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped to Rainbow hydrolysis class.",
+      "altLabel": [
+        "rainbow_hd_class_map"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900208",
+      "type": "skos:Concept",
+      "prefLabel": "Rainbow RD class map",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped to Rainbow reduction class.",
+      "altLabel": [
+        "rainbow_rd_class_map"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900209",
+      "type": "skos:Concept",
+      "prefLabel": "XenoNet edge score",
+      "inScheme": "xrm:scheme",
+      "definition": "Provenance from a XenoNet/Forest path edge score.",
+      "altLabel": [
+        "xenonet_edge_score"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900210",
+      "type": "skos:Concept",
+      "prefLabel": "XenoNet path score",
+      "inScheme": "xrm:scheme",
+      "definition": "Provenance from a multi-step path score.",
+      "altLabel": [
+        "xenonet_path_score"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900211",
+      "type": "skos:Concept",
+      "prefLabel": "legacy SOM model output",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped from a legacy site-of-metabolism model.",
+      "altLabel": [
+        "legacy_som_model_output"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900212",
+      "type": "skos:Concept",
+      "prefLabel": "legacy reactivity model output",
+      "inScheme": "xrm:scheme",
+      "definition": "Mapped from a legacy reactivity model.",
+      "altLabel": [
+        "legacy_reactivity_model_output"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900213",
+      "type": "skos:Concept",
+      "prefLabel": "exclusion SMARTS fired",
+      "inScheme": "xrm:scheme",
+      "definition": "Negative/exclusion SMARTS suppressed a tag.",
+      "altLabel": [
+        "exclusion_smarts_fired"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900214",
+      "type": "skos:Concept",
+      "prefLabel": "priority tie-break",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag chosen by priority among competing rules.",
+      "altLabel": [
+        "priority_tie_break"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900215",
+      "type": "skos:Concept",
+      "prefLabel": "manual curator override",
+      "inScheme": "xrm:scheme",
+      "definition": "Curator overrode automatic tagging.",
+      "altLabel": [
+        "manual_curator_override"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900216",
+      "type": "skos:Concept",
+      "prefLabel": "harvest promotion",
+      "inScheme": "xrm:scheme",
+      "definition": "Term/synonym promoted from offline harvest.",
+      "altLabel": [
+        "harvest_promotion"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900217",
+      "type": "skos:Concept",
+      "prefLabel": "atom-map required match",
+      "inScheme": "xrm:scheme",
+      "definition": "Assignment required mapped atoms to fire.",
+      "altLabel": [
+        "atom_map_required_match"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900218",
+      "type": "skos:Concept",
+      "prefLabel": "site aromaticity gate",
+      "inScheme": "xrm:scheme",
+      "definition": "Assignment gated on site aromaticity.",
+      "altLabel": [
+        "site_aromaticity_gate"
+      ],
+      "broader": "xrm:1900000"
+    },
+    {
+      "id": "xrm:1900219",
+      "type": "skos:Concept",
+      "prefLabel": "multi-site split",
+      "inScheme": "xrm:scheme",
+      "definition": "Emission split across distinct localized sites.",
+      "altLabel": [
+        "multi_site_split"
+      ],
       "broader": "xrm:1900000"
     },
     {
@@ -5121,6 +6157,9 @@
       "prefLabel": "enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Enzyme family framing (orthogonal to reaction name).",
+      "altLabel": [
+        "enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5129,6 +6168,9 @@
       "prefLabel": "tissue context",
       "inScheme": "xrm:scheme",
       "definition": "Tissue framing.",
+      "altLabel": [
+        "tissue_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5137,6 +6179,9 @@
       "prefLabel": "species context",
       "inScheme": "xrm:scheme",
       "definition": "Species framing.",
+      "altLabel": [
+        "species_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5145,6 +6190,9 @@
       "prefLabel": "matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Matrix / biofluid framing.",
+      "altLabel": [
+        "matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5153,6 +6201,9 @@
       "prefLabel": "compartment context",
       "inScheme": "xrm:scheme",
       "definition": "Subcellular compartment framing.",
+      "altLabel": [
+        "compartment_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5162,7 +6213,8 @@
       "inScheme": "xrm:scheme",
       "definition": "Cytochrome P450 family context (orthogonal).",
       "altLabel": [
-        "P450 family context"
+        "P450 family context",
+        "cyp_enzyme_family_context"
       ],
       "broader": "xrm:2100000"
     },
@@ -5172,6 +6224,9 @@
       "prefLabel": "UGT enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "UGT family context (orthogonal).",
+      "altLabel": [
+        "ugt_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5180,6 +6235,9 @@
       "prefLabel": "SULT enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Sulfotransferase family context (orthogonal).",
+      "altLabel": [
+        "sult_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5188,6 +6246,9 @@
       "prefLabel": "GST enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Glutathione S-transferase context (orthogonal).",
+      "altLabel": [
+        "gst_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5196,6 +6257,9 @@
       "prefLabel": "NAT enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "N-acetyltransferase context (orthogonal).",
+      "altLabel": [
+        "nat_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5204,6 +6268,9 @@
       "prefLabel": "FMO enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Flavin monooxygenase context (orthogonal).",
+      "altLabel": [
+        "fmo_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5212,6 +6279,9 @@
       "prefLabel": "AO enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Aldehyde oxidase context (orthogonal).",
+      "altLabel": [
+        "ao_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5220,6 +6290,9 @@
       "prefLabel": "MAO enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Monoamine oxidase context (orthogonal).",
+      "altLabel": [
+        "mao_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5228,6 +6301,9 @@
       "prefLabel": "CES enzyme family context",
       "inScheme": "xrm:scheme",
       "definition": "Carboxylesterase context (orthogonal).",
+      "altLabel": [
+        "ces_enzyme_family_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5236,6 +6312,9 @@
       "prefLabel": "liver tissue context",
       "inScheme": "xrm:scheme",
       "definition": "Liver tissue framing.",
+      "altLabel": [
+        "liver_tissue_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5244,6 +6323,9 @@
       "prefLabel": "intestine tissue context",
       "inScheme": "xrm:scheme",
       "definition": "Intestine tissue framing.",
+      "altLabel": [
+        "intestine_tissue_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5252,6 +6334,9 @@
       "prefLabel": "kidney tissue context",
       "inScheme": "xrm:scheme",
       "definition": "Kidney tissue framing.",
+      "altLabel": [
+        "kidney_tissue_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5260,6 +6345,9 @@
       "prefLabel": "lung tissue context",
       "inScheme": "xrm:scheme",
       "definition": "Lung tissue framing.",
+      "altLabel": [
+        "lung_tissue_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5268,6 +6356,9 @@
       "prefLabel": "brain tissue context",
       "inScheme": "xrm:scheme",
       "definition": "Brain tissue framing.",
+      "altLabel": [
+        "brain_tissue_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5276,6 +6367,9 @@
       "prefLabel": "human species context",
       "inScheme": "xrm:scheme",
       "definition": "Human species framing.",
+      "altLabel": [
+        "human_species_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5284,6 +6378,9 @@
       "prefLabel": "rat species context",
       "inScheme": "xrm:scheme",
       "definition": "Rat species framing.",
+      "altLabel": [
+        "rat_species_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5292,6 +6389,9 @@
       "prefLabel": "mouse species context",
       "inScheme": "xrm:scheme",
       "definition": "Mouse species framing.",
+      "altLabel": [
+        "mouse_species_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5300,6 +6400,9 @@
       "prefLabel": "dog species context",
       "inScheme": "xrm:scheme",
       "definition": "Dog species framing.",
+      "altLabel": [
+        "dog_species_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5309,7 +6412,8 @@
       "inScheme": "xrm:scheme",
       "definition": "Nonhuman primate framing.",
       "altLabel": [
-        "NHP species context"
+        "NHP species context",
+        "monkey_species_context"
       ],
       "broader": "xrm:2100000"
     },
@@ -5319,6 +6423,9 @@
       "prefLabel": "plasma matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Plasma matrix framing.",
+      "altLabel": [
+        "plasma_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5327,6 +6434,9 @@
       "prefLabel": "urine matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Urine matrix framing.",
+      "altLabel": [
+        "urine_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5335,6 +6445,9 @@
       "prefLabel": "bile matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Bile matrix framing.",
+      "altLabel": [
+        "bile_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5343,6 +6456,9 @@
       "prefLabel": "feces matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Feces matrix framing.",
+      "altLabel": [
+        "feces_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5351,6 +6467,9 @@
       "prefLabel": "microsome matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Microsome incubation matrix.",
+      "altLabel": [
+        "microsome_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5359,6 +6478,9 @@
       "prefLabel": "cytosol matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Cytosol incubation matrix.",
+      "altLabel": [
+        "cytosol_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5367,6 +6489,9 @@
       "prefLabel": "hepatocyte matrix context",
       "inScheme": "xrm:scheme",
       "definition": "Hepatocyte incubation matrix.",
+      "altLabel": [
+        "hepatocyte_matrix_context"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5375,6 +6500,9 @@
       "prefLabel": "endoplasmic reticulum compartment",
       "inScheme": "xrm:scheme",
       "definition": "ER compartment framing.",
+      "altLabel": [
+        "endoplasmic_reticulum_compartment"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5383,6 +6511,9 @@
       "prefLabel": "cytosol compartment",
       "inScheme": "xrm:scheme",
       "definition": "Cytosol compartment framing.",
+      "altLabel": [
+        "cytosol_compartment"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5391,6 +6522,9 @@
       "prefLabel": "mitochondria compartment",
       "inScheme": "xrm:scheme",
       "definition": "Mitochondrial compartment framing.",
+      "altLabel": [
+        "mitochondria_compartment"
+      ],
       "broader": "xrm:2100000"
     },
     {
@@ -5399,6 +6533,362 @@
       "prefLabel": "blood compartment",
       "inScheme": "xrm:scheme",
       "definition": "Blood / systemic compartment framing.",
+      "altLabel": [
+        "blood_compartment"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100200",
+      "type": "skos:Concept",
+      "prefLabel": "CYP3A context",
+      "inScheme": "xrm:scheme",
+      "definition": "CYP3A family context (orthogonal).",
+      "altLabel": [
+        "CYP3A",
+        "cyp3a_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100201",
+      "type": "skos:Concept",
+      "prefLabel": "CYP2D6 context",
+      "inScheme": "xrm:scheme",
+      "definition": "CYP2D6 isoform context (orthogonal).",
+      "altLabel": [
+        "cyp2d6_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100202",
+      "type": "skos:Concept",
+      "prefLabel": "CYP2C9 context",
+      "inScheme": "xrm:scheme",
+      "definition": "CYP2C9 isoform context (orthogonal).",
+      "altLabel": [
+        "cyp2c9_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100203",
+      "type": "skos:Concept",
+      "prefLabel": "CYP2C19 context",
+      "inScheme": "xrm:scheme",
+      "definition": "CYP2C19 isoform context (orthogonal).",
+      "altLabel": [
+        "cyp2c19_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100204",
+      "type": "skos:Concept",
+      "prefLabel": "CYP1A2 context",
+      "inScheme": "xrm:scheme",
+      "definition": "CYP1A2 isoform context (orthogonal).",
+      "altLabel": [
+        "cyp1a2_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100205",
+      "type": "skos:Concept",
+      "prefLabel": "CYP2E1 context",
+      "inScheme": "xrm:scheme",
+      "definition": "CYP2E1 isoform context (orthogonal).",
+      "altLabel": [
+        "cyp2e1_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100206",
+      "type": "skos:Concept",
+      "prefLabel": "UGT1A1 context",
+      "inScheme": "xrm:scheme",
+      "definition": "UGT1A1 isoform context (orthogonal).",
+      "altLabel": [
+        "ugt1a1_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100207",
+      "type": "skos:Concept",
+      "prefLabel": "UGT2B7 context",
+      "inScheme": "xrm:scheme",
+      "definition": "UGT2B7 isoform context (orthogonal).",
+      "altLabel": [
+        "ugt2b7_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100208",
+      "type": "skos:Concept",
+      "prefLabel": "SULT1A1 context",
+      "inScheme": "xrm:scheme",
+      "definition": "SULT1A1 isoform context (orthogonal).",
+      "altLabel": [
+        "sult1a1_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100209",
+      "type": "skos:Concept",
+      "prefLabel": "GST-P context",
+      "inScheme": "xrm:scheme",
+      "definition": "GST-P family context (orthogonal).",
+      "altLabel": [
+        "gst_p_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100210",
+      "type": "skos:Concept",
+      "prefLabel": "NAT2 context",
+      "inScheme": "xrm:scheme",
+      "definition": "NAT2 isoform context (orthogonal).",
+      "altLabel": [
+        "nat2_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100211",
+      "type": "skos:Concept",
+      "prefLabel": "FMO3 context",
+      "inScheme": "xrm:scheme",
+      "definition": "FMO3 isoform context (orthogonal).",
+      "altLabel": [
+        "fmo3_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100212",
+      "type": "skos:Concept",
+      "prefLabel": "skin tissue context",
+      "inScheme": "xrm:scheme",
+      "definition": "Skin tissue framing.",
+      "altLabel": [
+        "skin_tissue_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100213",
+      "type": "skos:Concept",
+      "prefLabel": "placenta tissue context",
+      "inScheme": "xrm:scheme",
+      "definition": "Placenta tissue framing.",
+      "altLabel": [
+        "placenta_tissue_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100214",
+      "type": "skos:Concept",
+      "prefLabel": "adrenal tissue context",
+      "inScheme": "xrm:scheme",
+      "definition": "Adrenal tissue framing.",
+      "altLabel": [
+        "adrenal_tissue_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100215",
+      "type": "skos:Concept",
+      "prefLabel": "rabbit species context",
+      "inScheme": "xrm:scheme",
+      "definition": "Rabbit species framing.",
+      "altLabel": [
+        "rabbit_species_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100216",
+      "type": "skos:Concept",
+      "prefLabel": "minipig species context",
+      "inScheme": "xrm:scheme",
+      "definition": "Minipig species framing.",
+      "altLabel": [
+        "minipig_species_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100217",
+      "type": "skos:Concept",
+      "prefLabel": "serum matrix context",
+      "inScheme": "xrm:scheme",
+      "definition": "Serum matrix framing.",
+      "altLabel": [
+        "serum_matrix_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100218",
+      "type": "skos:Concept",
+      "prefLabel": "whole blood matrix context",
+      "inScheme": "xrm:scheme",
+      "definition": "Whole-blood matrix framing.",
+      "altLabel": [
+        "whole_blood_matrix_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100219",
+      "type": "skos:Concept",
+      "prefLabel": "tissue homogenate matrix",
+      "inScheme": "xrm:scheme",
+      "definition": "Tissue homogenate incubation matrix.",
+      "altLabel": [
+        "tissue_homogenate_matrix"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100220",
+      "type": "skos:Concept",
+      "prefLabel": "recombinant enzyme matrix",
+      "inScheme": "xrm:scheme",
+      "definition": "Recombinant enzyme incubation matrix.",
+      "altLabel": [
+        "recombinant_enzyme_matrix"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100221",
+      "type": "skos:Concept",
+      "prefLabel": "supersome matrix context",
+      "inScheme": "xrm:scheme",
+      "definition": "Insect-cell supersome matrix.",
+      "altLabel": [
+        "supersome_matrix_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100222",
+      "type": "skos:Concept",
+      "prefLabel": "lysosome compartment",
+      "inScheme": "xrm:scheme",
+      "definition": "Lysosomal compartment framing.",
+      "altLabel": [
+        "lysosome_compartment"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100223",
+      "type": "skos:Concept",
+      "prefLabel": "peroxisome compartment",
+      "inScheme": "xrm:scheme",
+      "definition": "Peroxisome compartment framing.",
+      "altLabel": [
+        "peroxisome_compartment"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100224",
+      "type": "skos:Concept",
+      "prefLabel": "nucleus compartment",
+      "inScheme": "xrm:scheme",
+      "definition": "Nuclear compartment framing.",
+      "altLabel": [
+        "nucleus_compartment"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100225",
+      "type": "skos:Concept",
+      "prefLabel": "extracellular compartment",
+      "inScheme": "xrm:scheme",
+      "definition": "Extracellular compartment framing.",
+      "altLabel": [
+        "extracellular_compartment"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100226",
+      "type": "skos:Concept",
+      "prefLabel": "male sex context",
+      "inScheme": "xrm:scheme",
+      "definition": "Male biological sex framing.",
+      "altLabel": [
+        "male_sex_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100227",
+      "type": "skos:Concept",
+      "prefLabel": "female sex context",
+      "inScheme": "xrm:scheme",
+      "definition": "Female biological sex framing.",
+      "altLabel": [
+        "female_sex_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100228",
+      "type": "skos:Concept",
+      "prefLabel": "pediatric age context",
+      "inScheme": "xrm:scheme",
+      "definition": "Pediatric age framing.",
+      "altLabel": [
+        "pediatric_age_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100229",
+      "type": "skos:Concept",
+      "prefLabel": "geriatric age context",
+      "inScheme": "xrm:scheme",
+      "definition": "Geriatric age framing.",
+      "altLabel": [
+        "geriatric_age_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100230",
+      "type": "skos:Concept",
+      "prefLabel": "fed state context",
+      "inScheme": "xrm:scheme",
+      "definition": "Fed-state ADME framing.",
+      "altLabel": [
+        "fed_state_context"
+      ],
+      "broader": "xrm:2100000"
+    },
+    {
+      "id": "xrm:2100231",
+      "type": "skos:Concept",
+      "prefLabel": "fasted state context",
+      "inScheme": "xrm:scheme",
+      "definition": "Fasted-state ADME framing.",
+      "altLabel": [
+        "fasted_state_context"
+      ],
       "broader": "xrm:2100000"
     },
     {

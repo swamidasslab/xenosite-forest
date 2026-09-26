@@ -281,6 +281,8 @@ concepts:
   - xrm:8000003
   - xrm:7800001
   - xrm:1500118
+  - xrm:0000303
+  - xrm:0000300
 - id: xrm:0000102
   preferred_label: aliphatic hydroxylation
   synonyms:
@@ -345,6 +347,7 @@ concepts:
   - xrm:7400001
   - xrm:7700001
   - xrm:1500012
+  - xrm:1300117
   synonyms:
   - alkene epoxidation
   - oxirane formation
@@ -606,6 +609,7 @@ concepts:
   - xrm:7000001
   - xrm:7900002
   - xrm:1500010
+  - xrm:0000101
 - id: xrm:0000301
   preferred_label: ortho-quinone formation
   parents:
@@ -624,6 +628,7 @@ concepts:
   related_match:
   - xrm:8000005
   - xrm:1500011
+  - xrm:0000101
 - id: xrm:0000304
   preferred_label: quinone-methide formation
   synonyms:
@@ -980,6 +985,7 @@ concepts:
   - xrm:0001001
   related_match:
   - xrm:1500015
+  - xrm:1400121
 - id: xrm:0001005
   preferred_label: N-glucuronidation
   parents:
@@ -1587,6 +1593,83 @@ concepts:
   synonyms:
   - aldehyde-forming class
   - aldehyde_formation_class
+- id: xrm:1200200
+  preferred_label: aromatic hydroxylation class
+  definition: 'Rainbow SO: aromatic hydroxylation class.'
+  parents:
+  - xrm:1200000
+  synonyms:
+  - aryl hydroxylation class
+- id: xrm:1200201
+  preferred_label: aliphatic hydroxylation class
+  definition: 'Rainbow SO: aliphatic hydroxylation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200202
+  preferred_label: N-dealkylation class
+  definition: 'Rainbow UO: N-dealkylation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200203
+  preferred_label: O-dealkylation class
+  definition: 'Rainbow UO: O-dealkylation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200204
+  preferred_label: S-dealkylation class
+  definition: 'Rainbow UO: S-dealkylation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200205
+  preferred_label: C-dealkylation class
+  definition: 'Rainbow UO: C-dealkylation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200206
+  preferred_label: oxidative dehalogenation class
+  definition: 'Rainbow UO: oxidative dehalogenation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200207
+  preferred_label: quinone formation class
+  definition: 'Rainbow DH-adjacent / Forest QF: quinone formation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200208
+  preferred_label: iminium formation class
+  definition: 'Rainbow DH: iminium formation class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200209
+  preferred_label: single-to-double bond dehydrogenation class
+  definition: 'Rainbow DH: single→double bond class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200210
+  preferred_label: double-to-triple bond dehydrogenation class
+  definition: 'Rainbow DH: double→triple bond class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200211
+  preferred_label: ether hydrolysis class
+  definition: 'Rainbow HD: ether hydrolysis class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200212
+  preferred_label: cyanide hydrolysis class
+  definition: 'Rainbow HD: cyanide hydrolysis class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200213
+  preferred_label: sulfo reduction class
+  definition: 'Rainbow RD: sulfo reduction class.'
+  parents:
+  - xrm:1200000
+- id: xrm:1200214
+  preferred_label: oxygen reduction class
+  definition: 'Rainbow RD: oxygen/carbonyl reduction class.'
+  parents:
+  - xrm:1200000
 - id: xrm:1300000
   preferred_label: phase II conjugation family
   synonyms: *id004
@@ -1762,6 +1845,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - epoxide_gsh_conjugation
+  related_match:
+  - xrm:0000110
 - id: xrm:1300118
   preferred_label: Michael GSH conjugation
   definition: GSH attack on a Michael acceptor.
@@ -1885,6 +1970,8 @@ concepts:
   - xrm:1400000
   synonyms:
   - aromatic_soft_spot
+  related_match:
+  - xrm:1600102
 - id: xrm:1400101
   preferred_label: benzylic soft spot
   definition: Benzylic metabolic soft spot.
@@ -1899,6 +1986,8 @@ concepts:
   - xrm:1400000
   synonyms:
   - amine_soft_spot
+  related_match:
+  - xrm:1600104
 - id: xrm:1400103
   preferred_label: ether soft spot
   definition: Ether metabolic soft spot (O-dealkylation risk).
@@ -2034,6 +2123,8 @@ concepts:
   - xrm:1400000
   synonyms:
   - acyl_glucuronide_risk
+  related_match:
+  - xrm:0001004
 - id: xrm:1400122
   preferred_label: aldehyde risk
   definition: Risk of aldehyde formation.
@@ -2419,6 +2510,217 @@ concepts:
   - xrm:1500000
   synonyms:
   - nitro_anion_radical
+- id: xrm:1500200
+  preferred_label: hydroquinone metabolite
+  definition: Hydroquinone product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - hydroquinone_metabolite
+- id: xrm:1500201
+  preferred_label: aminophenol metabolite
+  definition: Aminophenol product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - aminophenol_metabolite
+- id: xrm:1500202
+  preferred_label: nitrosoarenes
+  definition: Nitrosoarene metabolite class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - nitrosoarene
+- id: xrm:1500203
+  preferred_label: nitrenium ion
+  definition: Nitrenium reactive intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - nitrenium_ion
+- id: xrm:1500204
+  preferred_label: carbocation intermediate
+  definition: Carbocation metabolic intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - carbocation_intermediate
+- id: xrm:1500205
+  preferred_label: benzylic radical
+  definition: Benzylic radical intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - benzylic_radical
+- id: xrm:1500206
+  preferred_label: thiyl radical
+  definition: Thiyl radical intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - thiyl_radical
+- id: xrm:1500207
+  preferred_label: sulfenic acid
+  definition: Sulfenic acid intermediate/product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfenic_acid
+- id: xrm:1500208
+  preferred_label: sulfinic acid metabolite
+  definition: Sulfinic acid metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfinic_acid_metabolite
+- id: xrm:1500209
+  preferred_label: sulfonic acid metabolite
+  definition: Sulfonic acid metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfonic_acid_metabolite
+- id: xrm:1500210
+  preferred_label: disulfide metabolite
+  definition: Disulfide metabolite product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - disulfide_metabolite
+- id: xrm:1500211
+  preferred_label: lactam metabolite
+  definition: Lactam ring metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - lactam_metabolite
+- id: xrm:1500212
+  preferred_label: lactone metabolite
+  definition: Lactone ring metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - lactone_metabolite
+- id: xrm:1500213
+  preferred_label: carboxylic acid glucuronide
+  definition: Acyl-linked glucuronide of a carboxylic acid.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - carboxylic_acid_glucuronide
+- id: xrm:1500214
+  preferred_label: ether glucuronide
+  definition: O-glucuronide of an alcohol/phenol.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - ether_glucuronide
+- id: xrm:1500215
+  preferred_label: N-glucuronide
+  definition: N-linked glucuronide product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - n_glucuronide
+- id: xrm:1500216
+  preferred_label: quaternary ammonium glucuronide
+  definition: Quaternary N-glucuronide product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - quaternary_ammonium_glucuronide
+- id: xrm:1500217
+  preferred_label: sulfate ester metabolite
+  definition: Sulfate ester conjugate product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfate_ester_metabolite
+- id: xrm:1500218
+  preferred_label: cysteine adduct
+  definition: Cysteine conjugate / adduct product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - cysteine_adduct
+- id: xrm:1500219
+  preferred_label: N-acetylcysteine adduct
+  definition: NAC / mercapturate-path adduct.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - NAC adduct
+  - n_acetylcysteine_adduct
+- id: xrm:1500220
+  preferred_label: glycine conjugate
+  definition: Glycine-conjugated metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - glycine_conjugate
+- id: xrm:1500221
+  preferred_label: taurine conjugate
+  definition: Taurine-conjugated metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - taurine_conjugate
+- id: xrm:1500222
+  preferred_label: CoA conjugate
+  definition: Coenzyme A conjugate intermediate/product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - coa_conjugate
+- id: xrm:1500223
+  preferred_label: methylated metabolite
+  definition: Methyl-conjugated metabolite product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - methylated_metabolite
+- id: xrm:1500224
+  preferred_label: acetylated metabolite
+  definition: Acetyl-conjugated metabolite product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - acetylated_metabolite
+- id: xrm:1500225
+  preferred_label: dealkylated amine
+  definition: Amine product after N-dealkylation.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - dealkylated_amine
+- id: xrm:1500226
+  preferred_label: dealkylated phenol
+  definition: Phenol product after O-dealkylation.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - dealkylated_phenol
+- id: xrm:1500227
+  preferred_label: nor-metabolite
+  definition: N- or O-dealkylated nor-metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - nor_metabolite
+- id: xrm:1500228
+  preferred_label: carboxylic acid from alcohol
+  definition: Carboxylic acid from alcohol oxidation cascade.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - carboxylic_acid_from_alcohol
+- id: xrm:1500229
+  preferred_label: ketone metabolite
+  definition: Ketone metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - ketone_metabolite
 - id: xrm:1600000
   preferred_label: site type
   synonyms: *id007
@@ -2536,6 +2838,8 @@ concepts:
   - xrm:1600000
   synonyms:
   - phenolic oxygen
+  related_match:
+  - xrm:1400100
 - id: xrm:1600103
   preferred_label: aniline
   definition: Aniline / aromatic amine site.
@@ -2550,6 +2854,8 @@ concepts:
   - xrm:1600000
   synonyms:
   - tertiary_amine
+  related_match:
+  - xrm:1400102
 - id: xrm:1600105
   preferred_label: secondary amine
   definition: Secondary amine nitrogen environment.
@@ -2852,6 +3158,205 @@ concepts:
   - xrm:1600000
   synonyms:
   - atom_index_localization
+- id: xrm:1600200
+  preferred_label: atom site template
+  definition: Template localizing a reaction to an atom site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - atom_site
+  - atom_site_template
+- id: xrm:1600201
+  preferred_label: bond site template
+  definition: Template localizing a reaction to a bond site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - bond_site
+  - bond_site_template
+- id: xrm:1600202
+  preferred_label: ring site template
+  definition: Template localizing a reaction to a ring site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ring_site
+  - ring_site_template
+- id: xrm:1600203
+  preferred_label: attachment atom template O
+  definition: Template for O-attachment localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - attachment_atom_template_o
+- id: xrm:1600204
+  preferred_label: attachment atom template N
+  definition: Template for N-attachment localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - attachment_atom_template_n
+- id: xrm:1600205
+  preferred_label: attachment atom template S
+  definition: Template for S-attachment localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - attachment_atom_template_s
+- id: xrm:1600206
+  preferred_label: attachment atom template C
+  definition: Template for C-attachment localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - attachment_atom_template_c
+- id: xrm:1600207
+  preferred_label: attachment atom template acyl
+  definition: Template for acyl-attachment localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - attachment_atom_template_acyl
+- id: xrm:1600208
+  preferred_label: canonical site name
+  definition: Canonical generated site-localized display name.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - canonical_site_name
+- id: xrm:1600209
+  preferred_label: map-number site label
+  definition: Site label using atom-map numbers (e.g. @1).
+  parents:
+  - xrm:1600000
+  synonyms:
+  - map_number_site_label
+- id: xrm:1600210
+  preferred_label: element-index site label
+  definition: Site label using element + index (e.g. C7).
+  parents:
+  - xrm:1600000
+  synonyms:
+  - element_index_site_label
+- id: xrm:1600211
+  preferred_label: motif-localized name template
+  definition: Motif-aware localized name (e.g. para on anisole).
+  parents:
+  - xrm:1600000
+  synonyms:
+  - motif_localized_name_template
+- id: xrm:1600212
+  preferred_label: product-class name template
+  definition: Product-class display name (e.g. phenol formation).
+  parents:
+  - xrm:1600000
+  synonyms:
+  - product_class_name_template
+- id: xrm:1600213
+  preferred_label: medchem tag name template
+  definition: Med-chem liability display phrase.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - medchem_tag_name_template
+- id: xrm:1600214
+  preferred_label: regio descriptor template
+  definition: Ortho/meta/para (or similar) regio descriptor.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - regio_descriptor_template
+- id: xrm:1600215
+  preferred_label: stereo descriptor template
+  definition: Stereo descriptor in a localized name.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - stereo_descriptor_template
+- id: xrm:1600216
+  preferred_label: multi-site list template
+  definition: Template listing multiple localized sites.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - multi_site_list_template
+- id: xrm:1600217
+  preferred_label: bond endpoints template
+  definition: Template naming both ends of a bond site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - bond_endpoints_template
+- id: xrm:1600218
+  preferred_label: ring index template
+  definition: Template naming a ring by index/system.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ring_index_template
+- id: xrm:1600219
+  preferred_label: heteroatom symbol template
+  definition: Template inserting N/O/S/halogen symbol.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - heteroatom_symbol_template
+- id: xrm:1600220
+  preferred_label: chain position template
+  definition: Template for ω / ω-1 / terminal position names.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - chain_position_template
+- id: xrm:1600221
+  preferred_label: benzylic position template
+  definition: Template for benzylic position naming.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - benzylic_position_template
+- id: xrm:1600222
+  preferred_label: allylic position template
+  definition: Template for allylic position naming.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - allylic_position_template
+- id: xrm:1600223
+  preferred_label: aniline nitrogen template
+  definition: Template for aniline N localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - aniline_nitrogen_template
+- id: xrm:1600224
+  preferred_label: phenol oxygen template
+  definition: Template for phenolic O localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - phenol_oxygen_template
+- id: xrm:1600225
+  preferred_label: tertiary amine nitrogen template
+  definition: Template for tertiary amine N localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - tertiary_amine_nitrogen_template
+- id: xrm:1600226
+  preferred_label: site environment phrase template
+  definition: Phrase combining site environment + reaction.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - site_environment_phrase_template
+- id: xrm:1600227
+  preferred_label: underspecified site template
+  definition: Display when site localization is ambiguous.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - underspecified_site_template
 - id: xrm:1700000
   preferred_label: structural delta
   synonyms: *id008
@@ -3089,61 +3594,226 @@ concepts:
   definition: Tag assigned from reactant/product SMARTS.
   parents:
   - xrm:1900000
+  synonyms:
+  - smarts_derived_tag
 - id: xrm:1900011
   preferred_label: formula-delta-derived tag
   definition: Tag assigned from elemental delta.
   parents:
   - xrm:1900000
+  synonyms:
+  - formula_delta_derived_tag
 - id: xrm:1900012
   preferred_label: caller-tag-derived
   definition: Tag assigned from opaque caller CURIE/tag.
   parents:
   - xrm:1900000
+  synonyms:
+  - caller_tag_derived
 - id: xrm:1900013
   preferred_label: Forest-map-derived tag
   definition: Tag assigned via Metabolic Forest map correspondence.
   parents:
   - xrm:1900000
+  synonyms:
+  - forest_map_derived_tag
 - id: xrm:1900014
   preferred_label: exclusion rule
   definition: Negative / exclusion pattern applied.
   parents:
   - xrm:1900000
+  synonyms:
+  - exclusion_rule
 - id: xrm:1900100
   preferred_label: Rainbow class derived
   definition: Tag derived from Rainbow Phase I class mapping.
   parents:
   - xrm:1900000
+  synonyms:
+  - rainbow_class_derived
 - id: xrm:1900101
   preferred_label: XenoNet path derived
   definition: Tag derived from a multi-step XenoNet/Forest path.
   parents:
   - xrm:1900000
+  synonyms:
+  - xenonet_path_derived
 - id: xrm:1900102
   preferred_label: legacy model output
   definition: Tag mapped from a legacy model output label.
   parents:
   - xrm:1900000
+  synonyms:
+  - legacy_model_output
 - id: xrm:1900103
   preferred_label: harvest-derived synonym
   definition: Label/synonym promoted from offline harvest.
   parents:
   - xrm:1900000
+  synonyms:
+  - harvest_derived_synonym
 - id: xrm:1900104
   preferred_label: manual curation
   definition: Tag asserted by manual curation.
   parents:
   - xrm:1900000
+  synonyms:
+  - manual_curation
 - id: xrm:1900105
   preferred_label: priority override
   definition: Higher-priority rule overrode a broader tag.
   parents:
   - xrm:1900000
+  synonyms:
+  - priority_override
 - id: xrm:1900106
   preferred_label: site template expansion
   definition: Localized label generated from a site template (not a concept).
   parents:
   - xrm:1900000
+  synonyms:
+  - site_template_expansion
+- id: xrm:1900200
+  preferred_label: repo rule derived
+  definition: Tag derived from a repository structure rule.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - forest rule derived
+  - repo_rule_derived
+- id: xrm:1900201
+  preferred_label: SMARTS pattern match
+  definition: Tag from a matched SMARTS pattern.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - smarts_pattern_match
+- id: xrm:1900202
+  preferred_label: formula delta match
+  definition: Tag from elemental formula delta.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - formula_delta_match
+- id: xrm:1900203
+  preferred_label: caller CURIE match
+  definition: Tag from an opaque caller CURIE/tag.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - caller_curie_match
+- id: xrm:1900204
+  preferred_label: Rainbow SO class map
+  definition: Mapped to Rainbow stable oxygenation class.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - rainbow_so_class_map
+- id: xrm:1900205
+  preferred_label: Rainbow UO class map
+  definition: Mapped to Rainbow unstable oxygenation class.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - rainbow_uo_class_map
+- id: xrm:1900206
+  preferred_label: Rainbow DH class map
+  definition: Mapped to Rainbow dehydrogenation class.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - rainbow_dh_class_map
+- id: xrm:1900207
+  preferred_label: Rainbow HD class map
+  definition: Mapped to Rainbow hydrolysis class.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - rainbow_hd_class_map
+- id: xrm:1900208
+  preferred_label: Rainbow RD class map
+  definition: Mapped to Rainbow reduction class.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - rainbow_rd_class_map
+- id: xrm:1900209
+  preferred_label: XenoNet edge score
+  definition: Provenance from a XenoNet/Forest path edge score.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - xenonet_edge_score
+- id: xrm:1900210
+  preferred_label: XenoNet path score
+  definition: Provenance from a multi-step path score.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - xenonet_path_score
+- id: xrm:1900211
+  preferred_label: legacy SOM model output
+  definition: Mapped from a legacy site-of-metabolism model.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - legacy_som_model_output
+- id: xrm:1900212
+  preferred_label: legacy reactivity model output
+  definition: Mapped from a legacy reactivity model.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - legacy_reactivity_model_output
+- id: xrm:1900213
+  preferred_label: exclusion SMARTS fired
+  definition: Negative/exclusion SMARTS suppressed a tag.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - exclusion_smarts_fired
+- id: xrm:1900214
+  preferred_label: priority tie-break
+  definition: Tag chosen by priority among competing rules.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - priority_tie_break
+- id: xrm:1900215
+  preferred_label: manual curator override
+  definition: Curator overrode automatic tagging.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - manual_curator_override
+- id: xrm:1900216
+  preferred_label: harvest promotion
+  definition: Term/synonym promoted from offline harvest.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - harvest_promotion
+- id: xrm:1900217
+  preferred_label: atom-map required match
+  definition: Assignment required mapped atoms to fire.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - atom_map_required_match
+- id: xrm:1900218
+  preferred_label: site aromaticity gate
+  definition: Assignment gated on site aromaticity.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - site_aromaticity_gate
+- id: xrm:1900219
+  preferred_label: multi-site split
+  definition: Emission split across distinct localized sites.
+  parents:
+  - xrm:1900000
+  synonyms:
+  - multi_site_split
 - id: xrm:2000000
   preferred_label: evidence
   synonyms: *id011
@@ -3348,26 +4018,36 @@ concepts:
   definition: Enzyme family framing (orthogonal to reaction name).
   parents:
   - xrm:2100000
+  synonyms:
+  - enzyme_family_context
 - id: xrm:2100011
   preferred_label: tissue context
   definition: Tissue framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - tissue_context
 - id: xrm:2100012
   preferred_label: species context
   definition: Species framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - species_context
 - id: xrm:2100013
   preferred_label: matrix context
   definition: Matrix / biofluid framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - matrix_context
 - id: xrm:2100014
   preferred_label: compartment context
   definition: Subcellular compartment framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - compartment_context
 - id: xrm:2100100
   preferred_label: CYP enzyme family context
   definition: Cytochrome P450 family context (orthogonal).
@@ -3375,91 +4055,126 @@ concepts:
   - xrm:2100000
   synonyms:
   - P450 family context
+  - cyp_enzyme_family_context
 - id: xrm:2100101
   preferred_label: UGT enzyme family context
   definition: UGT family context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - ugt_enzyme_family_context
 - id: xrm:2100102
   preferred_label: SULT enzyme family context
   definition: Sulfotransferase family context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - sult_enzyme_family_context
 - id: xrm:2100103
   preferred_label: GST enzyme family context
   definition: Glutathione S-transferase context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - gst_enzyme_family_context
 - id: xrm:2100104
   preferred_label: NAT enzyme family context
   definition: N-acetyltransferase context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - nat_enzyme_family_context
 - id: xrm:2100105
   preferred_label: FMO enzyme family context
   definition: Flavin monooxygenase context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - fmo_enzyme_family_context
 - id: xrm:2100106
   preferred_label: AO enzyme family context
   definition: Aldehyde oxidase context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - ao_enzyme_family_context
 - id: xrm:2100107
   preferred_label: MAO enzyme family context
   definition: Monoamine oxidase context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - mao_enzyme_family_context
 - id: xrm:2100108
   preferred_label: CES enzyme family context
   definition: Carboxylesterase context (orthogonal).
   parents:
   - xrm:2100000
+  synonyms:
+  - ces_enzyme_family_context
 - id: xrm:2100109
   preferred_label: liver tissue context
   definition: Liver tissue framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - liver_tissue_context
 - id: xrm:2100110
   preferred_label: intestine tissue context
   definition: Intestine tissue framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - intestine_tissue_context
 - id: xrm:2100111
   preferred_label: kidney tissue context
   definition: Kidney tissue framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - kidney_tissue_context
 - id: xrm:2100112
   preferred_label: lung tissue context
   definition: Lung tissue framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - lung_tissue_context
 - id: xrm:2100113
   preferred_label: brain tissue context
   definition: Brain tissue framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - brain_tissue_context
 - id: xrm:2100114
   preferred_label: human species context
   definition: Human species framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - human_species_context
 - id: xrm:2100115
   preferred_label: rat species context
   definition: Rat species framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - rat_species_context
 - id: xrm:2100116
   preferred_label: mouse species context
   definition: Mouse species framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - mouse_species_context
 - id: xrm:2100117
   preferred_label: dog species context
   definition: Dog species framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - dog_species_context
 - id: xrm:2100118
   preferred_label: monkey species context
   definition: Nonhuman primate framing.
@@ -3467,61 +4182,309 @@ concepts:
   - xrm:2100000
   synonyms:
   - NHP species context
+  - monkey_species_context
 - id: xrm:2100119
   preferred_label: plasma matrix context
   definition: Plasma matrix framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - plasma_matrix_context
 - id: xrm:2100120
   preferred_label: urine matrix context
   definition: Urine matrix framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - urine_matrix_context
 - id: xrm:2100121
   preferred_label: bile matrix context
   definition: Bile matrix framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - bile_matrix_context
 - id: xrm:2100122
   preferred_label: feces matrix context
   definition: Feces matrix framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - feces_matrix_context
 - id: xrm:2100123
   preferred_label: microsome matrix context
   definition: Microsome incubation matrix.
   parents:
   - xrm:2100000
+  synonyms:
+  - microsome_matrix_context
 - id: xrm:2100124
   preferred_label: cytosol matrix context
   definition: Cytosol incubation matrix.
   parents:
   - xrm:2100000
+  synonyms:
+  - cytosol_matrix_context
 - id: xrm:2100125
   preferred_label: hepatocyte matrix context
   definition: Hepatocyte incubation matrix.
   parents:
   - xrm:2100000
+  synonyms:
+  - hepatocyte_matrix_context
 - id: xrm:2100126
   preferred_label: endoplasmic reticulum compartment
   definition: ER compartment framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - endoplasmic_reticulum_compartment
 - id: xrm:2100127
   preferred_label: cytosol compartment
   definition: Cytosol compartment framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - cytosol_compartment
 - id: xrm:2100128
   preferred_label: mitochondria compartment
   definition: Mitochondrial compartment framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - mitochondria_compartment
 - id: xrm:2100129
   preferred_label: blood compartment
   definition: Blood / systemic compartment framing.
   parents:
   - xrm:2100000
+  synonyms:
+  - blood_compartment
+- id: xrm:2100200
+  preferred_label: CYP3A context
+  definition: CYP3A family context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - CYP3A
+  - cyp3a_context
+- id: xrm:2100201
+  preferred_label: CYP2D6 context
+  definition: CYP2D6 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - cyp2d6_context
+- id: xrm:2100202
+  preferred_label: CYP2C9 context
+  definition: CYP2C9 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - cyp2c9_context
+- id: xrm:2100203
+  preferred_label: CYP2C19 context
+  definition: CYP2C19 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - cyp2c19_context
+- id: xrm:2100204
+  preferred_label: CYP1A2 context
+  definition: CYP1A2 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - cyp1a2_context
+- id: xrm:2100205
+  preferred_label: CYP2E1 context
+  definition: CYP2E1 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - cyp2e1_context
+- id: xrm:2100206
+  preferred_label: UGT1A1 context
+  definition: UGT1A1 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - ugt1a1_context
+- id: xrm:2100207
+  preferred_label: UGT2B7 context
+  definition: UGT2B7 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - ugt2b7_context
+- id: xrm:2100208
+  preferred_label: SULT1A1 context
+  definition: SULT1A1 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - sult1a1_context
+- id: xrm:2100209
+  preferred_label: GST-P context
+  definition: GST-P family context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - gst_p_context
+- id: xrm:2100210
+  preferred_label: NAT2 context
+  definition: NAT2 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - nat2_context
+- id: xrm:2100211
+  preferred_label: FMO3 context
+  definition: FMO3 isoform context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - fmo3_context
+- id: xrm:2100212
+  preferred_label: skin tissue context
+  definition: Skin tissue framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - skin_tissue_context
+- id: xrm:2100213
+  preferred_label: placenta tissue context
+  definition: Placenta tissue framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - placenta_tissue_context
+- id: xrm:2100214
+  preferred_label: adrenal tissue context
+  definition: Adrenal tissue framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - adrenal_tissue_context
+- id: xrm:2100215
+  preferred_label: rabbit species context
+  definition: Rabbit species framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - rabbit_species_context
+- id: xrm:2100216
+  preferred_label: minipig species context
+  definition: Minipig species framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - minipig_species_context
+- id: xrm:2100217
+  preferred_label: serum matrix context
+  definition: Serum matrix framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - serum_matrix_context
+- id: xrm:2100218
+  preferred_label: whole blood matrix context
+  definition: Whole-blood matrix framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - whole_blood_matrix_context
+- id: xrm:2100219
+  preferred_label: tissue homogenate matrix
+  definition: Tissue homogenate incubation matrix.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - tissue_homogenate_matrix
+- id: xrm:2100220
+  preferred_label: recombinant enzyme matrix
+  definition: Recombinant enzyme incubation matrix.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - recombinant_enzyme_matrix
+- id: xrm:2100221
+  preferred_label: supersome matrix context
+  definition: Insect-cell supersome matrix.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - supersome_matrix_context
+- id: xrm:2100222
+  preferred_label: lysosome compartment
+  definition: Lysosomal compartment framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - lysosome_compartment
+- id: xrm:2100223
+  preferred_label: peroxisome compartment
+  definition: Peroxisome compartment framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - peroxisome_compartment
+- id: xrm:2100224
+  preferred_label: nucleus compartment
+  definition: Nuclear compartment framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - nucleus_compartment
+- id: xrm:2100225
+  preferred_label: extracellular compartment
+  definition: Extracellular compartment framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - extracellular_compartment
+- id: xrm:2100226
+  preferred_label: male sex context
+  definition: Male biological sex framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - male_sex_context
+- id: xrm:2100227
+  preferred_label: female sex context
+  definition: Female biological sex framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - female_sex_context
+- id: xrm:2100228
+  preferred_label: pediatric age context
+  definition: Pediatric age framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - pediatric_age_context
+- id: xrm:2100229
+  preferred_label: geriatric age context
+  definition: Geriatric age framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - geriatric_age_context
+- id: xrm:2100230
+  preferred_label: fed state context
+  definition: Fed-state ADME framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - fed_state_context
+- id: xrm:2100231
+  preferred_label: fasted state context
+  definition: Fasted-state ADME framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - fasted_state_context
 - id: xrm:6000000
   preferred_label: ambiguity and underspecification
   definition: Cross-cutting spine for incomplete, conflicting, or underdetermined naming evidence. Prefer

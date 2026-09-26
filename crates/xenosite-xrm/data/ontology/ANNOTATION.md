@@ -4,54 +4,78 @@ SKOS concepts **name** things. Reaction annotations **combine** them.
 Do not mint combinatorial concepts such as
 `benzylic_phase_1_hydroxylation_clearance_liability`.
 
-Site-localized display names (`C4 aromatic hydroxylation`, `para-hydroxylation
-of anisole`) are generated from templates + `SiteRef`, not stored as ontology
-terms.
+Site-localized display names (`C4 aromatic hydroxylation`, `benzylic hydroxylation @1`)
+are generated from templates + `SiteRef` into
+[`AnnotationBundle::site_label`](../../src/bundle.rs), not stored as ontology terms.
+
+```rust
+let bundles = namer.annotate_smiles("CC", "CCO", &[])?;
+// bundles[i].transformation / phase / site_environment / medchem_interpretation / site_label
+```
 
 ## Inventory guidance (v0.1)
 
 A useful first band is **~350–500** chemist-facing canonical concepts with
 **1,000–2,000** labels/synonyms/mappings — enough to be useful, still curatable.
 That band is a **floor for usefulness**, not a hard cap. Extra terms are welcome
-when they are well motivated and clear (distinct chemist handle, SMARTS/delta
-assignable, or a needed med-chem / product / site / evidence facet). Prefer
-clear leaves over combinatorial compounds; site-localized display names stay as
-templates. Forest-map rules/patterns are an alias spine counted separately.
+when they are well motivated and clear. Prefer clear leaves over combinatorial
+compounds. Forest-map rules/patterns are an alias spine counted separately.
+
+### Category bands (primary-spine counting)
+
+Count a concept toward the spine of its **nearest spine-root ancestor** (not the
+full polyhierarchy descendant closure — that double-counts leaves under both
+chemical transformation and phase I family).
+
+| Spine | Target | Notes |
+| --- | --- | --- |
+| Phase / pathway role | 10–20 | phase I/II, sequential metabolism, intermediate formation |
+| Chemical transformation | 90–140 | Largest core |
+| Phase I detailed classes | 25–40 | Rainbow-compatible + finer types |
+| Phase II conjugation classes | 40–70 | By attachment atom where useful |
+| Product / metabolite class | 70–110 | Quinone, epoxide, GSH adduct, … |
+| Site environment | 60–100 | Benzylic, phenol, tertiary amine, heteroarene, … |
+| Structural delta | 35–60 | +O, −2H, aromaticity loss, conjugate mass shift |
+| Med-chem interpretation | 40–70 | Soft spot, bioactivation, blocking, … |
+| Evidence / assertion | 30–50 | MS, NMR, predicted/observed/curated/conflict |
+| Biological context | 40–80 | Enzyme/tissue/species/matrix (orthogonal) |
+| Rule/model provenance | 20–40 | SMARTS, Rainbow class, XenoNet, legacy model |
+| Localization templates | 20–40 | Templates only — not per-atom enumerations |
 
 ## SKOS link types
 
 | Link | Use |
 | --- | --- |
 | `skos:broader` / `skos:narrower` | Within a spine |
-| `skos:relatedMatch` | Loose cross-spine association |
+| `skos:related` / `skos:relatedMatch` | Loose cross-spine association |
 | `skos:exactMatch` | True identity to an external concept (rare) |
 | `skos:closeMatch` | Similar MeSH/KEGG/Rhea/model term |
 | `skos:broadMatch` / `skos:narrowMatch` | Legacy/model terms broader/narrower than XRM |
 
 ## Operational annotation properties (`xmet:`)
 
-These are **assertion / event** links, not thesaurus identity. Emit them on
-named reactions (assignment hits), not as SKOS concept parents.
+These are **assertion / event** links on [`AnnotationBundle`], not thesaurus
+identity parents.
 
-| Property | Use |
+| Property | Bundle field |
 | --- | --- |
-| `xmet:hasPhase` | → metabolism phase |
-| `xmet:hasTransformation` | → chemical transformation |
-| `xmet:hasProductClass` | → reactive / product metabolite class |
-| `xmet:hasSiteEnvironment` | → site type / environment |
-| `xmet:hasStructuralDelta` | → structural delta |
-| `xmet:hasMedChemInterpretation` | → medchem liability |
-| `xmet:hasEvidenceType` | → evidence |
-| `xmet:hasBiologicalContext` | → biological context (orthogonal) |
-| `xmet:generatedByRule` | → rule provenance / SMARTS / Forest rule |
-| `xmet:mapsModelOutput` | → legacy / Rainbow / model output |
-| `xmet:localizesToSite` | → `SiteRef` / map nums |
-| `xmet:mayPrecede` / `xmet:mayFollow` | pathway logic |
-| `xmet:bioactivatesTo` / `xmet:detoxifiesTo` | liability product framing |
-| `xmet:hasConjugateGroup` | glucuronide / sulfate / GSH / … |
-| `xmet:hasAttachmentAtomType` | O / N / S / C / acyl |
+| `xmet:hasPhase` | `phase` |
+| `xmet:hasTransformation` | `transformation` |
+| `xmet:hasProductClass` | `product_class` |
+| `xmet:hasSiteEnvironment` | `site_environment` |
+| `xmet:hasStructuralDelta` | `structural_delta` |
+| `xmet:hasMedChemInterpretation` | `medchem_interpretation` |
+| `xmet:hasEvidenceType` | `evidence_type` |
+| `xmet:hasBiologicalContext` | `biological_context` |
+| `xmet:generatedByRule` | `generated_by_rule` |
+| `xmet:mapsModelOutput` | (via SSSOM / provenance leaves) |
+| `xmet:localizesToSite` | `site` + `site_label` |
+| `xmet:mayPrecede` / `xmet:mayFollow` | SKOS `relatedMatch` pathway pairs |
+| `xmet:bioactivatesTo` / `xmet:detoxifiesTo` | medchem ↔ product_class related pairs |
+| `xmet:hasConjugateGroup` | phase2 / product_class conjugates |
+| `xmet:hasAttachmentAtomType` | site environment attachment-atom leaves |
 
-## Bundle shape (illustrative)
+## Bundle shape
 
 ```json
 {
@@ -60,9 +84,8 @@ named reactions (assignment hits), not as SKOS concept parents.
   "site_environment": ["xrm:1600014"],
   "structural_delta": ["xrm:1700012"],
   "medchem_interpretation": ["xrm:1400010"],
-  "site_label": "C7 benzylic hydroxylation"
+  "site_label": "benzylic hydroxylation @1",
+  "site": {"map_nums": [1]},
+  "xmet_properties": ["xmet:hasPhase", "xmet:hasTransformation", "xmet:localizesToSite"]
 }
 ```
-
-Today the Rust `Term` list is a flat multi-tag emission with ancestor
-expansion; bundles can be layered later without expanding the concept count.

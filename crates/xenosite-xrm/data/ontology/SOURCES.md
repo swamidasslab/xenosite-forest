@@ -6,8 +6,12 @@ Annotation bundles / `xmet:` link types: [`ANNOTATION.md`](ANNOTATION.md).
 
 v0.1 useful band: ~350–500 chemist-facing concepts with 1,000–2,000
 labels/synonyms/mappings — a floor, not a cap. Extra well-motivated terms are
-fine. Site-localized names are templates, not concepts. Positioning vs
-RXNO/MOP/GO/ChEBI/…: [`RELATED_ONTOLOGIES.md`](RELATED_ONTOLOGIES.md).
+fine. Site-localized names are templates, not concepts. Combinations emit via
+[`AnnotationBundle`](ANNOTATION.md) (`namer.annotate`), not new concepts.
+Positioning vs RXNO/MOP/GO/ChEBI/…: [`RELATED_ONTOLOGIES.md`](RELATED_ONTOLOGIES.md).
+
+Primary-spine inventory (nearest spine-root ancestor; Forest map separate) is
+tracked against the category bands in [`ANNOTATION.md`](ANNOTATION.md).
 
 Spine vocabulary follows the ChatGPT design share (metabolism phase, chemical
 transformation, Rainbow phase I family, phase II conjugation family, medchem

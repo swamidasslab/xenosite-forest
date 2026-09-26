@@ -41,6 +41,12 @@ let terms = namer.name_smiles("CC", "CCO", &[])?;
 for t in terms {
     println!("{} ({}) path={:?}", t.pref_label, t.id, t.path_labels);
 }
+
+// Faceted annotation bundles (combinations are not ontology concepts):
+let bundles = namer.annotate_smiles("CC", "CCO", &[])?;
+for b in bundles {
+    println!("{:?}  site_label={:?}", b.transformation, b.site_label);
+}
 ```
 
 With opaque forest tags (from an external caller or find_path adapter):

@@ -1,6 +1,7 @@
 //! Load config; name a mapped reactant→product.
 
 use crate::assignment::Assignments;
+use crate::bundle::AnnotationBundle;
 use crate::chemistry::{MappedReaction, ReactionChemistry};
 use crate::error::{Error, Result};
 use crate::skos::Thesaurus;
@@ -126,6 +127,24 @@ impl Namer {
         tags: &[&str],
     ) -> Result<Vec<Term>> {
         self.name(&MappedReaction::new(reactant, product).with_tags(tags.iter().copied()))
+    }
+
+    /// Facet flat terms into per-site annotation bundles (`xmet:*` combination layer).
+    ///
+    /// Combinatorial display names live in [`AnnotationBundle::site_label`], not as
+    /// ontology concepts.
+    pub fn annotate(&self, query: &MappedReaction) -> Result<Vec<AnnotationBundle>> {
+        let terms = self.name(query)?;
+        Ok(AnnotationBundle::from_terms(&self.thesaurus, &terms))
+    }
+
+    pub fn annotate_smiles(
+        &self,
+        reactant: &str,
+        product: &str,
+        tags: &[&str],
+    ) -> Result<Vec<AnnotationBundle>> {
+        self.annotate(&MappedReaction::new(reactant, product).with_tags(tags.iter().copied()))
     }
 
     /// Compact lines for feedback dumps: `prefLabel [id]@site ← path`.

@@ -16,6 +16,7 @@
 //! - **manifest.json** — paths to the above
 
 mod assignment;
+mod bundle;
 mod chemistry;
 mod curie;
 mod error;
@@ -25,6 +26,7 @@ mod sssom;
 mod term;
 
 pub use assignment::{AssignmentHit, AssignmentRule, Assignments};
+pub use bundle::{spines, AnnotationBundle};
 pub use chemistry::{AtomMap, LocalizedTag, MappedReaction}; // LocalizedTag for site-localized caller tags
 pub use curie::Curie;
 pub use error::{Error, Result};
