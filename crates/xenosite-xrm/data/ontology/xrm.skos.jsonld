@@ -43,7 +43,7 @@
       "type": "skos:ConceptScheme",
       "prefLabel": "Xenobiotic Reaction Metabolism",
       "iri": "https://xenosite.org/ontology/xrm#",
-      "definition": "Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming, site-localized labels, structural transformation tags, product/liability classes, leaving groups, and mappings to RXNO/MOP/GO/ChEBI/Rhea/KEGG/MeSH/ECO/CHMO. Separate from named-synthesis and enzyme ontologies; the layer between SMARTS/rules and human-useful med-chem metabolism names."
+      "definition": "Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming only — not a full chemical ontology. Covers site-localized labels, structural transformation tags, product/liability/leaving-group/pharmacological-role classes, parent/product/reaction annotation roles, and SSSOM mappings to RXNO/MOP/GO/ChEBI/Rhea/KEGG/MeSH/ECO/CHMO. The layer between SMARTS/rules and human-useful med-chem metabolism names."
     },
     {
       "id": "xrm:0000000",
@@ -276,7 +276,8 @@
         "xrm:7200001",
         "xrm:7300001",
         "xrm:7400001",
-        "xrm:7700001"
+        "xrm:7700001",
+        "xrm:2400012"
       ]
     },
     {
@@ -1373,7 +1374,8 @@
       "broader": "xrm:0001001",
       "relatedMatch": [
         "xrm:1500015",
-        "xrm:1400121"
+        "xrm:1400121",
+        "xrm:1400030"
       ]
     },
     {
@@ -2818,7 +2820,8 @@
         "metabolic soft-spot",
         "metabolic_soft_spot"
       ],
-      "broader": "xrm:1400000"
+      "broader": "xrm:1400000",
+      "relatedMatch": "xrm:2400013"
     },
     {
       "id": "xrm:1400011",
@@ -2950,6 +2953,24 @@
       ],
       "broader": "xrm:1400000",
       "relatedMatch": "xrm:0000201"
+    },
+    {
+      "id": "xrm:1400030",
+      "type": "skos:Concept",
+      "prefLabel": "forms reactive conjugate",
+      "inScheme": "xrm:scheme",
+      "definition": "Transformation yields or proceeds via a reactive conjugate (e.g. acyl glucuronide, GSH-trappable adduct precursor).",
+      "altLabel": [
+        "reactive conjugate formation",
+        "forms_reactive_conjugate"
+      ],
+      "broader": "xrm:1400000",
+      "relatedMatch": [
+        "xrm:1500030",
+        "xrm:1500015",
+        "xrm:1500019",
+        "xrm:0001004"
+      ]
     },
     {
       "id": "xrm:1400100",
@@ -3262,7 +3283,8 @@
       "altLabel": [
         "prodrug_activation"
       ],
-      "broader": "xrm:1400000"
+      "broader": "xrm:1400000",
+      "relatedMatch": "xrm:2300012"
     },
     {
       "id": "xrm:1400128",
@@ -3309,7 +3331,10 @@
         "quinoid"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:0000300"
+      "relatedMatch": [
+        "xrm:0000300",
+        "xrm:2400011"
+      ]
     },
     {
       "id": "xrm:1500011",
@@ -3361,7 +3386,10 @@
         "acyl_glucuronide"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:0001004"
+      "relatedMatch": [
+        "xrm:0001004",
+        "xrm:1400030"
+      ]
     },
     {
       "id": "xrm:1500016",
@@ -3399,6 +3427,27 @@
       "altLabel": [
         "gsh_trappable_metabolite"
       ],
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:1400030"
+    },
+    {
+      "id": "xrm:1500030",
+      "type": "skos:Concept",
+      "prefLabel": "reactive conjugate",
+      "inScheme": "xrm:scheme",
+      "definition": "Conjugate product class that is chemically reactive (acyl glucuronide, etc.).",
+      "altLabel": [
+        "reactive conjugated metabolite"
+      ],
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:1400030"
+    },
+    {
+      "id": "xrm:1500031",
+      "type": "skos:Concept",
+      "prefLabel": "stable conjugate",
+      "inScheme": "xrm:scheme",
+      "definition": "Conjugate product class expected to be chemically stable.",
       "broader": "xrm:1500000"
     },
     {
@@ -7174,6 +7223,181 @@
         "non-cleaving transformation"
       ],
       "broader": "xrm:2200000"
+    },
+    {
+      "id": "xrm:2300000",
+      "type": "skos:Concept",
+      "prefLabel": "pharmacological role",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolism-specific pharmacological framing of parent or metabolite (not a full activity ontology).",
+      "altLabel": [
+        "pharmacology role",
+        "pharma_role"
+      ],
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:2300010",
+      "type": "skos:Concept",
+      "prefLabel": "pharmacologically active metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolite that retains or gains pharmacological activity.",
+      "altLabel": [
+        "active metabolite"
+      ],
+      "broader": "xrm:2300000",
+      "relatedMatch": "xrm:2400011"
+    },
+    {
+      "id": "xrm:2300011",
+      "type": "skos:Concept",
+      "prefLabel": "pharmacologically inactive metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolite lacking relevant pharmacological activity.",
+      "altLabel": [
+        "inactive metabolite"
+      ],
+      "broader": "xrm:2300000"
+    },
+    {
+      "id": "xrm:2300012",
+      "type": "skos:Concept",
+      "prefLabel": "prodrug",
+      "inScheme": "xrm:scheme",
+      "definition": "Parent administered in inactive/less-active form requiring metabolic activation.",
+      "broader": "xrm:2300000",
+      "relatedMatch": "xrm:1400127"
+    },
+    {
+      "id": "xrm:2300014",
+      "type": "skos:Concept",
+      "prefLabel": "active parent",
+      "inScheme": "xrm:scheme",
+      "definition": "Parent compound that is pharmacologically active as administered.",
+      "altLabel": [
+        "active parent drug"
+      ],
+      "broader": "xrm:2300000",
+      "relatedMatch": "xrm:2400010"
+    },
+    {
+      "id": "xrm:2300015",
+      "type": "skos:Concept",
+      "prefLabel": "inactive parent",
+      "inScheme": "xrm:scheme",
+      "definition": "Parent that is inactive until metabolized (typical prodrug parent).",
+      "broader": "xrm:2300000"
+    },
+    {
+      "id": "xrm:2300016",
+      "type": "skos:Concept",
+      "prefLabel": "equipotent metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolite with activity comparable to the parent.",
+      "broader": "xrm:2300000"
+    },
+    {
+      "id": "xrm:2300017",
+      "type": "skos:Concept",
+      "prefLabel": "more active metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolite more active than the parent.",
+      "broader": "xrm:2300000"
+    },
+    {
+      "id": "xrm:2300018",
+      "type": "skos:Concept",
+      "prefLabel": "less active metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolite less active than the parent.",
+      "broader": "xrm:2300000"
+    },
+    {
+      "id": "xrm:2300019",
+      "type": "skos:Concept",
+      "prefLabel": "toxicophore-bearing metabolite",
+      "inScheme": "xrm:scheme",
+      "definition": "Metabolite carrying a toxicophore (activity framed as toxicity).",
+      "broader": "xrm:2300000"
+    },
+    {
+      "id": "xrm:2400000",
+      "type": "skos:Concept",
+      "prefLabel": "annotation about",
+      "inScheme": "xrm:scheme",
+      "definition": "Which entity a tag is about: parent xenobiotic, metabolite product, or the reaction/transformation itself.",
+      "altLabel": [
+        "assertion about",
+        "tag target"
+      ],
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:2400010",
+      "type": "skos:Concept",
+      "prefLabel": "about parent",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag describes the parent / reactant xenobiotic.",
+      "altLabel": [
+        "parent-associated",
+        "about reactant"
+      ],
+      "broader": "xrm:2400000",
+      "relatedMatch": "xrm:2300014"
+    },
+    {
+      "id": "xrm:2400011",
+      "type": "skos:Concept",
+      "prefLabel": "about product",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag describes the metabolite product.",
+      "altLabel": [
+        "product-associated",
+        "about metabolite"
+      ],
+      "broader": "xrm:2400000",
+      "relatedMatch": [
+        "xrm:2300010",
+        "xrm:1500010"
+      ]
+    },
+    {
+      "id": "xrm:2400012",
+      "type": "skos:Concept",
+      "prefLabel": "about reaction",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag describes the transformation / reaction event itself.",
+      "altLabel": [
+        "reaction-associated",
+        "about transformation"
+      ],
+      "broader": "xrm:2400000",
+      "relatedMatch": "xrm:0000100"
+    },
+    {
+      "id": "xrm:2400013",
+      "type": "skos:Concept",
+      "prefLabel": "about site on parent",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag localizes a site on the parent structure.",
+      "broader": "xrm:2400000",
+      "relatedMatch": "xrm:1400010"
+    },
+    {
+      "id": "xrm:2400014",
+      "type": "skos:Concept",
+      "prefLabel": "about site on product",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag localizes a feature on the product structure.",
+      "broader": "xrm:2400000"
+    },
+    {
+      "id": "xrm:2400015",
+      "type": "skos:Concept",
+      "prefLabel": "about pathway",
+      "inScheme": "xrm:scheme",
+      "definition": "Tag describes multi-step pathway context rather than a single edge.",
+      "broader": "xrm:2400000"
     },
     {
       "id": "xrm:6000000",

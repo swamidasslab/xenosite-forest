@@ -15,7 +15,8 @@ reaction-generating SMARTS/rules and human-useful med-chem metabolism names.
 synthesis / name-reaction oriented, not xenobiotic-metabolism oriented. XRM
 stays **separate and SKOS-first**, with explicit SSSOM mappings to
 RXNO / MOP / GO / ChEBI / Rhea / KEGG / MeSH (and ECO / CHMO for evidence),
-rather than extending any one of them.
+rather than extending any one of them. Do **not** grow a full chemical
+ontology here — metabolism-specific terms only ([`SCOPE.md`](SCOPE.md)).
 
 ## Closest resources (ordered)
 

@@ -40,8 +40,12 @@ Forest ruleset concepts use unabbreviated labels ending in `ruleset`.
 | **evidence** | Literature, MS, NMR, incubation system, … | harvest / curation tags |
 | **biological context** | Enzyme / tissue / species / matrix (orthogonal) | never primary reaction label |
 | **leaving group** | Departing methyl / ethyl / halide / carboxylate / … | dealkylation, hydrolysis, dehalogenation deltas |
+| **pharmacological role** | Active/inactive metabolite, prodrug, active parent | `chem:active-metabolite`, `chem:prodrug`, … |
+| **annotation about** | Tag is about parent, product, or reaction | `chem:about-parent|product|reaction` |
 | **ambiguity and underspecification** | Typed incomplete/conflicting evidence | `chem:*-ambiguity` |
 | **Metabolic Forest map** | Alias spine: ruleset → rule → PatternInfo | `forest.rule:*`, `forest.pattern:*` |
+
+Scope: metabolism-specific only — see [`SCOPE.md`](SCOPE.md).
 
 Legacy facets (redox polarity, bond-edit topology, formula-delta class, ring
 fate, oxygenation outcome, metabolite cardinality, aromatic impact,

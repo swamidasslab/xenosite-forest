@@ -271,6 +271,8 @@ fn parallel_spine_roots_present() {
         ("xrm:2000000", "evidence"),
         ("xrm:2100000", "biological context"),
         ("xrm:2200000", "leaving group"),
+        ("xrm:2300000", "pharmacological role"),
+        ("xrm:2400000", "annotation about"),
         ("xrm:6000000", "ambiguity and underspecification"),
         ("xrm:9000000", "Metabolic Forest map"),
     ] {
@@ -341,6 +343,40 @@ fn leaving_group_tags_with_dealkylation() {
     assert!(labs.contains(&"N-demethylation"), "{labs:?}");
     assert!(labs.contains(&"methyl leaving group"), "{labs:?}");
     assert!(labs.contains(&"leaving group"), "{labs:?}");
+}
+
+#[test]
+fn pharmacological_and_about_roles_stack() {
+    let terms = namer()
+        .name_smiles(
+            "C",
+            "C",
+            &[
+                "chem:prodrug",
+                "chem:prodrug-activation",
+                "chem:active-metabolite",
+                "chem:about-reaction",
+            ],
+        )
+        .unwrap();
+    let labs = labels(&terms);
+    assert!(labs.contains(&"prodrug"), "{labs:?}");
+    assert!(labs.contains(&"prodrug activation"), "{labs:?}");
+    assert!(labs.contains(&"pharmacologically active metabolite"), "{labs:?}");
+    assert!(labs.contains(&"about reaction"), "{labs:?}");
+    assert!(labs.contains(&"about parent"), "{labs:?}");
+    assert!(labs.contains(&"about product"), "{labs:?}");
+
+    let bundles = namer()
+        .annotate_smiles("C", "C", &["chem:forms-reactive-conjugate", "chem:about-product"])
+        .unwrap();
+    let b = bundles.iter().find(|b| !b.about_product.is_empty());
+    assert!(b.is_some(), "{bundles:?}");
+    let reactive_terms = namer()
+        .name_smiles("C", "C", &["chem:forms-reactive-conjugate"])
+        .unwrap();
+    let labs = labels(&reactive_terms);
+    assert!(labs.contains(&"forms reactive conjugate"), "{labs:?}");
 }
 
 #[test]

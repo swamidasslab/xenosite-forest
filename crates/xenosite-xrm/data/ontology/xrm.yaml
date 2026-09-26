@@ -1,13 +1,14 @@
 # XRM thesaurus (authoring source). Export to xrm.skos.jsonld for Rust.
-# Site-localized names (e.g. C4 hydroxylation) are NOT concepts; generate from templates.
+# Metabolism-specific only — not a full chemical ontology.
+# Site-localized names are NOT concepts; generate from templates.
 scheme:
   id: xrm:scheme
   preferred_label: Xenobiotic Reaction Metabolism
   iri: https://xenosite.org/ontology/xrm#
-  definition: Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming, site-localized
-    labels, structural transformation tags, product/liability classes, leaving groups, and mappings to
-    RXNO/MOP/GO/ChEBI/Rhea/KEGG/MeSH/ECO/CHMO. Separate from named-synthesis and enzyme ontologies; the
-    layer between SMARTS/rules and human-useful med-chem metabolism names.
+  definition: Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming only — not a
+    full chemical ontology. Covers site-localized labels, structural transformation tags, product/liability/leaving-group/pharmacological-role
+    classes, parent/product/reaction annotation roles, and SSSOM mappings to RXNO/MOP/GO/ChEBI/Rhea/KEGG/MeSH/ECO/CHMO.
+    The layer between SMARTS/rules and human-useful med-chem metabolism names.
 spines:
 - id: xrm:1000000
   preferred_label: metabolism phase
@@ -97,6 +98,14 @@ spines:
   synonyms: &id013
   - leaving_group
   - departing group
+- id: xrm:2300000
+  preferred_label: pharmacological role
+  definition: Metabolism-specific pharmacological framing.
+  synonyms: []
+- id: xrm:2400000
+  preferred_label: annotation about
+  definition: Whether a tag is about parent, product, or reaction.
+  synonyms: []
 concepts:
 - id: xrm:0000000
   preferred_label: xenobiotic biotransformation
@@ -272,6 +281,7 @@ concepts:
   - xrm:7300001
   - xrm:7400001
   - xrm:7700001
+  - xrm:2400012
   synonyms:
   - C-hydroxylation
   - monooxygenation hydroxylation
@@ -1007,6 +1017,7 @@ concepts:
   related_match:
   - xrm:1500015
   - xrm:1400121
+  - xrm:1400030
 - id: xrm:0001005
   preferred_label: N-glucuronidation
   parents:
@@ -1899,6 +1910,8 @@ concepts:
   - soft spot
   - metabolic soft-spot
   - metabolic_soft_spot
+  related_match:
+  - xrm:2400013
 - id: xrm:1400011
   preferred_label: clearance liability
   definition: Transformation that drives metabolic clearance.
@@ -1984,6 +1997,20 @@ concepts:
   - xrm:0000201
   synonyms:
   - aldehyde_forming
+- id: xrm:1400030
+  preferred_label: forms reactive conjugate
+  definition: Transformation yields or proceeds via a reactive conjugate (e.g. acyl glucuronide, GSH-trappable
+    adduct precursor).
+  parents:
+  - xrm:1400000
+  synonyms:
+  - reactive conjugate formation
+  - forms_reactive_conjugate
+  related_match:
+  - xrm:1500030
+  - xrm:1500015
+  - xrm:1500019
+  - xrm:0001004
 - id: xrm:1400100
   preferred_label: aromatic soft spot
   definition: Aromatic site that is a metabolic soft spot.
@@ -2188,6 +2215,8 @@ concepts:
   - xrm:1400000
   synonyms:
   - prodrug_activation
+  related_match:
+  - xrm:2300012
 - id: xrm:1400128
   preferred_label: metabolic switching risk
   definition: Blocking one site may switch metabolism elsewhere.
@@ -2215,6 +2244,7 @@ concepts:
   - xrm:1500000
   related_match:
   - xrm:0000300
+  - xrm:2400011
   synonyms:
   - benzoquinone metabolite
   - quinoid
@@ -2253,6 +2283,7 @@ concepts:
   - xrm:1500000
   related_match:
   - xrm:0001004
+  - xrm:1400030
   synonyms:
   - acyl_glucuronide
 - id: xrm:1500016
@@ -2279,6 +2310,22 @@ concepts:
   - xrm:1500000
   synonyms:
   - gsh_trappable_metabolite
+  related_match:
+  - xrm:1400030
+- id: xrm:1500030
+  preferred_label: reactive conjugate
+  definition: Conjugate product class that is chemically reactive (acyl glucuronide, etc.).
+  parents:
+  - xrm:1500000
+  synonyms:
+  - reactive conjugated metabolite
+  related_match:
+  - xrm:1400030
+- id: xrm:1500031
+  preferred_label: stable conjugate
+  definition: Conjugate product class expected to be chemically stable.
+  parents:
+  - xrm:1500000
 - id: xrm:1500100
   preferred_label: quinone-like reactive metabolite
   definition: Broad class of quinoid reactive metabolites.
@@ -4685,6 +4732,129 @@ concepts:
   - xrm:2200000
   synonyms:
   - non-cleaving transformation
+- id: xrm:2300000
+  preferred_label: pharmacological role
+  definition: Metabolism-specific pharmacological framing of parent or metabolite (not a full activity
+    ontology).
+  parents:
+  - xrm:0000000
+  synonyms:
+  - pharmacology role
+  - pharma_role
+- id: xrm:2300010
+  preferred_label: pharmacologically active metabolite
+  definition: Metabolite that retains or gains pharmacological activity.
+  parents:
+  - xrm:2300000
+  synonyms:
+  - active metabolite
+  related_match:
+  - xrm:2400011
+- id: xrm:2300011
+  preferred_label: pharmacologically inactive metabolite
+  definition: Metabolite lacking relevant pharmacological activity.
+  parents:
+  - xrm:2300000
+  synonyms:
+  - inactive metabolite
+- id: xrm:2300012
+  preferred_label: prodrug
+  definition: Parent administered in inactive/less-active form requiring metabolic activation.
+  parents:
+  - xrm:2300000
+  related_match:
+  - xrm:1400127
+- id: xrm:2300014
+  preferred_label: active parent
+  definition: Parent compound that is pharmacologically active as administered.
+  parents:
+  - xrm:2300000
+  synonyms:
+  - active parent drug
+  related_match:
+  - xrm:2400010
+- id: xrm:2300015
+  preferred_label: inactive parent
+  definition: Parent that is inactive until metabolized (typical prodrug parent).
+  parents:
+  - xrm:2300000
+- id: xrm:2300016
+  preferred_label: equipotent metabolite
+  definition: Metabolite with activity comparable to the parent.
+  parents:
+  - xrm:2300000
+- id: xrm:2300017
+  preferred_label: more active metabolite
+  definition: Metabolite more active than the parent.
+  parents:
+  - xrm:2300000
+- id: xrm:2300018
+  preferred_label: less active metabolite
+  definition: Metabolite less active than the parent.
+  parents:
+  - xrm:2300000
+- id: xrm:2300019
+  preferred_label: toxicophore-bearing metabolite
+  definition: Metabolite carrying a toxicophore (activity framed as toxicity).
+  parents:
+  - xrm:2300000
+- id: xrm:2400000
+  preferred_label: annotation about
+  definition: 'Which entity a tag is about: parent xenobiotic, metabolite product, or the reaction/transformation
+    itself.'
+  parents:
+  - xrm:0000000
+  synonyms:
+  - assertion about
+  - tag target
+- id: xrm:2400010
+  preferred_label: about parent
+  definition: Tag describes the parent / reactant xenobiotic.
+  parents:
+  - xrm:2400000
+  synonyms:
+  - parent-associated
+  - about reactant
+  related_match:
+  - xrm:2300014
+- id: xrm:2400011
+  preferred_label: about product
+  definition: Tag describes the metabolite product.
+  parents:
+  - xrm:2400000
+  synonyms:
+  - product-associated
+  - about metabolite
+  related_match:
+  - xrm:2300010
+  - xrm:1500010
+- id: xrm:2400012
+  preferred_label: about reaction
+  definition: Tag describes the transformation / reaction event itself.
+  parents:
+  - xrm:2400000
+  synonyms:
+  - reaction-associated
+  - about transformation
+  related_match:
+  - xrm:0000100
+- id: xrm:2400013
+  preferred_label: about site on parent
+  definition: Tag localizes a site on the parent structure.
+  parents:
+  - xrm:2400000
+  related_match:
+  - xrm:1400010
+- id: xrm:2400014
+  preferred_label: about site on product
+  definition: Tag localizes a feature on the product structure.
+  parents:
+  - xrm:2400000
+- id: xrm:2400015
+  preferred_label: about pathway
+  definition: Tag describes multi-step pathway context rather than a single edge.
+  parents:
+  - xrm:2400000
 - id: xrm:6000000
   preferred_label: ambiguity and underspecification
   definition: Cross-cutting spine for incomplete, conflicting, or underdetermined naming evidence. Prefer

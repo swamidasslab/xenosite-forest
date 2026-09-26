@@ -42,6 +42,8 @@ chemical transformation and phase I family).
 | Rule/model provenance | 20–40 | SMARTS, Rainbow class, XenoNet, legacy model |
 | Localization templates | 20–40 | Templates only — not per-atom enumerations |
 | Leaving group | 20–40 | Departing methyl/ethyl/halide/carboxylate/… fragments |
+| Pharmacological role | 10–25 | Active/inactive metabolite, prodrug (metabolism-specific) |
+| Annotation about | 5–15 | about parent / product / reaction (not combinatorial) |
 
 ## SKOS link types
 
@@ -76,6 +78,8 @@ identity parents.
 | `xmet:hasConjugateGroup` | phase2 / product_class conjugates |
 | `xmet:hasAttachmentAtomType` | site environment attachment-atom leaves |
 | `xmet:hasLeavingGroup` | `leaving_group` |
+| `xmet:hasPharmacologicalRole` | `pharmacological_role` |
+| `xmet:aboutParent` / `aboutProduct` / `aboutReaction` | distinguish tag target |
 
 ## Bundle shape
 

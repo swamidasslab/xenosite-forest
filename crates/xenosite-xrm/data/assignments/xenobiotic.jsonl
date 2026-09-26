@@ -2,9 +2,9 @@
 # phase II conjugation family, medchem liability, reactive metabolite family,
 # site type, structural delta, product status, rule provenance, …).
 # Structural / delta rules
-{"id":"asg:hydroxylation","emit":["xrm:0000100","xrm:7000001","xrm:7100001","xrm:7200001","xrm:7300001","xrm:7400001","xrm:7700001","xrm:7500003","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010"],"delta":{"O":1},"reactant_smarts":"[#6:1]","product_smarts":"[#6:1][#8H1]","require_map":[1]}
-{"id":"asg:aromatic-hydroxylation","emit":["xrm:0000101","xrm:7800001","xrm:8000003","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1600013"],"delta":{"O":1},"reactant_smarts":"[cH:1]","product_smarts":"[c:1][#8H1]","require_map":[1],"site_aromatic":true}
-{"id":"asg:aliphatic-hydroxylation","emit":["xrm:0000102","xrm:7800002","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1600010"],"delta":{"O":1},"reactant_smarts":"[CH2,CH3:1]","product_smarts":"[C:1][#8H1]","require_map":[1],"site_aromatic":false}
+{"id":"asg:hydroxylation","emit":["xrm:0000100","xrm:7000001","xrm:7100001","xrm:7200001","xrm:7300001","xrm:7400001","xrm:7700001","xrm:7500003","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:2400012"],"delta":{"O":1},"reactant_smarts":"[#6:1]","product_smarts":"[#6:1][#8H1]","require_map":[1]}
+{"id":"asg:aromatic-hydroxylation","emit":["xrm:0000101","xrm:7800001","xrm:8000003","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1600013","xrm:2400012"],"delta":{"O":1},"reactant_smarts":"[cH:1]","product_smarts":"[c:1][#8H1]","require_map":[1],"site_aromatic":true}
+{"id":"asg:aliphatic-hydroxylation","emit":["xrm:0000102","xrm:7800002","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1600010","xrm:2400012"],"delta":{"O":1},"reactant_smarts":"[CH2,CH3:1]","product_smarts":"[C:1][#8H1]","require_map":[1],"site_aromatic":false}
 {"id":"asg:epoxidation","emit":["xrm:0000110","xrm:0000111","xrm:7000001","xrm:7200006","xrm:7600003","xrm:7300001","xrm:7400001","xrm:7700001","xrm:7500001","xrm:0000010","xrm:1200000","xrm:1500012","xrm:1400014","xrm:1400019"],"delta":{"O":1},"reactant_smarts":"[#6:1]=[#6:2]","product_smarts":"C1OC1"}
 {"id":"asg:alcohol-oxidation","emit":["xrm:0000310","xrm:0000012","xrm:7000001","xrm:7200003","xrm:7400003","xrm:7700004","xrm:7100001","xrm:1200000","xrm:1400022","xrm:1500013"],"reactant_smarts":"[#6:1][#8H1]","product_smarts":"[#6:1]=O","require_map":[1]}
 {"id":"asg:primary-alcohol-oxidation","emit":["xrm:0000311","xrm:0000012","xrm:1200000","xrm:1400022","xrm:1500013"],"reactant_smarts":"[CH2:1][#8H1]","product_smarts":"[#6:1]=O","require_map":[1]}
@@ -16,7 +16,7 @@
 {"id":"asg:delta-halogen-loss-Br","emit":["xrm:7700009","xrm:7100005","xrm:7200002","xrm:1700000","xrm:1900011","xrm:2200016","xrm:2200000"],"delta":{"Br":-1}}
 {"id":"asg:delta-carbon-loss","emit":["xrm:7700007","xrm:7300002","xrm:7200002","xrm:1700000","xrm:1900011","xrm:2200032","xrm:2200000"],"delta":{"C":-1}}
 # Chemist / Forest tags
-{"id":"asg:tag-hydroxylation","emit":["xrm:0000100","xrm:9100100","xrm:7000001","xrm:7400001","xrm:7300001","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1900012"],"tags_any":["forest.rule:Hydroxylation","chem:hydroxylation"]}
+{"id":"asg:tag-hydroxylation","emit":["xrm:0000100","xrm:9100100","xrm:7000001","xrm:7400001","xrm:7300001","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1900012","xrm:2400012"],"tags_any":["forest.rule:Hydroxylation","chem:hydroxylation"]}
 {"id":"asg:tag-aromatic-hydroxylation","emit":["xrm:0000101","xrm:8000003","xrm:7800001","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1900012"],"tags_any":["chem:aromatic-hydroxylation","chem:aryl-hydroxylation"]}
 {"id":"asg:tag-para-hydroxylation","emit":["xrm:0000103","xrm:8000003","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1900012"],"tags_any":["chem:para-hydroxylation"]}
 {"id":"asg:tag-benzylic-hydroxylation","emit":["xrm:0000106","xrm:7800002","xrm:0000010","xrm:1200000","xrm:1400010","xrm:1400015","xrm:1900010","xrm:1600014","xrm:1900012"],"tags_any":["chem:benzylic-hydroxylation"]}
@@ -32,18 +32,18 @@
 {"id":"asg:tag-oxidative-deamination","emit":["xrm:0000208","xrm:0004006","xrm:7100002","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1400022","xrm:1600021","xrm:1400019","xrm:1900012"],"tags_any":["chem:oxidative-deamination","chem:deamination"]}
 {"id":"asg:tag-o-dealkylation","emit":["xrm:0000202","xrm:7100003","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012","xrm:2200032","xrm:2200000"],"tags_any":["chem:O-dealkylation"]}
 {"id":"asg:tag-o-demethylation","emit":["xrm:0000209","xrm:7100003","xrm:0000011","xrm:1200000","xrm:1400010","xrm:1400011","xrm:1900012","xrm:2200010","xrm:2200000"],"tags_any":["chem:O-demethylation"]}
-{"id":"asg:tag-glucuronidation","emit":["xrm:0001000","xrm:9101000","xrm:7000003","xrm:7500003","xrm:7700008","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1900012"],"tags_any":["forest.rule:Glucuronidation","chem:glucuronidation"]}
-{"id":"asg:tag-acyl-glucuronidation","emit":["xrm:0001004","xrm:0004017","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1500015","xrm:1400014","xrm:1400019","xrm:1900012"],"tags_any":["chem:acyl-glucuronidation","chem:acyl-glucuronide"]}
+{"id":"asg:tag-glucuronidation","emit":["xrm:0001000","xrm:9101000","xrm:7000003","xrm:7500003","xrm:7700008","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1900012","xrm:1500031","xrm:2400012","xrm:2400011"],"tags_any":["forest.rule:Glucuronidation","chem:glucuronidation"]}
+{"id":"asg:tag-acyl-glucuronidation","emit":["xrm:0001004","xrm:0004017","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1500015","xrm:1400014","xrm:1400019","xrm:1900012","xrm:1400030","xrm:1500030","xrm:2400012"],"tags_any":["chem:acyl-glucuronidation","chem:acyl-glucuronide"]}
 {"id":"asg:tag-phenolic-glucuronidation","emit":["xrm:0001002","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1900012"],"tags_any":["chem:phenolic-glucuronidation"]}
 {"id":"asg:tag-n-glucuronidation","emit":["xrm:0001005","xrm:1300000","xrm:1400020","xrm:1400021","xrm:1900012"],"tags_any":["chem:N-glucuronidation"]}
-{"id":"asg:tag-sulfation","emit":["xrm:0001010","xrm:9101010","xrm:7000003","xrm:7500003","xrm:1900012"],"tags_any":["forest.rule:Sulfation","chem:sulfation"]}
-{"id":"asg:tag-acetylation","emit":["xrm:0001020","xrm:9101020","xrm:7000003","xrm:1900012"],"tags_any":["forest.rule:Acetylation","chem:acetylation","chem:N-acetylation"]}
-{"id":"asg:tag-glutathionation","emit":["xrm:0001030","xrm:9101030","xrm:7500002","xrm:7000003","xrm:1500019","xrm:1400013","xrm:1300000","xrm:1900012"],"tags_any":["forest.rule:Glutathionation","chem:glutathione-conjugation"]}
-{"id":"asg:tag-gsh-michael","emit":["xrm:0001031","xrm:0004014","xrm:8000008","xrm:7500002","xrm:1500016","xrm:1500019","xrm:1400013","xrm:1300000","xrm:1900012"],"tags_any":["forest.pattern:Glutathionation/michael","chem:GSH-Michael"]}
-{"id":"asg:tag-gsh-epoxide","emit":["xrm:0001032","xrm:7500002","xrm:1500019","xrm:1400013","xrm:1300000","xrm:1900012"],"tags_any":["forest.pattern:Glutathionation/epoxide_ch","forest.pattern:Glutathionation/epoxide_ch2","forest.pattern:Glutathionation/epoxide_c","chem:GSH-epoxide"]}
-{"id":"asg:tag-quinone","emit":["xrm:0000300","xrm:0004001","xrm:0003000","xrm:9100600","xrm:8000005","xrm:7500001","xrm:7000001","xrm:7900002","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012"],"tags_any":["forest.rule:QuinoneFormation","chem:quinone-formation"]}
-{"id":"asg:tag-quinone-imine","emit":["xrm:0000303","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7500001","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1500011","xrm:1900012"],"tags_any":["chem:quinone-imine","chem:quinone-imine-formation"]}
-{"id":"asg:tag-quinone-methide","emit":["xrm:0000304","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7500001","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012"],"tags_any":["chem:quinone-methide","chem:quinone-methide-formation"]}
+{"id":"asg:tag-sulfation","emit":["xrm:0001010","xrm:9101010","xrm:7000003","xrm:7500003","xrm:1900012","xrm:1500031","xrm:2400012","xrm:2400011"],"tags_any":["forest.rule:Sulfation","chem:sulfation"]}
+{"id":"asg:tag-acetylation","emit":["xrm:0001020","xrm:9101020","xrm:7000003","xrm:1900012","xrm:1500031","xrm:2400012","xrm:2400011"],"tags_any":["forest.rule:Acetylation","chem:acetylation","chem:N-acetylation"]}
+{"id":"asg:tag-glutathionation","emit":["xrm:0001030","xrm:9101030","xrm:7500002","xrm:7000003","xrm:1500019","xrm:1400013","xrm:1300000","xrm:1900012","xrm:1400030","xrm:1500030","xrm:2400012"],"tags_any":["forest.rule:Glutathionation","chem:glutathione-conjugation"]}
+{"id":"asg:tag-gsh-michael","emit":["xrm:0001031","xrm:0004014","xrm:8000008","xrm:7500002","xrm:1500016","xrm:1500019","xrm:1400013","xrm:1300000","xrm:1900012","xrm:1400030","xrm:1500030","xrm:2400012"],"tags_any":["forest.pattern:Glutathionation/michael","chem:GSH-Michael"]}
+{"id":"asg:tag-gsh-epoxide","emit":["xrm:0001032","xrm:7500002","xrm:1500019","xrm:1400013","xrm:1300000","xrm:1900012","xrm:1400030","xrm:1500030","xrm:2400012"],"tags_any":["forest.pattern:Glutathionation/epoxide_ch","forest.pattern:Glutathionation/epoxide_ch2","forest.pattern:Glutathionation/epoxide_c","chem:GSH-epoxide"]}
+{"id":"asg:tag-quinone","emit":["xrm:0000300","xrm:0004001","xrm:0003000","xrm:9100600","xrm:8000005","xrm:7500001","xrm:7000001","xrm:7900002","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012","xrm:1400030","xrm:2400011"],"tags_any":["forest.rule:QuinoneFormation","chem:quinone-formation"]}
+{"id":"asg:tag-quinone-imine","emit":["xrm:0000303","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7500001","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1500011","xrm:1900012","xrm:1400030","xrm:2400011"],"tags_any":["chem:quinone-imine","chem:quinone-imine-formation"]}
+{"id":"asg:tag-quinone-methide","emit":["xrm:0000304","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7500001","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012","xrm:1400030","xrm:2400011"],"tags_any":["chem:quinone-methide","chem:quinone-methide-formation"]}
 {"id":"asg:tag-imine-methide","emit":["xrm:0000306","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7500001","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012"],"tags_any":["chem:imine-methide","chem:imine-methide-formation"]}
 {"id":"asg:tag-one-step-quinone","emit":["xrm:0000307","xrm:0000300","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7900001","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012"],"tags_any":["chem:one-step-quinone-formation"]}
 {"id":"asg:tag-two-step-quinone","emit":["xrm:0000308","xrm:0000300","xrm:0004001","xrm:0003000","xrm:8000005","xrm:7900002","xrm:7900003","xrm:6000040","xrm:1500010","xrm:1400014","xrm:1400012","xrm:1400019","xrm:1200000","xrm:1900012"],"tags_any":["chem:two-step-quinone-formation"]}
@@ -53,7 +53,7 @@
 {"id":"asg:tag-sulfo-reduction","emit":["xrm:0000533","xrm:7000002","xrm:7100004","xrm:1900012"],"tags_any":["chem:sulfo-reduction"]}
 {"id":"asg:tag-cyanide-hydrolysis","emit":["xrm:0000409","xrm:7000003","xrm:7200002","xrm:7300002","xrm:1900012","xrm:2200021","xrm:2200000"],"tags_any":["chem:cyanide-hydrolysis"]}
 {"id":"asg:tag-ether-hydrolysis","emit":["xrm:0000408","xrm:7000003","xrm:7200002","xrm:7300002","xrm:1900012","xrm:2200021","xrm:2200000"],"tags_any":["chem:ether-hydrolysis"]}
-{"id":"asg:tag-methylation","emit":["xrm:0001040","xrm:7000003","xrm:7200004","xrm:1900012"],"tags_any":["chem:methylation"]}
+{"id":"asg:tag-methylation","emit":["xrm:0001040","xrm:7000003","xrm:7200004","xrm:1900012","xrm:1500031","xrm:2400012","xrm:2400011"],"tags_any":["chem:methylation"]}
 {"id":"asg:tag-glycine-conjugation","emit":["xrm:0001051","xrm:7000003","xrm:7700008","xrm:1900012"],"tags_any":["chem:glycine-conjugation"]}
 {"id":"asg:tag-tautomerization","emit":["xrm:0002000","xrm:9102000","xrm:7000003","xrm:7700010","xrm:7200005","xrm:1900012"],"tags_any":["forest.rule:Tautomerization","chem:tautomerization"]}
 {"id":"asg:tag-conjugation","emit":["xrm:0000024","xrm:0000002","xrm:9000016","xrm:7000003","xrm:1900012"],"tags_any":["chem:conjugation","forest.ruleset:Conjugation","forest.ruleset:CJ"]}
@@ -86,3 +86,13 @@
 {"id":"asg:tag-electrophile-generation","emit":["xrm:7500001","xrm:0003000","xrm:1900012"],"tags_any":["chem:electrophile-generation","chem:bioactivation"]}
 {"id":"asg:tag-electrophile-consumption","emit":["xrm:7500002","xrm:1900012"],"tags_any":["chem:electrophile-consumption"]}
 {"id":"asg:tag-detoxication","emit":["xrm:0003001","xrm:7500004","xrm:1900012"],"tags_any":["chem:detoxication","chem:detoxification"]}
+# Pharmacological role + annotation-about (parent/product/reaction)
+{"id":"asg:tag-forms-reactive-conjugate","emit":["xrm:1400030","xrm:1500030","xrm:2400012"],"tags_any":["chem:forms-reactive-conjugate","chem:reactive-conjugate"]}
+{"id":"asg:tag-active-metabolite","emit":["xrm:2300010","xrm:2400011","xrm:2300000"],"tags_any":["chem:active-metabolite","chem:pharmacologically-active-metabolite"]}
+{"id":"asg:tag-inactive-metabolite","emit":["xrm:2300011","xrm:2400011","xrm:2300000"],"tags_any":["chem:inactive-metabolite","chem:pharmacologically-inactive-metabolite"]}
+{"id":"asg:tag-prodrug","emit":["xrm:2300012","xrm:2400010","xrm:2300000"],"tags_any":["chem:prodrug"]}
+{"id":"asg:tag-prodrug-activation","emit":["xrm:2300013","xrm:2300012","xrm:2400012","xrm:2300000"],"tags_any":["chem:prodrug-activation"]}
+{"id":"asg:tag-active-parent","emit":["xrm:2300014","xrm:2400010","xrm:2300000"],"tags_any":["chem:active-parent"]}
+{"id":"asg:tag-about-parent","emit":["xrm:2400010","xrm:2400000"],"tags_any":["chem:about-parent"]}
+{"id":"asg:tag-about-product","emit":["xrm:2400011","xrm:2400000"],"tags_any":["chem:about-product"]}
+{"id":"asg:tag-about-reaction","emit":["xrm:2400012","xrm:2400000"],"tags_any":["chem:about-reaction"]}
