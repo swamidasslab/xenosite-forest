@@ -469,9 +469,11 @@ pub fn site_shell_cost(
 ///
 /// Builds the **projected** site bag (`current + δ`), then measures distance to
 /// the **target** bag ([`AtomNeighborhood::norm_l1_opts`], greedy multiset).
-/// Close pairs: pass both ends. Cleaving sites should pass
-/// [`site_atoms_with_leave`]. Prefer [`site_shell_cost_best_map`] when multiple
-/// MCS maps are available.
+/// Close pairs: pass both ends. Cleaving sites should pass site∪leave via
+/// [`site_atoms_with_leave`] and list leave indices in `leave_atoms` so those
+/// heavies count as unmatched debt until cleaved (no MCS target mate — same
+/// view as the gate’s leave fragment). Prefer [`site_shell_cost_best_map`] when
+/// multiple MCS maps are available.
 pub fn site_shell_cost_opts(
     current: &MoleculeShells,
     delta: Option<&AlignedShells>,
@@ -480,7 +482,34 @@ pub fn site_shell_cost_opts(
     site_atoms: &[usize],
     opts: SiteShellCostOpts,
 ) -> f64 {
+    site_shell_cost_leave(
+        current,
+        delta,
+        target,
+        reactant_to_target,
+        site_atoms,
+        &[],
+        opts,
+    )
+}
+
+/// [`site_shell_cost_opts`] with an explicit leave fragment.
+///
+/// `leave_atoms` (subset of `site_atoms`) are Effect leave heavies: while still
+/// present they contribute projected shells with **no** target mate (debt).
+/// After the edit cleaves them they drop from both bags — residual falls when
+/// the debt exceeds any kept-site shell change.
+pub fn site_shell_cost_leave(
+    current: &MoleculeShells,
+    delta: Option<&AlignedShells>,
+    target: &MoleculeShells,
+    reactant_to_target: &BTreeMap<usize, usize>,
+    site_atoms: &[usize],
+    leave_atoms: &[usize],
+    opts: SiteShellCostOpts,
+) -> f64 {
     let zero = AtomNeighborhood::default();
+    let leave: HashSet<usize> = leave_atoms.iter().copied().collect();
     let mut projected: Vec<AtomNeighborhood> = Vec::new();
     let mut target_envs: Vec<AtomNeighborhood> = Vec::new();
 
@@ -488,25 +517,27 @@ pub fn site_shell_cost_opts(
         let Some(cur) = current.atoms.get(&r) else {
             continue;
         };
-        let mapped = reactant_to_target.get(&r).copied();
+        // Cleaved in the applied edit: leave/debt gone.
         let cleaved = delta.is_some_and(|d| !d.alignment.contains_key(&r));
-
-        if let Some(t) = mapped {
-            if let Some(tgt) = target.atoms.get(&t) {
-                target_envs.push(tgt.clone());
-            }
-        }
-
         if cleaved {
             continue;
         }
 
-        // projected = current + δ  (δ = product − reactant); cost vs target below.
         let projected_env = match delta {
             Some(d) => apply_neighborhood(cur, d.atoms.get(&r).unwrap_or(&zero)),
             None => cur.clone(),
         };
         projected.push(projected_env);
+
+        // Leave fragment: no target mate (gate discards it). Kept site: pair.
+        if leave.contains(&r) {
+            continue;
+        }
+        if let Some(t) = reactant_to_target.get(&r).copied() {
+            if let Some(tgt) = target.atoms.get(&t) {
+                target_envs.push(tgt.clone());
+            }
+        }
     }
 
     neighborhood_bag_norm_l1(&projected, &target_envs, opts.dearomatic)
@@ -535,22 +566,40 @@ pub fn site_shell_cost_best_map(
 
 /// Expand `site_atoms` with heavies on the leaving side of a cleavage bond.
 ///
-/// When `site_atoms` already holds both bond ends, the smaller side (or the side
-/// whose heavy count matches `leave_count`) is unioned in. When only one end is
-/// known (unique-edit orbit), `cleavage_bonds` supplies the partner. No-op when
-/// no cleavage bond touches the site.
+/// Bond priority (first match wins per site):
+/// 1. site ↔ other SMARTS-mapped atoms (`mapped` beyond the site) — the edit
+///    bond the pattern actually cleaves (e.g. Dehydration C–O when site_map
+///    only lists C);
+/// 2. bonded pair already inside `site_atoms`;
+/// 3. [`AtomDiff`] `cleavage_bonds` touching the site;
+/// 4. any heavy neighbor of a singleton site (open leave).
+///
+/// Then the smaller side (or the side whose heavy count matches `leave_count`)
+/// is unioned in. No-op when no cleavage bond touches the site.
 pub fn site_atoms_with_leave(
     mol: &Molecule,
     site_atoms: &[usize],
     leave_count: Option<usize>,
     cleavage_bonds: &BTreeSet<(usize, usize)>,
+    mapped: &[usize],
 ) -> Vec<usize> {
     let mut out: BTreeSet<usize> = site_atoms.iter().copied().collect();
     let site: HashSet<usize> = site_atoms.iter().copied().collect();
 
     let mut bonds: Vec<(usize, usize)> = Vec::new();
-    // Prefer an explicit bonded pair inside the site.
-    if site_atoms.len() >= 2 {
+    // 1. Pattern-mapped partners outside the declared site (leave end).
+    for &a in site_atoms {
+        for &b in mapped {
+            if site.contains(&b) || a == b {
+                continue;
+            }
+            if mol.bond_between(atom_idx(a), atom_idx(b)).is_some() {
+                bonds.push(bond_key_usize(a, b));
+            }
+        }
+    }
+    // 2. Explicit bonded pair inside the site.
+    if bonds.is_empty() && site_atoms.len() >= 2 {
         for i in 0..site_atoms.len() {
             for j in (i + 1)..site_atoms.len() {
                 let a = site_atoms[i];
@@ -561,6 +610,7 @@ pub fn site_atoms_with_leave(
             }
         }
     }
+    // 3. MCS cleavage bonds touching the site.
     if bonds.is_empty() {
         for &(a, b) in cleavage_bonds {
             if site.contains(&a) || site.contains(&b) {
@@ -568,7 +618,7 @@ pub fn site_atoms_with_leave(
             }
         }
     }
-    // Fall back: any heavy neighbor of a singleton site (open leave).
+    // 4. Fall back: any heavy neighbor of a singleton site (open leave).
     if bonds.is_empty() && site_atoms.len() == 1 {
         let a = site_atoms[0];
         for (nbr, _) in mol.neighbors(atom_idx(a)) {
@@ -1180,10 +1230,87 @@ mod tests {
         }
         let me = me.expect("methyl");
         let oxy = oxy.expect("oxygen");
-        // Unique-edit style: only heteroatom in the seed → leave expands to Me.
-        let expanded = site_atoms_with_leave(&mol, &[oxy], Some(1), &diff.cleavage_bonds);
+        // Unique-edit style: only heteroatom in the seed → leave expands to Me
+        // via MCS cleavage_bonds / neighbor fallback.
+        let expanded = site_atoms_with_leave(&mol, &[oxy], Some(1), &diff.cleavage_bonds, &[oxy]);
         assert!(expanded.contains(&me), "leave Me missing: {expanded:?}");
         assert!(expanded.contains(&oxy), "{expanded:?}");
+        // With both SMARTS maps, prefer the O–Me bond over MCS noise.
+        let mapped = site_atoms_with_leave(&mol, &[oxy], Some(1), &diff.cleavage_bonds, &[me, oxy]);
+        assert!(mapped.contains(&me) && mapped.contains(&oxy), "{mapped:?}");
+        assert_eq!(mapped.len(), 2, "leave_count=1 Me side: {mapped:?}");
+    }
+
+    #[test]
+    fn dehydration_alcohol_residual_drops_with_leave() {
+        use crate::rules::dehydration;
+        let parent = ForestMol::parse("COc1ccc(CC=C)cc1O").unwrap();
+        let target = parse_mol("O=C1C=CC(=O)C(CC=C)=C1").unwrap();
+        let ad = atom_diff(parent.mol(), &target);
+        let cur = molecule_shells(parent.mol());
+        let tgt = molecule_shells(&target);
+        let set = dehydration();
+        let c = set
+            .candidates(parent.mol())
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.pattern.name == "alcohol")
+            .expect("Dehydration alcohol");
+        assert!(c.pattern.effect.cleaves);
+        assert_eq!(c.pattern.effect.leave_count, Some(1));
+        let site: Vec<usize> = c
+            .pattern
+            .site_map
+            .iter()
+            .filter_map(|m| c.mapped.get(m).copied())
+            .collect();
+        let mapped: Vec<usize> = c.mapped.values().copied().collect();
+        let atoms = site_atoms_with_leave(
+            parent.mol(),
+            &site,
+            c.pattern.effect.leave_count.map(|n| n as usize),
+            &ad.cleavage_bonds,
+            &mapped,
+        );
+        assert!(
+            atoms.len() <= 3,
+            "leave_count=1 should not pull the whole ring: {atoms:?}"
+        );
+        let leave_only: Vec<usize> = atoms
+            .iter()
+            .copied()
+            .filter(|a| !site.contains(a))
+            .collect();
+        assert!(
+            !leave_only.is_empty(),
+            "expected OH leave beyond site {site:?}, got {atoms:?}"
+        );
+        let pieces = c.materialize_mols(parent.mol()).unwrap();
+        let child = parent.adopt_product(pieces[0].clone());
+        let edit = edit_shells(&parent, &child);
+        let before = site_shell_cost_leave(
+            &cur,
+            None,
+            &tgt,
+            &ad.mapping,
+            &atoms,
+            &leave_only,
+            SiteShellCostOpts::default(),
+        );
+        let after = site_shell_cost_leave(
+            &cur,
+            Some(&edit),
+            &tgt,
+            &ad.mapping,
+            &atoms,
+            &leave_only,
+            SiteShellCostOpts::default(),
+        );
+        assert!(
+            before > after + 1e-12,
+            "cleaving OH leave should drop residual: {before:.3} → {after:.3} atoms={atoms:?} leave={leave_only:?}"
+        );
     }
 
     fn aligned_shells_mol(a: &Molecule, b: &Molecule) -> AlignedShells {

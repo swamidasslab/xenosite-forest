@@ -134,6 +134,8 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
 - **Always-on PatternInfo catalog audit.** `cargo test -p xenosite-forest --test pattern_info_catalog` (also under plain `cargo test -p xenosite-forest`): every `catalog_names` leaf — unique names, sealed `delta_formula`, site_map/kind shape, edit present; chemistry probe that kept-site aromatic→non-aromatic edits declare `dearomatizes` capability; resolve check on aromatic vs aliphatic probes. Status: approved (Rust derisk).
 
+- **Site-shell leave matches the cleavage gate.** Cleaving residuals expand via [`site_atoms_with_leave`](../../crates/xenosite-forest/src/matched_atom.rs) preferring SMARTS-mapped partners (not MCS `cleavage_bonds` noise). Leave heavies are unmatched debt until cleaved ([`site_shell_cost_leave`](../../crates/xenosite-forest/src/matched_atom.rs)) — no MCS target mate, so phenol-OH→quinone no longer treats the leaving O as a needed map. Status: approved (Rust derisk). Tests: `dehydration_alcohol_residual_drops_with_leave` / `site_atoms_with_leave_includes_methyl`.
+
 ## Schema in PatternInfo (approved)
 
 - **``swap_group: str``** on `PatternInfo` (optional When override). Pair unique-edit resolves as When → PatternInfo → ``name``. Same non-empty resolved group on both ends → unordered; unequal → ordered by ``name``. Omit the field when it would equal ``name``; set it only when grouping should differ. Status: approved. Tests: `test_pair_signatures.py`.

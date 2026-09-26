@@ -18,7 +18,7 @@ use std::time::Instant;
 use xenosite_forest::{
     FindPathConfig, ForestMol, PathCounters, SiteShellCostOpts, aligned_shells, atom_diff,
     candidate_could_help_on, edit_shells, find_path_with, molecule_shells, pair_could_help,
-    parse_mol, phase_one, site_atoms_with_leave, site_shell_cost_opts,
+    parse_mol, phase_one, site_atoms_with_leave, site_shell_cost_leave, site_shell_cost_opts,
 };
 
 const MID: &[(&str, &str, &str)] = &[
@@ -211,12 +211,13 @@ fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
 fn expand_atoms(
     mol: &xenosite_forest::Molecule,
     atoms: &[usize],
+    mapped: &[usize],
     leave: bool,
     leave_count: Option<usize>,
     cleavage_bonds: &BTreeSet<(usize, usize)>,
 ) -> Vec<usize> {
     if leave {
-        site_atoms_with_leave(mol, atoms, leave_count, cleavage_bonds)
+        site_atoms_with_leave(mol, atoms, leave_count, cleavage_bonds, mapped)
     } else {
         let mut a = atoms.to_vec();
         a.sort_unstable();
@@ -225,23 +226,26 @@ fn expand_atoms(
     }
 }
 
+struct ResidArgs<'a> {
+    atoms: &'a [usize],
+    leave: &'a [usize],
+    dearomatizes: bool,
+}
+
 fn residual(
     mode: Mode,
     delta: Option<&xenosite_forest::AlignedShells>,
     cur: &xenosite_forest::MoleculeShells,
     tgt: &xenosite_forest::MoleculeShells,
     map: &std::collections::BTreeMap<usize, usize>,
-    atoms: &[usize],
-    dearomatizes: bool,
+    args: ResidArgs<'_>,
 ) -> f64 {
-    site_shell_cost_opts(
-        cur,
-        delta,
-        tgt,
-        map,
-        atoms,
-        mode.opts_for_effect(dearomatizes),
-    )
+    let opts = mode.opts_for_effect(args.dearomatizes);
+    if args.leave.is_empty() {
+        site_shell_cost_opts(cur, delta, tgt, map, args.atoms, opts)
+    } else {
+        site_shell_cost_leave(cur, delta, tgt, map, args.atoms, args.leave, opts)
+    }
 }
 
 fn residual_after_edit(
@@ -253,12 +257,11 @@ fn residual_after_edit(
         &xenosite_forest::MoleculeShells,
     ),
     map: &std::collections::BTreeMap<usize, usize>,
-    atoms: &[usize],
-    dearomatizes: bool,
+    args: ResidArgs<'_>,
 ) -> f64 {
     let (cur, tgt) = shells;
     let edit = edit_shells(parent, child);
-    residual(mode, Some(&edit), cur, tgt, map, atoms, dearomatizes)
+    residual(mode, Some(&edit), cur, tgt, map, args)
 }
 
 fn site_cost_legacy(mode: Mode, align: &xenosite_forest::AlignedShells, atoms: &[usize]) -> f64 {
@@ -302,17 +305,42 @@ fn eval_suite(
             .unwrap()
         {
             let leave_n = c.pattern.effect.leave_count.map(|n| n as usize);
+            let site = site_atoms_cand(&c);
+            let mapped: Vec<usize> = c.mapped.values().copied().collect();
+            // Cleaving effects always include leave (same view as the gate).
+            // Ablation `mode.leave` also expands non-default cases.
             let atoms = expand_atoms(
                 parent.mol(),
-                &site_atoms_cand(&c),
-                mode.leave && c.pattern.effect.cleaves,
+                &site,
+                &mapped,
+                c.pattern.effect.cleaves || mode.leave,
                 leave_n,
                 &ad.cleavage_bonds,
             );
             let gate = candidate_could_help_on(&c, &ad, Some(parent.mol()), Some(&rb));
             let dear = c.pattern.effect.dearomatizes;
+            let leave_only: Vec<usize> = if c.pattern.effect.cleaves {
+                atoms
+                    .iter()
+                    .copied()
+                    .filter(|a| !site.contains(a))
+                    .collect()
+            } else {
+                Vec::new()
+            };
             let (score, rank_cost) = if proj {
-                let before = residual(mode, None, &cur, &tgt, &map, &atoms, dear);
+                let before = residual(
+                    mode,
+                    None,
+                    &cur,
+                    &tgt,
+                    &map,
+                    ResidArgs {
+                        atoms: &atoms,
+                        leave: &leave_only,
+                        dearomatizes: dear,
+                    },
+                );
                 let Ok(pieces) = c.materialize_mols(parent.mol()) else {
                     continue;
                 };
@@ -320,8 +348,18 @@ fn eval_suite(
                     continue;
                 }
                 let child = parent.adopt_product(pieces[0].clone());
-                let after =
-                    residual_after_edit(mode, &parent, &child, (&cur, &tgt), &map, &atoms, dear);
+                let after = residual_after_edit(
+                    mode,
+                    &parent,
+                    &child,
+                    (&cur, &tgt),
+                    &map,
+                    ResidArgs {
+                        atoms: &atoms,
+                        leave: &leave_only,
+                        dearomatizes: dear,
+                    },
+                );
                 let keep = before > after + 1e-12;
                 if collect_fn && gate && !keep {
                     fns.push(FnHit {
@@ -360,7 +398,18 @@ fn eval_suite(
             let gate = pair_could_help(&p, &ad, parent.mol(), &rb);
             let dear = p.effect.dearomatizes;
             let (score, rank_cost) = if proj {
-                let before = residual(mode, None, &cur, &tgt, &map, &atoms, dear);
+                let before = residual(
+                    mode,
+                    None,
+                    &cur,
+                    &tgt,
+                    &map,
+                    ResidArgs {
+                        atoms: &atoms,
+                        leave: &[],
+                        dearomatizes: dear,
+                    },
+                );
                 let Ok(pieces) = p.materialize_mols(parent.mol()) else {
                     continue;
                 };
@@ -368,8 +417,18 @@ fn eval_suite(
                     continue;
                 }
                 let child = parent.adopt_product(pieces[0].clone());
-                let after =
-                    residual_after_edit(mode, &parent, &child, (&cur, &tgt), &map, &atoms, dear);
+                let after = residual_after_edit(
+                    mode,
+                    &parent,
+                    &child,
+                    (&cur, &tgt),
+                    &map,
+                    ResidArgs {
+                        atoms: &atoms,
+                        leave: &[],
+                        dearomatizes: dear,
+                    },
+                );
                 let keep = before > after + 1e-12;
                 if collect_fn && gate && !keep {
                     fns.push(FnHit {
@@ -418,6 +477,7 @@ fn eval_suite(
                 };
                 atoms = expand_atoms(
                     &ra,
+                    &atoms,
                     &atoms,
                     mode.leave && (!step.sides.is_empty() || ad.has_cleavage()),
                     None,
