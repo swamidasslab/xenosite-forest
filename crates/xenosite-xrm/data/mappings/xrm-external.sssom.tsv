@@ -1,0 +1,24 @@
+# Seed crosswalks to GO / RXNO / ECO / ChEBI.
+# XRM stays a separate SKOS thesaurus; these are soft alignments, not imports.
+subject_id	predicate_id	object_id	mapping_justification	subject_label	object_label
+xrm:0000000	skos:closeMatch	GO:0006805	semapv:ManualMappingCuration	xenobiotic biotransformation	xenobiotic metabolic process
+xrm:0000001	skos:broadMatch	GO:0006805	semapv:ManualMappingCuration	phase I	xenobiotic metabolic process
+xrm:0000002	skos:broadMatch	GO:0006805	semapv:ManualMappingCuration	phase II	xenobiotic metabolic process
+xrm:0000100	skos:closeMatch	RXNO:0000330	semapv:ManualMappingCuration	hydroxylation	hydroxylation
+xrm:0000110	skos:closeMatch	RXNO:0000001	semapv:ManualMappingCuration	epoxidation	epoxidation
+xrm:0000200	skos:relatedMatch	RXNO:0000336	semapv:ManualMappingCuration	dealkylation	dealkylation
+xrm:0001040	skos:closeMatch	RXNO:0000350	semapv:ManualMappingCuration	methylation	methylation
+xrm:0001020	skos:relatedMatch	RXNO:0000345	semapv:ManualMappingCuration	acetylation	acetylation
+xrm:2000000	skos:broadMatch	ECO:0000000	semapv:ManualMappingCuration	evidence	evidence
+xrm:2000010	skos:closeMatch	ECO:0000352	semapv:ManualMappingCuration	literature evidence	evidence used in automatic assertion
+xrm:2000011	skos:relatedMatch	ECO:0006000	semapv:ManualMappingCuration	MS1 evidence	mass spectrometry evidence
+xrm:2000012	skos:relatedMatch	ECO:0006000	semapv:ManualMappingCuration	MS2 evidence	mass spectrometry evidence
+xrm:2000014	skos:relatedMatch	ECO:0006055	semapv:ManualMappingCuration	NMR evidence	nuclear magnetic resonance evidence
+xrm:1500010	skos:closeMatch	CHEBI:36141	semapv:ManualMappingCuration	quinone	quinone
+xrm:1500011	skos:closeMatch	CHEBI:50106	semapv:ManualMappingCuration	quinone imine	quinone imine
+xrm:1500012	skos:closeMatch	CHEBI:32955	semapv:ManualMappingCuration	epoxide	epoxide
+xrm:1500013	skos:closeMatch	CHEBI:17478	semapv:ManualMappingCuration	aldehyde	aldehyde
+xrm:1500015	skos:relatedMatch	CHEBI:139518	semapv:ManualMappingCuration	acyl glucuronide	1-O-acylglucuronide
+xrm:0001000	skos:relatedMatch	CHEBI:24302	semapv:ManualMappingCuration	glucuronidation	glucosiduronic acid
+xrm:0001010	skos:relatedMatch	CHEBI:26819	semapv:ManualMappingCuration	sulfation	sulfate
+xrm:0001030	skos:relatedMatch	CHEBI:57925	semapv:ManualMappingCuration	glutathionation	glutathione

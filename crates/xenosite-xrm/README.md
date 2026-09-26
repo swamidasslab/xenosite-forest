@@ -26,7 +26,10 @@ Edit `xrm.yaml`, then export SKOS:
 python3 crates/xenosite-xrm/tools/yaml_to_skos.py
 ```
 
-XRM is a **separate** ontology (not an extension of MeSH or KEGG). MeSH Phase I/II and MOP process terms are linked via SSSOM `broadMatch` / `exactMatch`. Enzyme types are orthogonal and never primary labels.
+XRM is a **separate** med-chem SKOS thesaurus (not an extension of RXNO, MOP,
+MeSH, GO, or KEGG). Those resources — plus ChEBI, Rhea, ECO, CHMO — are linked
+via SSSOM. See [`data/ontology/RELATED_ONTOLOGIES.md`](data/ontology/RELATED_ONTOLOGIES.md).
+Enzyme types are orthogonal (biological context) and never primary reaction labels.
 
 ## Usage
 

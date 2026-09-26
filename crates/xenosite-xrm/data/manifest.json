@@ -3,7 +3,8 @@
   "mappings": [
     "mappings/xrm-mesh.sssom.tsv",
     "mappings/xrm-mop.sssom.tsv",
-    "mappings/xrm-forest.sssom.tsv"
+    "mappings/xrm-forest.sssom.tsv",
+    "mappings/xrm-external.sssom.tsv"
   ],
   "assignments": ["assignments/xenobiotic.jsonl"]
 }

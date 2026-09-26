@@ -4,9 +4,10 @@ XRM **tags each reaction with many terms** from parallel, cross-cutting spines.
 Authoring source: [`xrm.yaml`](xrm.yaml). Runtime export: [`xrm.skos.jsonld`](xrm.skos.jsonld).
 Annotation bundles / `xmet:` link types: [`ANNOTATION.md`](ANNOTATION.md).
 
-v0.1 inventory target: ~350–500 chemist-facing canonical concepts (plus Forest-map
-alias concepts), with 1,000–2,000 labels/synonyms/mappings. Site-localized names
-are templates, not concepts.
+v0.1 useful band: ~350–500 chemist-facing concepts with 1,000–2,000
+labels/synonyms/mappings — a floor, not a cap. Extra well-motivated terms are
+fine. Site-localized names are templates, not concepts. Positioning vs
+RXNO/MOP/GO/ChEBI/…: [`RELATED_ONTOLOGIES.md`](RELATED_ONTOLOGIES.md).
 
 Spine vocabulary follows the ChatGPT design share (metabolism phase, chemical
 transformation, Rainbow phase I family, phase II conjugation family, medchem

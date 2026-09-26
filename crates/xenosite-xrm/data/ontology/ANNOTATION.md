@@ -8,12 +8,15 @@ Site-localized display names (`C4 aromatic hydroxylation`, `para-hydroxylation
 of anisole`) are generated from templates + `SiteRef`, not stored as ontology
 terms.
 
-## Target inventory (v0.1)
+## Inventory guidance (v0.1)
 
-Aim for **~350–500 canonical concepts** (~425 feels right), with
-**1,000–2,000** labels/synonyms/mappings across the thesaurus and SSSOM files.
-Forest-map rules/patterns are an alias spine and are counted separately from
-chemist-facing inventory.
+A useful first band is **~350–500** chemist-facing canonical concepts with
+**1,000–2,000** labels/synonyms/mappings — enough to be useful, still curatable.
+That band is a **floor for usefulness**, not a hard cap. Extra terms are welcome
+when they are well motivated and clear (distinct chemist handle, SMARTS/delta
+assignable, or a needed med-chem / product / site / evidence facet). Prefer
+clear leaves over combinatorial compounds; site-localized display names stay as
+templates. Forest-map rules/patterns are an alias spine counted separately.
 
 ## SKOS link types
 
