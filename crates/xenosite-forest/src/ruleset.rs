@@ -383,10 +383,12 @@ fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
         return None;
     }
     // Hydrolysis before generic carbonyl/alcohol (uses map 2/3, not map 1).
-    if product.contains("[*:2](O)") {
+    // Require the carbonyl oxygen map writeup so gem-dihalide OxDehal
+    // `>>[*:1].[*:2](O)=O.[*:3]` is not misclassified.
+    if product.contains("[*:1]=[*:2](O)") {
         return Some(RingOpenOxygenate::HydrolysisAddWater);
     }
-    if product.contains("[*:2].[*:3]") && product.contains("[*:1]=") {
+    if product.contains("[*:1]=[*:2].[*:3]") {
         return Some(RingOpenOxygenate::HydrolysisCleave);
     }
     // Carboxylic before bare carbonyl (`(=O)O` contains `=O`).
