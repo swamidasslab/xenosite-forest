@@ -21,15 +21,20 @@ fn aliphatic_hydroxylation_ethane_to_ethanol() {
     assert!(labs.contains(&"hydroxylation"), "{labs:?}");
     assert!(labs.contains(&"aliphatic hydroxylation"), "{labs:?}");
     assert!(labs.contains(&"phase I"), "{labs:?}");
+    assert!(labs.contains(&"metabolism phase"), "{labs:?}");
     assert!(labs.contains(&"oxidation"), "{labs:?}");
-    // Cross-cutting spines auto-tag alongside the chemist type.
+    // Rainbow phase I family + medchem liability (ChatGPT spines).
+    assert!(labs.contains(&"stable oxygenation"), "{labs:?}");
+    assert!(labs.contains(&"phase I reaction family"), "{labs:?}");
+    assert!(labs.contains(&"metabolic soft spot"), "{labs:?}");
+    // Nested structural-delta facets still auto-tag.
     assert!(labs.contains(&"net oxidation"), "{labs:?}");
     assert!(labs.contains(&"oxygen gain"), "{labs:?}");
     assert!(labs.contains(&"stable oxygen addition"), "{labs:?}");
     assert!(labs.contains(&"single-metabolite transformation"), "{labs:?}");
     assert!(labs.contains(&"aliphatic site"), "{labs:?}");
-    // Forest-map class parents are a parallel hierarchy, not on the chemist path.
-    assert!(!labs.contains(&"stable oxygenation"), "{labs:?}");
+    // Forest ruleset alias is not on the pure structural path.
+    assert!(!labs.contains(&"stable oxygenation ruleset"), "{labs:?}");
     assert!(!labs.contains(&"aromatic hydroxylation"), "{labs:?}");
     assert!(terms[0].specificity.depth >= terms.last().unwrap().specificity.depth);
 }
@@ -117,7 +122,19 @@ fn terms_carry_ontology_and_inter_matches() {
 #[test]
 fn no_enzyme_strings_in_primary_labels() {
     let namer = namer();
+    // Enzyme names are allowed only under biological context (orthogonal spine).
+    let bio = "xrm:2100000";
     for c in namer.thesaurus.concepts.values() {
+        let under_bio = c.broader.iter().any(|b| b.as_str() == bio)
+            || c.id.as_str() == bio
+            || namer
+                .thesaurus
+                .ancestors(c.id.as_str())
+                .iter()
+                .any(|a| a.as_str() == bio);
+        if under_bio {
+            continue;
+        }
         let l = c.pref_label.to_ascii_lowercase();
         assert!(!l.contains("cyp"), "{}", c.pref_label);
         assert!(!l.contains("cytochrome"), "{}", c.pref_label);
@@ -135,13 +152,7 @@ fn parallel_hierarchies_exist() {
         Some("xrm:0000000")
     );
 
-    let aromatic = namer.thesaurus.get("xrm:8000000").expect("aromatic impact");
-    assert_eq!(
-        aromatic.pref_label,
-        "aromatic and conjugated-system impact"
-    );
-
-    // Forest-map class parents use full names and hang under the Forest map, not phase I.
+    // Rainbow chemist classes hang under phase I reaction family, not Forest map.
     for (id, label) in [
         ("xrm:0000010", "stable oxygenation"),
         ("xrm:0000011", "unstable oxygenation"),
@@ -149,13 +160,13 @@ fn parallel_hierarchies_exist() {
         let c = namer.thesaurus.get(id).expect(id);
         assert_eq!(c.pref_label, label);
         assert!(
-            c.broader.iter().any(|b| b.as_str() == "xrm:9000000"),
+            c.broader.iter().any(|b| b.as_str() == "xrm:1200000"),
             "{id} broader={:?}",
             c.broader
         );
         assert!(
-            !c.broader.iter().any(|b| b.as_str() == "xrm:0000001"),
-            "{id} must not be under chemist phase I"
+            !c.broader.iter().any(|b| b.as_str() == "xrm:9000000"),
+            "{id} must not be under Forest map"
         );
         for alt in &c.alt_labels {
             assert!(
@@ -165,15 +176,26 @@ fn parallel_hierarchies_exist() {
         }
     }
 
-    // Chemist hydroxylation is under oxidation, related to Forest Hydroxylation rule.
+    // Forest ruleset aliases use unabbreviated *ruleset* labels.
+    for (id, label) in [
+        ("xrm:9000010", "stable oxygenation ruleset"),
+        ("xrm:9000011", "unstable oxygenation ruleset"),
+    ] {
+        let c = namer.thesaurus.get(id).expect(id);
+        assert_eq!(c.pref_label, label);
+        assert!(c.broader.iter().any(|b| b.as_str() == "xrm:9000000"));
+    }
+
+    // Chemist hydroxylation is under carbon oxidation + Rainbow stable oxygenation.
     let oh = namer.thesaurus.get("xrm:0000100").unwrap();
     assert!(oh.broader.iter().any(|b| b.as_str() == "xrm:0000021"));
+    assert!(oh.broader.iter().any(|b| b.as_str() == "xrm:0000010"));
     let rule = namer.thesaurus.get("xrm:9100100").unwrap();
     assert_eq!(rule.pref_label, "Hydroxylation rule");
-    assert!(rule.broader.iter().any(|b| b.as_str() == "xrm:0000010"));
+    assert!(rule.broader.iter().any(|b| b.as_str() == "xrm:9000010"));
 
     let forest = &namer.mappings.by_subject;
-    assert!(forest["xrm:0000010"]
+    assert!(forest["xrm:9000010"]
         .iter()
         .any(|m| m.object_id.as_str() == "forest.ruleset:SO"));
     assert!(forest["xrm:9100100"]
@@ -190,6 +212,7 @@ fn forest_tag_emits_forest_map_rule() {
     assert!(labs.contains(&"hydroxylation"), "{labs:?}");
     assert!(labs.contains(&"Hydroxylation rule"), "{labs:?}");
     assert!(labs.contains(&"stable oxygenation"), "{labs:?}");
+    assert!(labs.contains(&"stable oxygenation ruleset"), "{labs:?}");
     assert!(labs.contains(&"Metabolic Forest map"), "{labs:?}");
 }
 
@@ -235,18 +258,19 @@ fn ambiguity_tags_stack_with_positive_terms() {
 fn parallel_spine_roots_present() {
     let namer = namer();
     for (id, label) in [
+        ("xrm:1000000", "metabolism phase"),
+        ("xrm:1100000", "chemical transformation"),
+        ("xrm:1200000", "phase I reaction family"),
+        ("xrm:1300000", "phase II conjugation family"),
+        ("xrm:1400000", "medchem liability"),
+        ("xrm:1500000", "reactive metabolite family"),
+        ("xrm:1600000", "site type"),
+        ("xrm:1700000", "structural delta"),
+        ("xrm:1800000", "product status"),
+        ("xrm:1900000", "rule provenance"),
+        ("xrm:2000000", "evidence"),
+        ("xrm:2100000", "biological context"),
         ("xrm:6000000", "ambiguity and underspecification"),
-        ("xrm:7000000", "redox polarity"),
-        ("xrm:7100000", "site atom class"),
-        ("xrm:7200000", "bond-edit topology"),
-        ("xrm:7300000", "metabolite cardinality"),
-        ("xrm:7400000", "oxygenation outcome"),
-        ("xrm:7500000", "electrophile role"),
-        ("xrm:7600000", "ring fate"),
-        ("xrm:7700000", "formula-delta class"),
-        ("xrm:7800000", "site aromaticity"),
-        ("xrm:7900000", "pathway-step role"),
-        ("xrm:8000000", "aromatic and conjugated-system impact"),
         ("xrm:9000000", "Metabolic Forest map"),
     ] {
         let c = namer.thesaurus.get(id).unwrap_or_else(|| panic!("{id}"));
@@ -256,6 +280,11 @@ fn parallel_spine_roots_present() {
             "{id} should hang under root"
         );
     }
+    // Legacy facets nest under the ChatGPT spines (not peer roots).
+    let redox = namer.thesaurus.get("xrm:7000000").unwrap();
+    assert!(redox.broader.iter().any(|b| b.as_str() == "xrm:1700000"));
+    let aromatic = namer.thesaurus.get("xrm:8000000").unwrap();
+    assert!(aromatic.broader.iter().any(|b| b.as_str() == "xrm:1700000"));
 }
 
 #[test]

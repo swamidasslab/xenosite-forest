@@ -4,8 +4,10 @@
 subject_id	predicate_id	object_id	mapping_justification	subject_label	object_label
 xrm:0000001	skos:relatedMatch	forest.ruleset:PhaseOne	semapv:ManualMappingCuration	phase I	PhaseOne
 xrm:0000002	skos:relatedMatch	forest.ruleset:CJ	semapv:ManualMappingCuration	phase II	CJ
-xrm:0000010	skos:exactMatch	forest.ruleset:SO	semapv:ManualMappingCuration	stable oxygenation	SO
-xrm:0000011	skos:exactMatch	forest.ruleset:UO	semapv:ManualMappingCuration	unstable oxygenation	UO
+xrm:9000010	skos:exactMatch	forest.ruleset:SO	semapv:ManualMappingCuration	stable oxygenation ruleset	SO
+xrm:0000010	skos:relatedMatch	forest.ruleset:SO	semapv:ManualMappingCuration	stable oxygenation	SO
+xrm:9000011	skos:exactMatch	forest.ruleset:UO	semapv:ManualMappingCuration	unstable oxygenation ruleset	UO
+xrm:0000011	skos:relatedMatch	forest.ruleset:UO	semapv:ManualMappingCuration	unstable oxygenation	UO
 xrm:0000100	skos:relatedMatch	forest.rule:Hydroxylation	semapv:ManualMappingCuration	hydroxylation	Hydroxylation
 xrm:0000110	skos:relatedMatch	forest.rule:Epoxidation	semapv:ManualMappingCuration	epoxidation	Epoxidation
 xrm:0000201	skos:relatedMatch	forest.rule:NDealkylation	semapv:ManualMappingCuration	N-dealkylation	NDealkylation

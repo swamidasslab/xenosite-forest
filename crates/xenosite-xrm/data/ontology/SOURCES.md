@@ -1,49 +1,54 @@
 # Sources for XRM term inventory
 
 XRM **tags each reaction with many terms** from parallel, cross-cutting spines.
-That improves chemist readability and makes soft alignment to external
-ontologies (MeSH, MOP, Forest opaque CURIEs) easier: each spine can map
-independently.
+Authoring source: [`xrm.yaml`](xrm.yaml). Runtime export: [`xrm.skos.jsonld`](xrm.skos.jsonld).
+Annotation bundles / `xmet:` link types: [`ANNOTATION.md`](ANNOTATION.md).
+
+v0.1 inventory target: ~350–500 chemist-facing canonical concepts (plus Forest-map
+alias concepts), with 1,000–2,000 labels/synonyms/mappings. Site-localized names
+are templates, not concepts.
+
+Spine vocabulary follows the ChatGPT design share (metabolism phase, chemical
+transformation, Rainbow phase I family, phase II conjugation family, medchem
+liability, reactive metabolite family, site type, structural delta, product
+status, rule provenance, evidence, biological context), plus ambiguity and the
+Metabolic Forest map as an **alias / mapping** spine.
 
 Forest abbreviations (`SO`, `UO`, `DH`, `HD`, `RD`, …) are **never** XRM
-prefLabels or altLabels. They appear only as opaque `forest.*` CURIE object
-ids in SSSOM.
+prefLabels. They appear only as opaque `forest.*` CURIE object ids in SSSOM.
+Forest ruleset concepts use unabbreviated labels ending in `ruleset`.
 
-## Parallel spines (under `xenobiotic biotransformation`)
+## Core spines (under `xenobiotic biotransformation`)
 
 | Spine | Role | Auto-tag cues |
 | --- | --- | --- |
-| Chemist reaction type (`phase I` / `phase II`, named transformations) | Primary chemist vocabulary | SMARTS, delta, `chem:*` tags |
-| **Metabolic Forest map** | Intentionally mirrors repo rulesets → rules → PatternInfo | `forest.rule:*`, `forest.pattern:*`, `forest.ruleset:*` |
-| **Aromatic and conjugated-system impact** | π-system fate (dearomatize, quinoid, arene oxide, …) | quinone / arene-oxide / GSH-Michael / dearomatization tags |
-| **Redox polarity** | Net oxidation / reduction / redox-neutral | delta O, typed oxidations/reductions/conjugations |
-| **Site atom class** | C / N / O / S / halogen / multi-element site | typed dealkylation / oxidation tags |
-| **Bond-edit topology** | Addition, cleavage, bond-order change, ring closure, … | SMARTS class of edit |
-| **Metabolite cardinality** | Single metabolite vs fragmenting | hydroxylation vs dealkylation/hydrolysis |
-| **Oxygenation outcome** | Stable oxygen addition vs oxygen-triggered cleavage | chemist parallel to Forest stable/unstable classes |
-| **Electrophile role** | Generate / consume electrophile; nucleophile exposure | quinone, epoxide, GSH, bioactivation tags |
-| **Ring fate** | Preserved / opened / formed / resized | epoxide, ring-opening facets |
-| **Formula-delta class** | `+O`, −halogen, −C, … | elemental delta only |
-| **Site aromaticity** | Aromatic vs aliphatic site | `site_aromatic` on typed rules |
-| **Pathway-step role** | One-step / multi-step / preparatory / terminal | quinone one-/two-step and path tags |
-| **Ambiguity and underspecification** | Typed incomplete/conflicting evidence | `chem:*-ambiguity`, `chem:*-underspecified` |
-| Process facet | NIH shift, ipso, carbinolamine cleavage, acyl migration, … | mechanism tags |
-| Bioactivation / detoxication | Toxicity-oriented outcome framing | reactive-metabolite tags |
+| **metabolism phase** | Phase I / II / III framing | ancestors of typed reactions; `chem:phase-*` |
+| **chemical transformation** | Enzyme-independent edit class | SMARTS / delta / typed chem tags |
+| **phase I reaction family** | Rainbow five classes + detailed Phase I types | hydroxylation→stable oxygenation; dealkylation→unstable oxygenation |
+| **phase II conjugation family** | Glucuronidation, sulfation, GSH, … | conjugation SMARTS / tags |
+| **medchem liability** | Soft spot, clearance, bioactivation, blocking | typed liability emits |
+| **reactive metabolite family** | Quinone, epoxide, aldehyde, acyl glucuronide, … | quinone / epoxide / GSH tags |
+| **site type** | Atom / bond / ring / aromatic / benzylic / … | site aromaticity + typed sites |
+| **structural delta** | Formula, mass, bond order, aromaticity, … | elemental delta; nested legacy delta spines |
+| **product status** | Observed / predicted / intermediate / … | caller / harvest tags |
+| **rule provenance** | SMARTS vs delta vs caller vs Forest map | assignment path |
+| **evidence** | Literature, MS, NMR, incubation system, … | harvest / curation tags |
+| **biological context** | Enzyme / tissue / species / matrix (orthogonal) | never primary reaction label |
+| **ambiguity and underspecification** | Typed incomplete/conflicting evidence | `chem:*-ambiguity` |
+| **Metabolic Forest map** | Alias spine: ruleset → rule → PatternInfo | `forest.rule:*`, `forest.pattern:*` |
 
-Ambiguity subtypes include site/regio/stereo SOM ambiguity, reaction-type and
-competing-type ambiguity, mechanism ambiguity, metabolite-structure and
-atom-mapping underspecification, formula-only evidence, pathway-depth and
-intermediate gaps, phase ambiguity, Forest-map correspondence ambiguity,
-external-ontology alignment ambiguity, aromatic-impact and electrophile-role
-ambiguity, and provenance underspecification — plus `fully specified` when
-callers assert completeness.
+Legacy facets (redox polarity, bond-edit topology, formula-delta class, ring
+fate, oxygenation outcome, metabolite cardinality, aromatic impact,
+pathway-step role, site atom class, site aromaticity, process facet) hang
+**under** `structural delta`, `site type`, or `chemical transformation` rather
+than as peer root spines.
 
 ## Metabolic Forest map (full names)
 
 | XRM prefLabel | Opaque Forest CURIE |
 | --- | --- |
-| stable oxygenation | `forest.ruleset:SO` |
-| unstable oxygenation | `forest.ruleset:UO` |
+| stable oxygenation ruleset | `forest.ruleset:SO` |
+| unstable oxygenation ruleset | `forest.ruleset:UO` |
 | dehydrogenation ruleset | `forest.ruleset:DH` |
 | hydrolysis ruleset | `forest.ruleset:HD` |
 | reduction ruleset | `forest.ruleset:RD` |
@@ -53,9 +58,8 @@ callers assert completeness.
 | phase I ruleset | `forest.ruleset:PhaseOne` |
 | bioactivation ruleset | `forest.ruleset:BA` |
 
-Rules and patterns hang under those rulesets (`Hydroxylation rule`,
-`Hydroxylation/h`, …) with `skos:exactMatch` to `forest.rule:*` /
-`forest.pattern:*`.
+Chemist Rainbow classes `stable oxygenation` / `unstable oxygenation` are under
+**phase I reaction family**, with `skos:relatedMatch` to the Forest rulesets.
 
 ## Primary literature
 
@@ -79,5 +83,5 @@ seed lexicon. See:
 - [`tools/harvest/GUIDANCE_SOURCES.md`](../tools/harvest/GUIDANCE_SOURCES.md)
 - Output: [`data/candidates/`](../candidates/)
 
-Promote reviewed candidates into SKOS `altLabel`, SSSOM, and SMARTS-backed
+Promote reviewed candidates into YAML `synonyms`, SSSOM, and SMARTS-backed
 goldens. Prefer structure (SMARTS/delta) over Forest reaction-tool tags.

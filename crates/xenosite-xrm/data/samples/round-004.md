@@ -1,0 +1,2259 @@
+# Proposed terms — feedback round 004
+
+ChatGPT-aligned spines: metabolism phase, chemical transformation, Rainbow phase I family, phase II conjugation family, medchem liability, reactive metabolite family, site type, structural delta, product status, rule provenance, evidence, biological context; plus ambiguity and Metabolic Forest map (alias). Site-localized names are templates, not concepts.
+
+See `data/ontology/ANNOTATION.md` for bundle/link design.
+
+Regenerate: `cargo run -p xenosite-xrm --example sample_terms -- --write`
+
+## ethane → ethanol (aliphatic hydroxylation)
+- reactant: `CC`
+- product: `CCO`
+- tags: _(none)_
+- terms:
+  - aliphatic hydroxylation [xrm:0000102]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - aliphatic hydroxylation [xrm:0000102]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - aliphatic site [xrm:7800002]@a0 ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aliphatic site [xrm:7800002]@a1 ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom site [xrm:1600010]@a0 ← xenobiotic biotransformation > site type > atom site
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a0 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom site [xrm:1600010]@a1 ← xenobiotic biotransformation > site type > atom site
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a1 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+
+## benzene → phenol (aromatic hydroxylation)
+- reactant: `c1ccccc1`
+- product: `Oc1ccccc1`
+- tags: _(none)_
+- terms:
+  - aromatic hydroxylation [xrm:0000101]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - aromatic ring substitution impact [xrm:8000003]@a0 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a0 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a1 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a1 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a2 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a2 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a2 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a2 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a3 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a3 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a3 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a4 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a4 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a4 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a5 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a5 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a5 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a0 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a0 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a0 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a1 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a1 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a1 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a2 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a2 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a2 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a2 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a2 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a2 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a2 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a2 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a2 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a2 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a3 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a3 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a3 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a3 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a3 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a3 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a3 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a3 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a3 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a4 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a4 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a4 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a4 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a4 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a4 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a4 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a4 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a4 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a5 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a5 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a5 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a5 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a5 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a5 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a5 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a5 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a5 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a2 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a2 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a2 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a2 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a2 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a2 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a2 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a2 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a3 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a3 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a3 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a3 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a3 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a3 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a3 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a3 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a4 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a4 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a4 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a4 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a4 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a4 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a4 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a4 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a5 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a5 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a5 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a5 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a5 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a5 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a5 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a5 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a2 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a3 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a4 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a5 ← xenobiotic biotransformation
+
+## chem:para-hydroxylation
+- reactant: `CCc1ccccc1`
+- product: `CCc1ccc(O)cc1`
+- tags: `chem:para-hydroxylation`, `chem:aromatic-hydroxylation`
+- terms:
+  - para-hydroxylation [xrm:0000103] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation > para-hydroxylation
+  - aromatic hydroxylation [xrm:0000101] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - hydroxylation [xrm:0000100] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - aromatic ring substitution impact [xrm:8000003] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001] ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - carbon oxidation [xrm:0000021] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a2 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a2 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a3 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a3 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a3 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a4 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a4 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a4 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a5 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a5 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a5 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a6 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a6 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a6 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a6 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a6 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a6 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a7 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a7 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a7 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a7 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a7 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a7 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - SMARTS-derived tag [xrm:1900010] ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000] ← xenobiotic biotransformation > site type > site aromaticity
+  - stable metabolite [xrm:1400015] ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010] ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a2 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a2 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a2 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a2 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a2 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a2 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a2 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a3 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a3 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a3 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a3 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a3 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a3 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a3 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a3 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a3 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a4 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a4 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a4 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a4 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a4 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a4 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a4 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a4 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a4 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a5 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a5 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a5 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a5 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a5 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a5 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a5 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a5 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a5 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a6 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a6 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a6 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a6 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a6 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a6 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a6 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a6 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a6 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a6 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a6 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a6 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a7 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a7 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a7 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a7 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a7 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a7 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a7 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a7 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a7 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a7 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a7 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a7 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a2 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a2 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a2 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a2 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a2 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a2 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a2 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a2 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a3 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a3 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a3 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a3 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a3 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a3 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a3 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a3 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a4 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a4 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a4 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a4 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a4 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a4 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a4 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a4 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a5 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a5 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a5 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a5 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a5 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a5 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a5 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a5 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a6 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a6 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a6 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a6 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a6 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a6 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a6 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a6 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a7 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a7 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a7 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a7 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a7 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a7 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a7 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a7 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a2 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a3 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a4 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a5 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a6 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a7 ← xenobiotic biotransformation
+
+## chem:benzylic-hydroxylation
+- reactant: `CCc1ccccc1`
+- product: `CC(O)c1ccccc1`
+- tags: `chem:benzylic-hydroxylation`
+- terms:
+  - aliphatic hydroxylation [xrm:0000102] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - benzylic hydroxylation [xrm:0000106] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > benzylic hydroxylation
+  - aliphatic hydroxylation [xrm:0000102]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - aliphatic hydroxylation [xrm:0000102]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - hydroxylation [xrm:0000100] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - aliphatic site [xrm:7800002] ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - carbon oxidation [xrm:0000021] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - aliphatic site [xrm:7800002]@a0 ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aliphatic site [xrm:7800002]@a1 ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a2 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a2 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a3 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a3 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a4 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a4 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a5 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a5 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a6 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a6 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a6 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a6 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a7 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a7 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a7 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a7 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - SMARTS-derived tag [xrm:1900010] ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - benzylic site [xrm:1600014] ← xenobiotic biotransformation > site type > benzylic site
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000] ← xenobiotic biotransformation > site type > site aromaticity
+  - stable metabolite [xrm:1400015] ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010] ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom site [xrm:1600010]@a0 ← xenobiotic biotransformation > site type > atom site
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a0 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom site [xrm:1600010]@a1 ← xenobiotic biotransformation > site type > atom site
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a1 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a2 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a2 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a2 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a2 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a2 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a2 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a2 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a3 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a3 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a3 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a3 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a3 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a3 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a3 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a4 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a4 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a4 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a4 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a4 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a4 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a4 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a5 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a5 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a5 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a5 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a5 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a5 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a5 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a6 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a6 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a6 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a6 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a6 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a6 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a6 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a6 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a6 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a7 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a7 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a7 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a7 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a7 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a7 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a7 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a7 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a7 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a2 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a2 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a2 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a2 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a2 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a2 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a2 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a2 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a3 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a3 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a3 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a3 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a3 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a3 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a3 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a3 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a4 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a4 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a4 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a4 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a4 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a4 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a4 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a4 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a5 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a5 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a5 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a5 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a5 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a5 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a5 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a5 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a6 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a6 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a6 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a6 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a6 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a6 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a6 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a6 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a7 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a7 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a7 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a7 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a7 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a7 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a7 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a7 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a2 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a3 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a4 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a5 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a6 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a7 ← xenobiotic biotransformation
+
+## ethene → oxirane
+- reactant: `C=C`
+- product: `C1CO1`
+- tags: _(none)_
+- terms:
+  - alkene epoxidation [xrm:0000111]@a0,a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > epoxidation > alkene epoxidation
+  - epoxidation [xrm:0000110]@a0,a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > epoxidation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - carbon oxidation [xrm:0000021]@a0,a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - electrophile generation [xrm:7500001]@a0,a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > electrophile generation
+  - net oxidation [xrm:7000001]@a0,a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001]@a0,a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - ring closure [xrm:7200006]@a0,a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > ring closure
+  - ring formed [xrm:7600003]@a0,a1 ← xenobiotic biotransformation > structural delta > ring fate > ring formed
+  - single-metabolite transformation [xrm:7300001]@a0,a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0,a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - bioactivation risk [xrm:1400019]@a0,a1 ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - bond-edit topology [xrm:7200000]@a0,a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0,a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - epoxide [xrm:1500012]@a0,a1 ← xenobiotic biotransformation > reactive metabolite family > epoxide
+  - formula-delta class [xrm:7700000]@a0,a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolite cardinality [xrm:7300000]@a0,a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0,a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0,a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0,a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - reactive metabolite [xrm:1400014]@a0,a1 ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - redox polarity [xrm:7000000]@a0,a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - ring fate [xrm:7600000]@a0,a1 ← xenobiotic biotransformation > structural delta > ring fate
+  - stable oxygenation [xrm:0000010]@a0,a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0,a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0,a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0,a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0,a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0,a1 ← xenobiotic biotransformation > reactive metabolite family
+  - structural delta [xrm:1700000]@a0,a1 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0,a1 ← xenobiotic biotransformation
+
+## chem:arene-oxide + NIH-shift facets
+- reactant: `c1ccccc1`
+- product: `Oc1ccccc1`
+- tags: `chem:arene-oxide`, `chem:NIH-shift`
+- terms:
+  - arene oxide formation [xrm:0000112] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > epoxidation > arene oxide formation
+  - aromatic hydroxylation [xrm:0000101] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - epoxidation [xrm:0000110] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > epoxidation
+  - hydroxylation [xrm:0000100] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - NIH shift [xrm:0004003] ← xenobiotic biotransformation > chemical transformation > process facet > NIH shift
+  - arene oxide pathway [xrm:8000007] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > arene oxide pathway
+  - aromaticity gain [xrm:8000002] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity gain
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - carbon oxidation [xrm:0000021] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - rearomatization [xrm:0004002] ← xenobiotic biotransformation > chemical transformation > process facet > rearomatization
+  - rearrangement topology [xrm:7200005] ← xenobiotic biotransformation > structural delta > bond-edit topology > rearrangement topology
+  - aromatic ring substitution impact [xrm:8000003]@a0 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a0 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a1 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a1 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a2 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a2 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a2 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a2 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a3 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a3 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a3 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a4 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a4 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a4 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a5 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a5 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a5 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - bond-edit topology [xrm:7200000] ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - competing-type ambiguity [xrm:6000021] ← xenobiotic biotransformation > ambiguity and underspecification > competing-type ambiguity
+  - epoxide [xrm:1500012] ← xenobiotic biotransformation > reactive metabolite family > epoxide
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - reaction-type ambiguity [xrm:6000020] ← xenobiotic biotransformation > ambiguity and underspecification > reaction-type ambiguity
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - stable oxygenation [xrm:0000010] ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a0 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a0 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a0 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a1 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a1 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a1 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a2 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a2 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a2 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a2 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a2 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a2 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a2 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a2 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a2 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a2 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a3 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a3 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a3 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a3 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a3 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a3 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a3 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a3 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a3 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a4 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a4 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a4 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a4 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a4 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a4 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a4 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a4 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a4 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a5 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a5 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a5 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a5 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a5 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a5 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a5 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a5 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a5 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - ambiguity and underspecification [xrm:6000000] ← xenobiotic biotransformation > ambiguity and underspecification
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a2 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a2 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a2 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a2 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a2 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a2 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a2 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a2 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a3 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a3 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a3 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a3 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a3 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a3 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a3 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a3 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a4 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a4 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a4 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a4 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a4 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a4 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a4 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a4 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a5 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a5 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a5 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a5 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a5 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a5 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a5 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a5 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a2 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a3 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a4 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a5 ← xenobiotic biotransformation
+
+## ethanol → acetaldehyde
+- reactant: `CCO`
+- product: `CC=O`
+- tags: _(none)_
+- terms:
+  - primary alcohol oxidation [xrm:0000311]@a1 ← xenobiotic biotransformation > chemical transformation > dehydrogenation > alcohol oxidation > primary alcohol oxidation
+  - alcohol oxidation [xrm:0000310]@a1 ← xenobiotic biotransformation > chemical transformation > dehydrogenation > alcohol oxidation
+  - bond order change [xrm:7200003]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > bond order change
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - dehydrogenation delta [xrm:7700004]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > dehydrogenation delta
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - non-oxygenative transformation [xrm:7400003]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > non-oxygenative transformation
+  - aldehyde [xrm:1500013]@a1 ← xenobiotic biotransformation > reactive metabolite family > aldehyde
+  - aldehyde forming [xrm:1400022]@a1 ← xenobiotic biotransformation > medchem liability > aldehyde forming
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - dehydrogenation [xrm:0000012]@a1 ← xenobiotic biotransformation > chemical transformation > dehydrogenation
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+
+## chem:N-demethylation
+- reactant: `CN(C)C`
+- product: `CNC`
+- tags: `chem:N-demethylation`
+- terms:
+  - N-demethylation [xrm:0000205] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation > N-dealkylation > N-demethylation
+  - N-dealkylation [xrm:0000201] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation > N-dealkylation
+  - dealkylation [xrm:0000200] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation
+  - alkyl loss delta [xrm:7700007] ← xenobiotic biotransformation > structural delta > formula-delta class > alkyl loss delta
+  - bond cleavage [xrm:7200002] ← xenobiotic biotransformation > structural delta > bond-edit topology > bond cleavage
+  - carbinolamine cleavage [xrm:0004006] ← xenobiotic biotransformation > chemical transformation > process facet > carbinolamine cleavage
+  - carbon–heteroatom oxidative cleavage [xrm:0000023] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage
+  - fragmenting transformation [xrm:7300002] ← xenobiotic biotransformation > structural delta > metabolite cardinality > fragmenting transformation
+  - aldehyde forming [xrm:1400022] ← xenobiotic biotransformation > medchem liability > aldehyde forming
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - bond-edit topology [xrm:7200000] ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - clearance liability [xrm:1400011] ← xenobiotic biotransformation > medchem liability > clearance liability
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000] ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - tertiary amine site [xrm:1600021] ← xenobiotic biotransformation > site type > tertiary amine site
+  - unstable oxygenation [xrm:0000011] ← xenobiotic biotransformation > phase I reaction family > unstable oxygenation
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:oxidative-deamination
+- reactant: `CCN`
+- product: `CC=O`
+- tags: `chem:oxidative-deamination`
+- terms:
+  - oxidative deamination [xrm:0000208] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation > N-dealkylation > oxidative deamination
+  - N-dealkylation [xrm:0000201] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation > N-dealkylation
+  - dealkylation [xrm:0000200] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation
+  - carbinolamine cleavage [xrm:0004006] ← xenobiotic biotransformation > chemical transformation > process facet > carbinolamine cleavage
+  - carbon–heteroatom oxidative cleavage [xrm:0000023] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nitrogen site [xrm:7100002] ← xenobiotic biotransformation > site type > site atom class > nitrogen site
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - aldehyde forming [xrm:1400022] ← xenobiotic biotransformation > medchem liability > aldehyde forming
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - clearance liability [xrm:1400011] ← xenobiotic biotransformation > medchem liability > clearance liability
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000] ← xenobiotic biotransformation > site type > site atom class
+  - tertiary amine site [xrm:1600021] ← xenobiotic biotransformation > site type > tertiary amine site
+  - unstable oxygenation [xrm:0000011] ← xenobiotic biotransformation > phase I reaction family > unstable oxygenation
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:O-demethylation
+- reactant: `COc1ccccc1`
+- product: `Oc1ccccc1`
+- tags: `chem:O-demethylation`
+- terms:
+  - O-demethylation [xrm:0000209] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation > O-dealkylation > O-demethylation
+  - O-dealkylation [xrm:0000202] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation > O-dealkylation
+  - dealkylation [xrm:0000200] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage > dealkylation
+  - alkyl loss delta [xrm:7700007] ← xenobiotic biotransformation > structural delta > formula-delta class > alkyl loss delta
+  - bond cleavage [xrm:7200002] ← xenobiotic biotransformation > structural delta > bond-edit topology > bond cleavage
+  - carbon–heteroatom oxidative cleavage [xrm:0000023] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon–heteroatom oxidative cleavage
+  - fragmenting transformation [xrm:7300002] ← xenobiotic biotransformation > structural delta > metabolite cardinality > fragmenting transformation
+  - oxygen site [xrm:7100003] ← xenobiotic biotransformation > site type > site atom class > oxygen site
+  - bond-edit topology [xrm:7200000] ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - clearance liability [xrm:1400011] ← xenobiotic biotransformation > medchem liability > clearance liability
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000] ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - site atom class [xrm:7100000] ← xenobiotic biotransformation > site type > site atom class
+  - unstable oxygenation [xrm:0000011] ← xenobiotic biotransformation > phase I reaction family > unstable oxygenation
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:acyl-glucuronidation
+- reactant: `CC(=O)O`
+- product: `CC(=O)O`
+- tags: `chem:acyl-glucuronidation`
+- terms:
+  - acyl glucuronidation [xrm:0001004] ← xenobiotic biotransformation > metabolism phase > phase II > glucuronidation > O-glucuronidation > acyl glucuronidation
+  - O-glucuronidation [xrm:0001001] ← xenobiotic biotransformation > metabolism phase > phase II > glucuronidation > O-glucuronidation
+  - acyl migration [xrm:0004017] ← xenobiotic biotransformation > chemical transformation > process facet > acyl migration
+  - glucuronidation [xrm:0001000] ← xenobiotic biotransformation > metabolism phase > phase II > glucuronidation
+  - alcohol oxidation [xrm:0000310]@a1 ← xenobiotic biotransformation > chemical transformation > dehydrogenation > alcohol oxidation
+  - bond order change [xrm:7200003]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > bond order change
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - dehydrogenation delta [xrm:7700004]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > dehydrogenation delta
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - non-oxygenative transformation [xrm:7400003]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > non-oxygenative transformation
+  - acyl glucuronide [xrm:1500015] ← xenobiotic biotransformation > reactive metabolite family > acyl glucuronide
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - clearance pathway [xrm:1400020] ← xenobiotic biotransformation > medchem liability > clearance pathway
+  - phase II [xrm:0000002] ← xenobiotic biotransformation > metabolism phase > phase II
+  - polarity increasing [xrm:1400021] ← xenobiotic biotransformation > medchem liability > polarity increasing
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - aldehyde [xrm:1500013]@a1 ← xenobiotic biotransformation > reactive metabolite family > aldehyde
+  - aldehyde forming [xrm:1400022]@a1 ← xenobiotic biotransformation > medchem liability > aldehyde forming
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - dehydrogenation [xrm:0000012]@a1 ← xenobiotic biotransformation > chemical transformation > dehydrogenation
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase II conjugation family [xrm:1300000] ← xenobiotic biotransformation > phase II conjugation family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+
+## chem:phenolic-glucuronidation
+- reactant: `Oc1ccccc1`
+- product: `Oc1ccccc1`
+- tags: `chem:phenolic-glucuronidation`
+- terms:
+  - phenolic glucuronidation [xrm:0001002] ← xenobiotic biotransformation > metabolism phase > phase II > glucuronidation > O-glucuronidation > phenolic glucuronidation
+  - O-glucuronidation [xrm:0001001] ← xenobiotic biotransformation > metabolism phase > phase II > glucuronidation > O-glucuronidation
+  - glucuronidation [xrm:0001000] ← xenobiotic biotransformation > metabolism phase > phase II > glucuronidation
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - clearance pathway [xrm:1400020] ← xenobiotic biotransformation > medchem liability > clearance pathway
+  - phase II [xrm:0000002] ← xenobiotic biotransformation > metabolism phase > phase II
+  - polarity increasing [xrm:1400021] ← xenobiotic biotransformation > medchem liability > polarity increasing
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase II conjugation family [xrm:1300000] ← xenobiotic biotransformation > phase II conjugation family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:GSH-Michael + conjugate-addition facet
+- reactant: `C=CC=O`
+- product: `C=CC=O`
+- tags: `chem:GSH-Michael`
+- terms:
+  - Michael glutathionation [xrm:0001031] ← xenobiotic biotransformation > metabolism phase > phase II > glutathionation > Michael glutathionation
+  - conjugate addition [xrm:0004014] ← xenobiotic biotransformation > chemical transformation > process facet > conjugate addition
+  - conjugated adduct formation [xrm:8000008] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > conjugated adduct formation
+  - electrophile consumption [xrm:7500002] ← xenobiotic biotransformation > reactive metabolite family > electrophile role > electrophile consumption
+  - glutathionation [xrm:0001030] ← xenobiotic biotransformation > metabolism phase > phase II > glutathionation
+  - GSH-trappable metabolite [xrm:1500019] ← xenobiotic biotransformation > reactive metabolite family > GSH-trappable metabolite
+  - Michael acceptor [xrm:1500016] ← xenobiotic biotransformation > reactive metabolite family > Michael acceptor
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - detoxification [xrm:1400013] ← xenobiotic biotransformation > medchem liability > detoxification
+  - electrophile role [xrm:7500000] ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - phase II [xrm:0000002] ← xenobiotic biotransformation > metabolism phase > phase II
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase II conjugation family [xrm:1300000] ← xenobiotic biotransformation > phase II conjugation family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:quinone-formation (dearomatization + bioactivation)
+- reactant: `c1ccccc1`
+- product: `O=C1C=CC(=O)C=C1`
+- tags: `chem:quinone-formation`
+- terms:
+  - QuinoneFormation rule [xrm:9100600] ← xenobiotic biotransformation > Metabolic Forest map > quinone formation ruleset > QuinoneFormation rule
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - electrophile generation [xrm:7500001] ← xenobiotic biotransformation > reactive metabolite family > electrophile role > electrophile generation
+  - multi-step pathway member [xrm:7900002] ← xenobiotic biotransformation > structural delta > pathway-step role > multi-step pathway member
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - quinoid π-system formation [xrm:8000005] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > quinoid π-system formation
+  - quinone formation [xrm:0000300] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - bioactivation [xrm:0003000] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation [xrm:1400012] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - electrophile role [xrm:7500000] ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - pathway-step role [xrm:7900000] ← xenobiotic biotransformation > structural delta > pathway-step role
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - quinone [xrm:1500010] ← xenobiotic biotransformation > reactive metabolite family > quinone
+  - quinone formation ruleset [xrm:9000015] ← xenobiotic biotransformation > Metabolic Forest map > quinone formation ruleset
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - Metabolic Forest map [xrm:9000000] ← xenobiotic biotransformation > Metabolic Forest map
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:quinone-imine + one-step quinone formation
+- reactant: `CC(=O)Nc1ccc(O)cc1`
+- product: `CC(=O)N=C1C=CC(=O)C=C1`
+- tags: `chem:quinone-imine`, `chem:one-step-quinone-formation`
+- terms:
+  - one-step quinone formation [xrm:0000307] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation > one-step quinone formation
+  - quinone-imine formation [xrm:0000303] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation > quinone-imine formation
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - direct one-step transformation [xrm:7900001] ← xenobiotic biotransformation > structural delta > pathway-step role > direct one-step transformation
+  - electrophile generation [xrm:7500001] ← xenobiotic biotransformation > reactive metabolite family > electrophile role > electrophile generation
+  - quinoid π-system formation [xrm:8000005] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > quinoid π-system formation
+  - quinone formation [xrm:0000300] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation
+  - alcohol oxidation [xrm:0000310]@a7 ← xenobiotic biotransformation > chemical transformation > dehydrogenation > alcohol oxidation
+  - bond order change [xrm:7200003]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology > bond order change
+  - carbon oxidation [xrm:0000021]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a7 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - dehydrogenation delta [xrm:7700004]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class > dehydrogenation delta
+  - net oxidation [xrm:7000001]@a7 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - non-oxygenative transformation [xrm:7400003]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome > non-oxygenative transformation
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - bioactivation [xrm:0003000] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation [xrm:1400012] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - electrophile role [xrm:7500000] ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - pathway-step role [xrm:7900000] ← xenobiotic biotransformation > structural delta > pathway-step role
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - quinone [xrm:1500010] ← xenobiotic biotransformation > reactive metabolite family > quinone
+  - quinone imine [xrm:1500011] ← xenobiotic biotransformation > reactive metabolite family > quinone imine
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - aldehyde [xrm:1500013]@a7 ← xenobiotic biotransformation > reactive metabolite family > aldehyde
+  - aldehyde forming [xrm:1400022]@a7 ← xenobiotic biotransformation > medchem liability > aldehyde forming
+  - bond-edit topology [xrm:7200000]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - dehydrogenation [xrm:0000012]@a7 ← xenobiotic biotransformation > chemical transformation > dehydrogenation
+  - formula-delta class [xrm:7700000]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - oxidation [xrm:0000020]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a7 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a7 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a7 ← xenobiotic biotransformation > site type > site atom class
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a7 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a7 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a7 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a7 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a7 ← xenobiotic biotransformation > reactive metabolite family
+  - site type [xrm:1600000]@a7 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a7 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a7 ← xenobiotic biotransformation
+
+## chem:two-step-quinone-formation
+- reactant: `c1ccccc1`
+- product: `O=C1C=CC(=O)C=C1`
+- tags: `chem:two-step-quinone-formation`
+- terms:
+  - two-step quinone formation [xrm:0000308] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation > two-step quinone formation
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - multi-step pathway member [xrm:7900002] ← xenobiotic biotransformation > structural delta > pathway-step role > multi-step pathway member
+  - preparatory intermediate step [xrm:7900003] ← xenobiotic biotransformation > structural delta > pathway-step role > preparatory intermediate step
+  - quinoid π-system formation [xrm:8000005] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > quinoid π-system formation
+  - quinone formation [xrm:0000300] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - bioactivation [xrm:0003000] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation [xrm:1400012] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - pathway-depth ambiguity [xrm:6000040] ← xenobiotic biotransformation > ambiguity and underspecification > pathway-depth ambiguity
+  - pathway-step role [xrm:7900000] ← xenobiotic biotransformation > structural delta > pathway-step role
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - quinone [xrm:1500010] ← xenobiotic biotransformation > reactive metabolite family > quinone
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - ambiguity and underspecification [xrm:6000000] ← xenobiotic biotransformation > ambiguity and underspecification
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:imine-methide
+- reactant: `Nc1ccc(C)cc1`
+- product: `N=C1C=CC(=C)C=C1`
+- tags: `chem:imine-methide`
+- terms:
+  - imine-methide formation [xrm:0000306] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation > imine-methide formation
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - electrophile generation [xrm:7500001] ← xenobiotic biotransformation > reactive metabolite family > electrophile role > electrophile generation
+  - quinoid π-system formation [xrm:8000005] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > quinoid π-system formation
+  - quinone formation [xrm:0000300] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - bioactivation [xrm:0003000] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation [xrm:1400012] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - electrophile role [xrm:7500000] ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - quinone [xrm:1500010] ← xenobiotic biotransformation > reactive metabolite family > quinone
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:dearomatization alone
+- reactant: `c1ccccc1`
+- product: `C1=CC=CC=C1`
+- tags: `chem:dearomatization`
+- terms:
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:nitroaromatic-reduction
+- reactant: `O=[N+]([O-])c1ccccc1`
+- product: `Nc1ccccc1`
+- tags: `chem:nitroaromatic-reduction`
+- terms:
+  - nitroaromatic reduction [xrm:0000513] ← xenobiotic biotransformation > chemical transformation > reduction > nitrogen reduction > nitro reduction > nitroaromatic reduction
+  - nitro reduction [xrm:0000511] ← xenobiotic biotransformation > chemical transformation > reduction > nitrogen reduction > nitro reduction
+  - aromatic site [xrm:7800001] ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - electrophile generation [xrm:7500001] ← xenobiotic biotransformation > reactive metabolite family > electrophile role > electrophile generation
+  - net reduction [xrm:7000002] ← xenobiotic biotransformation > structural delta > redox polarity > net reduction
+  - nitrogen reduction [xrm:0000510] ← xenobiotic biotransformation > chemical transformation > reduction > nitrogen reduction
+  - bioactivation [xrm:0003000] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation [xrm:1400012] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - electrophile role [xrm:7500000] ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - reduction [xrm:0000014] ← xenobiotic biotransformation > chemical transformation > reduction
+  - site aromaticity [xrm:7800000] ← xenobiotic biotransformation > site type > site aromaticity
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:cyanide-hydrolysis
+- reactant: `CC#N`
+- product: `CC(=O)O`
+- tags: `chem:cyanide-hydrolysis`
+- terms:
+  - bond cleavage [xrm:7200002] ← xenobiotic biotransformation > structural delta > bond-edit topology > bond cleavage
+  - cyanide hydrolysis [xrm:0000409] ← xenobiotic biotransformation > chemical transformation > hydrolysis > cyanide hydrolysis
+  - fragmenting transformation [xrm:7300002] ← xenobiotic biotransformation > structural delta > metabolite cardinality > fragmenting transformation
+  - redox-neutral [xrm:7000003] ← xenobiotic biotransformation > structural delta > redox polarity > redox-neutral
+  - bond-edit topology [xrm:7200000] ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - hydrolysis [xrm:0000013] ← xenobiotic biotransformation > chemical transformation > hydrolysis
+  - metabolite cardinality [xrm:7300000] ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:carbonyl-reduction
+- reactant: `CC(=O)C`
+- product: `CC(O)C`
+- tags: `chem:carbonyl-reduction`
+- terms:
+  - carbonyl reduction [xrm:0000524] ← xenobiotic biotransformation > chemical transformation > reduction > oxygen reduction > carbonyl reduction
+  - carbon site [xrm:7100001] ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net reduction [xrm:7000002] ← xenobiotic biotransformation > structural delta > redox polarity > net reduction
+  - oxygen reduction [xrm:0000520] ← xenobiotic biotransformation > chemical transformation > reduction > oxygen reduction
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - reduction [xrm:0000014] ← xenobiotic biotransformation > chemical transformation > reduction
+  - site atom class [xrm:7100000] ← xenobiotic biotransformation > site type > site atom class
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:glycine-conjugation
+- reactant: `c1ccccc1C(=O)O`
+- product: `c1ccccc1C(=O)O`
+- tags: `chem:glycine-conjugation`
+- terms:
+  - glycine conjugation [xrm:0001051] ← xenobiotic biotransformation > metabolism phase > phase II > amino acid conjugation > glycine conjugation
+  - amino acid conjugation [xrm:0001050] ← xenobiotic biotransformation > metabolism phase > phase II > amino acid conjugation
+  - conjugate gain delta [xrm:7700008] ← xenobiotic biotransformation > structural delta > formula-delta class > conjugate gain delta
+  - redox-neutral [xrm:7000003] ← xenobiotic biotransformation > structural delta > redox polarity > redox-neutral
+  - alcohol oxidation [xrm:0000310]@a6 ← xenobiotic biotransformation > chemical transformation > dehydrogenation > alcohol oxidation
+  - bond order change [xrm:7200003]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology > bond order change
+  - carbon oxidation [xrm:0000021]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a6 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - dehydrogenation delta [xrm:7700004]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class > dehydrogenation delta
+  - net oxidation [xrm:7000001]@a6 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - non-oxygenative transformation [xrm:7400003]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome > non-oxygenative transformation
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - phase II [xrm:0000002] ← xenobiotic biotransformation > metabolism phase > phase II
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - aldehyde [xrm:1500013]@a6 ← xenobiotic biotransformation > reactive metabolite family > aldehyde
+  - aldehyde forming [xrm:1400022]@a6 ← xenobiotic biotransformation > medchem liability > aldehyde forming
+  - bond-edit topology [xrm:7200000]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - dehydrogenation [xrm:0000012]@a6 ← xenobiotic biotransformation > chemical transformation > dehydrogenation
+  - formula-delta class [xrm:7700000]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - oxidation [xrm:0000020]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a6 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a6 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a6 ← xenobiotic biotransformation > site type > site atom class
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase II conjugation family [xrm:1300000] ← xenobiotic biotransformation > phase II conjugation family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a6 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a6 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a6 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a6 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a6 ← xenobiotic biotransformation > reactive metabolite family
+  - site type [xrm:1600000]@a6 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a6 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a6 ← xenobiotic biotransformation
+
+## chem:tautomerization
+- reactant: `CC(=O)C`
+- product: `CC(O)=C`
+- tags: `chem:tautomerization`
+- terms:
+  - Tautomerization rule [xrm:9102000] ← xenobiotic biotransformation > Metabolic Forest map > tautomerization ruleset > Tautomerization rule
+  - no heavy-atom delta [xrm:7700010] ← xenobiotic biotransformation > structural delta > formula-delta class > no heavy-atom delta
+  - rearrangement topology [xrm:7200005] ← xenobiotic biotransformation > structural delta > bond-edit topology > rearrangement topology
+  - redox-neutral [xrm:7000003] ← xenobiotic biotransformation > structural delta > redox polarity > redox-neutral
+  - bond-edit topology [xrm:7200000] ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - tautomerization [xrm:0002000] ← xenobiotic biotransformation > chemical transformation > tautomerization
+  - tautomerization ruleset [xrm:9000017] ← xenobiotic biotransformation > Metabolic Forest map > tautomerization ruleset
+  - Metabolic Forest map [xrm:9000000] ← xenobiotic biotransformation > Metabolic Forest map
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:regio-ambiguity + aromatic hydroxylation
+- reactant: `CCc1ccccc1`
+- product: `CCc1ccc(O)cc1`
+- tags: `chem:aromatic-hydroxylation`, `chem:regio-ambiguity`, `chem:competing-type`
+- terms:
+  - aromatic hydroxylation [xrm:0000101] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - aromatic hydroxylation [xrm:0000101]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aromatic hydroxylation
+  - hydroxylation [xrm:0000100] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - aromatic ring substitution impact [xrm:8000003] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001] ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - carbon oxidation [xrm:0000021] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - atom addition [xrm:7200001]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a2 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a2 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a3 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a3 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a3 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a4 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a4 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a4 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a5 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a5 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a5 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a6 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a6 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a6 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a6 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a6 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a6 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aromatic ring substitution impact [xrm:8000003]@a7 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromatic ring substitution impact
+  - aromatic site [xrm:7800001]@a7 ← xenobiotic biotransformation > site type > site aromaticity > aromatic site
+  - atom addition [xrm:7200001]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a7 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a7 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a7 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a7 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - SMARTS-derived tag [xrm:1900010] ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - competing-type ambiguity [xrm:6000021] ← xenobiotic biotransformation > ambiguity and underspecification > competing-type ambiguity
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - reaction-type ambiguity [xrm:6000020] ← xenobiotic biotransformation > ambiguity and underspecification > reaction-type ambiguity
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - regiochemical ambiguity [xrm:6000011] ← xenobiotic biotransformation > ambiguity and underspecification > regiochemical ambiguity
+  - site aromaticity [xrm:7800000] ← xenobiotic biotransformation > site type > site aromaticity
+  - site-of-metabolism ambiguity [xrm:6000010] ← xenobiotic biotransformation > ambiguity and underspecification > site-of-metabolism ambiguity
+  - stable metabolite [xrm:1400015] ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010] ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a2 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - bond-edit topology [xrm:7200000]@a2 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a2 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a2 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a2 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a2 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a2 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a2 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a2 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a2 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site atom class [xrm:7100000]@a2 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a2 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a2 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a3 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a3 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a3 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a3 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a3 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a3 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a3 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a3 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a3 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a3 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a3 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a3 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a3 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a3 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a3 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a3 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a4 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a4 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a4 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a4 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a4 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a4 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a4 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a4 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a4 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a4 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a4 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a4 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a4 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a4 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a4 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a4 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a5 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a5 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a5 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a5 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a5 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a5 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a5 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a5 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a5 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a5 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a5 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a5 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a5 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a5 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a5 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a5 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a6 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a6 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a6 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a6 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a6 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a6 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a6 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a6 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a6 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a6 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a6 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a6 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a6 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a6 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a6 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a6 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a7 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - aromatic and conjugated-system impact [xrm:8000000]@a7 ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - aromatic site [xrm:1600013]@a7 ← xenobiotic biotransformation > site type > aromatic site
+  - bond-edit topology [xrm:7200000]@a7 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a7 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a7 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a7 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a7 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a7 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a7 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a7 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a7 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a7 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a7 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a7 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a7 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - ambiguity and underspecification [xrm:6000000] ← xenobiotic biotransformation > ambiguity and underspecification
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000] ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a2 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a2 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a2 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a2 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a2 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a2 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a2 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a2 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a3 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a3 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a3 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a3 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a3 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a3 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a3 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a3 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a4 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a4 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a4 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a4 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a4 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a4 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a4 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a4 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a5 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a5 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a5 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a5 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a5 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a5 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a5 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a5 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a6 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a6 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a6 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a6 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a6 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a6 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a6 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a6 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a7 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a7 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a7 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a7 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a7 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a7 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a7 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a7 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a2 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a3 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a4 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a5 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a6 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a7 ← xenobiotic biotransformation
+
+## chem:pathway-depth-ambiguity + two-step quinone
+- reactant: `c1ccccc1`
+- product: `O=C1C=CC(=O)C=C1`
+- tags: `chem:two-step-quinone-formation`, `chem:pathway-depth-ambiguity`, `chem:intermediate-underspecified`
+- terms:
+  - two-step quinone formation [xrm:0000308] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation > two-step quinone formation
+  - aromaticity loss [xrm:8000001] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > aromaticity loss
+  - dearomatization [xrm:0004001] ← xenobiotic biotransformation > chemical transformation > process facet > dearomatization
+  - multi-step pathway member [xrm:7900002] ← xenobiotic biotransformation > structural delta > pathway-step role > multi-step pathway member
+  - preparatory intermediate step [xrm:7900003] ← xenobiotic biotransformation > structural delta > pathway-step role > preparatory intermediate step
+  - quinoid π-system formation [xrm:8000005] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact > quinoid π-system formation
+  - quinone formation [xrm:0000300] ← xenobiotic biotransformation > metabolism phase > phase I > quinone formation
+  - ambiguous reaction [xrm:6000001] ← xenobiotic biotransformation > ambiguity and underspecification > ambiguous reaction
+  - aromatic and conjugated-system impact [xrm:8000000] ← xenobiotic biotransformation > structural delta > aromatic and conjugated-system impact
+  - bioactivation [xrm:0003000] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation [xrm:1400012] ← xenobiotic biotransformation > medchem liability > bioactivation
+  - bioactivation risk [xrm:1400019] ← xenobiotic biotransformation > medchem liability > bioactivation risk
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - intermediate underspecification [xrm:6000041] ← xenobiotic biotransformation > ambiguity and underspecification > intermediate underspecification
+  - pathway-depth ambiguity [xrm:6000040] ← xenobiotic biotransformation > ambiguity and underspecification > pathway-depth ambiguity
+  - pathway-step role [xrm:7900000] ← xenobiotic biotransformation > structural delta > pathway-step role
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - process facet [xrm:0004000] ← xenobiotic biotransformation > chemical transformation > process facet
+  - quinone [xrm:1500010] ← xenobiotic biotransformation > reactive metabolite family > quinone
+  - reactive metabolite [xrm:1400014] ← xenobiotic biotransformation > medchem liability > reactive metabolite
+  - ambiguity and underspecification [xrm:6000000] ← xenobiotic biotransformation > ambiguity and underspecification
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000] ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+
+## chem:mapping-underspecified
+- reactant: `CC`
+- product: `CCO`
+- tags: `chem:hydroxylation`, `chem:mapping-underspecified`
+- terms:
+  - aliphatic hydroxylation [xrm:0000102]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - aliphatic hydroxylation [xrm:0000102]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation > aliphatic hydroxylation
+  - hydroxylation [xrm:0000100] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - hydroxylation [xrm:0000100]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation > hydroxylation
+  - Hydroxylation rule [xrm:9100100] ← xenobiotic biotransformation > Metabolic Forest map > stable oxygenation ruleset > Hydroxylation rule
+  - carbon oxidation [xrm:0000021] ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - net oxidation [xrm:7000001] ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - oxygen gain [xrm:7700001] ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001] ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001] ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aliphatic site [xrm:7800002]@a0 ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - atom addition [xrm:7200001]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a0 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a0 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - aliphatic site [xrm:7800002]@a1 ← xenobiotic biotransformation > site type > site aromaticity > aliphatic site
+  - atom addition [xrm:7200001]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology > atom addition
+  - carbon oxidation [xrm:0000021]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation > carbon oxidation
+  - carbon site [xrm:7100001]@a1 ← xenobiotic biotransformation > site type > site atom class > carbon site
+  - net oxidation [xrm:7000001]@a1 ← xenobiotic biotransformation > structural delta > redox polarity > net oxidation
+  - nucleophile exposure [xrm:7500003]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role > nucleophile exposure
+  - oxygen gain [xrm:7700001]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class > oxygen gain
+  - single-metabolite transformation [xrm:7300001]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality > single-metabolite transformation
+  - stable oxygen addition [xrm:7400001]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome > stable oxygen addition
+  - SMARTS-derived tag [xrm:1900010] ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom added [xrm:1700012] ← xenobiotic biotransformation > structural delta > atom added
+  - atom-mapping underspecification [xrm:6000031] ← xenobiotic biotransformation > ambiguity and underspecification > atom-mapping underspecification
+  - caller-tag-derived [xrm:1900012] ← xenobiotic biotransformation > rule provenance > caller-tag-derived
+  - formula delta [xrm:1700010] ← xenobiotic biotransformation > structural delta > formula delta
+  - formula-delta class [xrm:7700000] ← xenobiotic biotransformation > structural delta > formula-delta class
+  - formula-delta-derived tag [xrm:1900011] ← xenobiotic biotransformation > rule provenance > formula-delta-derived tag
+  - metabolic soft spot [xrm:1400010] ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000] ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - metabolite-structure underspecification [xrm:6000030] ← xenobiotic biotransformation > ambiguity and underspecification > metabolite-structure underspecification
+  - oxidation [xrm:0000020] ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000] ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001] ← xenobiotic biotransformation > metabolism phase > phase I
+  - phase I ruleset [xrm:9000018] ← xenobiotic biotransformation > Metabolic Forest map > phase I ruleset
+  - redox polarity [xrm:7000000] ← xenobiotic biotransformation > structural delta > redox polarity
+  - stable metabolite [xrm:1400015] ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010] ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - stable oxygenation ruleset [xrm:9000010] ← xenobiotic biotransformation > Metabolic Forest map > stable oxygenation ruleset
+  - SMARTS-derived tag [xrm:1900010]@a0 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom site [xrm:1600010]@a0 ← xenobiotic biotransformation > site type > atom site
+  - bond-edit topology [xrm:7200000]@a0 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a0 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a0 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a0 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a0 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a0 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a0 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a0 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a0 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a0 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a0 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a0 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a0 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - SMARTS-derived tag [xrm:1900010]@a1 ← xenobiotic biotransformation > rule provenance > SMARTS-derived tag
+  - atom site [xrm:1600010]@a1 ← xenobiotic biotransformation > site type > atom site
+  - bond-edit topology [xrm:7200000]@a1 ← xenobiotic biotransformation > structural delta > bond-edit topology
+  - electrophile role [xrm:7500000]@a1 ← xenobiotic biotransformation > reactive metabolite family > electrophile role
+  - formula-delta class [xrm:7700000]@a1 ← xenobiotic biotransformation > structural delta > formula-delta class
+  - metabolic soft spot [xrm:1400010]@a1 ← xenobiotic biotransformation > medchem liability > metabolic soft spot
+  - metabolite cardinality [xrm:7300000]@a1 ← xenobiotic biotransformation > structural delta > metabolite cardinality
+  - oxidation [xrm:0000020]@a1 ← xenobiotic biotransformation > chemical transformation > oxidation
+  - oxygenation outcome [xrm:7400000]@a1 ← xenobiotic biotransformation > structural delta > oxygenation outcome
+  - phase I [xrm:0000001]@a1 ← xenobiotic biotransformation > metabolism phase > phase I
+  - redox polarity [xrm:7000000]@a1 ← xenobiotic biotransformation > structural delta > redox polarity
+  - site aromaticity [xrm:7800000]@a1 ← xenobiotic biotransformation > site type > site aromaticity
+  - site atom class [xrm:7100000]@a1 ← xenobiotic biotransformation > site type > site atom class
+  - stable metabolite [xrm:1400015]@a1 ← xenobiotic biotransformation > medchem liability > stable metabolite
+  - stable oxygenation [xrm:0000010]@a1 ← xenobiotic biotransformation > phase I reaction family > stable oxygenation
+  - Metabolic Forest map [xrm:9000000] ← xenobiotic biotransformation > Metabolic Forest map
+  - ambiguity and underspecification [xrm:6000000] ← xenobiotic biotransformation > ambiguity and underspecification
+  - chemical transformation [xrm:1100000] ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000] ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000] ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000] ← xenobiotic biotransformation > phase I reaction family
+  - rule provenance [xrm:1900000] ← xenobiotic biotransformation > rule provenance
+  - structural delta [xrm:1700000] ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a0 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a0 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a0 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a0 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a0 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a0 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a0 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a0 ← xenobiotic biotransformation > structural delta
+  - chemical transformation [xrm:1100000]@a1 ← xenobiotic biotransformation > chemical transformation
+  - medchem liability [xrm:1400000]@a1 ← xenobiotic biotransformation > medchem liability
+  - metabolism phase [xrm:1000000]@a1 ← xenobiotic biotransformation > metabolism phase
+  - phase I reaction family [xrm:1200000]@a1 ← xenobiotic biotransformation > phase I reaction family
+  - reactive metabolite family [xrm:1500000]@a1 ← xenobiotic biotransformation > reactive metabolite family
+  - rule provenance [xrm:1900000]@a1 ← xenobiotic biotransformation > rule provenance
+  - site type [xrm:1600000]@a1 ← xenobiotic biotransformation > site type
+  - structural delta [xrm:1700000]@a1 ← xenobiotic biotransformation > structural delta
+  - xenobiotic biotransformation [xrm:0000000] ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a0 ← xenobiotic biotransformation
+  - xenobiotic biotransformation [xrm:0000000]@a1 ← xenobiotic biotransformation
+

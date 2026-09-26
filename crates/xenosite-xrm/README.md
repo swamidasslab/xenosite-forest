@@ -14,10 +14,17 @@ This crate **must not** depend on `xenosite-forest` or any forest rule implement
 
 | Role | Standard | Path |
 | --- | --- | --- |
-| Thesaurus | [SKOS](https://www.w3.org/TR/skos-reference/) JSON-LD | `data/ontology/xrm.skos.jsonld` |
+| Thesaurus (authoring) | YAML | `data/ontology/xrm.yaml` |
+| Thesaurus (runtime) | [SKOS](https://www.w3.org/TR/skos-reference/) JSON-LD | `data/ontology/xrm.skos.jsonld` |
 | Crosswalks | [SSSOM](https://mapping-commons.github.io/sssom/) TSV | `data/mappings/*.sssom.tsv` |
 | Assignment | JSON Lines | `data/assignments/xenobiotic.jsonl` |
 | Bundle | JSON manifest | `data/manifest.json` |
+
+Edit `xrm.yaml`, then export SKOS:
+
+```bash
+python3 crates/xenosite-xrm/tools/yaml_to_skos.py
+```
 
 XRM is a **separate** ontology (not an extension of MeSH or KEGG). MeSH Phase I/II and MOP process terms are linked via SSSOM `broadMatch` / `exactMatch`. Enzyme types are orthogonal and never primary labels.
 
@@ -50,7 +57,7 @@ Each [`Term`](src/term.rs) includes ontology identity, pref/alt labels, broader/
 1. **Separate XRM + declared synonyms** — MeSH is too coarse (Phase I/II only); KEGG RCLASS is RDM-centric; MOP has good leaves but no xenobiotic Phase spine.
 2. **SKOS + SSSOM + JSONL** — established standards; no OWL reasoner required on the hot path.
 3. **Assignment without forest imports** — prefer structural SMARTS / formula delta; opaque tags only when structure cannot decide (and for Forest-map correspondence).
-4. **Cross-cutting multi-spine tagging** — many parallel hierarchies (chemist type, Forest map, aromatic impact, redox, ambiguity, …).
+4. **Cross-cutting multi-spine tagging** — ChatGPT-aligned facets (metabolism phase, chemical transformation, Rainbow phase I family, phase II conjugation family, medchem liability, reactive metabolite family, site type, structural delta, product status, rule provenance, evidence, biological context) plus ambiguity and Metabolic Forest map as an alias spine.
 5. **Site-localized terms** — caller tags may use `@map` (`chem:hydroxylation@1`); SMARTS hits attach `SiteRef` so multi-change cases disambiguate.
 6. **Phase I / Phase II expected**; enzyme names excluded from primary output.
 
@@ -72,16 +79,15 @@ Regenerate the proposed-term panel after ontology/assignment edits:
 cargo run -p xenosite-xrm --example sample_terms -- --write
 ```
 
-Output: [`data/samples/round-003.md`](data/samples/round-003.md) (and prior rounds under `data/samples/`). Comment on that file (or open an issue citing the case label) to steer the next round.
+Output: [`data/samples/round-004.md`](data/samples/round-004.md) (and prior rounds under `data/samples/`). Comment on that file (or open an issue citing the case label) to steer the next round.
 
-Reactions are tagged with **many cross-cutting terms** from parallel spines
-(chemist type, Metabolic Forest map, aromatic/conjugate impact, redox, site
-atom, bond-edit topology, cardinality, oxygenation outcome, electrophile role,
-ring fate, formula-delta, site aromaticity, pathway-step role, and typed
-**ambiguity / underspecification**). See [`data/ontology/SOURCES.md`](data/ontology/SOURCES.md).
+Reactions are tagged with **many cross-cutting terms** from the spines in
+[`data/ontology/SOURCES.md`](data/ontology/SOURCES.md). Med-chem style stacks
+look like `phase I + unstable oxygenation + N-dealkylation + aldehyde forming +
+bioactivation risk + tertiary amine site`.
 
-Forest-map class parents use **unabbreviated** labels. Localized abbreviations
-appear only as opaque `forest.ruleset:*` CURIE object ids in SSSOM.
+Forest-map ruleset parents use **unabbreviated** labels ending in `ruleset`.
+Abbreviations appear only as opaque `forest.ruleset:*` CURIE object ids in SSSOM.
 
 ## Tests
 

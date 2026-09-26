@@ -1,0 +1,5100 @@
+# XRM thesaurus (authoring source). Export to xrm.skos.jsonld for Rust.
+# Site-localized names (e.g. C4 hydroxylation) are NOT concepts; generate from templates.
+scheme:
+  id: xrm:scheme
+  preferred_label: Xenobiotic Reaction Metabolism
+  iri: https://xenosite.org/ontology/xrm#
+  definition: 'XRM tags each reaction with many terms from parallel, cross-cutting spines aligned to med-chem
+    faceting: metabolism phase, chemical transformation, phase I reaction family (Rainbow), phase II conjugation
+    family, medchem liability, reactive metabolite family, site type, structural delta, product status,
+    rule provenance, evidence, biological context, plus ambiguity and Metabolic Forest map (alias spine).'
+spines:
+- id: xrm:1000000
+  preferred_label: metabolism phase
+  definition: Phase framing for xenobiotic biotransformation (I / II / III).
+  synonyms: &id001
+  - metabolism_phase
+  - phase
+- id: xrm:1100000
+  preferred_label: chemical transformation
+  definition: Enzyme-independent chemical edit class (oxidation, reduction, …).
+  synonyms: &id002
+  - chemical_transformation
+  - transformation
+- id: xrm:1200000
+  preferred_label: phase I reaction family
+  definition: Rainbow-anchored Phase I reaction classes and detailed types.
+  synonyms: &id003
+  - phase_1_reaction_family
+  - phase I family
+- id: xrm:1300000
+  preferred_label: phase II conjugation family
+  definition: Conjugation families typical of Phase II xenobiotic metabolism.
+  synonyms: &id004
+  - phase_2_conjugation_family
+  - conjugation family
+- id: xrm:1400000
+  preferred_label: medchem liability
+  definition: Medicinal-chemistry liability and design handles for a reaction.
+  synonyms: &id005
+  - medchem_liability
+  - liability
+- id: xrm:1500000
+  preferred_label: reactive metabolite family
+  definition: Reactive or trapping-prone metabolite product families.
+  synonyms: &id006
+  - reactive_metabolite_family
+  - reactive metabolite
+- id: xrm:1600000
+  preferred_label: site type
+  definition: Where on the molecule the transformation is localized.
+  synonyms: &id007
+  - site_type
+  - site class
+- id: xrm:1700000
+  preferred_label: structural delta
+  definition: Structural / formula / aromaticity / bond-order change facets.
+  synonyms: &id008
+  - structural_delta
+  - delta
+- id: xrm:1800000
+  preferred_label: product status
+  definition: Observation / prediction / pathway status of a metabolite.
+  synonyms: &id009
+  - product_status
+- id: xrm:1900000
+  preferred_label: rule provenance
+  definition: How a tag was produced (SMARTS, rule name, priority, exclusions).
+  synonyms: &id010
+  - rule_provenance
+  - provenance
+- id: xrm:2000000
+  preferred_label: evidence
+  definition: Evidence type supporting a named transformation or product.
+  synonyms: &id011
+  - evidence
+- id: xrm:2100000
+  preferred_label: biological context
+  definition: Orthogonal biological framing (enzyme, tissue, species, matrix).
+  synonyms: &id012
+  - biological_context
+- id: xrm:6000000
+  preferred_label: ambiguity and underspecification
+  definition: Cross-cutting spine for incomplete, conflicting, or underdetermined naming evidence. Prefer
+    specific ambiguity subtypes; tag alongside positive terms rather than replacing them.
+  synonyms: []
+- id: xrm:9000000
+  preferred_label: Metabolic Forest map
+  definition: Alias / mapping spine for Metabolic Forest rulesets → rules → patterns. Opaque forest.*
+    CURIEs only; not the chemist backbone.
+  synonyms: &id013
+  - forest alignment
+  - ruleset–rule–pattern map
+concepts:
+- id: xrm:0000000
+  preferred_label: xenobiotic biotransformation
+  synonyms:
+  - xenobiotic metabolism
+  - biotransformation
+  - drug metabolism
+  definition: Chemical alteration of an exogenous substance in a biological system.
+- id: xrm:0000001
+  preferred_label: phase I
+  synonyms:
+  - phase 1
+  - functionalization
+  - Metabolic Detoxication, Phase I
+  - phase 1 metabolism
+  - functionalization phase
+  definition: 'Functionalization: oxidation, reduction, hydrolysis, and related edits that introduce or
+    expose polar groups.'
+  parents:
+  - xrm:1000000
+  related_match:
+  - xrm:9000018
+- id: xrm:0000002
+  preferred_label: phase II
+  synonyms:
+  - phase 2
+  - conjugation
+  - Metabolic Detoxication, Phase II
+  - phase 2 metabolism
+  - conjugation phase
+  definition: Conjugation with hydrophilic moieties (glucuronide, sulfate, glutathione, acetyl, methyl,
+    amino acids, …).
+  parents:
+  - xrm:1000000
+- id: xrm:0000003
+  preferred_label: phase III transport
+  synonyms:
+  - phase 3
+  - phase III
+  - transport phase
+  definition: Transporter-mediated disposition related to xenobiotic handling; related to metabolism naming
+    but not a primary reaction label.
+  parents:
+  - xrm:1000000
+- id: xrm:0000010
+  preferred_label: stable oxygenation
+  synonyms:
+  - SO class
+  - stable oxygen addition class
+  - Rainbow stable oxygenation
+  - SO class (full name)
+  - stable_oxygenation
+  definition: 'Rainbow Phase I class: oxygenation that yields a stable oxygenated metabolite (aromatic/aliphatic
+    hydroxylation, epoxidation, N-oxidation, S-oxidation).'
+  parents:
+  - xrm:1200000
+  related_match:
+  - xrm:9000010
+- id: xrm:0000011
+  preferred_label: unstable oxygenation
+  synonyms:
+  - UO class
+  - unstable oxygen addition class
+  - Rainbow unstable oxygenation
+  - UO class (full name)
+  - unstable_oxygenation
+  definition: 'Rainbow Phase I class: oxygenation that triggers cleavage or rearrangement (N-/O-/S-/C-dealkylation,
+    oxidative deamination, oxidative dehalogenation).'
+  parents:
+  - xrm:1200000
+  related_match:
+  - xrm:9000011
+- id: xrm:0000012
+  preferred_label: dehydrogenation
+  synonyms:
+  - desaturation
+  definition: Phase I class that extracts hydrogen(s) to form a multiple bond, iminium, or quinoid (alcohol→carbonyl,
+    bond unsaturation, quinone/imine/methide formation, iminium formation). Maps to the Metabolic Forest
+    / Rainbow dehydrogenation ruleset; prefer this full name over localized abbreviations.
+  parents:
+  - xrm:1100000
+  - xrm:0000001
+  - xrm:1200000
+  related_match:
+  - xrm:9000012
+  - xrm:9100300
+  - xrm:7000001
+  - xrm:7200003
+  - xrm:7700004
+  - xrm:7400003
+- id: xrm:0000013
+  preferred_label: hydrolysis
+  definition: Phase I class in which water addition cleaves amide, ester, ether, or related bonds (including
+    cyanide/nitrile hydrolysis). Maps to the Metabolic Forest / Rainbow hydrolysis ruleset; prefer this
+    full name over localized abbreviations.
+  parents:
+  - xrm:1100000
+  - xrm:0000001
+  - xrm:1200000
+  related_match:
+  - xrm:9000013
+  - xrm:9100400
+  - xrm:7000003
+  - xrm:7200002
+  - xrm:7300002
+  - xrm:7700005
+- id: xrm:0000014
+  preferred_label: reduction
+  definition: Phase I class that removes oxygen or adds hydrogen(s) (nitro, carbonyl, and sulfo reduction;
+    reductive dehalogenation; hydrogenation). Maps to the Metabolic Forest / Rainbow reduction ruleset;
+    prefer this full name over localized abbreviations.
+  parents:
+  - xrm:1100000
+  - xrm:0000001
+  - xrm:1200000
+  related_match:
+  - xrm:9000014
+  - xrm:7000002
+  - xrm:7400003
+- id: xrm:0000020
+  preferred_label: oxidation
+  synonyms:
+  - oxidative metabolism
+  definition: Phase I oxidations broadly (carbon and heteroatom).
+  parents:
+  - xrm:1100000
+  - xrm:0000001
+  related_match:
+  - xrm:0000010
+  - xrm:0000011
+- id: xrm:0000021
+  preferred_label: carbon oxidation
+  definition: Oxidation at carbon (hydroxylation, epoxidation, alcohol/aldehyde oxidation).
+  parents:
+  - xrm:0000020
+- id: xrm:0000022
+  preferred_label: heteroatom oxidation
+  definition: Direct oxidation of N, S (and related heteroatoms).
+  parents:
+  - xrm:0000020
+- id: xrm:0000023
+  preferred_label: carbon–heteroatom oxidative cleavage
+  synonyms:
+  - α-carbon hydroxylation cleavage
+  definition: α-Carbon hydroxylation followed by C–X cleavage (N-/O-/S-dealkylation, oxidative deamination).
+  parents:
+  - xrm:0000020
+- id: xrm:0000024
+  preferred_label: conjugation
+  definition: 'Attachment of a hydrophilic moiety (Metabolic Forest conjugation ruleset: acetylation,
+    glucuronidation, glutathionation, sulfation, and related Phase II paths).'
+  parents:
+  - xrm:1100000
+  close_match:
+  - xrm:0000002
+  related_match:
+  - xrm:0001000
+  - xrm:0001010
+  - xrm:0001020
+  - xrm:0001030
+  - xrm:9000016
+- id: xrm:0000100
+  preferred_label: hydroxylation
+  definition: Introduction of a hydroxyl group, typically at carbon.
+  parents:
+  - xrm:0000021
+  - xrm:0000010
+  related_match:
+  - xrm:9100100
+  - xrm:7000001
+  - xrm:7100001
+  - xrm:7200001
+  - xrm:7300001
+  - xrm:7400001
+  - xrm:7700001
+  synonyms:
+  - C-hydroxylation
+  - monooxygenation hydroxylation
+- id: xrm:0000101
+  preferred_label: aromatic hydroxylation
+  synonyms:
+  - aryl hydroxylation
+  - benzene hydroxylation
+  - arene hydroxylation
+  definition: Hydroxylation of an aromatic ring; often via arene oxide / NIH-shift pathways.
+  parents:
+  - xrm:0000100
+  related_match:
+  - xrm:8000003
+  - xrm:7800001
+  - xrm:1500118
+- id: xrm:0000102
+  preferred_label: aliphatic hydroxylation
+  synonyms:
+  - alkyl hydroxylation
+  definition: Hydroxylation of an aliphatic carbon.
+  parents:
+  - xrm:0000100
+  related_match:
+  - xrm:7800002
+- id: xrm:0000103
+  preferred_label: para-hydroxylation
+  definition: Aromatic hydroxylation at the para position of a substituted benzene.
+  parents:
+  - xrm:0000101
+- id: xrm:0000104
+  preferred_label: ortho-hydroxylation
+  parents:
+  - xrm:0000101
+- id: xrm:0000105
+  preferred_label: meta-hydroxylation
+  parents:
+  - xrm:0000101
+- id: xrm:0000106
+  preferred_label: benzylic hydroxylation
+  definition: Hydroxylation at a carbon adjacent to an aromatic ring.
+  parents:
+  - xrm:0000100
+  - xrm:0000102
+  synonyms:
+  - toluene side-chain hydroxylation
+- id: xrm:0000107
+  preferred_label: allylic hydroxylation
+  definition: Hydroxylation at a carbon adjacent to a C=C bond.
+  parents:
+  - xrm:0000102
+- id: xrm:0000108
+  preferred_label: ω-hydroxylation
+  synonyms:
+  - omega-hydroxylation
+  - terminal methyl hydroxylation
+  parents:
+  - xrm:0000102
+- id: xrm:0000109
+  preferred_label: ω-1 hydroxylation
+  synonyms:
+  - omega-1 hydroxylation
+  - penultimate carbon hydroxylation
+  parents:
+  - xrm:0000102
+- id: xrm:0000110
+  preferred_label: epoxidation
+  definition: Formation of a three-membered epoxide ring.
+  parents:
+  - xrm:0000021
+  - xrm:1100000
+  - xrm:0000010
+  related_match:
+  - xrm:9100110
+  - xrm:7000001
+  - xrm:7200006
+  - xrm:7600003
+  - xrm:7400001
+  - xrm:7700001
+  - xrm:1500012
+  synonyms:
+  - alkene epoxidation
+  - oxirane formation
+- id: xrm:0000111
+  preferred_label: alkene epoxidation
+  parents:
+  - xrm:0000110
+- id: xrm:0000112
+  preferred_label: arene oxide formation
+  synonyms:
+  - aromatic epoxidation
+  - arene oxide
+  definition: Epoxidation of an aromatic π-system to an arene oxide intermediate.
+  parents:
+  - xrm:0000110
+  - xrm:0000101
+  related_match:
+  - xrm:8000007
+- id: xrm:0000113
+  preferred_label: thiophene epoxidation
+  parents:
+  - xrm:0000110
+  - xrm:8000006
+  related_match:
+  - xrm:0004001
+  - xrm:8000006
+- id: xrm:0000120
+  preferred_label: nitrogen oxidation
+  synonyms:
+  - N-oxidation
+  parents:
+  - xrm:0000022
+  - xrm:0000010
+  related_match:
+  - xrm:9100120
+- id: xrm:0000121
+  preferred_label: N-oxide formation
+  synonyms:
+  - tertiary amine N-oxidation
+  parents:
+  - xrm:0000120
+- id: xrm:0000122
+  preferred_label: hydroxylamine formation
+  synonyms:
+  - N-hydroxylation
+  parents:
+  - xrm:0000120
+  related_match:
+  - xrm:1500018
+- id: xrm:0000123
+  preferred_label: nitroso formation
+  parents:
+  - xrm:0000120
+  related_match:
+  - xrm:1500017
+- id: xrm:0000124
+  preferred_label: primary amine N-oxidation
+  parents:
+  - xrm:0000120
+- id: xrm:0000125
+  preferred_label: aromatic amine N-oxidation
+  parents:
+  - xrm:0000120
+- id: xrm:0000130
+  preferred_label: sulfur oxidation
+  synonyms:
+  - S-oxidation
+  parents:
+  - xrm:0000022
+  - xrm:0000010
+  related_match:
+  - xrm:9100130
+- id: xrm:0000131
+  preferred_label: sulfoxidation
+  synonyms:
+  - sulfoxide formation
+  parents:
+  - xrm:0000130
+- id: xrm:0000132
+  preferred_label: sulfone formation
+  parents:
+  - xrm:0000130
+- id: xrm:0000133
+  preferred_label: thiophene S-oxidation
+  definition: S-oxidation of a thiophene ring; a dearomatizing path to S-oxides.
+  parents:
+  - xrm:0000130
+  - xrm:0004001
+  - xrm:8000006
+  related_match:
+  - xrm:8000006
+- id: xrm:0000134
+  preferred_label: thiol oxidation
+  parents:
+  - xrm:0000130
+- id: xrm:0000135
+  preferred_label: disulfide formation
+  parents:
+  - xrm:0000130
+- id: xrm:0000140
+  preferred_label: primary carbon hydroxylation
+  parents:
+  - xrm:0000102
+- id: xrm:0000141
+  preferred_label: secondary carbon hydroxylation
+  parents:
+  - xrm:0000102
+- id: xrm:0000142
+  preferred_label: tertiary carbon hydroxylation
+  parents:
+  - xrm:0000102
+- id: xrm:0000143
+  preferred_label: alicyclic hydroxylation
+  definition: Hydroxylation of a saturated ring carbon.
+  parents:
+  - xrm:0000102
+- id: xrm:0000200
+  preferred_label: dealkylation
+  synonyms:
+  - oxidative dealkylation
+  definition: Oxidative removal of an alkyl group from N, O, S, or C via α-carbon hydroxylation.
+  parents:
+  - xrm:0000023
+  - xrm:1100000
+  - xrm:0000011
+  related_match:
+  - xrm:9100200
+  - xrm:7000001
+  - xrm:7200002
+  - xrm:7300002
+  - xrm:7400002
+  - xrm:7100007
+- id: xrm:0000201
+  preferred_label: N-dealkylation
+  parents:
+  - xrm:0000200
+  related_match:
+  - xrm:9100201
+  - xrm:7100002
+  - xrm:7100007
+  - xrm:1400022
+  - xrm:1500129
+  synonyms:
+  - oxidative N-dealkylation
+  - N-dealkylative cleavage
+- id: xrm:0000202
+  preferred_label: O-dealkylation
+  parents:
+  - xrm:0000200
+  related_match:
+  - xrm:7100003
+  - xrm:7100007
+  synonyms:
+  - oxidative O-dealkylation
+- id: xrm:0000203
+  preferred_label: S-dealkylation
+  parents:
+  - xrm:0000200
+  related_match:
+  - xrm:7100004
+  - xrm:7100007
+- id: xrm:0000204
+  preferred_label: C-dealkylation
+  synonyms:
+  - carbon–carbon dealkylation
+  parents:
+  - xrm:0000200
+- id: xrm:0000205
+  preferred_label: N-demethylation
+  synonyms:
+  - demethylation
+  - oxidative N-demethylation
+  definition: N-dealkylation that releases formaldehyde.
+  parents:
+  - xrm:0000201
+- id: xrm:0000206
+  preferred_label: N-deethylation
+  parents:
+  - xrm:0000201
+- id: xrm:0000207
+  preferred_label: N-depropylation
+  parents:
+  - xrm:0000201
+- id: xrm:0000208
+  preferred_label: oxidative deamination
+  synonyms:
+  - deamination
+  definition: α-Carbon hydroxylation of a primary (or suitable) amine releasing ammonia/amine and a carbonyl.
+  parents:
+  - xrm:0000201
+  - xrm:0000023
+  - xrm:0000011
+- id: xrm:0000209
+  preferred_label: O-demethylation
+  parents:
+  - xrm:0000202
+  synonyms:
+  - aryl methyl ether cleavage
+  - oxidative O-demethylation
+- id: xrm:0000210
+  preferred_label: oxidative dehalogenation
+  synonyms:
+  - oxidative dehalogenation
+  definition: Replacement of halogen by oxygen via oxidative pathways.
+  parents:
+  - xrm:0000020
+  - xrm:0000011
+  related_match:
+  - xrm:9100210
+  - xrm:7100005
+  - xrm:7200002
+  - xrm:7400002
+  - xrm:7700009
+- id: xrm:0000211
+  preferred_label: O-deethylation
+  parents:
+  - xrm:0000202
+- id: xrm:0000212
+  preferred_label: aromatic O-dealkylation
+  definition: Cleavage of an aryl–O–alkyl ether (e.g. anisole → phenol).
+  parents:
+  - xrm:0000202
+- id: xrm:0000213
+  preferred_label: aliphatic O-dealkylation
+  parents:
+  - xrm:0000202
+- id: xrm:0000214
+  preferred_label: oxidative defluorination
+  parents:
+  - xrm:0000210
+- id: xrm:0000215
+  preferred_label: oxidative dechlorination
+  parents:
+  - xrm:0000210
+- id: xrm:0000216
+  preferred_label: oxidative debromination
+  parents:
+  - xrm:0000210
+- id: xrm:0000300
+  preferred_label: quinone formation
+  synonyms:
+  - quinonation
+  - quinone species formation
+  definition: Formation of a quinone species by metabolic oxidation (quinone, quinone-imine, quinone-methide,
+    or imine-methide), in one or two metabolic steps. From the quinone-formation and Metabolic Forest
+    papers; under dehydrogenation in the Forest-mapped Phase I hierarchy.
+  parents:
+  - xrm:0000001
+  related_match:
+  - xrm:0000012
+  - xrm:0004001
+  - xrm:0003000
+  - xrm:0003002
+  - xrm:9000015
+  - xrm:9100600
+  - xrm:8000004
+  - xrm:8000005
+  - xrm:7500001
+  - xrm:7000001
+  - xrm:7900002
+  - xrm:1500010
+- id: xrm:0000301
+  preferred_label: ortho-quinone formation
+  parents:
+  - xrm:0000300
+- id: xrm:0000302
+  preferred_label: para-quinone formation
+  parents:
+  - xrm:0000300
+- id: xrm:0000303
+  preferred_label: quinone-imine formation
+  synonyms:
+  - quinone imine formation
+  - NAPQI-type formation
+  parents:
+  - xrm:0000300
+  related_match:
+  - xrm:8000005
+  - xrm:1500011
+- id: xrm:0000304
+  preferred_label: quinone-methide formation
+  synonyms:
+  - quinone methide formation
+  parents:
+  - xrm:0000300
+  related_match:
+  - xrm:8000005
+- id: xrm:0000305
+  preferred_label: iminium ion formation
+  synonyms:
+  - iminium formation
+  parents:
+  - xrm:0000012
+  related_match:
+  - xrm:0003000
+  - xrm:1500014
+- id: xrm:0000306
+  preferred_label: imine-methide formation
+  synonyms:
+  - imine methide formation
+  definition: Formation of an imine-methide quinoid species (quinone-formation paper subtype alongside
+    quinone, quinone-imine, and quinone-methide).
+  parents:
+  - xrm:0000300
+  related_match:
+  - xrm:8000005
+- id: xrm:0000307
+  preferred_label: one-step quinone formation
+  definition: Direct dehydrogenation of the parent to a quinone species without a prior hydroxylation
+    intermediate (quinone-formation / Rainbow papers).
+  parents:
+  - xrm:0000300
+  related_match:
+  - xrm:7900001
+- id: xrm:0000308
+  preferred_label: two-step quinone formation
+  definition: Quinone species formed after an intermediate hydroxylation (or related) step followed by
+    dehydrogenation (quinone-formation / Metabolic Forest papers).
+  parents:
+  - xrm:0000300
+  related_match:
+  - xrm:7900002
+  - xrm:7900003
+  - xrm:6000040
+- id: xrm:0000310
+  preferred_label: alcohol oxidation
+  synonyms:
+  - alcohol dehydrogenation
+  - alcohol to aldehyde
+  parents:
+  - xrm:0000012
+  - xrm:0000021
+- id: xrm:0000311
+  preferred_label: primary alcohol oxidation
+  definition: Oxidation of a primary alcohol toward aldehyde (and often further to acid).
+  parents:
+  - xrm:0000310
+- id: xrm:0000312
+  preferred_label: secondary alcohol oxidation
+  definition: Oxidation of a secondary alcohol to a ketone.
+  parents:
+  - xrm:0000310
+- id: xrm:0000313
+  preferred_label: aldehyde oxidation
+  synonyms:
+  - aldehyde to carboxylic acid
+  parents:
+  - xrm:0000021
+- id: xrm:0000314
+  preferred_label: alkene formation
+  synonyms:
+  - desaturation to alkene
+  parents:
+  - xrm:0000012
+- id: xrm:0000315
+  preferred_label: aromatization
+  definition: Formation or restoration of an aromatic system.
+  parents:
+  - xrm:0000012
+  - xrm:0004002
+  - xrm:1100000
+  related_match:
+  - xrm:8000002
+- id: xrm:0000316
+  preferred_label: single- to double-bond dehydrogenation
+  synonyms:
+  - bond unsaturation to alkene
+  definition: Dehydrogenation that converts a single bond into a double bond (Rainbow Table 1).
+  parents:
+  - xrm:0000012
+- id: xrm:0000317
+  preferred_label: double- to triple-bond dehydrogenation
+  synonyms:
+  - bond unsaturation to alkyne
+  definition: Dehydrogenation that converts a double bond into a triple bond (Rainbow Table 1).
+  parents:
+  - xrm:0000012
+- id: xrm:0000400
+  preferred_label: epoxide opening
+  synonyms:
+  - epoxide hydration
+  - epoxide hydrolysis
+  parents:
+  - xrm:0000013
+  related_match:
+  - xrm:9100401
+- id: xrm:0000401
+  preferred_label: ester hydrolysis
+  parents:
+  - xrm:0000013
+- id: xrm:0000402
+  preferred_label: amide hydrolysis
+  parents:
+  - xrm:0000013
+- id: xrm:0000403
+  preferred_label: lactone hydrolysis
+  parents:
+  - xrm:0000401
+- id: xrm:0000404
+  preferred_label: lactam hydrolysis
+  parents:
+  - xrm:0000402
+- id: xrm:0000405
+  preferred_label: carbamate hydrolysis
+  parents:
+  - xrm:0000013
+- id: xrm:0000406
+  preferred_label: urea hydrolysis
+  parents:
+  - xrm:0000013
+- id: xrm:0000407
+  preferred_label: ether cleavage
+  synonyms:
+  - ether hydrolysis
+  - hydrolytic ether cleavage
+  definition: Hydrolytic or solvolytic cleavage of ethers (distinct from oxidative O-dealkylation).
+  parents:
+  - xrm:0000013
+- id: xrm:0000408
+  preferred_label: ether hydrolysis
+  definition: Hydrolytic cleavage of an ether bond (Rainbow hydrolysis types; distinct from oxidative
+    O-dealkylation).
+  parents:
+  - xrm:0000013
+  related_match:
+  - xrm:0000407
+- id: xrm:0000409
+  preferred_label: cyanide hydrolysis
+  synonyms:
+  - nitrile hydrolysis (Rainbow)
+  definition: Hydrolysis at a cyanide/nitrile center (Rainbow Table 1 hydrolysis type).
+  parents:
+  - xrm:0000013
+  close_match:
+  - xrm:0000411
+- id: xrm:0000410
+  preferred_label: dephosphorylation
+  synonyms:
+  - phosphate ester hydrolysis
+  parents:
+  - xrm:0000013
+  related_match:
+  - xrm:9100402
+- id: xrm:0000411
+  preferred_label: nitrile hydrolysis
+  synonyms:
+  - cyanide hydrolysis
+  definition: Hydrolysis of a nitrile / cyanide group.
+  parents:
+  - xrm:0000013
+- id: xrm:0000412
+  preferred_label: azo cleavage
+  synonyms:
+  - azo splitting
+  - azo reduction/cleavage
+  parents:
+  - xrm:0000013
+  - xrm:0000014
+  related_match:
+  - xrm:9100403
+- id: xrm:0000500
+  preferred_label: hydrogenation
+  synonyms:
+  - alkene hydrogenation
+  - reductive saturation
+  parents:
+  - xrm:0000014
+  related_match:
+  - xrm:9100500
+  - xrm:7000002
+  - xrm:7200003
+  - xrm:7700003
+- id: xrm:0000501
+  preferred_label: alkene hydrogenation
+  parents:
+  - xrm:0000500
+- id: xrm:0000502
+  preferred_label: alkyne hydrogenation
+  parents:
+  - xrm:0000500
+- id: xrm:0000510
+  preferred_label: nitrogen reduction
+  parents:
+  - xrm:0000014
+  related_match:
+  - xrm:9100510
+- id: xrm:0000511
+  preferred_label: nitro reduction
+  definition: Reduction of a nitro group toward nitroso, hydroxylamine, and/or amine.
+  parents:
+  - xrm:0000510
+- id: xrm:0000512
+  preferred_label: nitro to amine reduction
+  parents:
+  - xrm:0000511
+- id: xrm:0000513
+  preferred_label: nitroaromatic reduction
+  parents:
+  - xrm:0000511
+  related_match:
+  - xrm:0003000
+- id: xrm:0000514
+  preferred_label: azo reduction
+  parents:
+  - xrm:0000510
+- id: xrm:0000515
+  preferred_label: N-oxide reduction
+  parents:
+  - xrm:0000510
+- id: xrm:0000516
+  preferred_label: oxime reduction
+  parents:
+  - xrm:0000510
+- id: xrm:0000520
+  preferred_label: oxygen reduction
+  synonyms:
+  - carbonyl reduction
+  - ketone/aldehyde reduction
+  parents:
+  - xrm:0000014
+  related_match:
+  - xrm:9100520
+- id: xrm:0000521
+  preferred_label: ketone reduction
+  parents:
+  - xrm:0000520
+- id: xrm:0000522
+  preferred_label: aldehyde reduction
+  parents:
+  - xrm:0000520
+- id: xrm:0000523
+  preferred_label: quinone reduction
+  parents:
+  - xrm:0000520
+  - xrm:0000014
+  related_match:
+  - xrm:0004002
+- id: xrm:0000524
+  preferred_label: carbonyl reduction
+  definition: Reduction of a carbonyl to an alcohol (Rainbow Table 1 reduction type).
+  parents:
+  - xrm:0000520
+  related_match:
+  - xrm:0000521
+  - xrm:0000522
+- id: xrm:0000530
+  preferred_label: sulfur reduction
+  parents:
+  - xrm:0000014
+  related_match:
+  - xrm:9100530
+- id: xrm:0000531
+  preferred_label: sulfoxide reduction
+  parents:
+  - xrm:0000530
+  related_match:
+  - xrm:0000533
+- id: xrm:0000532
+  preferred_label: disulfide reduction
+  parents:
+  - xrm:0000530
+- id: xrm:0000533
+  preferred_label: sulfo reduction
+  synonyms:
+  - sulfoxide reduction
+  - S-oxide reduction
+  definition: Reduction of a sulfo / sulfoxide center (Rainbow Table 1 reduction type).
+  parents:
+  - xrm:0000530
+  close_match:
+  - xrm:0000531
+- id: xrm:0000540
+  preferred_label: reductive dehalogenation
+  parents:
+  - xrm:0000014
+  related_match:
+  - xrm:9100540
+- id: xrm:0000541
+  preferred_label: reductive defluorination
+  parents:
+  - xrm:0000540
+- id: xrm:0000542
+  preferred_label: reductive dechlorination
+  parents:
+  - xrm:0000540
+- id: xrm:0000550
+  preferred_label: dehydration
+  definition: Loss of water (often accompanying reductive or elimination paths).
+  parents:
+  - xrm:0000014
+  - xrm:0000001
+  - xrm:1100000
+  related_match:
+  - xrm:9100501
+- id: xrm:0001000
+  preferred_label: glucuronidation
+  synonyms:
+  - glucuronosylation
+  - glucuronic acid conjugation
+  - R-HSA-156588
+  - UDP-glucuronosyl transfer
+  - glucuronide conjugation
+  - UDP-glucuronosyl conjugation
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+  related_match:
+  - xrm:9101000
+  - xrm:7000003
+  - xrm:7500003
+  - xrm:7700008
+  - xrm:1500116
+- id: xrm:0001001
+  preferred_label: O-glucuronidation
+  parents:
+  - xrm:0001000
+- id: xrm:0001002
+  preferred_label: phenolic glucuronidation
+  parents:
+  - xrm:0001001
+- id: xrm:0001003
+  preferred_label: alcoholic glucuronidation
+  synonyms:
+  - aliphatic O-glucuronidation
+  parents:
+  - xrm:0001001
+- id: xrm:0001004
+  preferred_label: acyl glucuronidation
+  synonyms:
+  - acyl glucuronide formation
+  definition: Glucuronidation of a carboxylic acid to an acyl glucuronide (often reactive).
+  parents:
+  - xrm:0001001
+  related_match:
+  - xrm:1500015
+- id: xrm:0001005
+  preferred_label: N-glucuronidation
+  parents:
+  - xrm:0001000
+- id: xrm:0001006
+  preferred_label: quaternary N-glucuronidation
+  synonyms:
+  - N+-glucuronidation
+  parents:
+  - xrm:0001005
+- id: xrm:0001007
+  preferred_label: S-glucuronidation
+  parents:
+  - xrm:0001000
+- id: xrm:0001008
+  preferred_label: C-glucuronidation
+  parents:
+  - xrm:0001000
+- id: xrm:0001009
+  preferred_label: carbamoyl glucuronidation
+  synonyms:
+  - N-carbamoyl glucuronidation
+  parents:
+  - xrm:0001000
+- id: xrm:0001010
+  preferred_label: sulfation
+  synonyms:
+  - sulfonation
+  - sulfate conjugation
+  - sulfo-conjugation
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+  related_match:
+  - xrm:9101010
+  - xrm:1500117
+- id: xrm:0001011
+  preferred_label: O-sulfation
+  parents:
+  - xrm:0001010
+- id: xrm:0001012
+  preferred_label: phenolic sulfation
+  parents:
+  - xrm:0001011
+- id: xrm:0001013
+  preferred_label: alcoholic sulfation
+  parents:
+  - xrm:0001011
+- id: xrm:0001014
+  preferred_label: N-sulfation
+  parents:
+  - xrm:0001010
+- id: xrm:0001020
+  preferred_label: acetylation
+  synonyms:
+  - N-acetylation
+  - acylation
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+  related_match:
+  - xrm:9101020
+- id: xrm:0001021
+  preferred_label: N-acetylation
+  parents:
+  - xrm:0001020
+- id: xrm:0001022
+  preferred_label: O-acetylation
+  parents:
+  - xrm:0001020
+- id: xrm:0001023
+  preferred_label: deacetylation
+  definition: Hydrolytic removal of an acetyl group (often esterase/amidase).
+  parents:
+  - xrm:0000001
+  - xrm:0000013
+- id: xrm:0001030
+  preferred_label: glutathionation
+  synonyms:
+  - glutathione conjugation
+  - GSH conjugation
+  - glutathionylation
+  - glutathione adduct formation
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+  related_match:
+  - xrm:9101030
+  - xrm:7500002
+  - xrm:7000003
+  - xrm:1500114
+- id: xrm:0001031
+  preferred_label: Michael glutathionation
+  synonyms:
+  - GSH Michael addition
+  definition: Glutathione addition at a Michael acceptor.
+  parents:
+  - xrm:0001030
+  related_match:
+  - xrm:8000004
+  - xrm:8000008
+  - xrm:7500002
+- id: xrm:0001032
+  preferred_label: epoxide glutathionation
+  synonyms:
+  - GSH epoxide conjugation
+  parents:
+  - xrm:0001030
+- id: xrm:0001033
+  preferred_label: halide displacement glutathionation
+  synonyms:
+  - GSH nucleophilic aromatic/aliphatic substitution
+  parents:
+  - xrm:0001030
+- id: xrm:0001034
+  preferred_label: isocyanate glutathionation
+  parents:
+  - xrm:0001030
+- id: xrm:0001035
+  preferred_label: aziridine glutathionation
+  parents:
+  - xrm:0001030
+- id: xrm:0001036
+  preferred_label: quinone glutathionation
+  parents:
+  - xrm:0001030
+  related_match:
+  - xrm:0000300
+  - xrm:8000008
+- id: xrm:0001037
+  preferred_label: mercapturic acid formation
+  definition: Downstream processing of GSH conjugates to N-acetylcysteine (mercapturate) adducts.
+  parents:
+  - xrm:0001030
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - mercapturic_acid_formation
+- id: xrm:0001040
+  preferred_label: methylation
+  synonyms:
+  - methyl conjugation
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+- id: xrm:0001041
+  preferred_label: O-methylation
+  synonyms:
+  - catechol O-methylation
+  parents:
+  - xrm:0001040
+- id: xrm:0001042
+  preferred_label: N-methylation
+  parents:
+  - xrm:0001040
+- id: xrm:0001043
+  preferred_label: S-methylation
+  synonyms:
+  - thiol methylation
+  parents:
+  - xrm:0001040
+- id: xrm:0001050
+  preferred_label: amino acid conjugation
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+  synonyms:
+  - amino_acid_conjugation
+- id: xrm:0001051
+  preferred_label: glycine conjugation
+  synonyms:
+  - hippurate formation
+  - benzoyl glycine conjugation
+  - glycine_conjugation
+  parents:
+  - xrm:0001050
+  - xrm:1300000
+  - xrm:0000002
+- id: xrm:0001052
+  preferred_label: glutamine conjugation
+  parents:
+  - xrm:0001050
+- id: xrm:0001053
+  preferred_label: taurine conjugation
+  parents:
+  - xrm:0001050
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - taurine_conjugation
+- id: xrm:0001054
+  preferred_label: serine conjugation
+  parents:
+  - xrm:0001050
+- id: xrm:0001060
+  preferred_label: glycosylation
+  synonyms:
+  - glycosidation
+  definition: Conjugation with sugars other than glucuronic acid.
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+- id: xrm:0001061
+  preferred_label: CoA conjugation
+  synonyms:
+  - acyl-CoA formation
+  - coa_conjugation
+  definition: Activation of carboxylic acids as CoA thioesters (often preceding amino acid conjugation).
+  parents:
+  - xrm:0000002
+  - xrm:1300000
+- id: xrm:0002000
+  preferred_label: tautomerization
+  definition: Tautomer interconversion; often peripheral to labeled metabolism.
+  parents:
+  - xrm:1100000
+  related_match:
+  - xrm:9000017
+  - xrm:9102000
+  - xrm:7000003
+  - xrm:7700010
+  - xrm:7200005
+- id: xrm:0002001
+  preferred_label: keto–enol tautomerization
+  parents:
+  - xrm:0002000
+- id: xrm:0002002
+  preferred_label: imine–enamine tautomerization
+  parents:
+  - xrm:0002000
+- id: xrm:0002003
+  preferred_label: isomerization
+  definition: Isomeric rearrangement without net redox (Rainbow excluded phase I remainder; Metabolic
+    Forest treats related rearrangements separately from the five Phase I classes).
+  parents:
+  - xrm:1100000
+- id: xrm:0002004
+  preferred_label: rearrangement
+  definition: Skeletal or substituent rearrangement in a metabolic pathway (Rainbow excluded remainder).
+  parents:
+  - xrm:1100000
+- id: xrm:0002005
+  preferred_label: deacylation
+  definition: Removal of an acyl group (Rainbow excluded phase I remainder; related to hydrolysis/deacetylation).
+  parents:
+  - xrm:0000001
+  related_match:
+  - xrm:0001023
+  - xrm:0000013
+- id: xrm:0002006
+  preferred_label: denitrogenation
+  definition: Metabolic loss of nitrogen from the scaffold (Rainbow excluded phase I remainder).
+  parents:
+  - xrm:0000001
+- id: xrm:0002007
+  preferred_label: decarbonylation
+  definition: Metabolic loss of carbon monoxide / carbonyl fragment (Rainbow excluded phase I remainder).
+  parents:
+  - xrm:0000001
+- id: xrm:0003000
+  preferred_label: bioactivation
+  synonyms:
+  - metabolic activation
+  definition: 'Role facet: formation of a more reactive/toxic metabolite.'
+  parents:
+  - xrm:1400000
+  - xrm:1400012
+  related_match:
+  - xrm:0000112
+  - xrm:0000300
+  - xrm:0000513
+  - xrm:0000133
+  - xrm:0001004
+  - xrm:9000019
+  - xrm:7500001
+  - xrm:1400012
+- id: xrm:0003001
+  preferred_label: detoxication
+  synonyms:
+  - detoxification
+  - bioinactivation
+  definition: 'Role facet: conversion toward less reactive, more excretable products.'
+  parents:
+  - xrm:1400000
+  - xrm:1400013
+  related_match:
+  - xrm:7500002
+  - xrm:7500004
+- id: xrm:0003002
+  preferred_label: reactive metabolite formation
+  parents:
+  - xrm:0003000
+  related_match:
+  - xrm:0000112
+  - xrm:0000303
+  - xrm:0000304
+  - xrm:0001004
+  - xrm:7500001
+- id: xrm:0004000
+  preferred_label: process facet
+  definition: Cross-cutting process-mechanism facets (NIH shift, ipso, carbinolamine cleavage, acyl migration,
+    …). Orthogonal to reaction-type, Forest-map, and impact spines.
+  parents:
+  - xrm:1100000
+- id: xrm:0004001
+  preferred_label: dearomatization
+  definition: Loss of aromatic character (arene oxide, quinone, thiophene S-oxide, cis-dihydrodiol, etc.).
+  parents:
+  - xrm:0004000
+  - xrm:8000001
+  - xrm:1100000
+  related_match:
+  - xrm:0000112
+  - xrm:0000300
+  - xrm:0000133
+  - xrm:0000500
+  - xrm:8000001
+  - xrm:7600001
+- id: xrm:0004002
+  preferred_label: rearomatization
+  definition: Restoration of aromaticity after a dearomatized intermediate (e.g. NIH-shift phenol formation).
+  parents:
+  - xrm:0004000
+  - xrm:8000002
+  related_match:
+  - xrm:0000101
+  - xrm:0004003
+  - xrm:8000002
+- id: xrm:0004003
+  preferred_label: NIH shift
+  definition: 1,2-Migration of H/halogen/substituent during aromatic hydroxylation via arene oxide.
+  parents:
+  - xrm:0004000
+  - xrm:8000007
+  related_match:
+  - xrm:0000101
+  - xrm:0000112
+  - xrm:0004002
+  - xrm:8000003
+  - xrm:8000007
+- id: xrm:0004004
+  preferred_label: ipso substitution
+  definition: Substitution at a substituted aromatic carbon (ipso), often displacing alkyl/halogen/alkoxy.
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0000101
+  - xrm:0000210
+  - xrm:0000202
+  - xrm:8000003
+- id: xrm:0004005
+  preferred_label: arene oxide rearrangement
+  parents:
+  - xrm:0004000
+  - xrm:8000007
+  related_match:
+  - xrm:0000112
+  - xrm:0000101
+  - xrm:0004003
+  - xrm:8000007
+- id: xrm:0004006
+  preferred_label: carbinolamine cleavage
+  definition: Spontaneous collapse of an α-hydroxy amine to amine + carbonyl; mechanism shared by N-dealkylation
+    and oxidative deamination.
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0000201
+  - xrm:0000208
+- id: xrm:0004007
+  preferred_label: hemiacetal cleavage
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0000202
+- id: xrm:0004008
+  preferred_label: ring opening
+  parents:
+  - xrm:0004000
+  - xrm:1100000
+  related_match:
+  - xrm:0000400
+  - xrm:0000412
+- id: xrm:0004009
+  preferred_label: ring expansion
+  parents:
+  - xrm:0004000
+- id: xrm:0004010
+  preferred_label: ring contraction
+  parents:
+  - xrm:0004000
+- id: xrm:0004011
+  preferred_label: cis-dihydroxylation
+  synonyms:
+  - arene cis-dihydrodiol formation
+  definition: Addition of two hydroxyls across an aromatic bond (often dioxygenase); a dearomatizing path.
+  parents:
+  - xrm:0004000
+  - xrm:0000021
+  related_match:
+  - xrm:0004001
+- id: xrm:0004012
+  preferred_label: hydration
+  parents:
+  - xrm:0004000
+  - xrm:0000013
+  - xrm:1100000
+  related_match:
+  - xrm:0000400
+- id: xrm:0004013
+  preferred_label: hydration of carbonyl
+  parents:
+  - xrm:0004012
+- id: xrm:0004014
+  preferred_label: conjugate addition
+  synonyms:
+  - Michael addition
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0001031
+  - xrm:0001036
+  - xrm:8000004
+  - xrm:8000008
+- id: xrm:0004015
+  preferred_label: nucleophilic aromatic substitution
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0001033
+- id: xrm:0004016
+  preferred_label: radical recombination metabolite
+  parents:
+  - xrm:0004000
+- id: xrm:0004017
+  preferred_label: acyl migration
+  definition: Intramolecular migration of an acyl group (notable for acyl glucuronides).
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0001004
+- id: xrm:0004018
+  preferred_label: transacylation
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0001004
+  - xrm:0001061
+- id: xrm:0004019
+  preferred_label: radical formation
+  definition: Formation of a radical metabolite intermediate (Rainbow excluded phase I remainder).
+  parents:
+  - xrm:0004000
+  related_match:
+  - xrm:0004016
+- id: xrm:1000000
+  preferred_label: metabolism phase
+  synonyms: *id001
+  definition: Phase framing for xenobiotic biotransformation (I / II / III).
+  parents:
+  - xrm:0000000
+- id: xrm:1000100
+  preferred_label: sequential metabolism
+  definition: Multi-step metabolic sequence rather than a single transformation.
+  parents:
+  - xrm:1000000
+  synonyms:
+  - sequential biotransformation
+- id: xrm:1000101
+  preferred_label: intermediate metabolite formation
+  definition: Formation of a non-terminal metabolic intermediate.
+  parents:
+  - xrm:1000000
+- id: xrm:1000102
+  preferred_label: first-pass metabolism
+  definition: Pathway role associated with first-pass metabolic clearance.
+  parents:
+  - xrm:1000000
+- id: xrm:1100000
+  preferred_label: chemical transformation
+  synonyms: *id002
+  definition: Enzyme-independent chemical edit class (oxidation, reduction, …).
+  parents:
+  - xrm:0000000
+- id: xrm:1100013
+  preferred_label: deamination
+  definition: Removal of an amino group.
+  parents:
+  - xrm:1100000
+- id: xrm:1100014
+  preferred_label: dehalogenation
+  definition: Removal of a halogen atom.
+  parents:
+  - xrm:1100000
+- id: xrm:1100016
+  preferred_label: ring oxidation
+  definition: Oxidation on a ring framework.
+  parents:
+  - xrm:1100000
+- id: xrm:1200000
+  preferred_label: phase I reaction family
+  synonyms: *id003
+  definition: Rainbow-anchored Phase I reaction classes and detailed types.
+  parents:
+  - xrm:0000000
+- id: xrm:1200100
+  preferred_label: aromatic epoxidation
+  definition: Epoxidation on an aromatic system.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - arene epoxidation
+  - aromatic_epoxidation
+- id: xrm:1200101
+  preferred_label: aliphatic epoxidation
+  definition: Epoxidation of an aliphatic alkene.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - aliphatic_epoxidation
+- id: xrm:1200102
+  preferred_label: N-oxidation
+  definition: Oxidation at nitrogen.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - nitrogen oxidation class
+  - n_oxidation
+- id: xrm:1200103
+  preferred_label: S-oxidation
+  definition: Oxidation at sulfur.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - sulfur oxidation class
+  - s_oxidation
+- id: xrm:1200104
+  preferred_label: oxidative deamination class
+  definition: 'Rainbow UO class member: oxidative deamination.'
+  parents:
+  - xrm:1200000
+  synonyms:
+  - oxidative_deamination_class
+- id: xrm:1200105
+  preferred_label: alcohol dehydrogenation
+  definition: Dehydrogenation of an alcohol to carbonyl.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - alcohol_dehydrogenation
+- id: xrm:1200106
+  preferred_label: amine dehydrogenation
+  definition: Dehydrogenation at an amine (iminium-forming path).
+  parents:
+  - xrm:1200000
+  synonyms:
+  - amine_dehydrogenation
+- id: xrm:1200107
+  preferred_label: ester hydrolysis class
+  definition: Hydrolytic cleavage of an ester.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - ester_hydrolysis_class
+- id: xrm:1200108
+  preferred_label: amide hydrolysis class
+  definition: Hydrolytic cleavage of an amide.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - amide_hydrolysis_class
+- id: xrm:1200109
+  preferred_label: carbonyl reduction class
+  definition: Reduction of a carbonyl to alcohol.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - carbonyl_reduction_class
+- id: xrm:1200110
+  preferred_label: nitro reduction class
+  definition: Reduction of a nitro group.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - nitro_reduction_class
+- id: xrm:1200111
+  preferred_label: reductive dehalogenation class
+  definition: Reductive removal of halogen.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - reductive_dehalogenation_class
+- id: xrm:1200112
+  preferred_label: hydrogenation class
+  definition: Addition of hydrogen across unsaturation.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - hydrogenation_class
+- id: xrm:1200113
+  preferred_label: aldehyde formation class
+  definition: Phase I path that forms an aldehyde.
+  parents:
+  - xrm:1200000
+  synonyms:
+  - aldehyde-forming class
+  - aldehyde_formation_class
+- id: xrm:1300000
+  preferred_label: phase II conjugation family
+  synonyms: *id004
+  definition: Conjugation families typical of Phase II xenobiotic metabolism.
+  parents:
+  - xrm:0000000
+- id: xrm:1300010
+  preferred_label: cysteine conjugation
+  definition: 'Phase II conjugation family: cysteine conjugation.'
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - cysteine_conjugation
+- id: xrm:1300011
+  preferred_label: N-acetylcysteine conjugation
+  definition: 'Phase II conjugation family: N-acetylcysteine conjugation.'
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - n_acetylcysteine_conjugation
+- id: xrm:1300012
+  preferred_label: phosphorylation
+  definition: 'Phase II conjugation family: phosphorylation.'
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+- id: xrm:1300100
+  preferred_label: O-glucuronidation class
+  definition: Glucuronidation at oxygen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - phenolic or alcoholic O-glucuronidation
+  - o_glucuronidation_class
+- id: xrm:1300101
+  preferred_label: N-glucuronidation class
+  definition: Glucuronidation at nitrogen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - n_glucuronidation_class
+- id: xrm:1300102
+  preferred_label: acyl glucuronidation class
+  definition: Glucuronidation of a carboxylic acid.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - acyl_glucuronidation_class
+- id: xrm:1300103
+  preferred_label: O-sulfation class
+  definition: Sulfation at oxygen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - o_sulfation_class
+- id: xrm:1300104
+  preferred_label: N-sulfation class
+  definition: Sulfation at nitrogen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - n_sulfation_class
+- id: xrm:1300105
+  preferred_label: GSH conjugation class
+  definition: Glutathione conjugation family.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - glutathione conjugation class
+  - gsh_conjugation_class
+- id: xrm:1300106
+  preferred_label: O-methylation class
+  definition: Methylation at oxygen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - o_methylation_class
+- id: xrm:1300107
+  preferred_label: N-methylation class
+  definition: Methylation at nitrogen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - n_methylation_class
+- id: xrm:1300108
+  preferred_label: S-methylation class
+  definition: Methylation at sulfur.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - s_methylation_class
+- id: xrm:1300109
+  preferred_label: N-acetylation class
+  definition: Acetylation at nitrogen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - n_acetylation_class
+- id: xrm:1300110
+  preferred_label: O-acetylation class
+  definition: Acetylation at oxygen.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - o_acetylation_class
+- id: xrm:1300111
+  preferred_label: glycine conjugation class
+  definition: Amino-acid conjugation with glycine.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - glycine_conjugation_class
+- id: xrm:1300112
+  preferred_label: taurine conjugation class
+  definition: Amino-acid conjugation with taurine.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - taurine_conjugation_class
+- id: xrm:1300113
+  preferred_label: glutamine conjugation class
+  definition: Amino-acid conjugation with glutamine.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - glutamine_conjugation_class
+- id: xrm:1300114
+  preferred_label: phosphorylation conjugation
+  definition: Phase II-like phosphorylation of a xenobiotic.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - xenobiotic phosphorylation
+  - phosphorylation_conjugation
+- id: xrm:1300115
+  preferred_label: carbamoyl glucuronidation class
+  definition: Carbamoyl glucuronide formation.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - carbamoyl_glucuronidation_class
+- id: xrm:1300116
+  preferred_label: quaternary N-glucuronidation class
+  definition: Quaternary ammonium N-glucuronide formation.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - quaternary_n_glucuronidation_class
+- id: xrm:1300117
+  preferred_label: epoxide GSH conjugation
+  definition: GSH attack on an epoxide.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - epoxide_gsh_conjugation
+- id: xrm:1300118
+  preferred_label: Michael GSH conjugation
+  definition: GSH attack on a Michael acceptor.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - michael_gsh_conjugation
+- id: xrm:1300119
+  preferred_label: halide-displacement GSH conjugation
+  definition: GSH displacement of a halide.
+  parents:
+  - xrm:1300000
+  - xrm:0000002
+  synonyms:
+  - halide_displacement_gsh_conjugation
+- id: xrm:1400000
+  preferred_label: medchem liability
+  synonyms: *id005
+  definition: Medicinal-chemistry liability and design handles for a reaction.
+  parents:
+  - xrm:0000000
+- id: xrm:1400010
+  preferred_label: metabolic soft spot
+  definition: Site or motif that is readily metabolized.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - soft spot
+  - metabolic soft-spot
+  - metabolic_soft_spot
+- id: xrm:1400011
+  preferred_label: clearance liability
+  definition: Transformation that drives metabolic clearance.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - clearance_liability
+- id: xrm:1400012
+  preferred_label: bioactivation
+  definition: Formation of a more reactive or toxic species.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - metabolic bioactivation
+  - bioactivation liability
+- id: xrm:1400013
+  preferred_label: detoxification
+  definition: Transformation that reduces reactive/toxic liability.
+  parents:
+  - xrm:1400000
+- id: xrm:1400014
+  preferred_label: reactive metabolite
+  definition: Product with electrophilic or trapping liability.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - reactive_metabolite
+- id: xrm:1400015
+  preferred_label: stable metabolite
+  definition: Product expected to be chemically stable.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - stable_metabolite
+- id: xrm:1400016
+  preferred_label: unstable intermediate
+  definition: Transient intermediate along a metabolic path.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - unstable_intermediate
+- id: xrm:1400017
+  preferred_label: masked liability
+  definition: Liability revealed only after a preparatory step.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - masked_liability
+- id: xrm:1400018
+  preferred_label: metabolic blocking opportunity
+  definition: Site where blocking could reduce metabolism.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - metabolic_blocking_opportunity
+- id: xrm:1400019
+  preferred_label: bioactivation risk
+  definition: Elevated risk of bioactivation at this site/path.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - bioactivation_risk
+- id: xrm:1400020
+  preferred_label: clearance pathway
+  definition: Dominant clearance-oriented conjugation or oxidation path.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - clearance_pathway
+- id: xrm:1400021
+  preferred_label: polarity increasing
+  definition: Transformation that increases polarity / solubility.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - polarity_increasing
+- id: xrm:1400022
+  preferred_label: aldehyde forming
+  definition: Path that produces an aldehyde product or intermediate.
+  parents:
+  - xrm:1400000
+  related_match:
+  - xrm:0000201
+  synonyms:
+  - aldehyde_forming
+- id: xrm:1400100
+  preferred_label: aromatic soft spot
+  definition: Aromatic site that is a metabolic soft spot.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - aromatic_soft_spot
+- id: xrm:1400101
+  preferred_label: benzylic soft spot
+  definition: Benzylic metabolic soft spot.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - benzylic_soft_spot
+- id: xrm:1400102
+  preferred_label: amine soft spot
+  definition: Amine metabolic soft spot.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - amine_soft_spot
+- id: xrm:1400103
+  preferred_label: ether soft spot
+  definition: Ether metabolic soft spot (O-dealkylation risk).
+  parents:
+  - xrm:1400000
+  synonyms:
+  - ether_soft_spot
+- id: xrm:1400104
+  preferred_label: thioether soft spot
+  definition: Thioether metabolic soft spot.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - thioether_soft_spot
+- id: xrm:1400105
+  preferred_label: ester soft spot
+  definition: Ester metabolic soft spot (hydrolysis risk).
+  parents:
+  - xrm:1400000
+  synonyms:
+  - ester_soft_spot
+- id: xrm:1400106
+  preferred_label: amide soft spot
+  definition: Amide metabolic soft spot.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - amide_soft_spot
+- id: xrm:1400107
+  preferred_label: clearance hotspot
+  definition: Site dominating metabolic clearance.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - clearance_hotspot
+- id: xrm:1400108
+  preferred_label: bioactivation hotspot
+  definition: Site associated with bioactivation risk.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - bioactivation_hotspot
+- id: xrm:1400109
+  preferred_label: detoxification pathway
+  definition: Pathway framed as detoxifying.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - detoxication pathway
+  - detoxification_pathway
+- id: xrm:1400110
+  preferred_label: GSH trapping opportunity
+  definition: Site/path amenable to GSH trapping assays.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - gsh_trapping_opportunity
+- id: xrm:1400111
+  preferred_label: metabolic blocking vector
+  definition: Suggested vector for metabolic blocking.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - metabolic_blocking_vector
+- id: xrm:1400112
+  preferred_label: fluorine blocking
+  definition: Fluorine substitution as a blocking strategy.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - fluorine_blocking
+- id: xrm:1400113
+  preferred_label: methyl blocking
+  definition: Methyl / alkyl blocking strategy.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - methyl_blocking
+- id: xrm:1400114
+  preferred_label: scaffold hop opportunity
+  definition: Liability suggesting scaffold change.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - scaffold_hop_opportunity
+- id: xrm:1400115
+  preferred_label: polarity decreasing
+  definition: Transformation that decreases polarity.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - polarity_decreasing
+- id: xrm:1400116
+  preferred_label: lipophilicity decreasing
+  definition: Transformation that decreases lipophilicity.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - lipophilicity_decreasing
+- id: xrm:1400117
+  preferred_label: reactive intermediate risk
+  definition: Risk of forming a reactive intermediate.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - reactive_intermediate_risk
+- id: xrm:1400118
+  preferred_label: idiosyncratic toxicity risk
+  definition: Liability framed toward idiosyncratic toxicity.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - idiosyncratic_toxicity_risk
+- id: xrm:1400119
+  preferred_label: time-dependent inhibition risk
+  definition: Liability framed toward TDI.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - TDI risk
+  - time_dependent_inhibition_risk
+- id: xrm:1400120
+  preferred_label: quinone risk
+  definition: Risk of quinone / quinone-imine formation.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - quinone_risk
+- id: xrm:1400121
+  preferred_label: acyl glucuronide risk
+  definition: Risk of reactive acyl glucuronide.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - acyl_glucuronide_risk
+- id: xrm:1400122
+  preferred_label: aldehyde risk
+  definition: Risk of aldehyde formation.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - aldehyde_risk
+- id: xrm:1400123
+  preferred_label: iminium risk
+  definition: Risk of iminium formation.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - iminium_risk
+- id: xrm:1400124
+  preferred_label: epoxide risk
+  definition: Risk of epoxide formation.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - epoxide_risk
+- id: xrm:1400125
+  preferred_label: stable circulating metabolite
+  definition: Stable metabolite likely to circulate.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - stable_circulating_metabolite
+- id: xrm:1400126
+  preferred_label: active metabolite opportunity
+  definition: Path that may yield an active metabolite.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - active_metabolite_opportunity
+- id: xrm:1400127
+  preferred_label: prodrug activation
+  definition: Metabolic activation of a prodrug.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - prodrug_activation
+- id: xrm:1400128
+  preferred_label: metabolic switching risk
+  definition: Blocking one site may switch metabolism elsewhere.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - metabolic_switching_risk
+- id: xrm:1400129
+  preferred_label: species-difference risk
+  definition: Liability sensitive to species differences.
+  parents:
+  - xrm:1400000
+  synonyms:
+  - species_difference_risk
+- id: xrm:1500000
+  preferred_label: reactive metabolite family
+  synonyms: *id006
+  definition: Reactive or trapping-prone metabolite product families.
+  parents:
+  - xrm:0000000
+- id: xrm:1500010
+  preferred_label: quinone
+  definition: Quinone reactive metabolite.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0000300
+  synonyms:
+  - benzoquinone metabolite
+  - quinoid
+- id: xrm:1500011
+  preferred_label: quinone imine
+  definition: Quinone-imine reactive metabolite.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0000303
+  synonyms:
+  - quinone_imine
+- id: xrm:1500012
+  preferred_label: epoxide
+  definition: Epoxide reactive metabolite.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0000110
+  synonyms:
+  - oxirane metabolite
+- id: xrm:1500013
+  preferred_label: aldehyde
+  definition: Aldehyde reactive metabolite.
+  parents:
+  - xrm:1500000
+- id: xrm:1500014
+  preferred_label: iminium
+  definition: Iminium reactive metabolite.
+  parents:
+  - xrm:1500000
+- id: xrm:1500015
+  preferred_label: acyl glucuronide
+  definition: Acyl glucuronide reactive conjugate.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0001004
+  synonyms:
+  - acyl_glucuronide
+- id: xrm:1500016
+  preferred_label: Michael acceptor
+  definition: Michael-acceptor electrophile.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - michael_acceptor
+- id: xrm:1500017
+  preferred_label: nitroso
+  definition: Nitroso reactive metabolite.
+  parents:
+  - xrm:1500000
+- id: xrm:1500018
+  preferred_label: hydroxylamine
+  definition: Hydroxylamine reactive metabolite.
+  parents:
+  - xrm:1500000
+- id: xrm:1500019
+  preferred_label: GSH-trappable metabolite
+  definition: Metabolite that forms a glutathione adduct.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - gsh_trappable_metabolite
+- id: xrm:1500100
+  preferred_label: quinone-like reactive metabolite
+  definition: Broad class of quinoid reactive metabolites.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - quinoid metabolite
+  - quinone_like_reactive_metabolite
+- id: xrm:1500101
+  preferred_label: ortho-quinone
+  definition: Ortho-quinone reactive metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - ortho_quinone
+- id: xrm:1500102
+  preferred_label: para-quinone
+  definition: Para-quinone reactive metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - para_quinone
+- id: xrm:1500103
+  preferred_label: quinone methide
+  definition: Quinone-methide reactive metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - quinone_methide
+- id: xrm:1500104
+  preferred_label: imine methide
+  definition: Imine-methide reactive metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - imine_methide
+- id: xrm:1500105
+  preferred_label: arene oxide
+  definition: Arene oxide reactive intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - arene_oxide
+- id: xrm:1500106
+  preferred_label: thiophene epoxide
+  definition: Thiophene S-oxide/epoxide-like reactive intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - thiophene_epoxide
+- id: xrm:1500107
+  preferred_label: acyl glucuronide reactive
+  definition: Reactive acyl glucuronide.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - acyl_glucuronide_reactive
+- id: xrm:1500108
+  preferred_label: isocyanate
+  definition: Isocyanate reactive metabolite.
+  parents:
+  - xrm:1500000
+- id: xrm:1500109
+  preferred_label: ketene
+  definition: Ketene reactive metabolite.
+  parents:
+  - xrm:1500000
+- id: xrm:1500110
+  preferred_label: nitroso metabolite
+  definition: Nitroso metabolite class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - nitroso_metabolite
+- id: xrm:1500111
+  preferred_label: hydroxylamine metabolite
+  definition: Hydroxylamine metabolite class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - hydroxylamine_metabolite
+- id: xrm:1500112
+  preferred_label: nitrene
+  definition: Nitrene reactive species.
+  parents:
+  - xrm:1500000
+- id: xrm:1500113
+  preferred_label: free radical metabolite
+  definition: Radical metabolite species.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - free_radical_metabolite
+- id: xrm:1500114
+  preferred_label: GSH adduct
+  definition: Glutathione adduct product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - glutathione adduct
+  - gsh_adduct
+  related_match:
+  - xrm:0001030
+- id: xrm:1500115
+  preferred_label: mercapturic acid
+  definition: Mercapturic acid product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - mercapturic_acid
+- id: xrm:1500116
+  preferred_label: glucuronide conjugate
+  definition: Glucuronide conjugate product class.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0001000
+  synonyms:
+  - glucuronide_conjugate
+- id: xrm:1500117
+  preferred_label: sulfate conjugate
+  definition: Sulfate conjugate product class.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0001010
+  synonyms:
+  - sulfate_conjugate
+- id: xrm:1500118
+  preferred_label: phenol metabolite
+  definition: Phenolic metabolite product class.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0000101
+  synonyms:
+  - phenol_metabolite
+- id: xrm:1500119
+  preferred_label: catechol metabolite
+  definition: Catechol metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - catechol_metabolite
+- id: xrm:1500120
+  preferred_label: alcohol metabolite
+  definition: Alcohol metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - alcohol_metabolite
+- id: xrm:1500121
+  preferred_label: carboxylic acid metabolite
+  definition: Carboxylic acid metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - carboxylic_acid_metabolite
+- id: xrm:1500122
+  preferred_label: N-oxide metabolite
+  definition: N-oxide metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - n_oxide_metabolite
+- id: xrm:1500123
+  preferred_label: sulfoxide metabolite
+  definition: Sulfoxide metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfoxide_metabolite
+- id: xrm:1500124
+  preferred_label: sulfone metabolite
+  definition: Sulfone metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfone_metabolite
+- id: xrm:1500125
+  preferred_label: imine metabolite
+  definition: Imine metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - imine_metabolite
+- id: xrm:1500126
+  preferred_label: carbinolamine intermediate
+  definition: Carbinolamine intermediate class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - carbinolamine_intermediate
+- id: xrm:1500127
+  preferred_label: hemiacetal intermediate
+  definition: Hemiacetal intermediate class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - hemiacetal_intermediate
+- id: xrm:1500128
+  preferred_label: epoxide metabolite
+  definition: Epoxide metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - epoxide product
+  - epoxide_metabolite
+- id: xrm:1500129
+  preferred_label: aldehyde metabolite
+  definition: Aldehyde metabolite product class.
+  parents:
+  - xrm:1500000
+  related_match:
+  - xrm:0000201
+  synonyms:
+  - aldehyde_metabolite
+- id: xrm:1500130
+  preferred_label: iminium metabolite
+  definition: Iminium metabolite product class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - iminium_metabolite
+- id: xrm:1500131
+  preferred_label: Michael acceptor metabolite
+  definition: Michael-acceptor metabolite class.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - michael_acceptor_metabolite
+- id: xrm:1500132
+  preferred_label: aziridine metabolite
+  definition: Aziridine reactive metabolite.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - aziridine_metabolite
+- id: xrm:1500133
+  preferred_label: sulfenic acid metabolite
+  definition: Sulfenic acid intermediate/product.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - sulfenic_acid_metabolite
+- id: xrm:1500134
+  preferred_label: nitro anion radical
+  definition: Nitro anion radical intermediate.
+  parents:
+  - xrm:1500000
+  synonyms:
+  - nitro_anion_radical
+- id: xrm:1600000
+  preferred_label: site type
+  synonyms: *id007
+  definition: Where on the molecule the transformation is localized.
+  parents:
+  - xrm:0000000
+- id: xrm:1600010
+  preferred_label: atom site
+  definition: Transformation localized to an atom.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - atom_site
+- id: xrm:1600011
+  preferred_label: bond site
+  definition: Transformation localized to a bond.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - bond_site
+- id: xrm:1600012
+  preferred_label: ring site
+  definition: Transformation localized to a ring.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ring_site
+- id: xrm:1600013
+  preferred_label: aromatic site
+  definition: Site on an aromatic system.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - aromatic_site
+- id: xrm:1600014
+  preferred_label: benzylic site
+  definition: Benzylic carbon site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - benzylic_site
+- id: xrm:1600015
+  preferred_label: allylic site
+  definition: Allylic carbon site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - allylic_site
+- id: xrm:1600016
+  preferred_label: heteroatom site
+  definition: Site at N/O/S/halogen heteroatom.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - heteroatom_site
+- id: xrm:1600017
+  preferred_label: alpha to heteroatom
+  definition: Carbon alpha to a heteroatom.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alpha_to_heteroatom
+- id: xrm:1600018
+  preferred_label: terminal alkyl
+  definition: Terminal alkyl carbon site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - terminal_alkyl
+- id: xrm:1600019
+  preferred_label: stereocenter
+  definition: Stereogenic site.
+  parents:
+  - xrm:1600000
+- id: xrm:1600020
+  preferred_label: ambiguous site
+  definition: Site localization is ambiguous.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ambiguous_site
+- id: xrm:1600021
+  preferred_label: tertiary amine site
+  definition: Tertiary amine nitrogen soft spot.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - tertiary_amine_site
+- id: xrm:1600022
+  preferred_label: phenolic site
+  definition: Phenolic oxygen site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - phenolic_site
+- id: xrm:1600100
+  preferred_label: benzylic carbon
+  definition: Benzylic carbon environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - benzylic site environment
+  - benzylic_carbon
+- id: xrm:1600101
+  preferred_label: allylic carbon
+  definition: Allylic carbon environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - allylic_carbon
+- id: xrm:1600102
+  preferred_label: phenol
+  definition: Phenolic site environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - phenolic oxygen
+- id: xrm:1600103
+  preferred_label: aniline
+  definition: Aniline / aromatic amine site.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - aromatic amine site
+- id: xrm:1600104
+  preferred_label: tertiary amine
+  definition: Tertiary amine nitrogen environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - tertiary_amine
+- id: xrm:1600105
+  preferred_label: secondary amine
+  definition: Secondary amine nitrogen environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - secondary_amine
+- id: xrm:1600106
+  preferred_label: primary amine
+  definition: Primary amine nitrogen environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - primary_amine
+- id: xrm:1600107
+  preferred_label: electron-rich arene
+  definition: Electron-rich aromatic ring environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - electron_rich_arene
+- id: xrm:1600108
+  preferred_label: electron-poor arene
+  definition: Electron-poor aromatic ring environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - electron_poor_arene
+- id: xrm:1600109
+  preferred_label: heteroarene
+  definition: Heteroaromatic ring environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - heteroaryl site
+- id: xrm:1600110
+  preferred_label: furan
+  definition: Furan ring site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600111
+  preferred_label: thiophene
+  definition: Thiophene ring site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600112
+  preferred_label: imidazole
+  definition: Imidazole ring site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600113
+  preferred_label: indole
+  definition: Indole ring site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600114
+  preferred_label: pyridine
+  definition: Pyridine ring site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600115
+  preferred_label: pyrimidine
+  definition: Pyrimidine ring site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600116
+  preferred_label: alkyl ether
+  definition: Alkyl ether oxygen environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alkyl_ether
+- id: xrm:1600117
+  preferred_label: aryl ether
+  definition: Aryl ether oxygen environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - aryl_ether
+- id: xrm:1600118
+  preferred_label: thioether
+  definition: Thioether sulfur environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600119
+  preferred_label: thiol
+  definition: Thiol sulfur environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600120
+  preferred_label: carboxylic acid
+  definition: Carboxylic acid site environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - carboxylic_acid
+- id: xrm:1600121
+  preferred_label: ester
+  definition: Ester site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600122
+  preferred_label: amide
+  definition: Amide site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600123
+  preferred_label: carbamate
+  definition: Carbamate site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600124
+  preferred_label: urea
+  definition: Urea site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600125
+  preferred_label: nitrile
+  definition: Nitrile site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600126
+  preferred_label: nitroarene
+  definition: Nitroaromatic site environment.
+  parents:
+  - xrm:1600000
+- id: xrm:1600127
+  preferred_label: alkyl halide
+  definition: Alkyl halide site environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alkyl_halide
+- id: xrm:1600128
+  preferred_label: aryl halide
+  definition: Aryl halide site environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - aryl_halide
+- id: xrm:1600129
+  preferred_label: terminal methyl
+  definition: Terminal methyl carbon environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - terminal_methyl
+- id: xrm:1600130
+  preferred_label: omega carbon
+  definition: ω-carbon of an alkyl chain.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ω-carbon
+  - omega_carbon
+- id: xrm:1600131
+  preferred_label: omega-1 carbon
+  definition: ω-1 carbon of an alkyl chain.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ω-1 carbon
+  - omega_1_carbon
+- id: xrm:1600132
+  preferred_label: para aromatic carbon
+  definition: Para position on an aromatic ring.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - para_aromatic_carbon
+- id: xrm:1600133
+  preferred_label: ortho aromatic carbon
+  definition: Ortho position on an aromatic ring.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - ortho_aromatic_carbon
+- id: xrm:1600134
+  preferred_label: meta aromatic carbon
+  definition: Meta position on an aromatic ring.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - meta_aromatic_carbon
+- id: xrm:1600135
+  preferred_label: attachment atom O
+  definition: Conjugation attachment at oxygen.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - O-attachment
+  - attachment_atom_o
+- id: xrm:1600136
+  preferred_label: attachment atom N
+  definition: Conjugation attachment at nitrogen.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - N-attachment
+  - attachment_atom_n
+- id: xrm:1600137
+  preferred_label: attachment atom S
+  definition: Conjugation attachment at sulfur.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - S-attachment
+  - attachment_atom_s
+- id: xrm:1600138
+  preferred_label: attachment atom C
+  definition: Conjugation attachment at carbon.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - C-attachment
+  - attachment_atom_c
+- id: xrm:1600139
+  preferred_label: acyl attachment
+  definition: Conjugation via acyl attachment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - acyl_attachment
+- id: xrm:1600140
+  preferred_label: alpha to nitrogen
+  definition: Carbon alpha to nitrogen.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alpha_to_nitrogen
+- id: xrm:1600141
+  preferred_label: alpha to oxygen
+  definition: Carbon alpha to oxygen.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alpha_to_oxygen
+- id: xrm:1600142
+  preferred_label: alpha to sulfur
+  definition: Carbon alpha to sulfur.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alpha_to_sulfur
+- id: xrm:1600143
+  preferred_label: vinyl carbon
+  definition: Vinylic carbon environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - vinyl_carbon
+- id: xrm:1600144
+  preferred_label: alkyne carbon
+  definition: Alkynyl carbon environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - alkyne_carbon
+- id: xrm:1600145
+  preferred_label: sp3 carbon
+  definition: Saturated carbon site environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - sp3_carbon
+- id: xrm:1600146
+  preferred_label: sp2 carbon
+  definition: Unsaturated carbon site environment.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - sp2_carbon
+- id: xrm:1600147
+  preferred_label: canonical site name template
+  definition: Template for generating localized site names dynamically.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - site_label template
+  - canonical_site_name_template
+- id: xrm:1600148
+  preferred_label: attachment atom template
+  definition: Template for conjugation attachment-atom localization.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - attachment_atom_template
+- id: xrm:1600149
+  preferred_label: map-number localization
+  definition: Localization by atom-map number.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - '@map localization'
+  - map_number_localization
+- id: xrm:1600150
+  preferred_label: atom-index localization
+  definition: Localization by reactant atom index when maps absent.
+  parents:
+  - xrm:1600000
+  synonyms:
+  - atom_index_localization
+- id: xrm:1700000
+  preferred_label: structural delta
+  synonyms: *id008
+  definition: Structural / formula / aromaticity / bond-order change facets.
+  parents:
+  - xrm:0000000
+- id: xrm:1700010
+  preferred_label: formula delta
+  definition: Elemental composition change.
+  parents:
+  - xrm:1700000
+- id: xrm:1700011
+  preferred_label: mass shift
+  definition: Nominal or exact mass difference.
+  parents:
+  - xrm:1700000
+- id: xrm:1700012
+  preferred_label: atom added
+  definition: Net atom addition.
+  parents:
+  - xrm:1700000
+- id: xrm:1700013
+  preferred_label: atom removed
+  definition: Net atom removal.
+  parents:
+  - xrm:1700000
+- id: xrm:1700014
+  preferred_label: bond order change
+  definition: Bond order increased or decreased.
+  parents:
+  - xrm:1700000
+- id: xrm:1700015
+  preferred_label: aromaticity change
+  definition: Aromaticity gained or lost.
+  parents:
+  - xrm:1700000
+- id: xrm:1700016
+  preferred_label: charge change
+  definition: Formal charge / protonation change.
+  parents:
+  - xrm:1700000
+- id: xrm:1700017
+  preferred_label: stereochemical change
+  definition: Stereo configuration change.
+  parents:
+  - xrm:1700000
+- id: xrm:1700018
+  preferred_label: conjugate moiety added
+  definition: Conjugate group attached.
+  parents:
+  - xrm:1700000
+- id: xrm:1700100
+  preferred_label: monooxygenation
+  definition: Net addition of one oxygen atom.
+  parents:
+  - xrm:1700000
+  synonyms:
+  - +O
+- id: xrm:1700101
+  preferred_label: dioxygenation
+  definition: Net addition of two oxygen atoms.
+  parents:
+  - xrm:1700000
+  synonyms:
+  - +2O
+- id: xrm:1700102
+  preferred_label: demethylation delta
+  definition: Net loss of CH2 (demethylation mass shift).
+  parents:
+  - xrm:1700000
+  synonyms:
+  - -CH2
+- id: xrm:1700103
+  preferred_label: deethylation delta
+  definition: Net loss of C2H4.
+  parents:
+  - xrm:1700000
+  synonyms:
+  - -C2H4
+- id: xrm:1700104
+  preferred_label: glucuronide mass shift
+  definition: Mass shift for glucuronide conjugation.
+  parents:
+  - xrm:1700000
+  synonyms:
+  - +C6H8O6
+- id: xrm:1700105
+  preferred_label: sulfate mass shift
+  definition: Mass shift for sulfate conjugation.
+  parents:
+  - xrm:1700000
+  synonyms:
+  - +SO3
+- id: xrm:1700106
+  preferred_label: GSH mass shift
+  definition: Mass shift for glutathione conjugation.
+  parents:
+  - xrm:1700000
+  synonyms:
+  - +GSH
+- id: xrm:1700107
+  preferred_label: aromaticity loss delta
+  definition: Loss of aromaticity.
+  parents:
+  - xrm:1700000
+- id: xrm:1700108
+  preferred_label: aromaticity gain delta
+  definition: Gain of aromaticity.
+  parents:
+  - xrm:1700000
+- id: xrm:1700109
+  preferred_label: bond order increase
+  definition: Increase in bond order.
+  parents:
+  - xrm:1700000
+- id: xrm:1700110
+  preferred_label: bond order decrease
+  definition: Decrease in bond order.
+  parents:
+  - xrm:1700000
+- id: xrm:1700111
+  preferred_label: ring expansion delta
+  definition: Ring size increase.
+  parents:
+  - xrm:1700000
+- id: xrm:1700112
+  preferred_label: ring contraction delta
+  definition: Ring size decrease.
+  parents:
+  - xrm:1700000
+- id: xrm:1800000
+  preferred_label: product status
+  synonyms: *id009
+  definition: Observation / prediction / pathway status of a metabolite.
+  parents:
+  - xrm:0000000
+- id: xrm:1800010
+  preferred_label: observed product
+  definition: Metabolite observed experimentally.
+  parents:
+  - xrm:1800000
+- id: xrm:1800011
+  preferred_label: predicted product
+  definition: Metabolite predicted by a model or rule.
+  parents:
+  - xrm:1800000
+- id: xrm:1800012
+  preferred_label: intermediate metabolite
+  definition: Non-terminal pathway intermediate.
+  parents:
+  - xrm:1800000
+- id: xrm:1800013
+  preferred_label: terminal metabolite
+  definition: Pathway-terminal metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800014
+  preferred_label: minor metabolite
+  definition: Minor abundance metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800015
+  preferred_label: major metabolite
+  definition: Major abundance metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800016
+  preferred_label: authentic metabolite
+  definition: Confirmed authentic metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800017
+  preferred_label: artifact
+  definition: Artifactual / non-biological product.
+  parents:
+  - xrm:1800000
+- id: xrm:1800018
+  preferred_label: not detected
+  definition: Looked for but not detected.
+  parents:
+  - xrm:1800000
+- id: xrm:1800019
+  preferred_label: ruled out
+  definition: Structurally or experimentally ruled out.
+  parents:
+  - xrm:1800000
+- id: xrm:1800100
+  preferred_label: circulating metabolite
+  definition: Metabolite observed in circulation.
+  parents:
+  - xrm:1800000
+- id: xrm:1800101
+  preferred_label: excreted metabolite
+  definition: Metabolite observed in excreta.
+  parents:
+  - xrm:1800000
+- id: xrm:1800102
+  preferred_label: primary metabolite
+  definition: First-generation metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800103
+  preferred_label: secondary metabolite
+  definition: Second-generation metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800104
+  preferred_label: trace metabolite
+  definition: Trace-level metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800105
+  preferred_label: putative metabolite
+  definition: Putative / unconfirmed metabolite.
+  parents:
+  - xrm:1800000
+- id: xrm:1800106
+  preferred_label: structure elucidated
+  definition: Structure fully elucidated.
+  parents:
+  - xrm:1800000
+- id: xrm:1800107
+  preferred_label: structure partially elucidated
+  definition: Structure only partially elucidated.
+  parents:
+  - xrm:1800000
+- id: xrm:1900000
+  preferred_label: rule provenance
+  synonyms: *id010
+  definition: How a tag was produced (SMARTS, rule name, priority, exclusions).
+  parents:
+  - xrm:0000000
+- id: xrm:1900010
+  preferred_label: SMARTS-derived tag
+  definition: Tag assigned from reactant/product SMARTS.
+  parents:
+  - xrm:1900000
+- id: xrm:1900011
+  preferred_label: formula-delta-derived tag
+  definition: Tag assigned from elemental delta.
+  parents:
+  - xrm:1900000
+- id: xrm:1900012
+  preferred_label: caller-tag-derived
+  definition: Tag assigned from opaque caller CURIE/tag.
+  parents:
+  - xrm:1900000
+- id: xrm:1900013
+  preferred_label: Forest-map-derived tag
+  definition: Tag assigned via Metabolic Forest map correspondence.
+  parents:
+  - xrm:1900000
+- id: xrm:1900014
+  preferred_label: exclusion rule
+  definition: Negative / exclusion pattern applied.
+  parents:
+  - xrm:1900000
+- id: xrm:1900100
+  preferred_label: Rainbow class derived
+  definition: Tag derived from Rainbow Phase I class mapping.
+  parents:
+  - xrm:1900000
+- id: xrm:1900101
+  preferred_label: XenoNet path derived
+  definition: Tag derived from a multi-step XenoNet/Forest path.
+  parents:
+  - xrm:1900000
+- id: xrm:1900102
+  preferred_label: legacy model output
+  definition: Tag mapped from a legacy model output label.
+  parents:
+  - xrm:1900000
+- id: xrm:1900103
+  preferred_label: harvest-derived synonym
+  definition: Label/synonym promoted from offline harvest.
+  parents:
+  - xrm:1900000
+- id: xrm:1900104
+  preferred_label: manual curation
+  definition: Tag asserted by manual curation.
+  parents:
+  - xrm:1900000
+- id: xrm:1900105
+  preferred_label: priority override
+  definition: Higher-priority rule overrode a broader tag.
+  parents:
+  - xrm:1900000
+- id: xrm:1900106
+  preferred_label: site template expansion
+  definition: Localized label generated from a site template (not a concept).
+  parents:
+  - xrm:1900000
+- id: xrm:2000000
+  preferred_label: evidence
+  synonyms: *id011
+  definition: Evidence type supporting a named transformation or product.
+  parents:
+  - xrm:0000000
+- id: xrm:2000010
+  preferred_label: literature evidence
+  definition: Supported by a paper or review.
+  parents:
+  - xrm:2000000
+- id: xrm:2000011
+  preferred_label: MS1 evidence
+  definition: Supported by MS1.
+  parents:
+  - xrm:2000000
+- id: xrm:2000012
+  preferred_label: MS2 evidence
+  definition: Supported by MS/MS.
+  parents:
+  - xrm:2000000
+- id: xrm:2000013
+  preferred_label: retention time evidence
+  definition: Supported by chromatographic retention time.
+  parents:
+  - xrm:2000000
+- id: xrm:2000014
+  preferred_label: NMR evidence
+  definition: Supported by NMR.
+  parents:
+  - xrm:2000000
+- id: xrm:2000015
+  preferred_label: synthetic standard
+  definition: Confirmed versus synthetic standard.
+  parents:
+  - xrm:2000000
+- id: xrm:2000016
+  preferred_label: radiolabel evidence
+  definition: Supported by radiolabel tracking.
+  parents:
+  - xrm:2000000
+- id: xrm:2000017
+  preferred_label: HLM incubation
+  definition: Human liver microsome incubation context.
+  parents:
+  - xrm:2000000
+- id: xrm:2000018
+  preferred_label: hepatocyte incubation
+  definition: Hepatocyte incubation context.
+  parents:
+  - xrm:2000000
+- id: xrm:2000019
+  preferred_label: recombinant enzyme
+  definition: Recombinant enzyme incubation context.
+  parents:
+  - xrm:2000000
+- id: xrm:2000020
+  preferred_label: negative control
+  definition: Negative-control observation.
+  parents:
+  - xrm:2000000
+- id: xrm:2000100
+  preferred_label: predicted assertion
+  definition: Assertion from a predictive model.
+  parents:
+  - xrm:2000000
+  synonyms:
+  - model-predicted
+- id: xrm:2000101
+  preferred_label: observed assertion
+  definition: Assertion from experimental observation.
+  parents:
+  - xrm:2000000
+- id: xrm:2000102
+  preferred_label: curated assertion
+  definition: Manually curated assertion.
+  parents:
+  - xrm:2000000
+- id: xrm:2000103
+  preferred_label: conflicting evidence
+  definition: Evidence sources conflict.
+  parents:
+  - xrm:2000000
+- id: xrm:2000104
+  preferred_label: literature figure evidence
+  definition: Supported by a literature figure.
+  parents:
+  - xrm:2000000
+- id: xrm:2000105
+  preferred_label: literature table evidence
+  definition: Supported by a literature table.
+  parents:
+  - xrm:2000000
+- id: xrm:2000106
+  preferred_label: text-span evidence
+  definition: Supported by a cited text span.
+  parents:
+  - xrm:2000000
+- id: xrm:2000107
+  preferred_label: exact-mass evidence
+  definition: Supported by accurate mass.
+  parents:
+  - xrm:2000000
+- id: xrm:2000108
+  preferred_label: isotope pattern evidence
+  definition: Supported by isotopic pattern.
+  parents:
+  - xrm:2000000
+- id: xrm:2000109
+  preferred_label: fragmentation evidence
+  definition: Supported by MS fragmentation.
+  parents:
+  - xrm:2000000
+- id: xrm:2000110
+  preferred_label: chromatographic evidence
+  definition: Supported by chromatography beyond RT alone.
+  parents:
+  - xrm:2000000
+- id: xrm:2000111
+  preferred_label: in vitro evidence
+  definition: Supported by in vitro experiment.
+  parents:
+  - xrm:2000000
+- id: xrm:2000112
+  preferred_label: in vivo evidence
+  definition: Supported by in vivo experiment.
+  parents:
+  - xrm:2000000
+- id: xrm:2000113
+  preferred_label: clinical evidence
+  definition: Supported by clinical observation.
+  parents:
+  - xrm:2000000
+- id: xrm:2000114
+  preferred_label: radiolabel recovery
+  definition: Supported by radiolabel recovery/ADME.
+  parents:
+  - xrm:2000000
+- id: xrm:2000115
+  preferred_label: trapping assay evidence
+  definition: Supported by trapping assay (e.g. GSH).
+  parents:
+  - xrm:2000000
+- id: xrm:2000116
+  preferred_label: synthetic standard match
+  definition: Matches a synthetic authentic standard.
+  parents:
+  - xrm:2000000
+- id: xrm:2000117
+  preferred_label: recombinant isoform evidence
+  definition: Supported by recombinant enzyme isoform data.
+  parents:
+  - xrm:2000000
+- id: xrm:2000118
+  preferred_label: S9 incubation
+  definition: S9 fraction incubation context.
+  parents:
+  - xrm:2000000
+- id: xrm:2000119
+  preferred_label: microsome incubation
+  definition: Microsomal incubation (non-HLM-specific).
+  parents:
+  - xrm:2000000
+- id: xrm:2000120
+  preferred_label: hepatocyte evidence
+  definition: Hepatocyte-based evidence.
+  parents:
+  - xrm:2000000
+- id: xrm:2000121
+  preferred_label: plasma observation
+  definition: Observed in plasma.
+  parents:
+  - xrm:2000000
+- id: xrm:2000122
+  preferred_label: urine observation
+  definition: Observed in urine.
+  parents:
+  - xrm:2000000
+- id: xrm:2000123
+  preferred_label: bile observation
+  definition: Observed in bile.
+  parents:
+  - xrm:2000000
+- id: xrm:2000124
+  preferred_label: low confidence assertion
+  definition: Low-confidence assertion.
+  parents:
+  - xrm:2000000
+- id: xrm:2000125
+  preferred_label: high confidence assertion
+  definition: High-confidence assertion.
+  parents:
+  - xrm:2000000
+- id: xrm:2100000
+  preferred_label: biological context
+  synonyms: *id012
+  definition: Orthogonal biological framing (enzyme, tissue, species, matrix).
+  parents:
+  - xrm:0000000
+- id: xrm:2100010
+  preferred_label: enzyme family context
+  definition: Enzyme family framing (orthogonal to reaction name).
+  parents:
+  - xrm:2100000
+- id: xrm:2100011
+  preferred_label: tissue context
+  definition: Tissue framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100012
+  preferred_label: species context
+  definition: Species framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100013
+  preferred_label: matrix context
+  definition: Matrix / biofluid framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100014
+  preferred_label: compartment context
+  definition: Subcellular compartment framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100100
+  preferred_label: CYP enzyme family context
+  definition: Cytochrome P450 family context (orthogonal).
+  parents:
+  - xrm:2100000
+  synonyms:
+  - P450 family context
+- id: xrm:2100101
+  preferred_label: UGT enzyme family context
+  definition: UGT family context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100102
+  preferred_label: SULT enzyme family context
+  definition: Sulfotransferase family context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100103
+  preferred_label: GST enzyme family context
+  definition: Glutathione S-transferase context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100104
+  preferred_label: NAT enzyme family context
+  definition: N-acetyltransferase context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100105
+  preferred_label: FMO enzyme family context
+  definition: Flavin monooxygenase context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100106
+  preferred_label: AO enzyme family context
+  definition: Aldehyde oxidase context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100107
+  preferred_label: MAO enzyme family context
+  definition: Monoamine oxidase context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100108
+  preferred_label: CES enzyme family context
+  definition: Carboxylesterase context (orthogonal).
+  parents:
+  - xrm:2100000
+- id: xrm:2100109
+  preferred_label: liver tissue context
+  definition: Liver tissue framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100110
+  preferred_label: intestine tissue context
+  definition: Intestine tissue framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100111
+  preferred_label: kidney tissue context
+  definition: Kidney tissue framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100112
+  preferred_label: lung tissue context
+  definition: Lung tissue framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100113
+  preferred_label: brain tissue context
+  definition: Brain tissue framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100114
+  preferred_label: human species context
+  definition: Human species framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100115
+  preferred_label: rat species context
+  definition: Rat species framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100116
+  preferred_label: mouse species context
+  definition: Mouse species framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100117
+  preferred_label: dog species context
+  definition: Dog species framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100118
+  preferred_label: monkey species context
+  definition: Nonhuman primate framing.
+  parents:
+  - xrm:2100000
+  synonyms:
+  - NHP species context
+- id: xrm:2100119
+  preferred_label: plasma matrix context
+  definition: Plasma matrix framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100120
+  preferred_label: urine matrix context
+  definition: Urine matrix framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100121
+  preferred_label: bile matrix context
+  definition: Bile matrix framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100122
+  preferred_label: feces matrix context
+  definition: Feces matrix framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100123
+  preferred_label: microsome matrix context
+  definition: Microsome incubation matrix.
+  parents:
+  - xrm:2100000
+- id: xrm:2100124
+  preferred_label: cytosol matrix context
+  definition: Cytosol incubation matrix.
+  parents:
+  - xrm:2100000
+- id: xrm:2100125
+  preferred_label: hepatocyte matrix context
+  definition: Hepatocyte incubation matrix.
+  parents:
+  - xrm:2100000
+- id: xrm:2100126
+  preferred_label: endoplasmic reticulum compartment
+  definition: ER compartment framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100127
+  preferred_label: cytosol compartment
+  definition: Cytosol compartment framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100128
+  preferred_label: mitochondria compartment
+  definition: Mitochondrial compartment framing.
+  parents:
+  - xrm:2100000
+- id: xrm:2100129
+  preferred_label: blood compartment
+  definition: Blood / systemic compartment framing.
+  parents:
+  - xrm:2100000
+- id: xrm:6000000
+  preferred_label: ambiguity and underspecification
+  definition: Cross-cutting spine for incomplete, conflicting, or underdetermined naming evidence. Prefer
+    specific ambiguity subtypes; tag alongside positive terms rather than replacing them.
+  parents:
+  - xrm:0000000
+- id: xrm:6000001
+  preferred_label: ambiguous reaction
+  synonyms:
+  - underspecified reaction
+  definition: 'Broad flag: more than one incompatible reading remains open.'
+  parents:
+  - xrm:6000000
+- id: xrm:6000010
+  preferred_label: site-of-metabolism ambiguity
+  definition: Which atom or bond is the SOM is not uniquely determined.
+  parents:
+  - xrm:6000000
+- id: xrm:6000011
+  preferred_label: regiochemical ambiguity
+  definition: Multiple regioisomeric sites remain plausible.
+  parents:
+  - xrm:6000000
+  - xrm:6000010
+  related_match:
+  - xrm:6000001
+- id: xrm:6000012
+  preferred_label: stereochemical ambiguity
+  definition: Stereo outcome (or stereo of the site) is not specified.
+  parents:
+  - xrm:6000000
+  - xrm:6000010
+  related_match:
+  - xrm:6000001
+- id: xrm:6000020
+  preferred_label: reaction-type ambiguity
+  definition: Multiple reaction-type labels remain compatible with the evidence.
+  parents:
+  - xrm:6000000
+- id: xrm:6000021
+  preferred_label: competing-type ambiguity
+  definition: Two or more named types actively compete (e.g. epoxidation vs aromatic hydroxylation via
+    arene oxide).
+  parents:
+  - xrm:6000000
+  - xrm:6000020
+  related_match:
+  - xrm:6000001
+- id: xrm:6000022
+  preferred_label: mechanism ambiguity
+  definition: Overall type may be clear but the mechanistic path is not (e.g. NIH-shift vs direct insertion).
+  parents:
+  - xrm:6000000
+  - xrm:6000020
+  related_match:
+  - xrm:6000001
+- id: xrm:6000030
+  preferred_label: metabolite-structure underspecification
+  definition: Product structure is incomplete (missing stereo, tautomer, or connectivity detail).
+  parents:
+  - xrm:6000000
+- id: xrm:6000031
+  preferred_label: atom-mapping underspecification
+  definition: Atom map is missing, partial, or inconsistent, blocking site-level tags.
+  parents:
+  - xrm:6000000
+  - xrm:6000030
+  related_match:
+  - xrm:6000001
+- id: xrm:6000032
+  preferred_label: formula-only evidence
+  definition: Only formula/delta evidence is available; connectivity change is not grounded.
+  parents:
+  - xrm:6000000
+  - xrm:6000030
+  related_match:
+  - xrm:6000001
+- id: xrm:6000040
+  preferred_label: pathway-depth ambiguity
+  definition: Unclear whether the observed change is one-step or requires intermediates.
+  parents:
+  - xrm:6000000
+  related_match:
+  - xrm:0000308
+- id: xrm:6000041
+  preferred_label: intermediate underspecification
+  definition: A multi-step path is implied but intermediate structures are not specified.
+  parents:
+  - xrm:6000000
+  - xrm:6000040
+  related_match:
+  - xrm:6000001
+- id: xrm:6000050
+  preferred_label: phase ambiguity
+  definition: Unclear whether the step is best typed as phase I, phase II, or neither.
+  parents:
+  - xrm:6000000
+- id: xrm:6000051
+  preferred_label: forest-map correspondence ambiguity
+  definition: Chemist typing and Metabolic Forest rule/pattern correspondence are unresolved or conflicting.
+  parents:
+  - xrm:6000000
+  - xrm:6000001
+  related_match:
+  - xrm:6000001
+- id: xrm:6000052
+  preferred_label: external-ontology alignment ambiguity
+  definition: Mapping to MeSH/MOP/KEGG (or similar) is uncertain; keep XRM term and mark alignment soft.
+  parents:
+  - xrm:6000000
+  - xrm:6000001
+  related_match:
+  - xrm:6000001
+- id: xrm:6000060
+  preferred_label: aromatic-impact ambiguity
+  definition: Impact on aromatic/conjugated systems is unclear (preserve vs dearomatize vs quinoid).
+  parents:
+  - xrm:6000000
+  - xrm:6000001
+  related_match:
+  - xrm:6000001
+- id: xrm:6000061
+  preferred_label: electrophile-role ambiguity
+  definition: Whether the step generates or consumes an electrophile is unclear.
+  parents:
+  - xrm:6000000
+  - xrm:6000001
+  related_match:
+  - xrm:6000001
+- id: xrm:6000070
+  preferred_label: provenance underspecification
+  definition: Evidence source/tag provenance is missing (no structural match and no caller tags).
+  parents:
+  - xrm:6000000
+- id: xrm:6000099
+  preferred_label: fully specified
+  synonyms:
+  - unambiguous naming
+  definition: No outstanding ambiguity flags for the dimensions under consideration.
+  parents:
+  - xrm:6000000
+- id: xrm:7000000
+  preferred_label: redox polarity
+  definition: 'Cross-cutting spine: net redox character of the transformation, independent of named reaction
+    type.'
+  parents:
+  - xrm:1700000
+- id: xrm:7000001
+  preferred_label: net oxidation
+  definition: Net loss of electrons / gain of oxygen or unsaturation.
+  parents:
+  - xrm:7000000
+  related_match:
+  - xrm:0000100
+  - xrm:0000110
+  - xrm:0000200
+  - xrm:0000012
+  - xrm:0000300
+- id: xrm:7000002
+  preferred_label: net reduction
+  definition: Net gain of electrons / loss of oxygen or gain of saturation.
+  parents:
+  - xrm:7000000
+  related_match:
+  - xrm:0000014
+  - xrm:0000500
+- id: xrm:7000003
+  preferred_label: redox-neutral
+  definition: No net redox change (e.g. many conjugations, tautomerizations, hydrolyses).
+  parents:
+  - xrm:7000000
+  related_match:
+  - xrm:0000013
+  - xrm:0001000
+  - xrm:0001030
+  - xrm:0002000
+- id: xrm:7000004
+  preferred_label: redox polarity unspecified
+  definition: Redox polarity not determined from available evidence.
+  parents:
+  - xrm:7000000
+- id: xrm:7100000
+  preferred_label: site atom class
+  definition: 'Cross-cutting spine: principal element class at the site of metabolism.'
+  parents:
+  - xrm:1600000
+  synonyms:
+  - site_atom_class
+- id: xrm:7100001
+  preferred_label: carbon site
+  definition: Primary SOM involves carbon.
+  parents:
+  - xrm:7100000
+  related_match:
+  - xrm:0000100
+- id: xrm:7100002
+  preferred_label: nitrogen site
+  definition: Primary SOM involves nitrogen (lone pair or C–N).
+  parents:
+  - xrm:7100000
+  related_match:
+  - xrm:0000201
+- id: xrm:7100003
+  preferred_label: oxygen site
+  definition: Primary SOM involves oxygen (lone pair or C–O).
+  parents:
+  - xrm:7100000
+  related_match:
+  - xrm:0000202
+- id: xrm:7100004
+  preferred_label: sulfur site
+  definition: Primary SOM involves sulfur.
+  parents:
+  - xrm:7100000
+  related_match:
+  - xrm:0000203
+- id: xrm:7100005
+  preferred_label: halogen site
+  definition: Primary SOM involves halogen.
+  parents:
+  - xrm:7100000
+  related_match:
+  - xrm:0000210
+- id: xrm:7100006
+  preferred_label: phosphorus site
+  definition: Primary SOM involves phosphorus.
+  parents:
+  - xrm:7100000
+- id: xrm:7100007
+  preferred_label: multi-element site
+  definition: SOM spans more than one heavy-element class (e.g. C–X cleavage).
+  parents:
+  - xrm:7100000
+  related_match:
+  - xrm:0000200
+  - xrm:0000201
+  - xrm:0000202
+  - xrm:0000203
+- id: xrm:7100008
+  preferred_label: site atom class unspecified
+  definition: Site element class not asserted.
+  parents:
+  - xrm:7100000
+- id: xrm:7200000
+  preferred_label: bond-edit topology
+  definition: 'Cross-cutting spine: graph-edit shape of the transformation.'
+  parents:
+  - xrm:1700000
+- id: xrm:7200001
+  preferred_label: atom addition
+  definition: Heavy atom(s) added without bond cleavage of the scaffold (e.g. hydroxylation).
+  parents:
+  - xrm:7200000
+  related_match:
+  - xrm:0000100
+- id: xrm:7200002
+  preferred_label: bond cleavage
+  definition: A heavy-atom bond is broken (dealkylation, hydrolysis, dehalogenation).
+  parents:
+  - xrm:7200000
+  related_match:
+  - xrm:0000200
+  - xrm:0000210
+  - xrm:0000013
+- id: xrm:7200003
+  preferred_label: bond order change
+  definition: Bond order increases or decreases without heavy-atom count change (dehydrogenation, hydrogenation).
+  parents:
+  - xrm:7200000
+  related_match:
+  - xrm:0000012
+  - xrm:0000500
+- id: xrm:7200004
+  preferred_label: substitution
+  definition: One substituent replaces another at a site.
+  parents:
+  - xrm:7200000
+- id: xrm:7200005
+  preferred_label: rearrangement topology
+  definition: Atom connectivity is reshuffled (NIH shift, acyl migration, skeletal rearrangement).
+  parents:
+  - xrm:7200000
+  related_match:
+  - xrm:0002000
+- id: xrm:7200006
+  preferred_label: ring closure
+  definition: A new ring is formed.
+  parents:
+  - xrm:7200000
+  related_match:
+  - xrm:0000110
+- id: xrm:7200007
+  preferred_label: ring opening topology
+  definition: A ring bond is opened.
+  parents:
+  - xrm:7200000
+- id: xrm:7200008
+  preferred_label: bond-edit topology unspecified
+  definition: Graph-edit class not asserted.
+  parents:
+  - xrm:7200000
+- id: xrm:7300000
+  preferred_label: metabolite cardinality
+  definition: 'Cross-cutting spine: whether the reaction yields one observed metabolite or fragments into
+    more.'
+  parents:
+  - xrm:1700000
+- id: xrm:7300001
+  preferred_label: single-metabolite transformation
+  definition: One principal product retains the scaffold (Rainbow stable-oxygenation style outcome).
+  parents:
+  - xrm:7300000
+  related_match:
+  - xrm:0000100
+- id: xrm:7300002
+  preferred_label: fragmenting transformation
+  definition: Scaffold cleavage yields two (or more) products (dealkylation, hydrolysis).
+  parents:
+  - xrm:7300000
+  related_match:
+  - xrm:0000200
+  - xrm:0000013
+- id: xrm:7300003
+  preferred_label: metabolite cardinality unspecified
+  definition: Whether the reaction fragments is not asserted.
+  parents:
+  - xrm:7300000
+- id: xrm:7400000
+  preferred_label: oxygenation outcome
+  definition: 'Cross-cutting chemist spine for oxygenation fate: stable oxygen addition versus oxygen-triggered
+    cleavage. Distinct from the Metabolic Forest map nodes.'
+  parents:
+  - xrm:1700000
+- id: xrm:7400001
+  preferred_label: stable oxygen addition
+  definition: Oxygen is retained in a single observable oxygenated metabolite.
+  parents:
+  - xrm:7400000
+  related_match:
+  - xrm:0000100
+  - xrm:0000110
+- id: xrm:7400002
+  preferred_label: oxygen-triggered cleavage
+  definition: Oxygenation precipitates heavy-bond cleavage (unstable oxygenation outcome).
+  parents:
+  - xrm:7400000
+  related_match:
+  - xrm:0000200
+  - xrm:0000210
+- id: xrm:7400003
+  preferred_label: non-oxygenative transformation
+  definition: No oxygenation step defines the outcome.
+  parents:
+  - xrm:7400000
+  related_match:
+  - xrm:0000012
+  - xrm:0000014
+- id: xrm:7400004
+  preferred_label: oxygenation outcome unspecified
+  definition: Oxygenation fate not asserted.
+  parents:
+  - xrm:7400000
+- id: xrm:7500000
+  preferred_label: electrophile role
+  definition: 'Cross-cutting spine: relationship of the step to electrophilic reactivity / soft-hard capture.'
+  parents:
+  - xrm:1500000
+  synonyms:
+  - electrophile_role
+- id: xrm:7500001
+  preferred_label: electrophile generation
+  definition: Forms or unmasks an electrophilic metabolite.
+  parents:
+  - xrm:7500000
+  related_match:
+  - xrm:0000300
+  - xrm:0003000
+- id: xrm:7500002
+  preferred_label: electrophile consumption
+  definition: Captures or quenches an electrophile (e.g. GSH conjugation).
+  parents:
+  - xrm:7500000
+  related_match:
+  - xrm:0001030
+  - xrm:0001031
+  - xrm:0003001
+- id: xrm:7500003
+  preferred_label: nucleophile exposure
+  definition: Exposes a nucleophilic handle for later conjugation.
+  parents:
+  - xrm:7500000
+  related_match:
+  - xrm:0001000
+- id: xrm:7500004
+  preferred_label: reactivity-neutral step
+  definition: Neither generates nor consumes a notable electrophile in the usual sense.
+  parents:
+  - xrm:7500000
+  related_match:
+  - xrm:0003001
+- id: xrm:7500005
+  preferred_label: electrophile role unspecified
+  definition: Electrophile role not asserted.
+  parents:
+  - xrm:7500000
+- id: xrm:7600000
+  preferred_label: ring fate
+  definition: 'Cross-cutting spine: effect on ring systems.'
+  parents:
+  - xrm:1700000
+- id: xrm:7600001
+  preferred_label: ring preserved
+  definition: Existing rings unchanged in membership.
+  parents:
+  - xrm:7600000
+  related_match:
+  - xrm:0004001
+- id: xrm:7600002
+  preferred_label: ring opened
+  definition: A ring is opened.
+  parents:
+  - xrm:7600000
+- id: xrm:7600003
+  preferred_label: ring formed
+  definition: A new ring is formed (e.g. epoxide).
+  parents:
+  - xrm:7600000
+  related_match:
+  - xrm:0000110
+- id: xrm:7600004
+  preferred_label: ring expanded
+  definition: Ring size increases.
+  parents:
+  - xrm:7600000
+- id: xrm:7600005
+  preferred_label: ring contracted
+  definition: Ring size decreases.
+  parents:
+  - xrm:7600000
+- id: xrm:7600006
+  preferred_label: ring fate unspecified
+  definition: Ring fate not asserted.
+  parents:
+  - xrm:7600000
+- id: xrm:7700000
+  preferred_label: formula-delta class
+  definition: Cross-cutting spine keyed to heavy-atom formula change; highly automatable from reactant/product
+    formulas.
+  parents:
+  - xrm:1700000
+- id: xrm:7700001
+  preferred_label: oxygen gain
+  synonyms:
+  - +O
+  definition: Net +O (and no other heavy-atom change, unless further specialized).
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0000100
+  - xrm:0000110
+- id: xrm:7700002
+  preferred_label: oxygen loss
+  synonyms:
+  - -O
+  definition: Net −O.
+  parents:
+  - xrm:7700000
+- id: xrm:7700003
+  preferred_label: hydrogenation delta
+  definition: Net +H₂ equivalent without other heavy-atom change (often inferred with bond-order change).
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0000500
+- id: xrm:7700004
+  preferred_label: dehydrogenation delta
+  definition: Net −H₂ equivalent without other heavy-atom change.
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0000012
+- id: xrm:7700005
+  preferred_label: water addition delta
+  synonyms:
+  - +H2O
+  - hydration delta
+  definition: Net +H₂O.
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0000013
+- id: xrm:7700006
+  preferred_label: water loss delta
+  synonyms:
+  - -H2O
+  definition: Net −H₂O.
+  parents:
+  - xrm:7700000
+- id: xrm:7700007
+  preferred_label: alkyl loss delta
+  definition: Net loss of carbon(s) consistent with dealkylation/fragmentation.
+  parents:
+  - xrm:7700000
+- id: xrm:7700008
+  preferred_label: conjugate gain delta
+  definition: Net gain matching a conjugation adduct formula class (when known).
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0001000
+- id: xrm:7700009
+  preferred_label: halogen loss delta
+  definition: Net loss of halogen.
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0000210
+- id: xrm:7700010
+  preferred_label: no heavy-atom delta
+  definition: Heavy-atom formula unchanged (tautomer, many dehydrogenations if H ignored, rearrangements).
+  parents:
+  - xrm:7700000
+  related_match:
+  - xrm:0002000
+- id: xrm:7700011
+  preferred_label: formula-delta unspecified
+  definition: Formula delta class not asserted.
+  parents:
+  - xrm:7700000
+- id: xrm:7800000
+  preferred_label: site aromaticity
+  definition: 'Cross-cutting spine: aromatic character of the mapped site on the reactant.'
+  parents:
+  - xrm:1600000
+  synonyms:
+  - site_aromaticity
+- id: xrm:7800001
+  preferred_label: aromatic site
+  definition: Mapped site atom(s) are aromatic on the reactant.
+  parents:
+  - xrm:7800000
+  related_match:
+  - xrm:0000101
+- id: xrm:7800002
+  preferred_label: aliphatic site
+  definition: Mapped site atom(s) are non-aromatic on the reactant.
+  parents:
+  - xrm:7800000
+  related_match:
+  - xrm:0000102
+- id: xrm:7800003
+  preferred_label: site aromaticity unspecified
+  definition: Aromaticity of the site was not determined (no map / no probe).
+  parents:
+  - xrm:7800000
+- id: xrm:7900000
+  preferred_label: pathway-step role
+  definition: 'Cross-cutting spine: role of this step in a multi-step metabolic path.'
+  parents:
+  - xrm:1700000
+- id: xrm:7900001
+  preferred_label: direct one-step transformation
+  definition: Observed product arises in a single metabolic step from the named parent.
+  parents:
+  - xrm:7900000
+  related_match:
+  - xrm:0000307
+- id: xrm:7900002
+  preferred_label: multi-step pathway member
+  definition: Step participates in a path of depth ≥ 2 (e.g. two-step quinone formation).
+  parents:
+  - xrm:7900000
+  related_match:
+  - xrm:0000300
+  - xrm:0000308
+- id: xrm:7900003
+  preferred_label: preparatory intermediate step
+  definition: Intermediate that enables a subsequent defining step (e.g. hydroxylation before quinone
+    formation).
+  parents:
+  - xrm:7900000
+  related_match:
+  - xrm:0000308
+- id: xrm:7900004
+  preferred_label: terminal observable step
+  definition: Last enumerated step yielding the reported metabolite.
+  parents:
+  - xrm:7900000
+- id: xrm:7900005
+  preferred_label: pathway-step role unspecified
+  definition: Step role in a path is not asserted.
+  parents:
+  - xrm:7900000
+- id: xrm:8000000
+  preferred_label: aromatic and conjugated-system impact
+  synonyms:
+  - aromatic/conjugate impact
+  - π-system impact
+  definition: 'Parallel hierarchy focused on how a transformation impacts aromatic and conjugated π-systems:
+    loss or gain of aromaticity, engagement of conjugated acceptors, and rearrangements within those systems.
+    Orthogonal to both the chemist reaction-type spine and the Metabolic Forest map.'
+  parents:
+  - xrm:1700000
+- id: xrm:8000001
+  preferred_label: aromaticity loss
+  definition: Transformations that destroy or interrupt an aromatic system.
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0004001
+- id: xrm:8000002
+  preferred_label: aromaticity gain
+  definition: Transformations that form or restore an aromatic system.
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0004002
+  - xrm:0000315
+- id: xrm:8000003
+  preferred_label: aromatic ring substitution impact
+  definition: Substitution on an aromatic ring that preserves the aromatic sextet (e.g. phenolic hydroxylation
+    after NIH shift).
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0000101
+  - xrm:0004003
+  - xrm:0004004
+- id: xrm:8000004
+  preferred_label: conjugated π-system engagement
+  definition: Reactions whose defining impact is engagement of a conjugated acceptor or donor (Michael
+    acceptors, quinoids, extended enones).
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0004014
+  - xrm:0000300
+  - xrm:0001031
+- id: xrm:8000005
+  preferred_label: quinoid π-system formation
+  definition: Formation of quinone, quinone-imine, quinone-methide, or imine-methide π-systems from aromatic
+    or conjugated precursors.
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0000300
+  - xrm:0000303
+  - xrm:0000304
+  - xrm:0000306
+- id: xrm:8000006
+  preferred_label: heteroaromatic oxidation impact
+  definition: Oxidation paths that specifically perturb heteroaromatic rings (e.g. thiophene S-oxidation
+    or epoxidation).
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0000133
+  - xrm:0000113
+- id: xrm:8000007
+  preferred_label: arene oxide pathway
+  definition: Passage through an arene oxide / NIH-shift manifold on an aromatic ring.
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0000112
+  - xrm:0004003
+  - xrm:0004005
+- id: xrm:8000008
+  preferred_label: conjugated adduct formation
+  definition: Conjugation (e.g. GSH) that captures a conjugated electrophile without requiring the reaction
+    type hierarchy.
+  parents:
+  - xrm:8000000
+  related_match:
+  - xrm:0001031
+  - xrm:0001036
+  - xrm:0004014
+- id: xrm:9000000
+  preferred_label: Metabolic Forest map
+  synonyms: *id013
+  definition: Alias / mapping spine for Metabolic Forest rulesets → rules → patterns. Opaque forest.*
+    CURIEs only; not the chemist backbone.
+  parents:
+  - xrm:0000000
+- id: xrm:9000010
+  preferred_label: stable oxygenation ruleset
+  synonyms:
+  - Forest stable oxygenation
+  - SO ruleset
+  definition: Metabolic Forest ruleset alias for stable oxygenation (opaque forest.ruleset:SO). Not the
+    chemist Rainbow class.
+  parents:
+  - xrm:9000000
+  - xrm:9000018
+  exact_match:
+  - forest.ruleset:SO
+- id: xrm:9000011
+  preferred_label: unstable oxygenation ruleset
+  synonyms:
+  - Forest unstable oxygenation
+  - UO ruleset
+  definition: Metabolic Forest ruleset alias for unstable oxygenation (opaque forest.ruleset:UO). Not
+    the chemist Rainbow class.
+  parents:
+  - xrm:9000000
+  - xrm:9000018
+  exact_match:
+  - forest.ruleset:UO
+- id: xrm:9000012
+  preferred_label: dehydrogenation ruleset
+  definition: Forest ruleset containing the Dehydrogenation rule (quinone formation is a separate Forest
+    ruleset). Full name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+  - xrm:9000018
+- id: xrm:9000013
+  preferred_label: hydrolysis ruleset
+  definition: Forest ruleset for Hydrolysis, EpoxideOpening, Dephosphorylation (and AzoSplitting in Full).
+    Full name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+  - xrm:9000018
+- id: xrm:9000014
+  preferred_label: reduction ruleset
+  definition: Forest ruleset for hydrogenation, dehydration, nitrogen/oxygen/sulfur reduction, reductive
+    dehalogenation. Full name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+  - xrm:9000018
+- id: xrm:9000015
+  preferred_label: quinone formation ruleset
+  definition: Forest ruleset for quinone / quinone-imine / quinone-methide structure enumeration. Full
+    name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+- id: xrm:9000016
+  preferred_label: conjugation ruleset
+  definition: 'Forest conjugation ruleset: acetylation, glucuronidation, glutathionation, sulfation. Full
+    name only; localized abbreviations are not XRM labels.'
+  parents:
+  - xrm:9000000
+- id: xrm:9000017
+  preferred_label: tautomerization ruleset
+  definition: Forest tautomerization ruleset. Full name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+- id: xrm:9000018
+  preferred_label: phase I ruleset
+  definition: Forest Phase I aggregate ruleset (stable/unstable oxygenation, dehydrogenation, hydrolysis,
+    reduction). Full name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+- id: xrm:9000019
+  preferred_label: bioactivation ruleset
+  definition: Forest convenience ruleset for common bioactivation routes (quinone, epoxidation, nitroaromatic
+    reduction, thiophene S-oxidation). Full name only; localized abbreviations are not XRM labels.
+  parents:
+  - xrm:9000000
+- id: xrm:9100100
+  preferred_label: Hydroxylation rule
+  synonyms:
+  - Hydroxylation
+  definition: Metabolic Forest rule `Hydroxylation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000010
+  related_match:
+  - xrm:0000100
+- id: xrm:9100110
+  preferred_label: Epoxidation rule
+  synonyms:
+  - Epoxidation
+  definition: Metabolic Forest rule `Epoxidation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000010
+  related_match:
+  - xrm:0000110
+- id: xrm:9100120
+  preferred_label: NitrogenOxidation rule
+  synonyms:
+  - NitrogenOxidation
+  definition: Metabolic Forest rule `NitrogenOxidation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000010
+  related_match:
+  - xrm:0000120
+- id: xrm:9100130
+  preferred_label: SulfurOxidation rule
+  synonyms:
+  - SulfurOxidation
+  definition: Metabolic Forest rule `SulfurOxidation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000010
+  related_match:
+  - xrm:0000130
+- id: xrm:9100200
+  preferred_label: Dealkylation rule
+  synonyms:
+  - Dealkylation
+  definition: Metabolic Forest rule `Dealkylation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000011
+  related_match:
+  - xrm:0000200
+- id: xrm:9100201
+  preferred_label: NDealkylation rule
+  synonyms:
+  - NDealkylation
+  definition: Metabolic Forest rule `NDealkylation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000011
+  related_match:
+  - xrm:0000201
+- id: xrm:9100210
+  preferred_label: OxidativeDehalogenation rule
+  synonyms:
+  - OxidativeDehalogenation
+  definition: Metabolic Forest rule `OxidativeDehalogenation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000011
+  related_match:
+  - xrm:0000210
+- id: xrm:9100300
+  preferred_label: Dehydrogenation rule
+  synonyms:
+  - Dehydrogenation
+  definition: Metabolic Forest rule `Dehydrogenation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000012
+  related_match:
+  - xrm:0000012
+- id: xrm:9100400
+  preferred_label: Hydrolysis rule
+  synonyms:
+  - Hydrolysis
+  definition: Metabolic Forest rule `Hydrolysis` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000013
+  related_match:
+  - xrm:0000013
+- id: xrm:9100401
+  preferred_label: EpoxideOpening rule
+  synonyms:
+  - EpoxideOpening
+  definition: Metabolic Forest rule `EpoxideOpening` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000013
+  related_match:
+  - xrm:0000400
+- id: xrm:9100402
+  preferred_label: Dephosphorylation rule
+  synonyms:
+  - Dephosphorylation
+  definition: Metabolic Forest rule `Dephosphorylation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000013
+  related_match:
+  - xrm:0000410
+- id: xrm:9100403
+  preferred_label: AzoSplitting rule
+  synonyms:
+  - AzoSplitting
+  definition: Metabolic Forest rule `AzoSplitting` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000013
+  related_match:
+  - xrm:0000412
+- id: xrm:9100500
+  preferred_label: Hydrogenation rule
+  synonyms:
+  - Hydrogenation
+  definition: Metabolic Forest rule `Hydrogenation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+  related_match:
+  - xrm:0000500
+- id: xrm:9100501
+  preferred_label: Dehydration rule
+  synonyms:
+  - Dehydration
+  definition: Metabolic Forest rule `Dehydration` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+  related_match:
+  - xrm:0000550
+- id: xrm:9100510
+  preferred_label: NitrogenReduction rule
+  synonyms:
+  - NitrogenReduction
+  definition: Metabolic Forest rule `NitrogenReduction` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+  related_match:
+  - xrm:0000510
+- id: xrm:9100520
+  preferred_label: OxygenReduction rule
+  synonyms:
+  - OxygenReduction
+  definition: Metabolic Forest rule `OxygenReduction` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+  related_match:
+  - xrm:0000520
+- id: xrm:9100530
+  preferred_label: SulfurReduction rule
+  synonyms:
+  - SulfurReduction
+  definition: Metabolic Forest rule `SulfurReduction` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+  related_match:
+  - xrm:0000530
+- id: xrm:9100540
+  preferred_label: ReductiveDehalogenation rule
+  synonyms:
+  - ReductiveDehalogenation
+  definition: Metabolic Forest rule `ReductiveDehalogenation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+  related_match:
+  - xrm:0000540
+- id: xrm:9100541
+  preferred_label: BenzodioxoleReduction rule
+  synonyms:
+  - BenzodioxoleReduction
+  definition: Metabolic Forest rule `BenzodioxoleReduction` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000014
+- id: xrm:9100600
+  preferred_label: QuinoneFormation rule
+  synonyms:
+  - QuinoneFormation
+  definition: Metabolic Forest rule `QuinoneFormation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000015
+  related_match:
+  - xrm:0000300
+- id: xrm:9101000
+  preferred_label: Glucuronidation rule
+  synonyms:
+  - Glucuronidation
+  definition: Metabolic Forest rule `Glucuronidation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000016
+  related_match:
+  - xrm:0001000
+- id: xrm:9101010
+  preferred_label: Sulfation rule
+  synonyms:
+  - Sulfation
+  definition: Metabolic Forest rule `Sulfation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000016
+  related_match:
+  - xrm:0001010
+- id: xrm:9101020
+  preferred_label: Acetylation rule
+  synonyms:
+  - Acetylation
+  definition: Metabolic Forest rule `Acetylation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000016
+  related_match:
+  - xrm:0001020
+- id: xrm:9101030
+  preferred_label: Glutathionation rule
+  synonyms:
+  - Glutathionation
+  definition: Metabolic Forest rule `Glutathionation` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000016
+  related_match:
+  - xrm:0001030
+- id: xrm:9102000
+  preferred_label: Tautomerization rule
+  synonyms:
+  - Tautomerization
+  definition: Metabolic Forest rule `Tautomerization` in the Forest-map hierarchy.
+  parents:
+  - xrm:9000017
+  related_match:
+  - xrm:0002000
+- id: xrm:9200001
+  preferred_label: Hydroxylation/h
+  synonyms:
+  - h
+  definition: Metabolic Forest PatternInfo `h` under rule `Hydroxylation`.
+  parents:
+  - xrm:9100100
+- id: xrm:9200002
+  preferred_label: Hydroxylation/h2
+  synonyms:
+  - h2
+  definition: Metabolic Forest PatternInfo `h2` under rule `Hydroxylation`.
+  parents:
+  - xrm:9100100
+- id: xrm:9200003
+  preferred_label: Epoxidation/epoxide
+  synonyms:
+  - epoxide
+  definition: Metabolic Forest PatternInfo `epoxide` under rule `Epoxidation`.
+  parents:
+  - xrm:9100110
+- id: xrm:9200004
+  preferred_label: NitrogenOxidation/hydroxylamine
+  synonyms:
+  - hydroxylamine
+  definition: Metabolic Forest PatternInfo `hydroxylamine` under rule `NitrogenOxidation`.
+  parents:
+  - xrm:9100120
+- id: xrm:9200005
+  preferred_label: NitrogenOxidation/nitroso
+  synonyms:
+  - nitroso
+  definition: Metabolic Forest PatternInfo `nitroso` under rule `NitrogenOxidation`.
+  parents:
+  - xrm:9100120
+- id: xrm:9200006
+  preferred_label: NitrogenOxidation/n_oxide
+  synonyms:
+  - n_oxide
+  definition: Metabolic Forest PatternInfo `n_oxide` under rule `NitrogenOxidation`.
+  parents:
+  - xrm:9100120
+- id: xrm:9200007
+  preferred_label: SulfurOxidation/zwitterion
+  synonyms:
+  - zwitterion
+  definition: Metabolic Forest PatternInfo `zwitterion` under rule `SulfurOxidation`.
+  parents:
+  - xrm:9100130
+- id: xrm:9200008
+  preferred_label: SulfurOxidation/hydroxy
+  synonyms:
+  - hydroxy
+  definition: Metabolic Forest PatternInfo `hydroxy` under rule `SulfurOxidation`.
+  parents:
+  - xrm:9100130
+- id: xrm:9200009
+  preferred_label: SulfurOxidation/oxo
+  synonyms:
+  - oxo
+  definition: Metabolic Forest PatternInfo `oxo` under rule `SulfurOxidation`.
+  parents:
+  - xrm:9100130
+- id: xrm:9200010
+  preferred_label: Dealkylation/methyl_carboxylic
+  synonyms:
+  - methyl_carboxylic
+  definition: Metabolic Forest PatternInfo `methyl_carboxylic` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200011
+  preferred_label: Dealkylation/methyl_carbonyl
+  synonyms:
+  - methyl_carbonyl
+  definition: Metabolic Forest PatternInfo `methyl_carbonyl` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200012
+  preferred_label: Dealkylation/methyl_alcohol
+  synonyms:
+  - methyl_alcohol
+  definition: Metabolic Forest PatternInfo `methyl_alcohol` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200013
+  preferred_label: Dealkylation/methylene_carboxylic
+  synonyms:
+  - methylene_carboxylic
+  definition: Metabolic Forest PatternInfo `methylene_carboxylic` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200014
+  preferred_label: Dealkylation/methylene_carbonyl
+  synonyms:
+  - methylene_carbonyl
+  definition: Metabolic Forest PatternInfo `methylene_carbonyl` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200015
+  preferred_label: Dealkylation/methylene_alcohol
+  synonyms:
+  - methylene_alcohol
+  definition: Metabolic Forest PatternInfo `methylene_alcohol` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200016
+  preferred_label: Dealkylation/methine_carbonyl
+  synonyms:
+  - methine_carbonyl
+  definition: Metabolic Forest PatternInfo `methine_carbonyl` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200017
+  preferred_label: Dealkylation/methine_alcohol
+  synonyms:
+  - methine_alcohol
+  definition: Metabolic Forest PatternInfo `methine_alcohol` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200018
+  preferred_label: Dealkylation/quaternary_alcohol
+  synonyms:
+  - quaternary_alcohol
+  definition: Metabolic Forest PatternInfo `quaternary_alcohol` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200019
+  preferred_label: Dealkylation/cc_quaternary_alcohol
+  synonyms:
+  - cc_quaternary_alcohol
+  definition: Metabolic Forest PatternInfo `cc_quaternary_alcohol` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200020
+  preferred_label: Dealkylation/cc_alcohol
+  synonyms:
+  - cc_alcohol
+  definition: Metabolic Forest PatternInfo `cc_alcohol` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200021
+  preferred_label: Dealkylation/cc_carbonyl
+  synonyms:
+  - cc_carbonyl
+  definition: Metabolic Forest PatternInfo `cc_carbonyl` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200022
+  preferred_label: Dealkylation/hemiaminal
+  synonyms:
+  - hemiaminal
+  definition: Metabolic Forest PatternInfo `hemiaminal` under rule `Dealkylation`.
+  parents:
+  - xrm:9100200
+- id: xrm:9200023
+  preferred_label: OxidativeDehalogenation/alcohol
+  synonyms:
+  - alcohol
+  definition: Metabolic Forest PatternInfo `alcohol` under rule `OxidativeDehalogenation`.
+  parents:
+  - xrm:9100210
+- id: xrm:9200024
+  preferred_label: OxidativeDehalogenation/carbonyl
+  synonyms:
+  - carbonyl
+  definition: Metabolic Forest PatternInfo `carbonyl` under rule `OxidativeDehalogenation`.
+  parents:
+  - xrm:9100210
+- id: xrm:9200025
+  preferred_label: OxidativeDehalogenation/carboxylic
+  synonyms:
+  - carboxylic
+  definition: Metabolic Forest PatternInfo `carboxylic` under rule `OxidativeDehalogenation`.
+  parents:
+  - xrm:9100210
+- id: xrm:9200026
+  preferred_label: OxidativeDehalogenation/rearrange
+  synonyms:
+  - rearrange
+  definition: Metabolic Forest PatternInfo `rearrange` under rule `OxidativeDehalogenation`.
+  parents:
+  - xrm:9100210
+- id: xrm:9200027
+  preferred_label: OxidativeDehalogenation/gem_carboxylic
+  synonyms:
+  - gem_carboxylic
+  definition: Metabolic Forest PatternInfo `gem_carboxylic` under rule `OxidativeDehalogenation`.
+  parents:
+  - xrm:9100210
+- id: xrm:9200028
+  preferred_label: OxidativeDehalogenation/gem_hydrate
+  synonyms:
+  - gem_hydrate
+  definition: Metabolic Forest PatternInfo `gem_hydrate` under rule `OxidativeDehalogenation`.
+  parents:
+  - xrm:9100210
+- id: xrm:9200029
+  preferred_label: Dehydrogenation/sulfoxide
+  synonyms:
+  - sulfoxide
+  definition: Metabolic Forest PatternInfo `sulfoxide` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200030
+  preferred_label: Dehydrogenation/alcohol
+  synonyms:
+  - alcohol
+  definition: Metabolic Forest PatternInfo `alcohol` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200031
+  preferred_label: Dehydrogenation/amine
+  synonyms:
+  - amine
+  definition: Metabolic Forest PatternInfo `amine` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200032
+  preferred_label: Dehydrogenation/alkyl
+  synonyms:
+  - alkyl
+  definition: Metabolic Forest PatternInfo `alkyl` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200033
+  preferred_label: Dehydrogenation/phenol_end
+  synonyms:
+  - phenol_end
+  definition: Metabolic Forest PatternInfo `phenol_end` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200034
+  preferred_label: Dehydrogenation/amine_end
+  synonyms:
+  - amine_end
+  definition: Metabolic Forest PatternInfo `amine_end` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200035
+  preferred_label: Dehydrogenation/methide_end
+  synonyms:
+  - methide_end
+  definition: Metabolic Forest PatternInfo `methide_end` under rule `Dehydrogenation`.
+  parents:
+  - xrm:9100300
+- id: xrm:9200036
+  preferred_label: Hydrolysis/add_water
+  synonyms:
+  - add_water
+  definition: Metabolic Forest PatternInfo `add_water` under rule `Hydrolysis`.
+  parents:
+  - xrm:9100400
+- id: xrm:9200037
+  preferred_label: Hydrolysis/cleave
+  synonyms:
+  - cleave
+  definition: Metabolic Forest PatternInfo `cleave` under rule `Hydrolysis`.
+  parents:
+  - xrm:9100400
+- id: xrm:9200038
+  preferred_label: EpoxideOpening/rearrange
+  synonyms:
+  - rearrange
+  definition: Metabolic Forest PatternInfo `rearrange` under rule `EpoxideOpening`.
+  parents:
+  - xrm:9100401
+- id: xrm:9200039
+  preferred_label: EpoxideOpening/hydrate
+  synonyms:
+  - hydrate
+  definition: Metabolic Forest PatternInfo `hydrate` under rule `EpoxideOpening`.
+  parents:
+  - xrm:9100401
+- id: xrm:9200040
+  preferred_label: Dephosphorylation/phosphate_ester
+  synonyms:
+  - phosphate_ester
+  definition: Metabolic Forest PatternInfo `phosphate_ester` under rule `Dephosphorylation`.
+  parents:
+  - xrm:9100402
+- id: xrm:9200041
+  preferred_label: AzoSplitting/azo
+  synonyms:
+  - azo
+  definition: Metabolic Forest PatternInfo `azo` under rule `AzoSplitting`.
+  parents:
+  - xrm:9100403
+- id: xrm:9200042
+  preferred_label: Hydrogenation/alkyne
+  synonyms:
+  - alkyne
+  definition: Metabolic Forest PatternInfo `alkyne` under rule `Hydrogenation`.
+  parents:
+  - xrm:9100500
+- id: xrm:9200043
+  preferred_label: Hydrogenation/alkene
+  synonyms:
+  - alkene
+  definition: Metabolic Forest PatternInfo `alkene` under rule `Hydrogenation`.
+  parents:
+  - xrm:9100500
+- id: xrm:9200044
+  preferred_label: Hydrogenation/path_end
+  synonyms:
+  - path_end
+  definition: Metabolic Forest PatternInfo `path_end` under rule `Hydrogenation`.
+  parents:
+  - xrm:9100500
+- id: xrm:9200045
+  preferred_label: Dehydration/alcohol
+  synonyms:
+  - alcohol
+  definition: Metabolic Forest PatternInfo `alcohol` under rule `Dehydration`.
+  parents:
+  - xrm:9100501
+- id: xrm:9200046
+  preferred_label: Dehydration/beta_elimination
+  synonyms:
+  - beta_elimination
+  definition: Metabolic Forest PatternInfo `beta_elimination` under rule `Dehydration`.
+  parents:
+  - xrm:9100501
+- id: xrm:9200047
+  preferred_label: Dehydration/carbonyl
+  synonyms:
+  - carbonyl
+  definition: Metabolic Forest PatternInfo `carbonyl` under rule `Dehydration`.
+  parents:
+  - xrm:9100501
+- id: xrm:9200048
+  preferred_label: NitrogenReduction/nitro_charged
+  synonyms:
+  - nitro_charged
+  definition: Metabolic Forest PatternInfo `nitro_charged` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200049
+  preferred_label: NitrogenReduction/nitro_anion
+  synonyms:
+  - nitro_anion
+  definition: Metabolic Forest PatternInfo `nitro_anion` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200050
+  preferred_label: NitrogenReduction/nitro_neutral
+  synonyms:
+  - nitro_neutral
+  definition: Metabolic Forest PatternInfo `nitro_neutral` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200051
+  preferred_label: NitrogenReduction/nitro_to_amine
+  synonyms:
+  - nitro_to_amine
+  definition: Metabolic Forest PatternInfo `nitro_to_amine` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200052
+  preferred_label: NitrogenReduction/nitro_both
+  synonyms:
+  - nitro_both
+  definition: Metabolic Forest PatternInfo `nitro_both` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200053
+  preferred_label: NitrogenReduction/hydroxylamine
+  synonyms:
+  - hydroxylamine
+  definition: Metabolic Forest PatternInfo `hydroxylamine` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200054
+  preferred_label: NitrogenReduction/nitroso
+  synonyms:
+  - nitroso
+  definition: Metabolic Forest PatternInfo `nitroso` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200055
+  preferred_label: NitrogenReduction/nitro_both_any
+  synonyms:
+  - nitro_both_any
+  definition: Metabolic Forest PatternInfo `nitro_both_any` under rule `NitrogenReduction`.
+  parents:
+  - xrm:9100510
+- id: xrm:9200056
+  preferred_label: OxygenReduction/carbonyl
+  synonyms:
+  - carbonyl
+  definition: Metabolic Forest PatternInfo `carbonyl` under rule `OxygenReduction`.
+  parents:
+  - xrm:9100520
+- id: xrm:9200057
+  preferred_label: OxygenReduction/peroxide
+  synonyms:
+  - peroxide
+  definition: Metabolic Forest PatternInfo `peroxide` under rule `OxygenReduction`.
+  parents:
+  - xrm:9100520
+- id: xrm:9200058
+  preferred_label: SulfurReduction/sulfoxide
+  synonyms:
+  - sulfoxide
+  definition: Metabolic Forest PatternInfo `sulfoxide` under rule `SulfurReduction`.
+  parents:
+  - xrm:9100530
+- id: xrm:9200059
+  preferred_label: SulfurReduction/disulfide
+  synonyms:
+  - disulfide
+  definition: Metabolic Forest PatternInfo `disulfide` under rule `SulfurReduction`.
+  parents:
+  - xrm:9100530
+- id: xrm:9200060
+  preferred_label: SulfurReduction/thioether
+  synonyms:
+  - thioether
+  definition: Metabolic Forest PatternInfo `thioether` under rule `SulfurReduction`.
+  parents:
+  - xrm:9100530
+- id: xrm:9200061
+  preferred_label: ReductiveDehalogenation/cleave
+  synonyms:
+  - cleave
+  definition: Metabolic Forest PatternInfo `cleave` under rule `ReductiveDehalogenation`.
+  parents:
+  - xrm:9100540
+- id: xrm:9200062
+  preferred_label: ReductiveDehalogenation/alkene
+  synonyms:
+  - alkene
+  definition: Metabolic Forest PatternInfo `alkene` under rule `ReductiveDehalogenation`.
+  parents:
+  - xrm:9100540
+- id: xrm:9200063
+  preferred_label: BenzodioxoleReduction/dioxole_methylene
+  synonyms:
+  - dioxole_methylene
+  definition: Metabolic Forest PatternInfo `dioxole_methylene` under rule `BenzodioxoleReduction`.
+  parents:
+  - xrm:9100541
+- id: xrm:9200064
+  preferred_label: QuinoneFormation/single_to_double
+  synonyms:
+  - single_to_double
+  definition: Metabolic Forest PatternInfo `single_to_double` under rule `QuinoneFormation`.
+  parents:
+  - xrm:9100600
+- id: xrm:9200065
+  preferred_label: QuinoneFormation/add_carbonyl_o
+  synonyms:
+  - add_carbonyl_o
+  definition: Metabolic Forest PatternInfo `add_carbonyl_o` under rule `QuinoneFormation`.
+  parents:
+  - xrm:9100600
+- id: xrm:9200066
+  preferred_label: QuinoneFormation/replace_halogen
+  synonyms:
+  - replace_halogen
+  definition: Metabolic Forest PatternInfo `replace_halogen` under rule `QuinoneFormation`.
+  parents:
+  - xrm:9100600
+- id: xrm:9200067
+  preferred_label: QuinoneFormation/iminium
+  synonyms:
+  - iminium
+  definition: Metabolic Forest PatternInfo `iminium` under rule `QuinoneFormation`.
+  parents:
+  - xrm:9100600
+- id: xrm:9200068
+  preferred_label: QuinoneFormation/dealkylate
+  synonyms:
+  - dealkylate
+  definition: Metabolic Forest PatternInfo `dealkylate` under rule `QuinoneFormation`.
+  parents:
+  - xrm:9100600
+- id: xrm:9200069
+  preferred_label: Glucuronidation/alcohol
+  synonyms:
+  - alcohol
+  definition: Metabolic Forest PatternInfo `alcohol` under rule `Glucuronidation`.
+  parents:
+  - xrm:9101000
+- id: xrm:9200070
+  preferred_label: Glucuronidation/carboxylate
+  synonyms:
+  - carboxylate
+  definition: Metabolic Forest PatternInfo `carboxylate` under rule `Glucuronidation`.
+  parents:
+  - xrm:9101000
+- id: xrm:9200071
+  preferred_label: Sulfation/alcohol
+  synonyms:
+  - alcohol
+  definition: Metabolic Forest PatternInfo `alcohol` under rule `Sulfation`.
+  parents:
+  - xrm:9101010
+- id: xrm:9200072
+  preferred_label: Sulfation/epoxide_methyl_sulfone
+  synonyms:
+  - epoxide_methyl_sulfone
+  definition: Metabolic Forest PatternInfo `epoxide_methyl_sulfone` under rule `Sulfation`.
+  parents:
+  - xrm:9101010
+- id: xrm:9200073
+  preferred_label: Glutathionation/epoxide_ch
+  synonyms:
+  - epoxide_ch
+  definition: Metabolic Forest PatternInfo `epoxide_ch` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200074
+  preferred_label: Glutathionation/epoxide_ch2
+  synonyms:
+  - epoxide_ch2
+  definition: Metabolic Forest PatternInfo `epoxide_ch2` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200075
+  preferred_label: Glutathionation/epoxide_c
+  synonyms:
+  - epoxide_c
+  definition: Metabolic Forest PatternInfo `epoxide_c` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200076
+  preferred_label: Glutathionation/halide
+  synonyms:
+  - halide
+  definition: Metabolic Forest PatternInfo `halide` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200077
+  preferred_label: Glutathionation/thiol
+  synonyms:
+  - thiol
+  definition: Metabolic Forest PatternInfo `thiol` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200078
+  preferred_label: Glutathionation/alkene
+  synonyms:
+  - alkene
+  definition: Metabolic Forest PatternInfo `alkene` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200079
+  preferred_label: Glutathionation/michael
+  synonyms:
+  - michael
+  definition: Metabolic Forest PatternInfo `michael` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200080
+  preferred_label: Glutathionation/carbonyl
+  synonyms:
+  - carbonyl
+  definition: Metabolic Forest PatternInfo `carbonyl` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200081
+  preferred_label: Glutathionation/aziridine_ch
+  synonyms:
+  - aziridine_ch
+  definition: Metabolic Forest PatternInfo `aziridine_ch` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200082
+  preferred_label: Glutathionation/aziridine_ch2
+  synonyms:
+  - aziridine_ch2
+  definition: Metabolic Forest PatternInfo `aziridine_ch2` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200083
+  preferred_label: Glutathionation/aziridine_c
+  synonyms:
+  - aziridine_c
+  definition: Metabolic Forest PatternInfo `aziridine_c` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200084
+  preferred_label: Glutathionation/mesylate
+  synonyms:
+  - mesylate
+  definition: Metabolic Forest PatternInfo `mesylate` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
+- id: xrm:9200085
+  preferred_label: Glutathionation/isocyanate
+  synonyms:
+  - isocyanate
+  definition: Metabolic Forest PatternInfo `isocyanate` under rule `Glutathionation`.
+  parents:
+  - xrm:9101030
