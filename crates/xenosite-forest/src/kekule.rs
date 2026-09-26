@@ -13,7 +13,7 @@
 //!   that key and starts a new bag.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 use chematic::core::BondOrder;
@@ -248,60 +248,162 @@ pub struct EndParents {
     pub same_system: bool,
 }
 
+/// Bond-order sum for charge-follow (aromatic counts as 1.5, matching RDKit).
+fn bond_order_sums(mol: &Molecule) -> HashMap<usize, f32> {
+    let mut sums = HashMap::new();
+    for (idx, _) in mol.atoms() {
+        let i = atom_usize(idx);
+        let mut sum = 0.0_f32;
+        for (_nbr, bond_idx) in mol.neighbors(idx) {
+            sum += match mol.bond(bond_idx).order {
+                BondOrder::Single | BondOrder::Up | BondOrder::Down => 1.0,
+                BondOrder::Double => 2.0,
+                BondOrder::Triple => 3.0,
+                BondOrder::Aromatic => 1.5,
+                BondOrder::Quadruple => 4.0,
+                _ => 1.0,
+            };
+        }
+        sums.insert(i, sum);
+    }
+    sums
+}
+
+/// Move formal charge when a bond-order flip would leave it behind.
+///
+/// Same rules as Python `move_charge_with_bonds`: neutral C shifts H; neutral
+/// aromatic atoms do not mint charge from 1.5→1/2 alone; already-charged atoms
+/// and neutral non-aromatic heteroatoms follow the bond (N may gain charge when
+/// bond order rises — iminium / amide resonance / pyridinium bookkeeping).
+pub fn move_charge_with_bonds(
+    mol: &mut Molecule,
+    before: &HashMap<usize, f32>,
+    aromatic: &HashSet<usize>,
+) {
+    use chematic::core::Element;
+    let after = bond_order_sums(mol);
+    let idxs: Vec<usize> = after.keys().copied().collect();
+    for i in idxs {
+        let old = match before.get(&i) {
+            Some(&v) => v,
+            None => continue,
+        };
+        let new = after[&i];
+        let delta = (new - old).round() as i8;
+        if delta == 0 {
+            continue;
+        }
+        let atom = mol.atom(atom_idx(i));
+        let charge = atom.charge;
+        let z = atom.element.atomic_number();
+        let neutral = charge == 0;
+        if neutral && z == 6 {
+            // H travels with the bond on neutral carbon.
+            let impl_h = mol.implicit_hydrogen_count(atom_idx(i));
+            let expl = atom.hydrogen_count.unwrap_or(0);
+            let total = expl as i16 + impl_h as i16;
+            let updated = total - delta as i16;
+            if updated >= 0 {
+                // Rebuild with explicit H (chematic has no set_hydrogen in-place).
+                let mut next = mol.clone();
+                // Patch via with_atom_charge path style: rebuild one atom's H.
+                *mol = with_atom_explicit_h(&next, atom_idx(i), updated as u8);
+                let _ = next;
+            }
+        } else if neutral && aromatic.contains(&i) {
+            continue;
+        } else {
+            mol.set_charge(atom_idx(i), charge.saturating_add(delta));
+        }
+    }
+    let _ = Element::C; // keep import usable if charge path changes
+}
+
+fn with_atom_explicit_h(mol: &Molecule, idx: chematic::core::AtomIdx, h: u8) -> Molecule {
+    use chematic::core::{Atom, MoleculeBuilder};
+    let mut builder = MoleculeBuilder::new();
+    for (aidx, atom) in mol.atoms() {
+        let mut a = atom.clone();
+        if aidx == idx {
+            a.hydrogen_count = Some(h);
+        }
+        builder.add_atom(a);
+    }
+    for (_, bond) in mol.bonds() {
+        let _ = builder.add_bond(bond.atom1, bond.atom2, bond.order);
+    }
+    builder.copy_stereo_from(mol);
+    builder.copy_r_groups_from(mol);
+    builder.copy_bond_directions_from(mol);
+    builder.build()
+}
+
 fn match_assignment(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
     seed: (usize, usize),
 ) -> Option<BTreeMap<(usize, usize), BondOrder>> {
+    use chematic::core::kekulization::atom_must_be_matched;
     if !atoms.contains(&seed.0) || !atoms.contains(&seed.1) {
         return None;
     }
-    let mut adj: HashMap<usize, Vec<usize>> = atoms.iter().map(|&a| (a, Vec::new())).collect();
+    // Only must-match↔must-match edges are double-bond candidates (pyrrole
+    // [nH] / O / S donate a lone pair — chematic atom_must_be_matched).
+    let must: BTreeSet<usize> = atoms
+        .iter()
+        .copied()
+        .filter(|&i| atom_must_be_matched(mol, atom_idx(i)))
+        .collect();
+    if !must.contains(&seed.0) || !must.contains(&seed.1) {
+        return None;
+    }
+    let mut adj: HashMap<usize, Vec<usize>> = must.iter().map(|&a| (a, Vec::new())).collect();
     for &(left, right) in bonds {
+        if !must.contains(&left) || !must.contains(&right) {
+            continue;
+        }
         adj.get_mut(&left)?.push(right);
         adj.get_mut(&right)?.push(left);
     }
     for nbrs in adj.values_mut() {
         nbrs.sort_unstable();
     }
-    let carbons: Vec<usize> = atoms
-        .iter()
-        .copied()
-        .filter(|&i| mol.atom(atom_idx(i)).element.atomic_number() == 6)
-        .collect();
+    // Place doubles on must-match atoms (C and pyridine-type / charged N), not
+    // carbons alone — else pyridinium / pyridine parents never form.
+    let places: Vec<usize> = must.iter().copied().collect();
     let mut doubles = HashMap::from([(seed.0, seed.1), (seed.1, seed.0)]);
     fn place(
         idx: usize,
-        carbons: &[usize],
+        places: &[usize],
         adj: &HashMap<usize, Vec<usize>>,
         doubles: &mut HashMap<usize, usize>,
     ) -> bool {
-        if idx == carbons.len() {
+        if idx == places.len() {
             return true;
         }
-        let carbon = carbons[idx];
-        if doubles.contains_key(&carbon) {
-            return place(idx + 1, carbons, adj, doubles);
+        let atom = places[idx];
+        if doubles.contains_key(&atom) {
+            return place(idx + 1, places, adj, doubles);
         }
-        let Some(nbrs) = adj.get(&carbon) else {
+        let Some(nbrs) = adj.get(&atom) else {
             return false;
         };
         for &nbr in nbrs {
             if doubles.contains_key(&nbr) {
                 continue;
             }
-            doubles.insert(carbon, nbr);
-            doubles.insert(nbr, carbon);
-            if place(idx + 1, carbons, adj, doubles) {
+            doubles.insert(atom, nbr);
+            doubles.insert(nbr, atom);
+            if place(idx + 1, places, adj, doubles) {
                 return true;
             }
-            doubles.remove(&carbon);
+            doubles.remove(&atom);
             doubles.remove(&nbr);
         }
         false
     }
-    if !place(0, &carbons, &adj, &mut doubles) {
+    if !place(0, &places, &adj, &mut doubles) {
         return None;
     }
     let mut written = BTreeMap::new();
@@ -320,11 +422,19 @@ fn match_assignment(
 }
 
 /// Stamp one system's assignment onto `mol`. Other systems stay as they were.
+///
+/// Applies [`move_charge_with_bonds`] so charge separation on valid writings
+/// (including N that gains charge) matches Python reactant overlays.
 pub fn overlay(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     assignment: &BTreeMap<(usize, usize), BondOrder>,
 ) -> Molecule {
+    let before = bond_order_sums(mol);
+    let aromatic: HashSet<usize> = mol
+        .atoms()
+        .filter_map(|(idx, atom)| atom.aromatic.then_some(atom_usize(idx)))
+        .collect();
     let mut out = mol.clone();
     for (&(left, right), &order) in assignment {
         if let Some((bond_idx, _)) = out.bond_between(atom_idx(left), atom_idx(right)) {
@@ -336,6 +446,7 @@ pub fn overlay(
             out = out.with_atom_aromatic(atom_idx(atom), false);
         }
     }
+    move_charge_with_bonds(&mut out, &before, &aromatic);
     out
 }
 

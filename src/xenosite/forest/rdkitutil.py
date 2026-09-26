@@ -1301,14 +1301,16 @@ def move_charge_with_bonds(
 ) -> None:
     """Move formal charge when a bond-order flip would leave it behind.
 
-    The oxygen whose bond order rose by one loses a negative charge. The
-    oxygen whose bond order fell gains it. A neutral carbon keeps charge 0
-    and moves hydrogen instead, because that hydrogen has to travel with
-    the bond.
+    Used on Kekulé overlays (reactant parents) and available for post-reaction
+    path materialization. Bond-order rise on nitrogen may mint ``[N+]``
+    (iminium, amide resonance, pyridinium bookkeeping); a fall on oxygen may
+    mint ``[O-]``. That charge separation on valid products must stay.
 
-    A neutral aromatic atom is already the right charge. Kekulizing its
-    1.5-order bonds is not a flip that should mint ``[n-]`` or ``[n+]``.
-    Charged atoms still follow the bond, including a nitro oxygen.
+    A neutral carbon keeps charge 0 and moves hydrogen instead — the H
+    travels with the bond. A neutral *aromatic* atom is already the right
+    charge when only 1.5→1/2 kekulizing (do not mint ``[n-]``/``[n+]`` from
+    that alone). Already-charged atoms (nitro oxygen, ``[n+]``) always follow
+    the bond.
     """
 
     aromatic = aromatic or set()
@@ -1326,6 +1328,8 @@ def move_charge_with_bonds(
         elif neutral and atom.GetIdx() in aromatic:
             continue
         else:
+            # Includes neutral non-aromatic N/O (amide resonance) and any
+            # already-charged atom — N may gain charge when bond order rises.
             atom.SetFormalCharge(atom.GetFormalCharge() + delta)
 
 

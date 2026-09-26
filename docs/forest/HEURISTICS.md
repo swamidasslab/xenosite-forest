@@ -246,7 +246,8 @@ Status: **not approved**. Materializing every Kekulé form inside plain `SmirksR
 
 ## Chematic / RDKit resonance engines for ResonancePair path edits
 
-Status: **not approved** (do not migrate the path flip onto these).
+Status: **not approved** to *replace* path discovery with global re-kekulize;
+**not decided** for materializing the intentional flip via Kekulé parents.
 
 **Chematic** exposes aromatic kekulization (`chematic_core::kekulize` /
 `kekulize_inplace`) and low-level `set_bond_order`. **RDKit**
@@ -257,14 +258,50 @@ atoms, constrained cations/anions left of N, etc.). Forest already uses the
 supplier correctly for **Kekulé parents and conjugated groups**
 (`resonance_bond_maps` / `_kekule_forms`).
 
-Neither API is a conjugated-**path flip**. ResonancePair needs odd
-alternating-path discovery between two ends, then single↔double flip along
-that path after end edits (`swap_bonds_along_path` / Rust `flip_path`).
-Replacing that with re-kekulize or “pick a ResonanceMolSupplier form” would
-choose *some* matching, not the intentional path. Keep the hand walk; keep
-post-flip gates (H adjust, valence / two-double N, re-aromatized system drop).
-Sanitize / C10 failures are usually end-edit / SMIRKS products, not missing a
-library flip. Revisit only if a library gains an explicit path-flip primitive.
+Neither API is a conjugated-**path discovery**. ResonancePair still needs an
+odd alternating path between two ends after end edits. Blindly replacing that
+with re-kekulize or “pick a ResonanceMolSupplier form” would choose *some*
+matching, not the intentional path — **not approved**.
+
+**Possible refactor (not decided):** keep path discovery as today, but
+materialize the post-reaction flip by overlaying a Kekulé parent whose bond
+orders realize that path (system assignment constrained by the path’s
+single/double pattern), then the same `move_charge_with_bonds` used on
+reactant overlays. That retains charge separation on valid products
+(including N that gains charge when bond order rises — iminium / pyridinium /
+amide resonance) without inventing a second charge model. Kekulé matching
+must place doubles on must-match atoms (C and pyridine-type / charged N —
+`atom_must_be_matched`), not carbons alone. Until that lands, hand
+`flip_path` / `swap_bonds_along_path` plus post-flip H adjust and charge-follow
+stay. Sanitize / C10 failures are usually end-edit / SMIRKS products, not
+missing a library flip.
+
+**Parity judgment (examined Kekulé parents both sides):** path-constrained
+overlay is a **weak** parity lever until parent bags match door-by-door.
+Python already discovers paths on parents, then copies that parent and
+`swap_bonds_along_path`; swapping only the flip step for an overlay does not
+fix the bag. Observed parent sources diverge:
+
+- **Pair conjugated** (e.g. QuinoneFormation): Python
+  `ResonanceMolSupplier` / `resonance_bond_maps` — APAP and aminophenol stay
+  **neutral** amide/amine Kekulé; nitrobenzene has 4 maps; pyridinium 1.
+  Rust pair materialize uses `kekule_forms` (assignment writer) — APAP forms
+  show `O−` without the matching `N+`; pyridinium stays aromatic (1 form) →
+  candidates with 0 emissions while Python emits.
+- **Pair aromatic:** Python `parents_for_ends` on
+  `aromatic_parent_atoms` (ring only — exocyclic amide not rewritten).
+- **ResonanceRule:** Python `_write_assignment` on the **full conjugated**
+  component — APAP amide can be charged
+  (`CC([O-])=[NH+]…` or `CC(=O)[NH+]=C1C=CC(=[OH+])…`). Same writer with
+  carbons-only matching: pyridinium full-conj (includes methyl) yields 0
+  parents → aromatic fallback; aromatic-scoped bag still has 2.
+- **Indole (5,6):** neither side has a single-bond parent (both keep
+  aromatic fallback). Overlay cannot invent that assignment.
+
+Align bags first (pair conjugated ↔ RMS-equivalent maps; pair aromatic ↔
+aromatic scope; rule ↔ full-conj + must-match + correct `move_charge`). Then
+path-overlay is a materialization cleanup that unifies charge-follow with
+reactant overlays — not the product-set fix.
 
 ## Chematic product-side ``#`` expand → organic aliphatic + aromatic
 
