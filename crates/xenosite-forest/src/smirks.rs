@@ -13,18 +13,23 @@ use chematic::rxn::{apply_reaction_match, find_reaction_matches};
 use crate::mol::{ForestError, Molecule, atom_idx, atom_usize};
 use crate::valence::accept_product;
 
-fn element_symbol(el: Element) -> Option<&'static str> {
-    Some(match el {
-        Element::C => "C",
-        Element::N => "N",
-        Element::O => "O",
-        Element::S => "S",
-        Element::P => "P",
-        Element::F => "F",
-        Element::CL => "Cl",
-        Element::BR => "Br",
-        Element::I => "I",
-        Element::H => "H",
+fn element_symbol(el: Element, aromatic: bool) -> Option<&'static str> {
+    Some(match (el, aromatic) {
+        (Element::C, true) => "c",
+        (Element::N, true) => "n",
+        (Element::O, true) => "o",
+        (Element::S, true) => "s",
+        (Element::P, true) => "p",
+        (Element::C, false) => "C",
+        (Element::N, false) => "N",
+        (Element::O, false) => "O",
+        (Element::S, false) => "S",
+        (Element::P, false) => "P",
+        (Element::F, _) => "F",
+        (Element::CL, _) => "Cl",
+        (Element::BR, _) => "Br",
+        (Element::I, _) => "I",
+        (Element::H, _) => "H",
         _ => return None,
     })
 }
@@ -32,7 +37,8 @@ fn element_symbol(el: Element) -> Option<&'static str> {
 /// Rewrite a Python/RDKit SMIRKS so chematic can parse it for this match.
 ///
 /// - Drop product-side grouping parentheses after `>>`.
-/// - Replace every reactant `[…:map]` with `[El:map]` from the matched atom.
+/// - Replace every reactant `[…:map]` with `[El:map]` from the matched atom
+///   (lowercase when that atom is aromatic — chematic `C` is aliphatic-only).
 /// - Leave product `[* :map]` / organic atoms alone when already chematic-clean.
 pub fn specialize_smirks_for_maps(
     smirks: &str,
@@ -64,8 +70,8 @@ pub fn specialize_smirks_for_maps(
                     .parse()
                     .map_err(|_| ForestError::Smirks(format!("bad map in [{bracket}]")))?;
                 if let Some(&atom) = mapped.get(&mapno) {
-                    let el = mol.atom(atom_idx(atom)).element;
-                    let sym = element_symbol(el).ok_or_else(|| {
+                    let a = mol.atom(atom_idx(atom));
+                    let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
                         ForestError::Smirks(format!("unsupported element for map {mapno}"))
                     })?;
                     out.push('[');
@@ -207,6 +213,25 @@ mod tests {
                 .iter()
                 .any(|p| canon_of(&canon_smiles(p)).unwrap() == phenol),
             "form={form}"
+        );
+    }
+
+    #[test]
+    fn specialize_uses_aromatic_carbon_for_aryl_oxdehal() {
+        let mol = parse_mol("Clc1ccccc1").unwrap();
+        let hits = smarts_matches(&mol, "[#9,#17,#35,#53,#85:1]-[#6:2]").unwrap();
+        assert_eq!(hits.len(), 1);
+        let python = "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O";
+        let form = specialize_smirks_for_maps(python, &mol, &hits[0]).unwrap();
+        assert_eq!(form, "[Cl:1]-[c:2]>>[*:1].[*:2]O", "form={form}");
+        let products = apply_smirks_at(python, &mol, &hits[0]).unwrap();
+        let phenol = canon_of("Oc1ccccc1").unwrap();
+        assert!(
+            products
+                .iter()
+                .any(|p| canon_of(&canon_smiles(p)).unwrap() == phenol),
+            "got {:?} form={form}",
+            products.iter().map(canon_smiles).collect::<Vec<_>>()
         );
     }
 }

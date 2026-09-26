@@ -1217,6 +1217,239 @@ mod tests {
         );
     }
 
+    /// Every QF prep-spine shape: OH/DH cases must [`Deps::reaches`]; OxDehal
+    /// spines are constructed here (aryl `OxidativeDehalogenation` SMIRKS does
+    /// not yet apply under chematic — aliphatic leaf covered separately).
+    #[test]
+    fn qf_canonical_plan_shapes_all_replay() {
+        fn rules_of(deps: &Deps) -> Vec<&str> {
+            deps.steps().iter().map(|s| s.rule.as_str()).collect()
+        }
+        fn ring_c_bonded_to(mol: &Molecule, z: u8) -> usize {
+            (0..mol.atom_count())
+                .find(|&i| {
+                    let a = atom_idx(i);
+                    mol.atom(a).element.atomic_number() == 6
+                        && mol.atom(a).aromatic
+                        && mol
+                            .neighbors(a)
+                            .any(|(n, _)| mol.atom(n).element.atomic_number() == z)
+                })
+                .expect("ring C bonded to Z")
+        }
+        fn bare_para_to(mol: &Molecule, tagged: usize) -> usize {
+            (0..mol.atom_count())
+                .filter(|&i| {
+                    if i == tagged {
+                        return false;
+                    }
+                    let a = atom_idx(i);
+                    if mol.atom(a).element.atomic_number() != 6 || !mol.atom(a).aromatic {
+                        return false;
+                    }
+                    !mol.neighbors(a).any(|(n, _)| {
+                        let z = mol.atom(n).element.atomic_number();
+                        z != 6 && z != 1
+                    })
+                })
+                .max_by_key(|&i| {
+                    let mut dist = vec![usize::MAX; mol.atom_count()];
+                    dist[tagged] = 0;
+                    let mut q = std::collections::VecDeque::from([tagged]);
+                    while let Some(u) = q.pop_front() {
+                        for (n, _) in mol.neighbors(atom_idx(u)) {
+                            let v = atom_usize(n);
+                            if dist[v] == usize::MAX {
+                                dist[v] = dist[u] + 1;
+                                q.push_back(v);
+                            }
+                        }
+                    }
+                    dist[i]
+                })
+                .expect("para CH")
+        }
+
+        let need_o = Effect {
+            adds: Some("O".into()),
+            removes: Some("H".into()),
+            dearomatizes: true,
+            ..Default::default()
+        };
+        let phenol = Effect {
+            removes: Some("H".into()),
+            dearomatizes: true,
+            partner: Some("O".into()),
+            ..Default::default()
+        };
+        let cl_end = Effect {
+            adds: Some("O".into()),
+            dearomatizes: true,
+            partner: Some("Cl".into()),
+            ..Default::default()
+        };
+
+        // 1) DH only — hydroquinone.
+        {
+            let smi = "Oc1ccc(O)cc1";
+            let mol = parse_mol(smi).unwrap();
+            let c0 = ring_c_bonded_to(&mol, 8);
+            let c1 = (0..mol.atom_count())
+                .find(|&i| {
+                    i != c0
+                        && mol.atom(atom_idx(i)).element.atomic_number() == 6
+                        && mol.atom(atom_idx(i)).aromatic
+                        && mol
+                            .neighbors(atom_idx(i))
+                            .any(|(n, _)| mol.atom(n).element.atomic_number() == 8)
+                })
+                .unwrap();
+            let deps = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&phenol, &phenol],
+                &[c0, c1],
+            ));
+            assert_eq!(rules_of(&deps), ["Dehydrogenation"]);
+            assert!(
+                deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap(),
+                "{deps:?}"
+            );
+        }
+
+        // 2) OH → DH — phenol.
+        {
+            let smi = "Oc1ccccc1";
+            let mol = parse_mol(smi).unwrap();
+            let c_oh = ring_c_bonded_to(&mol, 8);
+            let c_h = bare_para_to(&mol, c_oh);
+            let deps = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&need_o, &phenol],
+                &[c_h, c_oh],
+            ));
+            assert_eq!(rules_of(&deps), ["Hydroxylation", "Dehydrogenation"]);
+            assert!(
+                deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap(),
+                "{deps:?}"
+            );
+        }
+
+        // 3) OH → OH → DH — benzene.
+        {
+            let smi = "c1ccccc1";
+            let mol = parse_mol(smi).unwrap();
+            let deps = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&need_o, &need_o],
+                &[0, 3],
+            ));
+            assert_eq!(
+                rules_of(&deps),
+                ["Hydroxylation", "Hydroxylation", "Dehydrogenation"]
+            );
+            assert!(deps.reaches(smi, "O=C1C=CC(=O)C=C1").unwrap());
+        }
+
+        // 4–7) OxDehal spines — structure only (aryl OxDehal SMIRKS empty under chematic).
+        {
+            let smi = "Oc1ccc(Cl)cc1";
+            let mol = parse_mol(smi).unwrap();
+            let c_cl = ring_c_bonded_to(&mol, 17);
+            let c_oh = ring_c_bonded_to(&mol, 8);
+            let deps = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&cl_end, &phenol],
+                &[c_cl, c_oh],
+            ));
+            assert_eq!(
+                rules_of(&deps),
+                ["OxidativeDehalogenation", "Dehydrogenation"]
+            );
+        }
+        {
+            let smi = "Clc1ccc(Cl)cc1";
+            let mol = parse_mol(smi).unwrap();
+            let mut cls: Vec<usize> = (0..mol.atom_count())
+                .filter(|&i| {
+                    mol.atom(atom_idx(i)).element.atomic_number() == 6
+                        && mol.atom(atom_idx(i)).aromatic
+                        && mol
+                            .neighbors(atom_idx(i))
+                            .any(|(n, _)| mol.atom(n).element.atomic_number() == 17)
+                })
+                .collect();
+            cls.sort_unstable();
+            let deps = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&cl_end, &cl_end],
+                &[cls[0], cls[1]],
+            ));
+            assert_eq!(
+                rules_of(&deps),
+                [
+                    "OxidativeDehalogenation",
+                    "OxidativeDehalogenation",
+                    "Dehydrogenation"
+                ]
+            );
+        }
+        {
+            let smi = "Clc1ccccc1";
+            let mol = parse_mol(smi).unwrap();
+            let c_cl = ring_c_bonded_to(&mol, 17);
+            let c_h = bare_para_to(&mol, c_cl);
+            let oh_first = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&need_o, &cl_end],
+                &[c_h, c_cl],
+            ));
+            assert_eq!(
+                rules_of(&oh_first),
+                [
+                    "Hydroxylation",
+                    "OxidativeDehalogenation",
+                    "Dehydrogenation"
+                ]
+            );
+            let ox_first = Deps::bind(hydroxylation_then_dehydrogenation(
+                &mol,
+                &[&cl_end, &need_o],
+                &[c_cl, c_h],
+            ));
+            assert_eq!(
+                rules_of(&ox_first),
+                [
+                    "OxidativeDehalogenation",
+                    "Hydroxylation",
+                    "Dehydrogenation"
+                ]
+            );
+        }
+
+        // Aliphatic OxDehal leaf does apply (chematic gap is aryl-only).
+        {
+            let mol = parse_mol("CCCl").unwrap();
+            let hits =
+                crate::smarts::smarts_matches(&mol, "[#9,#17,#35,#53,#85:1]-[#6:2]").unwrap();
+            assert_eq!(hits.len(), 1);
+            let c = *hits[0].get(&2).unwrap();
+            let x = *hits[0].get(&1).unwrap();
+            let step = Step::new(
+                "OxidativeDehalogenation",
+                [PlanAtom::index(c), PlanAtom::index(x)],
+            );
+            let products = step.apply(&mol).unwrap();
+            assert!(
+                products.iter().any(|p| {
+                    let got = canon_of(&canon_smiles(p)).unwrap();
+                    got == canon_of("C(C)O").unwrap() || got == canon_of("CCO").unwrap()
+                }),
+                "got {:?}",
+                products.iter().map(canon_smiles).collect::<Vec<_>>()
+            );
+        }
+    }
+
     #[test]
     fn replay_hydroxylation_ethane() {
         let mol = parse_mol("CC").unwrap();
