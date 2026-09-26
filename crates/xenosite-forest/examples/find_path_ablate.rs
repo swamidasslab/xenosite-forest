@@ -124,6 +124,8 @@ struct Row {
     billed: usize,
     deprio: usize,
     drop_dup: usize,
+    drop_exact: usize,
+    drop_skel: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +136,8 @@ struct Suite {
     total_secs: f64,
     total_deprio: usize,
     total_drop_dup: usize,
+    total_drop_exact: usize,
+    total_drop_skel: usize,
     rows: Vec<(String, Row)>,
 }
 
@@ -177,6 +181,8 @@ fn run_one(
             billed: counters.billed(),
             deprio: counters.deprioritized_known_site,
             drop_dup: counters.dropped_duplicate_plan,
+            drop_exact: counters.dropped_exact_plan,
+            drop_skel: counters.dropped_skeleton_twin,
         };
         best = Some(match best {
             None => row,
@@ -203,6 +209,8 @@ fn run_suite(
     let mut total_secs = 0.0;
     let mut total_deprio = 0;
     let mut total_drop_dup = 0;
+    let mut total_drop_exact = 0;
+    let mut total_drop_skel = 0;
     let mut rows = Vec::new();
     let suite_t0 = Instant::now();
     for &(name, reactant, target) in cases {
@@ -217,6 +225,8 @@ fn run_suite(
                     billed: 0,
                     deprio: 0,
                     drop_dup: 0,
+                    drop_exact: 0,
+                    drop_skel: 0,
                 },
             ));
             continue;
@@ -226,6 +236,8 @@ fn run_suite(
         total_bill += row.billed;
         total_deprio += row.deprio;
         total_drop_dup += row.drop_dup;
+        total_drop_exact += row.drop_exact;
+        total_drop_skel += row.drop_skel;
         if !row.hit {
             misses += 1;
         }
@@ -238,6 +250,8 @@ fn run_suite(
         total_secs,
         total_deprio,
         total_drop_dup,
+        total_drop_exact,
+        total_drop_skel,
         rows,
     }
 }
@@ -246,8 +260,8 @@ fn print_suite(suite: &Suite, detail: bool) {
     if detail {
         println!("\n=== {} ===", suite.label);
         println!(
-            "{:<32} {:>4} {:>5} {:>9} {:>6} {:>7} {:>8}",
-            "case", "hit", "hits", "seconds", "bill", "deprio", "drop_dup"
+            "{:<32} {:>4} {:>5} {:>9} {:>6} {:>7} {:>8} {:>8} {:>8}",
+            "case", "hit", "hits", "seconds", "bill", "deprio", "drop_dup", "exact", "skel"
         );
         for (name, row) in &suite.rows {
             if row.hits == 0 && row.seconds == 0.0 && !row.hit {
@@ -255,14 +269,16 @@ fn print_suite(suite: &Suite, detail: bool) {
                 continue;
             }
             println!(
-                "{:<32} {:>4} {:>5} {:>9.3} {:>6} {:>7} {:>8}",
+                "{:<32} {:>4} {:>5} {:>9.3} {:>6} {:>7} {:>8} {:>8} {:>8}",
                 name,
                 if row.hit { "ok" } else { "MISS" },
                 row.hits,
                 row.seconds,
                 row.billed,
                 row.deprio,
-                row.drop_dup
+                row.drop_dup,
+                row.drop_exact,
+                row.drop_skel
             );
         }
     }
@@ -271,15 +287,25 @@ fn print_suite(suite: &Suite, detail: bool) {
 fn print_summary(suites: &[Suite], baseline: &Suite) {
     println!("\n=== ablation summary (Δbill / Δsecs vs baseline) ===");
     println!(
-        "{:<18} {:>5} {:>8} {:>9} {:>8} {:>9} {:>7} {:>8}",
-        "variant", "miss", "bill", "Δbill", "seconds", "Δsecs", "deprio", "drop_dup"
+        "{:<18} {:>5} {:>8} {:>9} {:>8} {:>9} {:>7} {:>8} {:>8} {:>8}",
+        "variant", "miss", "bill", "Δbill", "seconds", "Δsecs", "deprio", "drop_dup", "exact",
+        "skel"
     );
     for s in suites {
         let db = s.total_bill as i64 - baseline.total_bill as i64;
         let ds = s.total_secs - baseline.total_secs;
         println!(
-            "{:<18} {:>5} {:>8} {:>+8} {:>9.3} {:>+9.3} {:>7} {:>8}",
-            s.label, s.misses, s.total_bill, db, s.total_secs, ds, s.total_deprio, s.total_drop_dup
+            "{:<18} {:>5} {:>8} {:>+8} {:>9.3} {:>+9.3} {:>7} {:>8} {:>8} {:>8}",
+            s.label,
+            s.misses,
+            s.total_bill,
+            db,
+            s.total_secs,
+            ds,
+            s.total_deprio,
+            s.total_drop_dup,
+            s.total_drop_exact,
+            s.total_drop_skel
         );
     }
 }
@@ -353,10 +379,10 @@ fn main() {
             },
         },
         Variant {
-            label: "no-novel",
+            label: "with-novel",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {
-                deprioritize_known_site: false,
+                deprioritize_known_site: true,
                 ..base_cfg
             },
         },

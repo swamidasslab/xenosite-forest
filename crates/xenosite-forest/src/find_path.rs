@@ -32,8 +32,17 @@ pub struct PathCounters {
     pub nodes: usize,
     pub mol_edits: usize,
     pub expansions: usize,
-    /// Hit not emitted: same linearizations or same rule/Maybe skeleton.
+    /// Target hit not emitted: same linearizations **or** same rule/Maybe
+    /// skeleton as an already-yielded plan. Total wasted duplicate finds
+    /// ([`Self::dropped_exact_plan`] + [`Self::dropped_skeleton_twin`]).
     pub dropped_duplicate_plan: usize,
+    /// Subset of [`Self::dropped_duplicate_plan`]: exact
+    /// [`Deps::same_linearizations`] match (same step identities).
+    pub dropped_exact_plan: usize,
+    /// Subset of [`Self::dropped_duplicate_plan`]: remapped free-step twin via
+    /// [`Deps::same_rule_maybe_skeleton`] but **not** exact linearizations.
+    /// How often search reaches the target again only to learn indices moved.
+    pub dropped_skeleton_twin: usize,
     /// Hit that *would* match [`Deps::dominates_extension_of`] against a yield.
     /// Counted only — not used to drop or abort (that lever over-collapsed
     /// multipath; HEURISTICS).
@@ -752,7 +761,8 @@ pub struct FindPathConfig {
     /// Frontier ranking after hit / novel-site tiers.
     pub heap_score: HeapScoreMode,
     /// Soft-demote expand hops whose pattern+site already appears in a yielded
-    /// path (HEURISTICS novel_site). Ablation: set false to ignore.
+    /// path (HEURISTICS novel_site). Default **false** — ablation showed it
+    /// burns hard multipath bill; set true to restore.
     pub deprioritize_known_site: bool,
     /// Yield-drop remapped free-step twins via [`Deps::same_rule_maybe_skeleton`]
     /// beside exact [`Deps::same_linearizations`]. Ablation: set false for
@@ -769,7 +779,8 @@ impl Default for FindPathConfig {
             use_atom_diff: true,
             lazy_closer: false,
             heap_score: HeapScoreMode::match_product(),
-            deprioritize_known_site: true,
+            // Ablation: on hurt hard multipath bill; default off.
+            deprioritize_known_site: false,
             drop_skeleton_twins: true,
         }
     }
@@ -794,15 +805,45 @@ fn plan_already_yielded(found: &[PathOutcome], plan: &Deps, drop_skeleton_twins:
     })
 }
 
+/// Classify why a hit would be a duplicate (exact first, else skeleton).
+fn duplicate_plan_kind(
+    found: &[PathOutcome],
+    plan: &Deps,
+    drop_skeleton_twins: bool,
+) -> Option<DuplicatePlanKind> {
+    if found.iter().any(|h| h.plan.same_linearizations(plan)) {
+        return Some(DuplicatePlanKind::Exact);
+    }
+    if drop_skeleton_twins && found.iter().any(|h| h.plan.same_rule_maybe_skeleton(plan)) {
+        return Some(DuplicatePlanKind::Skeleton);
+    }
+    None
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DuplicatePlanKind {
+    Exact,
+    Skeleton,
+}
+
 fn record_yield_plan_signals(
     counters: &mut PathCounters,
     found: &[PathOutcome],
     plan: &Deps,
     drop_skeleton_twins: bool,
 ) {
-    if plan_already_yielded(found, plan, drop_skeleton_twins) {
-        counters.dropped_duplicate_plan += 1;
-        return;
+    match duplicate_plan_kind(found, plan, drop_skeleton_twins) {
+        Some(DuplicatePlanKind::Exact) => {
+            counters.dropped_duplicate_plan += 1;
+            counters.dropped_exact_plan += 1;
+            return;
+        }
+        Some(DuplicatePlanKind::Skeleton) => {
+            counters.dropped_duplicate_plan += 1;
+            counters.dropped_skeleton_twin += 1;
+            return;
+        }
+        None => {}
     }
     if found.iter().any(|h| h.plan.dominates_extension_of(plan)) {
         counters.signal_contained_plan += 1;
@@ -2932,15 +2973,58 @@ mod tests {
         let mut counters = PathCounters::default();
         record_yield_plan_signals(&mut counters, &found, &twin, true);
         assert_eq!(counters.dropped_duplicate_plan, 1);
+        assert_eq!(counters.dropped_exact_plan, 1);
+        assert_eq!(counters.dropped_skeleton_twin, 0);
         assert_eq!(counters.signal_contained_plan, 0);
         assert!(plan_already_yielded(&found, &twin, true));
 
         let mut counters = PathCounters::default();
         record_yield_plan_signals(&mut counters, &found, &longer, true);
         assert_eq!(counters.dropped_duplicate_plan, 0);
+        assert_eq!(counters.dropped_exact_plan, 0);
+        assert_eq!(counters.dropped_skeleton_twin, 0);
         assert_eq!(counters.signal_contained_plan, 1);
         assert!(!plan_already_yielded(&found, &longer, true));
         assert_eq!(counters.plan_drops(), 1);
+    }
+
+    #[test]
+    fn skeleton_twin_drop_counts_separately_from_exact() {
+        use crate::canonical_plan::{CleavageSide, Maybe, PlanAtom, Step};
+        let maybe = Maybe::new([
+            CleavageSide::new([0], "OC", std::iter::empty::<BTreeSet<usize>>()),
+            CleavageSide::new([9], "OC", std::iter::empty::<BTreeSet<usize>>()),
+        ]);
+        let first = as_deps([
+            Step::new("Dealkylation", [PlanAtom::index(0)]),
+            Step::new("Dealkylation", [PlanAtom::index(9)]),
+        ])
+        .with_maybe(maybe.clone());
+        // Remapped indices, same rule multiset + Maybe sides → skeleton only.
+        let twin = as_deps([
+            Step::new("Dealkylation", [PlanAtom::index(12)]),
+            Step::new("Dealkylation", [PlanAtom::index(0)]),
+        ])
+        .with_maybe(maybe);
+        assert!(!first.same_linearizations(&twin));
+        assert!(first.same_rule_maybe_skeleton(&twin));
+
+        let found = vec![PathOutcome {
+            steps: vec![],
+            plan: first,
+            smiles: "C".into(),
+        }];
+        let mut counters = PathCounters::default();
+        record_yield_plan_signals(&mut counters, &found, &twin, true);
+        assert_eq!(counters.dropped_duplicate_plan, 1);
+        assert_eq!(counters.dropped_exact_plan, 0);
+        assert_eq!(counters.dropped_skeleton_twin, 1);
+
+        let mut counters = PathCounters::default();
+        record_yield_plan_signals(&mut counters, &found, &twin, false);
+        assert_eq!(counters.dropped_duplicate_plan, 0);
+        assert_eq!(counters.dropped_skeleton_twin, 0);
+        assert!(!plan_already_yielded(&found, &twin, false));
     }
 
     #[test]
