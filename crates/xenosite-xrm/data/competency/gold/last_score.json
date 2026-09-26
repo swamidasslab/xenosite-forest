@@ -1,6 +1,6 @@
 {
-  "n_gold": 15,
-  "n_actual": 15,
+  "n_gold": 150,
+  "n_actual": 150,
   "Transformation F1": 1.0,
   "Phase F1": 1.0,
   "Product class F1": 1.0,
@@ -11,32 +11,32 @@
   "Coverage with >=1 useful tag": 1.0,
   "counters": {
     "transformation_exact": {
-      "tp": 13,
+      "tp": 150,
       "fp": 0,
       "fn": 0
     },
     "phase_exact": {
-      "tp": 13,
+      "tp": 48,
       "fp": 0,
       "fn": 0
     },
     "product_class_exact": {
-      "tp": 9,
+      "tp": 30,
       "fp": 0,
       "fn": 0
     },
     "site_exact": {
-      "tp": 2,
+      "tp": 17,
       "fp": 0,
       "fn": 0
     },
     "liability_exact": {
-      "tp": 11,
+      "tp": 50,
       "fp": 0,
       "fn": 0
     },
     "external_mapping_ok": {
-      "tp": 3,
+      "tp": 2,
       "fp": 0,
       "fn": 0
     }

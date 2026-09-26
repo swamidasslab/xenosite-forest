@@ -104,14 +104,17 @@ def iri_to_curie(term) -> str:
     return s
 
 
-def run_sparql(query_path: Path) -> set[str]:
+def run_sparql(query: str | None = None, query_path: Path | None = None) -> set[str]:
     from rdflib import Graph
 
     if not SKOS_TTL.exists():
         raise AssertionError(f"missing {SKOS_TTL}; run tools/jsonld_to_ttl.py")
     g = Graph()
     g.parse(SKOS_TTL, format="turtle")
-    q = query_path.read_text()
+    if query_path is not None:
+        q = query_path.read_text()
+    else:
+        q = query or ""
     out = set()
     for row in g.query(q):
         # first projected variable is the term id
@@ -193,8 +196,10 @@ def main() -> int:
                 if prefix and not any(o.startswith(prefix) for o in hits):
                     raise AssertionError(f"no SSSOM {subj} → {prefix}* ; have {hits[:8]}")
             elif typ == "sparql":
-                qpath = SPARQL_DIR / q["query"]
-                got = run_sparql(qpath)
+                if q.get("query_text"):
+                    got = run_sparql(query=q["query_text"])
+                else:
+                    got = run_sparql(query_path=SPARQL_DIR / q["query"])
                 for need in q.get("expected_contains") or []:
                     if need not in got:
                         raise AssertionError(

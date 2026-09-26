@@ -3,14 +3,149 @@ GOLD-0001	CC	CCO		hydroxylation	phase I			metabolic soft spot	mop:0000673
 GOLD-0002	C=C	C1CO1		epoxidation	phase I	epoxide		bioactivation	mop:0000671
 GOLD-0003	c1ccccc1	Oc1ccccc1	chem:aromatic-hydroxylation	aromatic hydroxylation	phase I			metabolic soft spot	
 GOLD-0004	CCO	CCO	forest.rule:Glucuronidation	glucuronidation	phase II	glucuronide conjugate			
-GOLD-0005	C	C	chem:N-demethylation	N-demethylation	phase I		tertiary amine site	metabolic soft spot	
-GOLD-0006	C	C	chem:quinone-formation	quinone formation	phase I	quinone		bioactivation	forest.rule:QuinoneFormation
-GOLD-0007	C	C	chem:acyl-glucuronidation|chem:forms-reactive-conjugate	acyl glucuronidation	phase II	acyl glucuronide		forms reactive conjugate	
-GOLD-0008	[CH3:1]c1ccc([CH3:2])cc1	O[CH2:1]c1ccc([CH3:2])cc1	chem:benzylic-hydroxylation@1	benzylic hydroxylation	phase I		benzylic site	metabolic soft spot	
-GOLD-0009	C	C	forest.rule:Glutathionation	glutathionation	phase II	GSH-trappable metabolite		forms reactive conjugate	
-GOLD-0010	CCO	CC=O		alcohol oxidation	phase I	aldehyde		aldehyde forming	
-GOLD-0011	C	C	forest.rule:Sulfation	sulfation	phase II	sulfate conjugate			
-GOLD-0012	C	C	chem:N-glucuronidation	N-glucuronidation	phase II	glucuronide conjugate			
-GOLD-0013	C	C	chem:epoxidation@1,2	epoxidation	phase I	epoxide			
-GOLD-0014	C	C	chem:inactive-metabolite|chem:about-product					pharmacologically inactive metabolite	
-GOLD-0015	C	C	chem:prodrug|chem:about-parent					prodrug	
+GOLD-0005	[CH3:1]c1ccc([CH3:2])cc1	O[CH2:1]c1ccc([CH3:2])cc1	chem:benzylic-hydroxylation@1	benzylic hydroxylation	phase I		benzylic site	metabolic soft spot	
+GOLD-0006	C	C	chem:hydroxylation	hydroxylation	phase I			metabolic soft spot	
+GOLD-0007	C	C	chem:aromatic-hydroxylation	aromatic hydroxylation	phase I		aromatic site	metabolic soft spot	
+GOLD-0008	C	C	chem:para-hydroxylation	para-hydroxylation	phase I			metabolic soft spot	
+GOLD-0009	C	C	chem:benzylic-hydroxylation	benzylic hydroxylation	phase I		aliphatic site	metabolic soft spot	
+GOLD-0010	C	C	chem:omega-hydroxylation	ω-hydroxylation	phase I			metabolic soft spot	
+GOLD-0011	C	C	chem:epoxidation	epoxidation	phase I	electrophile generation		reactive metabolite	
+GOLD-0012	C	C	chem:arene-oxide	arene oxide formation	phase I	epoxide		reactive metabolite	
+GOLD-0013	C	C	chem:NIH-shift	NIH shift					
+GOLD-0014	C	C	chem:ipso-substitution	ipso substitution					
+GOLD-0015	C	C	chem:dearomatization	dearomatization					
+GOLD-0016	C	C	chem:dealkylation	dealkylation	phase I		multi-element site	metabolic soft spot	
+GOLD-0017	C	C	chem:N-dealkylation	N-dealkylation	phase I		nitrogen site	metabolic soft spot	
+GOLD-0018	C	C	chem:N-demethylation	N-demethylation	phase I		tertiary amine site	metabolic soft spot	
+GOLD-0019	C	C	chem:oxidative-deamination	oxidative deamination	phase I		nitrogen site	metabolic soft spot	
+GOLD-0020	C	C	chem:O-dealkylation	O-dealkylation	phase I		oxygen site	metabolic soft spot	
+GOLD-0021	C	C	chem:O-demethylation	O-demethylation	phase I		oxygen site	metabolic soft spot	
+GOLD-0022	C	C	chem:glucuronidation	glucuronidation	phase II	nucleophile exposure		clearance pathway	
+GOLD-0023	C	C	chem:acyl-glucuronidation	acyl migration	phase II	acyl glucuronide		clearance pathway	
+GOLD-0024	C	C	chem:phenolic-glucuronidation	phenolic glucuronidation	phase II	glucuronide conjugate		clearance pathway	
+GOLD-0025	C	C	chem:N-glucuronidation	N-glucuronidation	phase II	glucuronide conjugate		clearance pathway	
+GOLD-0026	C	C	chem:sulfation	sulfation	phase II	nucleophile exposure			
+GOLD-0027	C	C	chem:acetylation	acetylation	phase II				
+GOLD-0028	C	C	chem:glutathione-conjugation	glutathionation	phase II	electrophile consumption		detoxification	
+GOLD-0029	C	C	chem:GSH-Michael	conjugate addition	phase II	electrophile consumption		detoxification	
+GOLD-0030	C	C	chem:GSH-epoxide	epoxide glutathionation	phase II	electrophile consumption		detoxification	
+GOLD-0031	C	C	chem:quinone-formation	dearomatization		electrophile generation		bioactivation	
+GOLD-0032	C	C	chem:quinone-imine	dearomatization		electrophile generation		bioactivation	
+GOLD-0033	C	C	chem:quinone-methide	dearomatization		electrophile generation		bioactivation	
+GOLD-0034	C	C	chem:imine-methide	dearomatization		electrophile generation		bioactivation	
+GOLD-0035	C	C	chem:one-step-quinone-formation	dearomatization		quinone		bioactivation	
+GOLD-0036	C	C	chem:two-step-quinone-formation	dearomatization		quinone		bioactivation	
+GOLD-0037	C	C	chem:nitro-reduction	nitro reduction	phase I		nitrogen site		
+GOLD-0038	C	C	chem:nitroaromatic-reduction	nitroaromatic reduction	phase I	electrophile generation	aromatic site	bioactivation	
+GOLD-0039	C	C	chem:carbonyl-reduction	carbonyl reduction	phase I		carbon site		
+GOLD-0040	C	C	chem:sulfo-reduction	sulfo reduction	phase I		sulfur site		
+GOLD-0041	C	C	chem:cyanide-hydrolysis	cyanide hydrolysis	phase I				
+GOLD-0042	C	C	chem:ether-hydrolysis	ether hydrolysis	phase I				
+GOLD-0043	C	C	chem:methylation	methylation	phase II				
+GOLD-0044	C	C	chem:glycine-conjugation	glycine conjugation	phase II				
+GOLD-0045	C	C	chem:tautomerization	tautomerization					
+GOLD-0046	C	C	chem:conjugation	conjugation	phase II				
+GOLD-0047	C	C	chem:ambiguous	ambiguous reaction					
+GOLD-0048	C	C	chem:site-ambiguity	site-of-metabolism ambiguity					
+GOLD-0049	C	C	chem:regio-ambiguity	regiochemical ambiguity					
+GOLD-0050	C	C	chem:stereo-ambiguity	stereochemical ambiguity					
+GOLD-0051	C	C	chem:type-ambiguity	reaction-type ambiguity					
+GOLD-0052	C	C	chem:competing-type	competing-type ambiguity					
+GOLD-0053	C	C	chem:mechanism-ambiguity	mechanism ambiguity					
+GOLD-0054	C	C	chem:structure-underspecified	ambiguous reaction					
+GOLD-0055	C	C	chem:mapping-underspecified	atom-mapping underspecification					
+GOLD-0056	C	C	chem:formula-only	formula-only evidence					
+GOLD-0057	C	C	chem:pathway-depth-ambiguity	pathway-depth ambiguity					
+GOLD-0058	C	C	chem:intermediate-underspecified	pathway-depth ambiguity					
+GOLD-0059	C	C	chem:phase-ambiguity	phase ambiguity					
+GOLD-0060	C	C	chem:forest-map-ambiguity	ambiguous reaction					
+GOLD-0061	C	C	chem:external-alignment-ambiguity	external-ontology alignment ambiguity					
+GOLD-0062	C	C	chem:aromatic-impact-ambiguity	aromatic-impact ambiguity					
+GOLD-0063	C	C	chem:electrophile-role-ambiguity	electrophile-role ambiguity					
+GOLD-0064	C	C	chem:provenance-underspecified	ambiguous reaction					
+GOLD-0065	C	C	chem:fully-specified	fully specified					
+GOLD-0066	C	C	chem:one-step	direct one-step transformation					
+GOLD-0067	C	C	chem:multi-step	multi-step pathway member					
+GOLD-0068	C	C	chem:preparatory-step	preparatory intermediate step					
+GOLD-0069	C	C	chem:terminal-step	terminal observable step					
+GOLD-0070	C	C	chem:electrophile-generation	electrophile generation		electrophile generation		bioactivation	
+GOLD-0071	C	C	chem:electrophile-consumption	electrophile consumption		electrophile consumption			
+GOLD-0072	C	C	chem:detoxication	detoxication		reactivity-neutral step		detoxication	
+GOLD-0073	C	C	chem:forms-reactive-conjugate	forms reactive conjugate				forms reactive conjugate	
+GOLD-0074	C	C	chem:active-metabolite	pharmacologically active metabolite				pharmacologically active metabolite	
+GOLD-0075	C	C	chem:inactive-metabolite	pharmacologically inactive metabolite				pharmacologically inactive metabolite	
+GOLD-0076	C	C	chem:prodrug	prodrug				prodrug	
+GOLD-0077	C	C	chem:prodrug-activation	prodrug activation				prodrug activation	
+GOLD-0078	C	C	chem:active-parent	active parent				active parent	
+GOLD-0079	C	C	chem:about-parent	about parent					
+GOLD-0080	C	C	chem:about-product	about product					
+GOLD-0081	C	C	chem:about-reaction	about reaction					
+GOLD-0082	C	C	forest.rule:Hydroxylation	hydroxylation	phase I			metabolic soft spot	
+GOLD-0083	C	C	forest.rule:Epoxidation	epoxidation	phase I	electrophile generation		reactive metabolite	
+GOLD-0084	C	C	forest.rule:Dealkylation	dealkylation	phase I		multi-element site	metabolic soft spot	
+GOLD-0085	C	C	forest.rule:NDealkylation	N-dealkylation	phase I		nitrogen site	metabolic soft spot	
+GOLD-0086	C	C	forest.rule:Glucuronidation	glucuronidation	phase II	nucleophile exposure		clearance pathway	
+GOLD-0087	C	C	forest.rule:Sulfation	sulfation	phase II	nucleophile exposure			
+GOLD-0088	C	C	forest.rule:Acetylation	acetylation	phase II				
+GOLD-0089	C	C	forest.rule:Glutathionation	glutathionation	phase II	electrophile consumption		detoxification	
+GOLD-0090	C	C	forest.rule:QuinoneFormation	dearomatization		electrophile generation		bioactivation	
+GOLD-0091	C	C	forest.rule:NitroaromaticReduction	nitroaromatic reduction	phase I	electrophile generation	aromatic site	bioactivation	
+GOLD-0092	C	C	forest.rule:Tautomerization	tautomerization					
+GOLD-0093	C	C	forest.rule:AzoSplitting	about reaction					
+GOLD-0094	C	C	forest.rule:BenzodioxoleReduction	about reaction					
+GOLD-0095	C	C	forest.rule:Dehydration	about reaction					
+GOLD-0096	C	C	forest.rule:Dehydrogenation	about reaction					
+GOLD-0097	C	C	forest.rule:Dephosphorylation	about reaction					
+GOLD-0098	C	C	forest.rule:EpoxideOpening	about reaction					
+GOLD-0099	C	C	forest.rule:Hydrogenation	about reaction					
+GOLD-0100	C	C	forest.rule:Hydrolysis	about reaction					
+GOLD-0101	C	C	forest.rule:NitrogenOxidation	about reaction					
+GOLD-0102	C	C	forest.rule:NitrogenReduction	about reaction					
+GOLD-0103	C	C	forest.rule:OxidativeDehalogenation	about reaction					
+GOLD-0104	C	C	forest.rule:OxygenReduction	about reaction					
+GOLD-0105	C	C	forest.rule:ReductiveDehalogenation	about reaction					
+GOLD-0106	C	C	forest.rule:SulfurOxidation	about reaction					
+GOLD-0107	C	C	forest.rule:SulfurReduction	about reaction					
+GOLD-0108	C	C	forest.pattern:Dealkylation/hemiaminal	N-dealkylation	phase I		nitrogen site	metabolic soft spot	
+GOLD-0109	C	C	forest.pattern:Glutathionation/michael	conjugate addition	phase II	electrophile consumption		detoxification	
+GOLD-0110	C	C	forest.pattern:Glutathionation/epoxide_ch	epoxide glutathionation	phase II	electrophile consumption		detoxification	
+GOLD-0111	C	C	forest.pattern:AzoSplitting/azo	about reaction					
+GOLD-0112	C	C	forest.pattern:BenzodioxoleReduction/dioxole_methylene	about reaction					
+GOLD-0113	C	C	forest.pattern:Dealkylation/cc_alcohol	about reaction					
+GOLD-0114	C	C	forest.pattern:Dealkylation/cc_carbonyl	about reaction					
+GOLD-0115	C	C	forest.pattern:Dealkylation/cc_quaternary_alcohol	about reaction					
+GOLD-0116	C	C	forest.pattern:Dealkylation/methine_alcohol	about reaction					
+GOLD-0117	C	C	forest.pattern:Dealkylation/methine_carbonyl	about reaction					
+GOLD-0118	C	C	forest.pattern:Dealkylation/methyl_alcohol	about reaction					
+GOLD-0119	C	C	forest.pattern:Dealkylation/methyl_carbonyl	about reaction					
+GOLD-0120	C	C	forest.pattern:Dealkylation/methyl_carboxylic	about reaction					
+GOLD-0121	C	C	forest.pattern:Dealkylation/methylene_alcohol	about reaction					
+GOLD-0122	C	C	forest.pattern:Dealkylation/methylene_carbonyl	about reaction					
+GOLD-0123	C	C	forest.pattern:Dealkylation/methylene_carboxylic	about reaction					
+GOLD-0124	C	C	forest.pattern:Dealkylation/quaternary_alcohol	about reaction					
+GOLD-0125	C	C	forest.pattern:Dehydration/alcohol	about reaction					
+GOLD-0126	C	C	forest.pattern:Dehydration/beta_elimination	about reaction					
+GOLD-0127	C	C	forest.pattern:Dehydration/carbonyl	about reaction					
+GOLD-0128	C	C	forest.pattern:Dehydrogenation/alcohol	about reaction					
+GOLD-0129	C	C	forest.pattern:Dehydrogenation/alkyl	about reaction					
+GOLD-0130	C	C	forest.pattern:Dehydrogenation/amine	about reaction					
+GOLD-0131	C	C	forest.pattern:Dehydrogenation/amine_end	about reaction					
+GOLD-0132	C	C	forest.pattern:Dehydrogenation/methide_end	about reaction					
+GOLD-0133	C	C	forest.pattern:Dehydrogenation/phenol_end	about reaction					
+GOLD-0134	C	C	forest.pattern:Dehydrogenation/sulfoxide	about reaction					
+GOLD-0135	C	C	forest.pattern:Dephosphorylation/phosphate_ester	about reaction					
+GOLD-0136	C	C	forest.pattern:Epoxidation/epoxide	about reaction					
+GOLD-0137	C	C	forest.pattern:EpoxideOpening/hydrate	about reaction					
+GOLD-0138	C	C	forest.pattern:EpoxideOpening/rearrange	about reaction					
+GOLD-0139	C	C	forest.pattern:Glucuronidation/alcohol	about reaction					
+GOLD-0140	C	C	forest.pattern:Glucuronidation/carboxylate	about reaction					
+GOLD-0141	C	C	forest.pattern:Glutathionation/alkene	about reaction					
+GOLD-0142	C	C	forest.pattern:Glutathionation/aziridine_c	about reaction					
+GOLD-0143	C	C	forest.pattern:Glutathionation/aziridine_ch	about reaction					
+GOLD-0144	C	C	forest.pattern:Glutathionation/aziridine_ch2	about reaction					
+GOLD-0145	C	C	forest.pattern:Glutathionation/carbonyl	about reaction					
+GOLD-0146	C	C	forest.pattern:Glutathionation/halide	about reaction					
+GOLD-0147	C	C	forest.pattern:Glutathionation/isocyanate	about reaction					
+GOLD-0148	C	C	forest.pattern:Glutathionation/mesylate	about reaction					
+GOLD-0149	C	C	forest.pattern:Glutathionation/thiol	about reaction					
+GOLD-0150	C	C	forest.pattern:Hydrogenation/alkene	about reaction					

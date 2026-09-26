@@ -1,6 +1,6 @@
 # Competency evaluation plan (executable questions)
 
-Status: **executed** (executable CQs in CI; gold set scored; SHACL definitions complete).
+Status: **executed** (executable CQs in CI; ~10× expanded; gold set scored; SHACL definitions complete).
 
 Store of the design note (metabolism-specific XRM adaptation). Every competency
 question is a regression test: if the ontology cannot answer it, add terms/links
@@ -60,19 +60,26 @@ python3 crates/xenosite-xrm/tools/score_gold_set.py
 # → data/competency/gold/last_score.json + F1 report
 ```
 
-## Initial CQ budget (~50)
+## CQ budget (~10× initial ~50)
+
+Regenerate with `python3 tools/expand_competency.py`.
 
 | Area | Target | Notes |
 | --- | --- | --- |
-| Phase I transformations | 10 | + SPARQL aldehyde producers |
-| Phase II conjugations | 10 | attachment-atom SPARQL (O/N/S/C/acyl) |
-| Reactive metabolite classes | 8 | quinone-like, GSH-trappable |
-| Site localization | 8 | bond-centered epoxidation site_label |
-| Structural deltas | 5 | mass shifts / oxygenation |
-| External mappings | 5 | MeSH / MOP / GO / Forest |
-| Evidence/provenance | 4 | includes SHACL + definition coverage |
+| Phase I transformations | 100 | SPARQL + broader + tagging mix |
+| Phase II conjugations | 100 | attachment-atom SPARQL seeds retained |
+| Reactive metabolite classes | 80 | quinone-like, GSH-trappable |
+| Site localization | 80 | bond-centered epoxidation site_label |
+| Structural deltas | 50 | mass shifts / oxygenation |
+| External mappings | 50 | MeSH / MOP / GO / Forest / KEGG |
+| Evidence | 20 | definition coverage + MS/literature |
+| Provenance | 20 | includes SHACL |
+| Leaving group | 25 | methyl/halide/… |
+| Pharmacological role | 15 | active/inactive/prodrug |
+| Annotation about | 10 | parent/product/reaction |
+| Med-chem liability | 40 | soft spots / bioactivation |
 
-Supporting LG / pharma / about CQs sit alongside the budgeted set.
+Gold set target: **150** curated rows (`tools/expand_competency.py`).
 
 ## Run
 

@@ -1,16 +1,108 @@
-{"id": "CQ-P1-004", "expected_tags": ["hydroxylation", "aliphatic hydroxylation", "phase I", "stable oxygenation"], "expected_excludes": ["aromatic hydroxylation"], "expect_site_map": []}
-{"id": "CQ-P1-005", "expected_tags": ["epoxidation", "phase I"], "expected_excludes": ["hydroxylation"], "expect_site_map": []}
-{"id": "CQ-P1-006", "expected_tags": ["N-demethylation", "methyl leaving group", "leaving group"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-P1-009", "expected_tags": ["alcohol oxidation", "phase I"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-P2-002", "expected_tags": ["glucuronidation", "phase II"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-P2-008", "expected_tags": ["N-glucuronidation"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-P2-009", "expected_tags": ["sulfation"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-002", "expected_tags": ["forms reactive conjugate", "reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-003", "expected_tags": ["quinone formation"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-004", "expected_tags": ["acyl glucuronidation", "forms reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-SITE-002", "expected_tags": ["benzylic hydroxylation"], "expected_excludes": [], "expect_site_map": [1]}
+{"id": "CQ-P1-003", "expected_tags": ["hydroxylation", "aliphatic hydroxylation", "phase I", "stable oxygenation"], "expected_excludes": ["aromatic hydroxylation"], "expect_site_map": []}
+{"id": "CQ-P1-004", "expected_tags": ["epoxidation", "phase I"], "expected_excludes": ["hydroxylation"], "expect_site_map": []}
+{"id": "CQ-P1-007", "expected_tags": ["hydroxylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-012", "expected_tags": ["aromatic hydroxylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-017", "expected_tags": ["para-hydroxylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-022", "expected_tags": ["benzylic hydroxylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-027", "expected_tags": ["\u03c9-hydroxylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-032", "expected_tags": ["epoxidation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-037", "expected_tags": ["arene oxide formation", "dearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-042", "expected_tags": ["NIH shift", "rearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-047", "expected_tags": ["ipso substitution"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-052", "expected_tags": ["dearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-057", "expected_tags": ["dealkylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-061", "expected_tags": ["N-dealkylation", "carbinolamine cleavage"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-065", "expected_tags": ["N-demethylation", "carbinolamine cleavage"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-069", "expected_tags": ["oxidative deamination", "carbinolamine cleavage"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-073", "expected_tags": ["O-dealkylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-077", "expected_tags": ["O-demethylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-081", "expected_tags": ["acyl migration"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-085", "expected_tags": ["conjugate addition"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-089", "expected_tags": ["dearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-093", "expected_tags": ["dearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-097", "expected_tags": ["dearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P1-099", "expected_tags": ["dearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-004", "expected_tags": ["glucuronidation", "phase II", "glucuronide conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-008", "expected_tags": ["glucuronidation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-013", "expected_tags": ["acyl glucuronidation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-018", "expected_tags": ["phenolic glucuronidation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-023", "expected_tags": ["N-glucuronidation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-028", "expected_tags": ["sulfation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-033", "expected_tags": ["acetylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-038", "expected_tags": ["glutathionation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-043", "expected_tags": ["Michael glutathionation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-048", "expected_tags": ["epoxide glutathionation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-053", "expected_tags": ["methylation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-P2-058", "expected_tags": ["glycine conjugation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-005", "expected_tags": ["forms reactive conjugate", "reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-007", "expected_tags": ["electrophile generation", "epoxide"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-012", "expected_tags": ["epoxide"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-017", "expected_tags": ["nucleophile exposure", "stable conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-022", "expected_tags": ["acyl glucuronide", "reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-027", "expected_tags": ["glucuronide conjugate", "phenol metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-032", "expected_tags": ["glucuronide conjugate", "N-glucuronide"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-037", "expected_tags": ["nucleophile exposure", "stable conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-041", "expected_tags": ["stable conjugate"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-045", "expected_tags": ["electrophile consumption", "GSH-trappable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-049", "expected_tags": ["electrophile consumption", "Michael acceptor"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-053", "expected_tags": ["electrophile consumption", "GSH-trappable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-057", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-061", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-065", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-069", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-073", "expected_tags": ["quinone"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-077", "expected_tags": ["quinone"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-079", "expected_tags": ["electrophile generation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-003", "expected_tags": ["benzylic hydroxylation"], "expected_excludes": [], "expect_site_map": [1]}
 {"id": "CQ-SITE-004", "expected_tags": ["epoxidation"], "expected_excludes": [], "expect_site_map": [1, 2]}
-{"id": "CQ-SITE-007", "expected_tags": ["aromatic hydroxylation"], "expected_excludes": [], "expect_site_map": [1]}
-{"id": "CQ-DELTA-004", "expected_tags": ["oxygen gain"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-006", "expected_tags": ["aromatic site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-013", "expected_tags": ["multi-element site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-017", "expected_tags": ["nitrogen site", "tertiary amine site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-021", "expected_tags": ["tertiary amine site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-025", "expected_tags": ["nitrogen site", "tertiary amine site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-029", "expected_tags": ["oxygen site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-033", "expected_tags": ["oxygen site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-037", "expected_tags": ["nitrogen site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-041", "expected_tags": ["aromatic site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-045", "expected_tags": ["carbon site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-SITE-049", "expected_tags": ["sulfur site"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-003", "expected_tags": ["oxygen gain"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-005", "expected_tags": ["net oxidation", "stable oxygen addition"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-010", "expected_tags": ["aromatic ring substitution impact"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-015", "expected_tags": ["aromatic ring substitution impact"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-020", "expected_tags": ["ring formed"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-024", "expected_tags": ["dearomatization", "NIH shift"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-028", "expected_tags": ["NIH shift", "rearomatization"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-032", "expected_tags": ["aromatic ring substitution impact", "substitution"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-036", "expected_tags": ["dearomatization", "aromaticity loss"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-040", "expected_tags": ["oxygen-triggered cleavage", "fragmenting transformation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-044", "expected_tags": ["redox-neutral", "conjugate gain delta"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-048", "expected_tags": ["redox-neutral"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PROV-003", "expected_tags": ["caller-tag-derived"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PROV-007", "expected_tags": ["caller-tag-derived"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PROV-011", "expected_tags": ["caller-tag-derived"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PROV-015", "expected_tags": ["caller-tag-derived"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PROV-019", "expected_tags": ["caller-tag-derived"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-LG-003", "expected_tags": ["small alkyl leaving group"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-LG-007", "expected_tags": ["small alkyl leaving group"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-LG-011", "expected_tags": ["methyl leaving group"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-LG-015", "expected_tags": ["small alkyl leaving group"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-LG-019", "expected_tags": ["methyl leaving group"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-LG-023", "expected_tags": ["alcohol leaving fragment"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PHARM-003", "expected_tags": ["pharmacologically active metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PHARM-007", "expected_tags": ["pharmacologically inactive metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PHARM-011", "expected_tags": ["prodrug"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-PHARM-015", "expected_tags": ["prodrug activation", "prodrug"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-ABOUT-002", "expected_tags": ["prodrug", "pharmacologically active metabolite", "about parent", "about product"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-PHARM-002", "expected_tags": ["pharmacologically inactive metabolite", "about product", "pharmacological role"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-ABOUT-004", "expected_tags": ["about reaction"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-ABOUT-008", "expected_tags": ["about reaction", "about product"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-003", "expected_tags": ["metabolic soft spot", "stable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-008", "expected_tags": ["metabolic soft spot", "stable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-013", "expected_tags": ["metabolic soft spot", "stable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-018", "expected_tags": ["metabolic soft spot", "stable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-022", "expected_tags": ["metabolic soft spot", "stable metabolite"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-026", "expected_tags": ["reactive metabolite", "bioactivation risk"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-030", "expected_tags": ["reactive metabolite", "bioactivation risk"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-034", "expected_tags": ["metabolic soft spot", "clearance liability"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-038", "expected_tags": ["metabolic soft spot", "clearance liability"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-MED-040", "expected_tags": ["metabolic soft spot", "clearance liability"], "expected_excludes": [], "expect_site_map": []}

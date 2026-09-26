@@ -178,9 +178,10 @@ def main() -> int:
 
     # Soft CI floors — raise as gold set matures
     floors = {
-        "Transformation F1": 0.7,
-        "Phase F1": 0.7,
-        "Coverage with >=1 useful tag": 0.9,
+        "Transformation F1": 0.85,
+        "Phase F1": 0.85,
+        "Product class F1": 0.7,
+        "Coverage with >=1 useful tag": 0.95,
     }
     bad = []
     if actual:

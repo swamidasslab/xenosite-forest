@@ -39,8 +39,8 @@ fn tagging_competency_fixtures() {
     let namer = Namer::from_manifest(DEFAULT_MANIFEST).unwrap();
     let cases = fixtures();
     assert!(
-        cases.len() >= 10,
-        "expected tagging fixtures, got {}",
+        cases.len() >= 100,
+        "expected >=100 tagging fixtures after 10× expand, got {}",
         cases.len()
     );
     for fx in cases {

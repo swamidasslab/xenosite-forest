@@ -112,6 +112,8 @@ fixtures, enzyme-orthogonal guards, and dependency boundary checks.
 
 ```bash
 pip install -r crates/xenosite-xrm/tools/requirements-competency.txt
+# Optional: regenerate ~590 CQs + 150 gold rows from ontology/assignments
+python3 crates/xenosite-xrm/tools/expand_competency.py
 python3 crates/xenosite-xrm/tools/run_competency_tests.py --refresh-ttl
 cargo test -p xenosite-xrm --test competency
 cargo test -p xenosite-xrm --test gold_score
