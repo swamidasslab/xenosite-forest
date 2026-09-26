@@ -751,6 +751,13 @@ pub struct FindPathConfig {
     pub lazy_closer: bool,
     /// Frontier ranking after hit / novel-site tiers.
     pub heap_score: HeapScoreMode,
+    /// Soft-demote expand hops whose pattern+site already appears in a yielded
+    /// path (HEURISTICS novel_site). Ablation: set false to ignore.
+    pub deprioritize_known_site: bool,
+    /// Yield-drop remapped free-step twins via [`Deps::same_rule_maybe_skeleton`]
+    /// beside exact [`Deps::same_linearizations`]. Ablation: set false for
+    /// exact-only.
+    pub drop_skeleton_twins: bool,
 }
 
 impl Default for FindPathConfig {
@@ -762,6 +769,8 @@ impl Default for FindPathConfig {
             use_atom_diff: true,
             lazy_closer: false,
             heap_score: HeapScoreMode::match_product(),
+            deprioritize_known_site: true,
+            drop_skeleton_twins: true,
         }
     }
 }
@@ -774,18 +783,24 @@ fn accept_all_candidates(_c: &Candidate) -> bool {
 pub type OpenFindPath<'a, 'b> = FindPath<'a, 'b, fn(&Candidate) -> bool>;
 
 /// HEURISTICS: a later walk that is only a reordering of an already-yielded
-/// [`Deps`] is not a new path. Also drop remapped-index free-step twins
-/// ([`Deps::same_rule_maybe_skeleton`]). Dominated-extension is **not** a
-/// yield drop (over-collapsed multipath); it only bumps
-/// [`PathCounters::signal_contained_plan`].
-fn plan_already_yielded(found: &[PathOutcome], plan: &Deps) -> bool {
-    found
-        .iter()
-        .any(|h| h.plan.same_linearizations(plan) || h.plan.same_rule_maybe_skeleton(plan))
+/// [`Deps`] is not a new path. Optionally also drop remapped-index free-step
+/// twins ([`Deps::same_rule_maybe_skeleton`]) when `drop_skeleton_twins`.
+/// Dominated-extension is **not** a yield drop (over-collapsed multipath); it
+/// only bumps [`PathCounters::signal_contained_plan`].
+fn plan_already_yielded(found: &[PathOutcome], plan: &Deps, drop_skeleton_twins: bool) -> bool {
+    found.iter().any(|h| {
+        h.plan.same_linearizations(plan)
+            || (drop_skeleton_twins && h.plan.same_rule_maybe_skeleton(plan))
+    })
 }
 
-fn record_yield_plan_signals(counters: &mut PathCounters, found: &[PathOutcome], plan: &Deps) {
-    if plan_already_yielded(found, plan) {
+fn record_yield_plan_signals(
+    counters: &mut PathCounters,
+    found: &[PathOutcome],
+    plan: &Deps,
+    drop_skeleton_twins: bool,
+) {
+    if plan_already_yielded(found, plan, drop_skeleton_twins) {
         counters.dropped_duplicate_plan += 1;
         return;
     }
@@ -1085,6 +1100,8 @@ where
             use_atom_diff,
             lazy_closer,
             heap_score,
+            deprioritize_known_site,
+            drop_skeleton_twins,
         } = self.config;
 
         while let Some(item) = self.heap.pop() {
@@ -1096,8 +1113,13 @@ where
             if here.as_ref() == self.target_csmi.as_str() {
                 self.counters.nodes += 1;
                 let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
-                record_yield_plan_signals(self.counters, &self.yielded, &plan);
-                if plan_already_yielded(&self.yielded, &plan) {
+                record_yield_plan_signals(
+                    self.counters,
+                    &self.yielded,
+                    &plan,
+                    drop_skeleton_twins,
+                );
+                if plan_already_yielded(&self.yielded, &plan, drop_skeleton_twins) {
                     continue;
                 }
                 let outcome = PathOutcome {
@@ -1132,7 +1154,12 @@ where
             let mut hits_from_here = 0usize;
             // Cross-rule cleave Or: enqueue each (fold_key, continue_csmi) once.
             let mut seen_cleave_continues: HashSet<(CleaveFoldKey, String)> = HashSet::new();
-            let known_sites = yielded_plan_sites(&self.yielded);
+            // Empty map → hop_site_is_novel always true (ablation off).
+            let known_sites = if deprioritize_known_site {
+                yielded_plan_sites(&self.yielded)
+            } else {
+                std::collections::HashMap::new()
+            };
             let mut deprio_known = 0usize;
             let mut unstable_csmi = 0usize;
             // Local: Expand already borrows `self.counters` for the loop.
@@ -1919,6 +1946,8 @@ where
         let FindPathConfig {
             max_paths,
             max_nodes,
+            deprioritize_known_site,
+            drop_skeleton_twins,
             ..
         } = self.config;
 
@@ -1931,8 +1960,13 @@ where
             let here = walk.mol.csmi();
             if here.as_ref() == self.target_csmi.as_str() {
                 let plan = as_deps(walk.plan).with_maybe(Maybe::new(walk.maybe));
-                record_yield_plan_signals(self.counters, &self.yielded, &plan);
-                if plan_already_yielded(&self.yielded, &plan) {
+                record_yield_plan_signals(
+                    self.counters,
+                    &self.yielded,
+                    &plan,
+                    drop_skeleton_twins,
+                );
+                if plan_already_yielded(&self.yielded, &plan, drop_skeleton_twins) {
                     continue;
                 }
                 let outcome = PathOutcome {
@@ -1947,7 +1981,11 @@ where
             let mol = walk.mol.mol();
             self.counters.expansions += 1;
             let mut hits_from_here = 0usize;
-            let known_sites = yielded_plan_sites(&self.yielded);
+            let known_sites = if deprioritize_known_site {
+                yielded_plan_sites(&self.yielded)
+            } else {
+                std::collections::HashMap::new()
+            };
 
             // Pull metabolize one emission at a time — no full list.
             let emissions =
@@ -2892,16 +2930,16 @@ mod tests {
             smiles: "C".into(),
         }];
         let mut counters = PathCounters::default();
-        record_yield_plan_signals(&mut counters, &found, &twin);
+        record_yield_plan_signals(&mut counters, &found, &twin, true);
         assert_eq!(counters.dropped_duplicate_plan, 1);
         assert_eq!(counters.signal_contained_plan, 0);
-        assert!(plan_already_yielded(&found, &twin));
+        assert!(plan_already_yielded(&found, &twin, true));
 
         let mut counters = PathCounters::default();
-        record_yield_plan_signals(&mut counters, &found, &longer);
+        record_yield_plan_signals(&mut counters, &found, &longer, true);
         assert_eq!(counters.dropped_duplicate_plan, 0);
         assert_eq!(counters.signal_contained_plan, 1);
-        assert!(!plan_already_yielded(&found, &longer));
+        assert!(!plan_already_yielded(&found, &longer, true));
         assert_eq!(counters.plan_drops(), 1);
     }
 
