@@ -16,52 +16,72 @@ use std::collections::{BTreeSet, HashSet, VecDeque};
 use std::ops::Deref;
 
 use crate::ForestError;
-use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles, parse_mol};
+use crate::labels::Tag;
+use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles};
 use crate::pattern::Effect;
 
 /// One atom note in a [`Step`] site.
+///
+/// Sites are keyed by stable forest [`Tag`] (label), **not** chematic atom
+/// index. Indexes shuffle across hops; labels survive `Atom.tag` remaps so
+/// multi-hop plans replay from the reactant.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PlanAtom {
-    /// Known index on the mol at emit / resolve time.
-    Index(usize),
-    /// Atom a prep step will add: element at this anchor index.
+    /// Stable forest label ([`Tag`]) on the mol at emit / resolve time.
+    Label(Tag),
+    /// Atom a prep step will add: element at this anchor label.
     /// Becomes [`PlanAtom::AddedBy`] when the plan is bound.
-    WillAdd { element: String, at: usize },
+    WillAdd { element: String, at: Tag },
     /// Atom created by an earlier elementary step (rule + that step's anchors).
-    AddedBy { rule: String, anchors: Vec<usize> },
+    AddedBy { rule: String, anchors: Vec<Tag> },
 }
 
 impl PlanAtom {
+    /// Label note. `idx` is the **label id** ([`Tag`].0), not a chematic index.
+    ///
+    /// On a freshly stamped mol, stamp order makes `Tag(i)` coincide with
+    /// atom index `i`, so tests may pass `index(i)` for atom `i`.
     pub fn index(idx: usize) -> Self {
-        Self::Index(idx)
+        Self::Label(Tag(idx as u32))
     }
 
-    pub fn will_add(element: impl Into<String>, at: usize) -> Self {
+    pub fn label(tag: Tag) -> Self {
+        Self::Label(tag)
+    }
+
+    pub fn will_add(element: impl Into<String>, at: Tag) -> Self {
         Self::WillAdd {
             element: element.into(),
             at,
         }
     }
 
+    /// Will-add oxygen at anchor label id (see [`Self::index`]).
     pub fn oxygen_at(at: usize) -> Self {
+        Self::will_add("O", Tag(at as u32))
+    }
+
+    pub fn oxygen_at_tag(at: Tag) -> Self {
         Self::will_add("O", at)
     }
 
-    /// Anchor index this note depends on (known atom or will-add site).
-    pub fn anchor(&self) -> Option<usize> {
+    /// Anchor label this note depends on (known atom or will-add site).
+    pub fn anchor(&self) -> Option<Tag> {
         match self {
-            Self::Index(i) => Some(*i),
+            Self::Label(t) => Some(*t),
             Self::WillAdd { at, .. } => Some(*at),
             Self::AddedBy { anchors, .. } => anchors.first().copied(),
         }
     }
 }
 
-fn plan_atom_sort_key(a: &PlanAtom) -> (u8, String, Vec<usize>) {
+fn plan_atom_sort_key(a: &PlanAtom) -> (u8, String, Vec<u32>) {
     match a {
-        PlanAtom::Index(i) => (0, String::new(), vec![*i]),
-        PlanAtom::WillAdd { element, at } => (1, element.clone(), vec![*at]),
-        PlanAtom::AddedBy { rule, anchors } => (2, rule.clone(), anchors.clone()),
+        PlanAtom::Label(t) => (0, String::new(), vec![t.0]),
+        PlanAtom::WillAdd { element, at } => (1, element.clone(), vec![at.0]),
+        PlanAtom::AddedBy { rule, anchors } => {
+            (2, rule.clone(), anchors.iter().map(|t| t.0).collect())
+        }
     }
 }
 
@@ -70,8 +90,8 @@ fn plan_atom_sort_key(a: &PlanAtom) -> (u8, String, Vec<usize>) {
 pub struct Step {
     pub rule: String,
     pub site: Vec<PlanAtom>,
-    /// Automorphism orbit of the site atoms (generator closure), sorted.
-    /// Empty means unknown / not filled; treat as the resolved site indexes.
+    /// Automorphism orbit of the site **labels** ([`Tag`].0), sorted.
+    /// Empty means unknown / not filled; treat as the resolved site labels.
     /// Filled from ForestMol-cached gens when the plan is emitted.
     pub orbit: Vec<usize>,
 }
@@ -92,6 +112,7 @@ impl Step {
     }
 
     pub fn with_orbit(mut self, orbit: impl IntoIterator<Item = usize>) -> Self {
+        // Orbit entries are label ids ([`Tag`].0), not chematic indexes.
         let mut orbit: Vec<_> = orbit.into_iter().collect();
         orbit.sort_unstable();
         orbit.dedup();
@@ -99,17 +120,19 @@ impl Step {
         self
     }
 
-    /// Origin / will-add anchors named by this step's site notes.
-    pub fn anchors(&self) -> HashSet<usize> {
+    /// Origin / will-add anchors named by this step's site notes (labels).
+    pub fn anchors(&self) -> HashSet<Tag> {
         self.site.iter().filter_map(PlanAtom::anchor).collect()
     }
 
-    /// Orbit for equivalence checks: filled orbit, or resolved index anchors.
+    /// Orbit for equivalence checks: filled orbit labels, or resolved anchors.
+    ///
+    /// Values are [`Tag`].0 ids (stable labels), not chematic indexes.
     pub fn site_orbit(&self) -> Vec<usize> {
         if !self.orbit.is_empty() {
             return self.orbit.clone();
         }
-        let mut atoms: Vec<_> = self.anchors().into_iter().collect();
+        let mut atoms: Vec<_> = self.anchors().into_iter().map(|t| t.0 as usize).collect();
         atoms.sort_unstable();
         atoms
     }
@@ -139,8 +162,13 @@ impl Step {
 
     /// Run this elementary rule at the resolved site; return product mols.
     ///
-    /// Products keep atom indices from the edit (no SMILES round-trip) so
-    /// later steps' anchors still resolve.
+    /// Products keep `Atom.tag` labels from the edit (no SMILES round-trip) so
+    /// later steps' label notes still resolve.
+    ///
+    /// Unique-edit emits one orbit representative. When the plan names a
+    /// different atom in that class, remap a single-atom embedding onto the
+    /// **wanted** label so the edit lands on the tagged atom (not the rep) —
+    /// otherwise later hops see the wrong carbon hydroxylated.
     pub fn apply(&self, mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         let wanted = self.resolve_site(mol)?;
         let Some(rule) = crate::rules::leaf_rule(&self.rule) else {
@@ -149,13 +177,15 @@ impl Step {
                 self.rule
             )));
         };
+        let gens = crate::orbits::atom_bond_generators(mol);
+        let n = mol.atom_count();
         let mut products = Vec::new();
         let mut seen = HashSet::new();
         for c in rule.candidates(mol) {
             let c = c?;
-            if !wanted.contains(&c.site) {
+            let Some(c) = remap_candidate_to_wanted(&c, &wanted, &gens, n) else {
                 continue;
-            }
+            };
             for p in c.materialize_mols(mol)? {
                 let smi = canon_smiles(&p);
                 if seen.insert(smi) {
@@ -165,8 +195,14 @@ impl Step {
         }
         let endpoints = rule.leaf_pair_endpoints();
         if !endpoints.is_empty() {
+            let mut accepted = wanted.clone();
+            for &w in &wanted {
+                for i in crate::orbits::atom_orbit_with_gens(&gens, n, w) {
+                    accepted.insert(i);
+                }
+            }
             for pair in crate::pair_edit::pair_candidates(mol, &endpoints)? {
-                if !pair_matches_wanted(mol, &pair, &wanted) {
+                if !pair_matches_wanted(mol, &pair, &accepted) {
                     continue;
                 }
                 for p in pair.materialize_mols(mol)? {
@@ -179,6 +215,30 @@ impl Step {
         }
         Ok(products)
     }
+}
+
+/// Prefer exact wanted site; else remap single-atom unique-edit embedding onto
+/// a wanted atom in the same automorphism orbit.
+fn remap_candidate_to_wanted(
+    c: &crate::candidate::Candidate,
+    wanted: &HashSet<usize>,
+    gens: &[crate::orbits::AtomBondGenerator],
+    n_atoms: usize,
+) -> Option<crate::candidate::Candidate> {
+    if wanted.contains(&c.site) {
+        return Some(c.clone());
+    }
+    if c.mapped.len() != 1 {
+        return None;
+    }
+    let orbit = crate::orbits::atom_orbit_with_gens(gens, n_atoms, c.site);
+    let &want = wanted.iter().find(|w| orbit.contains(w))?;
+    let mut c2 = c.clone();
+    c2.site = want;
+    for v in c2.mapped.values_mut() {
+        *v = want;
+    }
+    Some(c2)
 }
 
 fn pair_matches_wanted(
@@ -205,22 +265,58 @@ fn pair_matches_wanted(
     partners.len() == wanted.len() && partners.iter().all(|p| wanted.contains(p))
 }
 
+/// Current chematic index of an atom carrying `tag`, if any.
+fn index_of_label(mol: &Molecule, tag: Tag) -> Result<usize, ForestError> {
+    for i in 0..mol.atom_count() {
+        if mol.atom(atom_idx(i)).tag == Some(tag.0) {
+            return Ok(i);
+        }
+    }
+    // Untagged mol (bare `parse_mol`): stamp convention makes label id == index.
+    let i = tag.0 as usize;
+    let untagged = (0..mol.atom_count()).all(|j| mol.atom(atom_idx(j)).tag.is_none());
+    if untagged && i < mol.atom_count() {
+        return Ok(i);
+    }
+    Err(ForestError::Plan(format!(
+        "no atom with label {} on mol ({} atoms)",
+        tag.0,
+        mol.atom_count()
+    )))
+}
+
+/// Label on atom index `idx`, or error when unset on a partially tagged mol.
+///
+/// Untagged mols (`parse_mol` without ForestMol stamp): treat index as label id
+/// (same convention as a fresh stamp).
+pub fn label_at(mol: &Molecule, idx: usize) -> Result<Tag, ForestError> {
+    if let Some(t) = mol.atom(atom_idx(idx)).tag {
+        return Ok(Tag(t));
+    }
+    let untagged = (0..mol.atom_count()).all(|j| mol.atom(atom_idx(j)).tag.is_none());
+    if untagged && idx < mol.atom_count() {
+        return Ok(Tag(idx as u32));
+    }
+    Err(ForestError::Plan(format!(
+        "atom {idx} has no label for plan site"
+    )))
+}
+
 fn resolve_atom(note: &PlanAtom, mol: &Molecule) -> Result<usize, ForestError> {
     match note {
-        PlanAtom::Index(i) => {
-            if *i >= mol.atom_count() {
-                return Err(ForestError::Plan(format!("site index {i} out of range")));
-            }
-            Ok(*i)
+        PlanAtom::Label(tag) => index_of_label(mol, *tag),
+        PlanAtom::WillAdd { element, at } => {
+            let at_idx = index_of_label(mol, *at)?;
+            resolve_added_element(mol, at_idx, element)
         }
-        PlanAtom::WillAdd { element, at } => resolve_added_element(mol, *at, element),
         PlanAtom::AddedBy { anchors, .. } => {
             let Some(&at) = anchors.first() else {
                 return Err(ForestError::Plan("AddedBy with empty anchors".into()));
             };
-            resolve_added_element(mol, at, "O")
-                .or_else(|_| resolve_added_element(mol, at, "N"))
-                .or_else(|_| resolve_added_element(mol, at, "S"))
+            let at_idx = index_of_label(mol, at)?;
+            resolve_added_element(mol, at_idx, "O")
+                .or_else(|_| resolve_added_element(mol, at_idx, "N"))
+                .or_else(|_| resolve_added_element(mol, at_idx, "S"))
         }
     }
 }
@@ -307,6 +403,143 @@ impl ApplyN {
 
     pub fn allows(&self, rule: &str) -> bool {
         self.arms.iter().any(|a| a == rule)
+    }
+
+    /// Orbit-deduped unordered site combinations of length [`Self::count`].
+    ///
+    /// `eligible` must already include unique-edit orbit atoms (not just
+    /// representatives) — see [`eligible_sites_for_apply_n`]. Counts and
+    /// dedup for ApplyN read this set, not sequential unique-edit alone.
+    pub fn site_combinations(&self, mol: &Molecule, eligible: &[usize]) -> Vec<Vec<usize>> {
+        crate::orbits::unordered_site_combinations(mol, eligible, self.count as usize)
+    }
+
+    /// Number of orbit-deduped site combinations ([`Self::site_combinations`]).
+    pub fn n_combinations(&self, mol: &Molecule, eligible: &[usize]) -> usize {
+        self.site_combinations(mol, eligible).len()
+    }
+}
+
+/// Eligible site atoms for an [`ApplyN`] pool: union of unique-edit / candidate
+/// orbits for arms that fire on `mol` under `ruleset`.
+pub fn eligible_sites_for_apply_n(
+    mol: &Molecule,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<Vec<usize>, ForestError> {
+    let mut eligible = BTreeSet::new();
+    for cand in ruleset.candidates(mol) {
+        let cand = cand?;
+        let rule = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
+        if !pool.allows(rule) {
+            continue;
+        }
+        if cand.orbit.is_empty() {
+            eligible.insert(cand.site);
+        } else {
+            eligible.extend(cand.orbit.iter().copied());
+        }
+    }
+    Ok(eligible.into_iter().collect())
+}
+
+/// Apply each orbit-deduped site combination for `pool` under `ruleset`.
+///
+/// For every combination, tries each linear order of sites; at each site picks
+/// the first arm candidate whose site lies in that atom's current orbit.
+/// Returns sorted unique product CSMIs (distinct products for the ApplyN count).
+pub fn apply_n_distinct_products(
+    reactant: &str,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<Vec<String>, ForestError> {
+    let start = crate::ForestMol::parse(reactant)?;
+    let eligible = eligible_sites_for_apply_n(start.mol(), ruleset, pool)?;
+    let combos = pool.site_combinations(start.mol(), &eligible);
+    let mut products = BTreeSet::new();
+    for combo in combos {
+        // Tags pin sites across hops (indexes shuffle).
+        let tags: Vec<crate::labels::Tag> = combo
+            .iter()
+            .map(|&i| label_at(start.mol(), i))
+            .collect::<Result<_, _>>()?;
+        for order in permute_indices(tags.len()) {
+            let mut cur = start.clone();
+            let mut ok = true;
+            for &oi in &order {
+                let tag = tags[oi];
+                let Some(idx) = cur.index_of(tag) else {
+                    ok = false;
+                    break;
+                };
+                let gens = cur.atom_bond_generators();
+                let n = cur.mol().atom_count();
+                let mut applied = false;
+                for cand in ruleset.candidates(cur.mol()) {
+                    let cand = cand?;
+                    let rule = cand.leaf_rule().unwrap_or(cand.pattern.name.as_str());
+                    if !pool.allows(rule) {
+                        continue;
+                    }
+                    let wanted: HashSet<usize> = [idx].into_iter().collect();
+                    let Some(cand) =
+                        remap_candidate_to_wanted(&cand, &wanted, &gens, n)
+                    else {
+                        continue;
+                    };
+                    let pieces = cand.materialize_mols(cur.mol())?;
+                    if pieces.is_empty() {
+                        continue;
+                    }
+                    cur = cur.adopt_product(pieces[0].clone());
+                    applied = true;
+                    break;
+                }
+                if !applied {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                products.insert(cur.csmi().as_ref().to_string());
+            }
+        }
+    }
+    Ok(products.into_iter().collect())
+}
+
+/// Number of distinct products from [`apply_n_distinct_products`].
+pub fn apply_n_n_distinct_products(
+    reactant: &str,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<usize, ForestError> {
+    Ok(apply_n_distinct_products(reactant, ruleset, pool)?.len())
+}
+
+fn permute_indices(n: usize) -> Vec<Vec<usize>> {
+    if n == 0 {
+        return vec![Vec::new()];
+    }
+    let mut elems: Vec<usize> = (0..n).collect();
+    let mut out = Vec::new();
+    heap_permute(&mut elems, n, &mut out);
+    out
+}
+
+fn heap_permute(elems: &mut [usize], k: usize, out: &mut Vec<Vec<usize>>) {
+    if k == 1 {
+        out.push(elems.to_vec());
+        return;
+    }
+    heap_permute(elems, k - 1, out);
+    for i in 0..k - 1 {
+        if k % 2 == 0 {
+            elems.swap(i, k - 1);
+        } else {
+            elems.swap(0, k - 1);
+        }
+        heap_permute(elems, k - 1, out);
     }
 }
 
@@ -487,11 +720,14 @@ impl Deps {
     }
 
     /// True if some linearization apply reaches `target` CSMI (or canon spelling).
+    ///
+    /// Reactant is parsed as a [`crate::ForestMol`] so site labels are stamped;
+    /// plans key sites by label, not chematic index.
     pub fn reaches(&self, reactant: &str, target: &str) -> Result<bool, ForestError> {
         let want = canon_of(target)?;
-        let mol = parse_mol(reactant)?;
+        let start = crate::ForestMol::parse(reactant)?;
         for lin in self.linearizations() {
-            for product in lin.apply(&mol)? {
+            for product in lin.apply(start.mol())? {
                 if canon_smiles(&product) == want {
                     return Ok(true);
                 }
@@ -514,6 +750,33 @@ impl Deps {
             return self.linearizations().len();
         }
         count_topological_sorts(n, &self.precedes)
+    }
+
+    /// Sorted unique product CSMIs from every linearization apply on `reactant`.
+    ///
+    /// Empty apply results (site labels that fail to rebind) contribute nothing.
+    /// Pair with [`Self::n_linearizations`]: `n_lin` can exceed distinct products
+    /// when several orders yield the same CSMI, or exceed zero while products are
+    /// empty when replay fails.
+    pub fn distinct_products(&self, reactant: &str) -> Result<Vec<String>, ForestError> {
+        let start = crate::ForestMol::parse(reactant)?;
+        let mut seen = BTreeSet::new();
+        for lin in self.linearizations() {
+            for product in lin.apply(start.mol())? {
+                seen.insert(canon_smiles(&product));
+            }
+        }
+        Ok(seen.into_iter().collect())
+    }
+
+    /// [`Self::distinct_products`] length.
+    pub fn n_distinct_products(&self, reactant: &str) -> Result<usize, ForestError> {
+        Ok(self.distinct_products(reactant)?.len())
+    }
+
+    /// `(n_linearizations, n_distinct_products)` for reporting / fuzz checks.
+    pub fn replay_stats(&self, reactant: &str) -> Result<(usize, usize), ForestError> {
+        Ok((self.n_linearizations(), self.n_distinct_products(reactant)?))
     }
 
     /// True iff `other` admits exactly the same total orders.
@@ -841,7 +1104,7 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
         for item in &step.site {
             match item {
                 PlanAtom::WillAdd { element, at } => {
-                    let mut bound_note = PlanAtom::Index(*at);
+                    let mut bound_note = PlanAtom::Label(*at);
                     for (earlier, previous) in steps[..later].iter().enumerate() {
                         if !previous.anchors().contains(at) {
                             continue;
@@ -873,7 +1136,7 @@ pub fn bind_deps(steps: Vec<Step>) -> Deps {
                         anchors,
                     });
                 }
-                PlanAtom::Index(_) => site.push(item.clone()),
+                PlanAtom::Label(_) => site.push(item.clone()),
             }
         }
         bound.push(Step::new(step.rule.clone(), site).with_orbit(step.orbit.iter().copied()));
@@ -913,12 +1176,16 @@ pub type CanonicalPlanFn = fn(
     end_effects: Option<&[&Effect]>,
 ) -> Vec<Step>;
 
-/// Identity plan: `rule` at the given site atoms.
+/// Identity plan: `rule` at the given site **labels** ([`Tag`].0 via usize).
+///
+/// Pass label ids. On a freshly stamped mol, `Tag(i)` coincides with atom `i`.
 pub fn identity_plan(rule: impl Into<String>, site: impl IntoIterator<Item = usize>) -> Vec<Step> {
     vec![Step::new(rule, site.into_iter().map(PlanAtom::index))]
 }
 
-/// Identity plan with automorphism orbit of the site (from generators).
+/// Identity plan with automorphism orbit of the site labels.
+///
+/// `site` and `orbit` are label ids ([`Tag`].0), not chematic indexes.
 pub fn identity_plan_with_orbit(
     rule: impl Into<String>,
     site: impl IntoIterator<Item = usize>,
@@ -926,6 +1193,30 @@ pub fn identity_plan_with_orbit(
 ) -> Vec<Step> {
     let site: Vec<_> = site.into_iter().collect();
     vec![Step::new(rule, site.into_iter().map(PlanAtom::index)).with_orbit(orbit)]
+}
+
+/// Identity plan from chematic indexes on a **labeled** mol (ForestMol stamp).
+///
+/// Maps each index → [`Tag`] via `Atom.tag`, then records label notes.
+pub fn identity_plan_at_indexes(
+    rule: impl Into<String>,
+    mol: &Molecule,
+    site: impl IntoIterator<Item = usize>,
+    orbit: impl IntoIterator<Item = usize>,
+) -> Result<Vec<Step>, ForestError> {
+    let site_tags: Vec<Tag> = site
+        .into_iter()
+        .map(|i| label_at(mol, i))
+        .collect::<Result<_, _>>()?;
+    let orbit_tags: Vec<usize> = orbit
+        .into_iter()
+        .map(|i| label_at(mol, i).map(|t| t.0 as usize))
+        .collect::<Result<_, _>>()?;
+    Ok(vec![Step::new(
+        rule,
+        site_tags.into_iter().map(PlanAtom::label),
+    )
+    .with_orbit(orbit_tags)])
 }
 
 /// Compat name.
@@ -946,7 +1237,8 @@ pub fn steps_for_leaf(
 ) -> Vec<Step> {
     match plan {
         Some(f) => f(mol, rule_name, site_atoms, end_effects),
-        None => identity_plan(rule_name, site_atoms.iter().copied()),
+        None => identity_plan_at_indexes(rule_name, mol, site_atoms.iter().copied(), [])
+            .unwrap_or_else(|_| identity_plan(rule_name, site_atoms.iter().copied())),
     }
 }
 
@@ -1002,9 +1294,12 @@ pub fn hydroxylation_then_dehydrogenation(
     let mut preps = Vec::new();
     let mut dh_refs = Vec::new();
     for (end, &atom) in ends.iter().zip(end_atoms.iter()) {
+        let Ok(atom_tag) = label_at(mol, atom) else {
+            continue;
+        };
         let partner = end.partner.as_deref().unwrap_or("");
         if end_needs_oxygen(end) {
-            let anchor = PlanAtom::index(atom);
+            let anchor = PlanAtom::label(atom_tag);
             if HALOGEN.contains(&partner) {
                 let Some(z) = halogen_z(partner) else {
                     continue;
@@ -1012,14 +1307,17 @@ pub fn hydroxylation_then_dehydrogenation(
                 let Some(halo) = bonded(mol, atom, z) else {
                     continue;
                 };
+                let Ok(halo_tag) = label_at(mol, halo) else {
+                    continue;
+                };
                 preps.push(Step::new(
                     "OxidativeDehalogenation",
-                    [anchor.clone(), PlanAtom::index(halo)],
+                    [anchor.clone(), PlanAtom::label(halo_tag)],
                 ));
             } else {
                 preps.push(Step::new("Hydroxylation", [anchor.clone()]));
             }
-            dh_refs.push(PlanAtom::oxygen_at(atom));
+            dh_refs.push(PlanAtom::oxygen_at_tag(atom_tag));
             continue;
         }
         let atomic_num = match partner {
@@ -1031,7 +1329,9 @@ pub fn hydroxylation_then_dehydrogenation(
         };
         if let Some(z) = atomic_num {
             if let Some(hetero) = bonded(mol, atom, z) {
-                dh_refs.push(PlanAtom::index(hetero));
+                if let Ok(hetero_tag) = label_at(mol, hetero) {
+                    dh_refs.push(PlanAtom::label(hetero_tag));
+                }
             }
         }
     }
@@ -1059,7 +1359,8 @@ pub fn quinone_canonical_plan(
             return plan;
         }
     }
-    identity_plan("Dehydrogenation", site_atoms.iter().copied())
+    identity_plan_at_indexes("Dehydrogenation", mol, site_atoms.iter().copied(), [])
+        .unwrap_or_else(|_| identity_plan("Dehydrogenation", site_atoms.iter().copied()))
 }
 
 /// Stable oxygenation (epoxidation) then hydrolysis (epoxide opening).
@@ -1067,21 +1368,26 @@ pub fn quinone_canonical_plan(
 /// Wired on [`crate::rules::epoxide_hydration`] — one metabolize hop to the
 /// vicinal diol; the plan is the elementary split for search / replay.
 pub fn epoxide_hydration_canonical_plan(
-    _mol: &Molecule,
+    mol: &Molecule,
     _rule_name: &str,
     site_atoms: &[usize],
     _end_effects: Option<&[&Effect]>,
 ) -> Vec<Step> {
     if site_atoms.len() < 2 {
-        return identity_plan("EpoxideHydration", site_atoms.iter().copied());
+        return identity_plan_at_indexes("EpoxideHydration", mol, site_atoms.iter().copied(), [])
+            .unwrap_or_else(|_| identity_plan("EpoxideHydration", site_atoms.iter().copied()));
     }
-    let c0 = site_atoms[0];
-    let c1 = site_atoms[1];
+    let Ok(c0) = label_at(mol, site_atoms[0]) else {
+        return identity_plan("EpoxideHydration", site_atoms.iter().copied());
+    };
+    let Ok(c1) = label_at(mol, site_atoms[1]) else {
+        return identity_plan("EpoxideHydration", site_atoms.iter().copied());
+    };
     vec![
-        Step::new("Epoxidation", [PlanAtom::index(c0), PlanAtom::index(c1)]),
+        Step::new("Epoxidation", [PlanAtom::label(c0), PlanAtom::label(c1)]),
         Step::new(
             "EpoxideOpening",
-            [PlanAtom::index(c0), PlanAtom::oxygen_at(c0)],
+            [PlanAtom::label(c0), PlanAtom::oxygen_at_tag(c0)],
         ),
     ]
 }
@@ -1089,6 +1395,7 @@ pub fn epoxide_hydration_canonical_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mol::parse_mol;
     use crate::pattern::Effect;
 
     #[test]
@@ -1610,11 +1917,11 @@ mod tests {
             [
                 PlanAtom::AddedBy {
                     rule: "Hydroxylation".into(),
-                    anchors: vec![0],
+                    anchors: vec![Tag(0)],
                 },
                 PlanAtom::AddedBy {
                     rule: "Hydroxylation".into(),
-                    anchors: vec![3],
+                    anchors: vec![Tag(3)],
                 },
             ],
         );
@@ -1741,6 +2048,38 @@ mod tests {
         let layered = Deps::new([h0, h3, dh], [(0, 2), (1, 2)]);
         assert_eq!(layered.n_linearizations(), layered.linearizations().len());
         assert_eq!(layered.n_linearizations(), 2);
+    }
+
+    #[test]
+    fn replay_stats_free_hydroxylations_share_product() {
+        // Two free OH steps (no precedes): 2 linearizations, one product when
+        // both orders reach the same CSMI on ethane.
+        let plan = Deps::bind([
+            Step::new("Hydroxylation", [PlanAtom::index(0)]),
+            Step::new("Hydroxylation", [PlanAtom::index(1)]),
+        ]);
+        assert_eq!(plan.n_linearizations(), 2);
+        let (n_lin, n_prod) = plan.replay_stats("CC").unwrap();
+        assert_eq!(n_lin, 2);
+        assert_eq!(n_prod, plan.n_distinct_products("CC").unwrap());
+        assert_eq!(n_prod, 1, "both orders → same ethane diol: {:?}", plan.distinct_products("CC"));
+    }
+
+    #[test]
+    fn apply_n_benzene_oh2_three_combinations_three_products() {
+        let set = crate::rules::hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let mol = crate::ForestMol::parse("c1ccccc1").unwrap();
+        let eligible = eligible_sites_for_apply_n(mol.mol(), &set, &pool).unwrap();
+        assert_eq!(eligible.len(), 6);
+        assert_eq!(pool.n_combinations(mol.mol(), &eligible), 3);
+        let products = apply_n_distinct_products("c1ccccc1", &set, &pool).unwrap();
+        assert_eq!(
+            products.len(),
+            3,
+            "ortho/meta/para diols: {products:?}"
+        );
+        assert_eq!(apply_n_n_distinct_products("c1ccccc1", &set, &pool).unwrap(), 3);
     }
 
     #[test]

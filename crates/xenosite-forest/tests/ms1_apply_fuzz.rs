@@ -16,7 +16,8 @@ use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 use xenosite_forest::mass::{Ms1Adduct, mz_abs_error, mz_of_mol, mz_within};
 use xenosite_forest::{
-    ApplyN, ForestMol, Ms1Config, PathCounters, PathOutcome, find_path_ms1, leaf_rule,
+    ApplyN, ForestMol, Ms1Config, PathCounters, PathOutcome, canon_smiles, find_path_ms1,
+    leaf_rule,
 };
 
 fn fuzz_config(default_cases: u32) -> ProptestConfig {
@@ -99,11 +100,14 @@ fn products_from_apply(reactant: &str, leaf: &str) -> Vec<(String, f64)> {
     out
 }
 
-/// Every emitted hit's final product must satisfy the target m/z; path steps
-/// must get monotonically closer (search invariant).
+/// Every emitted hit's product(s) must satisfy the target m/z.
+///
+/// Replays each plan linearization: sole products must all lie within tol;
+/// cleavage leave fragments are exempt (hit species must appear at target mz).
 fn assert_hits_mz_ok(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64) {
     let start = ForestMol::parse(reactant).expect("reactant");
     let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).expect("start mz");
+    let reactant_mol = start.mol();
     for h in hits {
         let mut prev_err = mz_abs_error(start_mz, mz);
         for (i, step) in h.steps.iter().enumerate() {
@@ -132,6 +136,48 @@ fn assert_hits_mz_ok(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64)
             mz_within(hit_mz, mz, tol_da),
             "hit {} mz={hit_mz} outside tol of {mz}",
             h.smiles
+        );
+
+        let mut any_replay = false;
+        for (li, lin) in h.plan.linearizations().into_iter().enumerate() {
+            let products = lin.apply(reactant_mol).unwrap_or_default();
+            if products.is_empty() {
+                continue;
+            }
+            any_replay = true;
+            if products.len() == 1 {
+                let pmz = mz_of_mol(&products[0], Ms1Adduct::MPlusH).expect("plan product mz");
+                assert!(
+                    mz_within(pmz, mz, tol_da),
+                    "plan lin{li} product mz={pmz} outside tol of {mz}"
+                );
+            } else {
+                // Mass-identical isomers all at target, or cleavage leave
+                // fragments off-target (then hit species must appear at mz).
+                let all_at_target = products.iter().all(|p| {
+                    mz_of_mol(p, Ms1Adduct::MPlusH)
+                        .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
+                });
+                if !all_at_target {
+                    let hit_ok = products.iter().any(|p| {
+                        canon_smiles(p) == h.smiles
+                            && mz_of_mol(p, Ms1Adduct::MPlusH)
+                                .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
+                    });
+                    assert!(
+                        hit_ok,
+                        "plan lin{li} missing hit {} at target mz; got {:?}",
+                        h.smiles,
+                        products.iter().map(canon_smiles).collect::<Vec<_>>()
+                    );
+                }
+            }
+        }
+        assert!(
+            any_replay || h.plan.steps().is_empty(),
+            "emitted plan for {} must replay from reactant; plan={:?}",
+            h.smiles,
+            h.plan
         );
     }
 }

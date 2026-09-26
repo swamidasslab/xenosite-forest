@@ -236,6 +236,130 @@ pub fn atoms_orbit_with_gens(
     (0..n_atoms).filter(|&i| seen[i]).collect()
 }
 
+/// Orbit-deduped unordered `k`-subsets of `eligible` site atoms.
+///
+/// Unique-edit collapses embeddings to one representative per class; ApplyN
+/// with `count = k` still needs the distinct **combinations** of sites under
+/// Aut(mol). Benzene carbons + `k = 2` → ortho / meta / para (3 reps), not
+/// sequential unique-edit alone and not raw `C(6,2)`.
+///
+/// Each returned vector is a sorted representative `k`-tuple (atom indexes).
+pub fn unordered_site_combinations_with_gens(
+    generators: &[AtomBondGenerator],
+    n_atoms: usize,
+    eligible: &[usize],
+    k: usize,
+) -> Vec<Vec<usize>> {
+    let mut eligible: Vec<usize> = eligible
+        .iter()
+        .copied()
+        .filter(|&i| i < n_atoms)
+        .collect();
+    eligible.sort_unstable();
+    eligible.dedup();
+    if k == 0 {
+        return vec![Vec::new()];
+    }
+    if k > eligible.len() {
+        return Vec::new();
+    }
+    if k == 1 {
+        // One rep per atom orbit intersected with eligible.
+        let mut seen = vec![false; n_atoms];
+        let mut reps = Vec::new();
+        for &a in &eligible {
+            if seen[a] {
+                continue;
+            }
+            let orbit = atom_orbit_with_gens(generators, n_atoms, a);
+            for &i in &orbit {
+                if i < n_atoms {
+                    seen[i] = true;
+                }
+            }
+            reps.push(vec![a]);
+        }
+        return reps;
+    }
+
+    let subsets = k_subsets(&eligible, k);
+    let mut parent: HashMap<Vec<usize>, Vec<usize>> =
+        subsets.iter().cloned().map(|s| (s.clone(), s)).collect();
+
+    fn find(parent: &mut HashMap<Vec<usize>, Vec<usize>>, mut item: Vec<usize>) -> Vec<usize> {
+        while parent[&item] != item {
+            let next = parent[&item].clone();
+            let grand = parent[&next].clone();
+            parent.insert(item.clone(), grand);
+            item = next;
+        }
+        item
+    }
+
+    for subset in &subsets {
+        for (atom_map, _) in generators {
+            let mut image: Vec<usize> = subset.iter().map(|&i| atom_map[i]).collect();
+            image.sort_unstable();
+            // Skip images that left the eligible set.
+            if !image.iter().all(|i| eligible.binary_search(i).is_ok()) {
+                continue;
+            }
+            let a = find(&mut parent, subset.clone());
+            let b = find(&mut parent, image);
+            if a != b {
+                parent.insert(b, a);
+            }
+        }
+    }
+
+    let mut buckets: BTreeMap<Vec<usize>, Vec<usize>> = BTreeMap::new();
+    for subset in subsets {
+        let root = find(&mut parent, subset.clone());
+        buckets.entry(root).or_insert(subset);
+    }
+    buckets.into_values().collect()
+}
+
+/// All unordered `k`-subsets of `items` (items must be sorted for stable output).
+fn k_subsets(items: &[usize], k: usize) -> Vec<Vec<usize>> {
+    let n = items.len();
+    if k > n {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut idx: Vec<usize> = (0..k).collect();
+    loop {
+        out.push(idx.iter().map(|&i| items[i]).collect());
+        // Next combination in colex / std next_combination order.
+        let mut i = k;
+        while i > 0 && idx[i - 1] == n - k + i - 1 {
+            i -= 1;
+        }
+        if i == 0 {
+            break;
+        }
+        idx[i - 1] += 1;
+        for j in i..k {
+            idx[j] = idx[j - 1] + 1;
+        }
+    }
+    out
+}
+
+/// Convenience: generators from `mol`.
+pub fn unordered_site_combinations(
+    mol: &Molecule,
+    eligible: &[usize],
+    k: usize,
+) -> Vec<Vec<usize>> {
+    unordered_site_combinations_with_gens(
+        &atom_bond_generators(mol),
+        mol.atom_count(),
+        eligible,
+        k,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,5 +442,43 @@ mod tests {
         assert!(classes.len() >= 2);
         let sizes = unordered_atom_pair_orbit_sizes(&mol);
         assert!(sizes.len() >= 3);
+    }
+
+    #[test]
+    fn benzene_site_combinations_k2_are_ortho_meta_para() {
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let eligible: Vec<_> = (0..6).collect();
+        let combos = unordered_site_combinations(&mol, &eligible, 2);
+        assert_eq!(combos.len(), 3, "{combos:?}");
+        let mut dists: Vec<_> = combos
+            .iter()
+            .map(|c| graph_distance(&mol, c[0], c[1]))
+            .collect();
+        dists.sort_unstable();
+        assert_eq!(dists, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn benzene_site_combinations_k1_is_one_orbit() {
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let eligible: Vec<_> = (0..6).collect();
+        assert_eq!(unordered_site_combinations(&mol, &eligible, 1).len(), 1);
+    }
+
+    #[test]
+    fn benzene_site_combinations_k3_count() {
+        // Unordered triples of benzene carbons up to Aut(D6h): three classes.
+        let mol = parse_mol("c1ccccc1").unwrap();
+        let eligible: Vec<_> = (0..6).collect();
+        let combos = unordered_site_combinations(&mol, &eligible, 3);
+        assert_eq!(combos.len(), 3, "{combos:?}");
+    }
+
+    #[test]
+    fn ethane_site_combinations_k1_and_k2() {
+        let mol = parse_mol("CC").unwrap();
+        let eligible = vec![0, 1];
+        assert_eq!(unordered_site_combinations(&mol, &eligible, 1).len(), 1);
+        assert_eq!(unordered_site_combinations(&mol, &eligible, 2).len(), 1);
     }
 }

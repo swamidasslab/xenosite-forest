@@ -91,7 +91,7 @@ fn fmt_plan(hit: &PathOutcome) -> String {
                 .site
                 .iter()
                 .map(|a| match a {
-                    xenosite_forest::PlanAtom::Index(i) => i.to_string(),
+                    xenosite_forest::PlanAtom::Label(t) => t.0.to_string(),
                     other => format!("{other:?}"),
                 })
                 .collect();

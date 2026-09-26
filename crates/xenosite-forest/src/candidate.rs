@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use crate::ForestError;
-use crate::canonical_plan::{Step, identity_plan_with_orbit};
+use crate::canonical_plan::{Step, identity_plan_at_indexes};
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Emission, PatternInfo};
 use crate::ruleset::apply_edit_mols;
@@ -124,10 +124,11 @@ impl Candidate {
 
     /// Elementary plan for this candidate (identity at discovery site).
     ///
-    /// Site orbit is the automorphism orbit from atom+bond generators.
+    /// Site notes are forest labels ([`crate::labels::Tag`]), not chematic
+    /// indexes. Orbit is the automorphism orbit mapped to label ids.
     pub fn identity_plan(&self, mol: &Molecule) -> Vec<Step> {
         let gens = crate::orbits::atom_bond_generators(mol);
-        self.identity_plan_with_gens(&gens, mol.atom_count())
+        self.identity_plan_with_gens(&gens, mol.atom_count(), mol)
     }
 
     /// Like [`Self::identity_plan`], reusing cached generators (ForestMol).
@@ -135,13 +136,16 @@ impl Candidate {
         &self,
         generators: &[crate::orbits::AtomBondGenerator],
         n_atoms: usize,
+        mol: &Molecule,
     ) -> Vec<Step> {
         let rule = self
             .leaf_rule()
             .unwrap_or(self.pattern.name.as_str())
             .to_string();
         let orbit = crate::orbits::atom_orbit_with_gens(generators, n_atoms, self.site);
-        identity_plan_with_orbit(rule, [self.site], orbit)
+        identity_plan_at_indexes(rule.clone(), mol, [self.site], orbit.iter().copied()).unwrap_or_else(
+            |_| crate::canonical_plan::identity_plan_with_orbit(rule, [self.site], orbit),
+        )
     }
 
     pub fn is_pair_endpoint(&self) -> bool {

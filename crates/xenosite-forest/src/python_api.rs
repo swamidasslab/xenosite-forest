@@ -482,7 +482,7 @@ fn find_path(
                     .site
                     .iter()
                     .map(|a| match a {
-                        crate::PlanAtom::Index(i) => i.to_string(),
+                        crate::PlanAtom::Label(t) => t.0.to_string(),
                         other => format!("{other:?}"),
                     })
                     .collect();

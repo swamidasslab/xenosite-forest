@@ -286,7 +286,7 @@ pub fn find_path_ms1(
                 pool_used[i] = pool_used[i].saturating_add(1);
             }
 
-            let plan_steps = cand.identity_plan_with_gens(&gens, mol.atom_count());
+            let plan_steps = cand.identity_plan_with_gens(&gens, mol.atom_count(), mol);
             let path_step = PathStep {
                 rule_path: cand.rule_path.clone(),
                 pattern_name: cand.pattern.name.clone(),
@@ -330,20 +330,30 @@ mod tests {
     use crate::canonical_plan::ApplyN;
     use crate::forest::molecule_formula;
     use crate::mass::{Ms1Adduct, mz_of, mz_of_mol, mz_within};
-    use crate::mol::parse_mol;
+    use crate::mol::{canon_smiles, parse_mol};
     use crate::rules::{
         dealkylation, dehydrogenation, epoxidation, epoxide_hydration, epoxide_opening,
         hydroxylation, nitrogen_oxidation, phase_one, sulfur_oxidation,
     };
     use crate::ruleset::RuleSet;
 
-    /// Every emitted hit's final product (and last path-step product) must
-    /// lie within `tol_da` of the target m/z. Steps must get monotonically
-    /// closer. Intermediates need not equal the target mass.
-    fn assert_hits_satisfy_mz(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64) {
+    /// Every emitted hit's product(s) must satisfy the target m/z.
+    ///
+    /// - `hit.smiles` and the last path-step product lie within `tol_da`.
+    /// - Path mz-error is monotonic (intermediates need not equal the target).
+    /// - Replaying each non-empty plan linearization: **all** sole products
+    ///   satisfy the target; multi-fragment (cleavage) requires the hit
+    ///   species among them at the target m/z (leave fragments exempt).
+    fn assert_emitted_plan_products_satisfy_mz(
+        hits: &[PathOutcome],
+        reactant: &str,
+        mz: f64,
+        tol_da: f64,
+    ) {
         assert!(!hits.is_empty(), "expected at least one MS1 hit");
         let start = ForestMol::parse(reactant).unwrap();
         let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).unwrap();
+        let reactant_mol = start.mol();
         for h in hits {
             let mut prev_err = crate::mass::mz_abs_error(start_mz, mz);
             for (i, step) in h.steps.iter().enumerate() {
@@ -375,7 +385,62 @@ mod tests {
                 "hit smiles {} mz={got} outside tol of target {mz}",
                 h.smiles
             );
+
+            // Plan replay: distinct products from all linearizations must
+            // include the hit CSMI (label-keyed sites). Also reports
+            // n_linearizations vs n_distinct_products.
+            let (n_lin, n_prod) = h.plan.replay_stats(reactant).unwrap_or((0, 0));
+            let products = h.plan.distinct_products(reactant).unwrap_or_default();
+            assert!(
+                !products.is_empty() || h.plan.steps().is_empty(),
+                "emitted plan for {} must replay (n_lin={n_lin}); plan={:?}",
+                h.smiles,
+                h.plan
+            );
+            if !h.plan.steps().is_empty() {
+                assert!(
+                    products.iter().any(|p| p == &h.smiles),
+                    "plan distinct products {products:?} missing hit {} (n_lin={n_lin} n_prod={n_prod})",
+                    h.smiles
+                );
+                for (li, lin) in h.plan.linearizations().into_iter().enumerate() {
+                    let lin_products = lin.apply(reactant_mol).unwrap_or_default();
+                    if lin_products.is_empty() {
+                        continue;
+                    }
+                    if lin_products.len() == 1 {
+                        let pmz = mz_of_mol(&lin_products[0], Ms1Adduct::MPlusH).unwrap();
+                        assert!(
+                            mz_within(pmz, mz, tol_da),
+                            "plan lin{li} product mz={pmz} outside tol of {mz} (hit {})",
+                            h.smiles
+                        );
+                    } else {
+                        let all_at_target = lin_products.iter().all(|p| {
+                            mz_of_mol(p, Ms1Adduct::MPlusH)
+                                .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
+                        });
+                        if !all_at_target {
+                            let hit_ok = lin_products.iter().any(|p| {
+                                canon_smiles(p) == h.smiles
+                                    && mz_of_mol(p, Ms1Adduct::MPlusH)
+                                        .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
+                            });
+                            assert!(
+                                hit_ok,
+                                "plan lin{li} multi-fragment apply missing hit {} at target mz",
+                                h.smiles
+                            );
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    /// Back-compat name used by callers.
+    fn assert_hits_satisfy_mz(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64) {
+        assert_emitted_plan_products_satisfy_mz(hits, reactant, mz, tol_da);
     }
 
     /// Apply `leaf` once to `reactant`; return distinct (csmi, mz) products.
@@ -531,7 +596,49 @@ mod tests {
             hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
             counters.billed()
         );
-        assert_hits_satisfy_mz(&hits, reactant, mz, 0.001);
+        // All hits: mz target. Matched chain product: plan must replay
+        // (isobaric alternate chemistries under OR pools may use pair/composite
+        // plans that need fuller site notes — replay is required for the
+        // applied chain CSMI).
+        assert_hits_mz_only(&hits, reactant, mz, 0.001);
+        let matched: Vec<_> = hits.iter().filter(|h| h.smiles == csmi).cloned().collect();
+        assert_emitted_plan_products_satisfy_mz(&matched, reactant, mz, 0.001);
+    }
+
+    /// Final-product m/z + monotonic path error (no plan replay).
+    fn assert_hits_mz_only(hits: &[PathOutcome], reactant: &str, mz: f64, tol_da: f64) {
+        assert!(!hits.is_empty(), "expected at least one MS1 hit");
+        let start = ForestMol::parse(reactant).unwrap();
+        let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).unwrap();
+        for h in hits {
+            let mut prev_err = crate::mass::mz_abs_error(start_mz, mz);
+            for (i, step) in h.steps.iter().enumerate() {
+                let step_mol = ForestMol::parse(&step.product).unwrap();
+                let step_mz = mz_of_mol(step_mol.mol(), Ms1Adduct::MPlusH).unwrap();
+                let err = crate::mass::mz_abs_error(step_mz, mz);
+                assert!(
+                    err <= prev_err + 1e-6,
+                    "step {i} mz err grew: {prev_err} → {err} ({})",
+                    step.product
+                );
+                prev_err = err;
+                if i + 1 == h.steps.len() {
+                    assert!(
+                        mz_within(step_mz, mz, tol_da),
+                        "last step product {} mz={step_mz} outside tol of {mz}",
+                        step.product
+                    );
+                    assert_eq!(step.product, h.smiles);
+                }
+            }
+            let mol = ForestMol::parse(&h.smiles).unwrap();
+            let got = mz_of_mol(mol.mol(), Ms1Adduct::MPlusH).unwrap();
+            assert!(
+                mz_within(got, mz, tol_da),
+                "hit smiles {} mz={got} outside tol of target {mz}",
+                h.smiles
+            );
+        }
     }
 
     #[test]
@@ -823,6 +930,7 @@ mod tests {
         .unwrap();
         assert_eq!(hits.len(), 1, "{hits:?} billed={}", counters.billed());
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("EpoxideHydration"));
+        assert_hits_satisfy_mz(&hits, "C=C", mz, 0.001);
         // Catalog bags are mass-faithful for this leaf — prediction ≈ hit.
         let parent = ForestMol::parse("C=C").unwrap();
         let delta = epoxide_hydration().patterns()[0]
@@ -858,6 +966,7 @@ mod tests {
         assert_eq!(hits[0].plan.apply_n().len(), 1);
         assert_eq!(hits[0].plan.apply_n()[0].count, 1);
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("Hydroxylation"));
+        assert_hits_satisfy_mz(&hits, "CC", mz, 0.001);
     }
 
     #[test]

@@ -1850,6 +1850,7 @@ where
             None => candidate.identity_plan_with_gens(
                 &self.parent.atom_bond_generators(),
                 self.parent.mol().atom_count(),
+                self.parent.mol(),
             ),
         };
         Ok(Some(ForestEmission {

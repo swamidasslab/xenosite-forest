@@ -67,10 +67,11 @@ pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
     ApplyN, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom,
-    Step, align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
+    Step, align_deps_indices, apply_n_distinct_products, apply_n_n_distinct_products, as_deps,
+    bind_deps, canonical_dependency_edges, eligible_sites_for_apply_n,
     epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
-    identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
-    transitive_closure_masks,
+    identity_plan_at_indexes, identity_plan_with_orbit, label_at, plan_for_leaf,
+    quinone_canonical_plan, steps_for_leaf, transitive_closure_masks,
 };
 pub use cleavage_graph::{
     CleavageArm, CleavageGraph, CleavageGraphConfig, CleavageGraphStats, CleavageLayer,
@@ -112,7 +113,8 @@ pub use mol::{
 pub use orbits::{
     AtomBondGenerator, atom_bond_generators, atom_orbit, atom_orbit_with_gens, atom_pair_orbit_id,
     atom_pair_orbit_id_with_gens, atoms_orbit_with_gens, unordered_atom_pair_groups_with_gens,
-    unordered_atom_pair_orbit_sizes,
+    unordered_atom_pair_orbit_sizes, unordered_site_combinations,
+    unordered_site_combinations_with_gens,
 };
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
 pub use pattern::{
