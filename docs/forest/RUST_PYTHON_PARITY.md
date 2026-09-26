@@ -100,6 +100,22 @@ Status: **approved**.
 (override via ``ruleset=``). Matches Rust ``*_default`` vs explicit-``&RuleSet``
 split. Status: **approved**.
 
+### C10 — Python sanitize cleanup of bad metabolites is a soft failure
+
+Live Python often emits chemically bad fragments that only become acceptable
+(or disappear) after RDKit ``SanitizeMol`` / ``sanitized_fragments`` /
+``xf.sanitize``. That post-hoc cleanup is a **soft failure**: the edit path
+produced junk that sanitize papered over. Ideally patterns, valence gates, and
+apply would not need sanitize to rescue products (Rust already refuses some
+shapes early, e.g. two-double nitrogen — see HEURISTICS).
+
+Parity implications: comparing only post-sanitize RDKit CSMI can hide that
+Python relied on sanitize while Rust never emitted (or emitted a different
+raw graph). When investigating empty-Rust / extra-Python gaps, check whether
+Python’s survivor required sanitize. Prefer fixing the emit path over
+widening sanitize. Status: **approved** (goal); tightening emit so sanitize
+is unnecessary remains open work, not an excuse for product mismatch.
+
 ---
 
 ## Work order (tackle in this sequence)
@@ -115,10 +131,11 @@ split. Status: **approved**.
 | 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **open** | recursive SMARTS / P valence? |
 | 7 | AzoSplitting / ThiopheneSulfurOxidation: Rust empty on aromatic examples | **open** | ResonanceRule ``=,:`` / Kekulé |
 | 8 | NitrogenReduction: Rust empty on ``CCNO`` (hydroxylamine) | **open** | Resonance / pattern arm |
-| 9 | BenzodioxoleReduction: wrong products | **open** | catechol vs ring-opened; C8 |
-| 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **open** | ``CCSO``+zwitterion vs ``CCS[O]`` |
+| 9 | BenzodioxoleReduction: wrong products | **open** | catechol vs ring-opened; C8; watch C10 |
+| 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **open** | ``CCSO``+zwitterion vs ``CCS[O]``; watch C10 |
 | 11 | Dehydration: site-count mismatch with matching products | **open** | may clear after C7 / site_map align |
 | 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |
+| 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):
 ``tests/forest/probe_d1_diff.py`` / ``artifacts/d1_*`` — Dealkylation-heavy;
