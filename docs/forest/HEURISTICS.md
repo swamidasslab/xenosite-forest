@@ -402,7 +402,7 @@ neutral-amide vs `O−`/`N+` bags.
 
 **Path flipping:** `RequireBoundaryUse` / `AllowStates` are the natural hooks
 for path-constrained overlay **or** for path-free dearomatization when end
-edits are π constraints (forced carbonyl leaf, consumed epoxide edge — see
+edits are π constraints (forced leaf/edge, consumed edge, demand state — see
 “Edit-as-π-constraints” under ResonancePair path edits). The crate still does
 not *discover* an odd alternating path; under that model it does not need to.
 Replacing path discovery with blind “pick a CSP solution” without edit
