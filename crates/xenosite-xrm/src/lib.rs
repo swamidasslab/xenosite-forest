@@ -1,4 +1,9 @@
-//! Config-driven xenobiotic reaction naming.
+//! Med-chem-oriented SKOS thesaurus for xenobiotic metabolism reaction naming.
+//!
+//! The missing layer between reaction-generating SMARTS/rules and human-useful
+//! med-chem metabolism names — **not** an enzyme, pathway, compound, or
+//! named-synthesis ontology. Separate from RXNO/MOP/GO/… with SSSOM mappings
+//! (see `data/ontology/RELATED_ONTOLOGIES.md`).
 //!
 //! # Boundary
 //!
@@ -6,7 +11,7 @@
 //! implementation). Naming is driven only by text / JSON-LD / JSONL / SSSOM
 //! config. Opaque CURIEs such as `forest.rule:Hydroxylation` may appear in
 //! config and in caller-supplied tags; they are strings, never resolved by
-//! importing forest code.
+//! importing forest code. Forest SMIRKS may be harvested offline for validation.
 //!
 //! # Formats
 //!
