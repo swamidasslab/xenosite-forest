@@ -2292,7 +2292,7 @@ mod tests {
         assert_eq!(lifted.cost(), 0, "{lifted:?}");
         let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
         assert_eq!(via.cost(), 0, "{via:?}");
-        assert!(!child.shares_tag_gen(&parent));
+        assert!(child.shares_tag_gen(&parent));
     }
 
     #[test]

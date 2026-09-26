@@ -3212,8 +3212,8 @@ mod tests {
         let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
         let child = parent.adopt_product(pieces[0].clone());
         // Surviving carbon tags are stable; born O is remapped via labels.
-        // Sibling adopts use a fresh tag_gen cell (not shared with parent).
-        assert!(!child.shares_tag_gen(&parent));
+        // adopt_product keeps the shared tag_gen with the parent.
+        assert!(child.shares_tag_gen(&parent));
         assert_eq!(child.tag_of(child.index_of(t0).unwrap()), Some(t0));
         assert_eq!(child.tag_of(child.index_of(t1).unwrap()), Some(t1));
         assert_eq!(child.mol().atom_count(), 3);

@@ -28,6 +28,19 @@ pub fn stamp(n: usize) -> (Vec<Option<Tag>>, u32) {
     (labels, n as u32)
 }
 
+/// Next tag id after every held label (sibling-stable: same parent labels ⇒
+/// same start, so product/from_apply mint the same born tags without advancing
+/// a shared counter between sibling adopts).
+pub fn next_tag(labels: &[Option<Tag>]) -> u32 {
+    labels
+        .iter()
+        .flatten()
+        .map(|t| t.0)
+        .max()
+        .map(|m| m.saturating_add(1))
+        .unwrap_or(0)
+}
+
 /// Carry tags through an apply: `src_to_new[src] = Some(dst)` or `None` if
 /// that atom left this piece. Unmapped product atoms get new tags.
 pub fn remap_apply(
@@ -398,9 +411,19 @@ mod tests {
         let child = parent.edit_copy();
         assert_eq!(child.tag_of(0), Some(tag));
         assert_eq!(child.index_of(tag), Some(0));
-        // `edit_copy` / `product` uses a fresh tag_gen (born atoms continue
-        // the counter value, not the Rc). `copy_mol` shares the gen.
-        assert!(!child.shares_tag_gen(&parent));
+        // `edit_copy` / `product` keep tags on the shared generator.
+        assert!(child.shares_tag_gen(&parent));
         assert!(parent.copy_mol().shares_tag_gen(&parent));
+
+        // Sibling adopts mint the same born tags (from parent labels, not a
+        // counter advanced between siblings).
+        let a = parent.adopt_product(parent.mol().clone());
+        let b = parent.adopt_product(parent.mol().clone());
+        assert!(a.shares_tag_gen(&parent));
+        assert!(b.shares_tag_gen(&parent));
+        assert_eq!(a.mol().atom_count(), b.mol().atom_count());
+        for i in 0..a.mol().atom_count() {
+            assert_eq!(a.tag_of(i), b.tag_of(i), "atom {i}");
+        }
     }
 }
