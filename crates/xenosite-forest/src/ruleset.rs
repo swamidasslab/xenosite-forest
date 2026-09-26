@@ -398,7 +398,12 @@ fn cleave_oxygenate(
     mode: RingOpenOxygenate,
 ) -> Option<Vec<Molecule>> {
     let (&left, &right) = (mapped.get(&1)?, mapped.get(&2)?);
-    let (bond_idx, _) = mol.bond_between(atom_idx(left), atom_idx(right))?;
+    let (bond_idx, bond) = mol.bond_between(atom_idx(left), atom_idx(right))?;
+    // Oxygenate cleavage is a σ-bond cut (Me–O, ring single, …). Do not
+    // "cleave" a carbonyl C=O into atomic O + hemiacetal (methyl acetate).
+    if bond.order != BondOrder::Single {
+        return None;
+    }
     let mut product = mol.with_bond_removed(bond_idx);
     match mode {
         RingOpenOxygenate::Alcohol => {
