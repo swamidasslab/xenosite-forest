@@ -598,8 +598,13 @@ pub fn parents_for_ends(
 
 /// Overlays of every aromatic conjugated system. Pair-path derisk only.
 ///
-/// A ResonanceRule should call [`ensure_kekule_parents`] for the matched
-/// bond instead of this. Counts are a **sum** of systems, not a product.
+/// Assignments stay inside **aromatic** atoms of each conjugated component
+/// (exocyclic amide / nitro are not rewritten). That matches Python pair
+/// conjugated parents from ``ResonanceMolSupplier`` on typical aromatics —
+/// charged amide kekulé forms belong to ResonanceRule ``reactant_parent``,
+/// not the pair door. A ResonanceRule should call [`ensure_kekule_parents`]
+/// for the matched bond instead of this. Counts are a **sum** of systems,
+/// not a product.
 pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
     if !mol.atoms().any(|(_, atom)| atom.aromatic) {
         return Ok(vec![mol.clone()]);
@@ -617,17 +622,30 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         }
         let (atoms, bonds) = conjugated_component(mol, start);
         covered.extend(&atoms);
-        if bonds.is_empty() {
+        let aromatic: BTreeSet<usize> = atoms
+            .iter()
+            .copied()
+            .filter(|&i| mol.atom(atom_idx(i)).aromatic)
+            .collect();
+        if aromatic.len() < 2 {
             continue;
         }
-        let key = SystemKey::of(mol, &atoms, &bonds);
+        let arbonds: BTreeSet<_> = bonds
+            .iter()
+            .copied()
+            .filter(|&(a, b)| aromatic.contains(&a) && aromatic.contains(&b))
+            .collect();
+        if arbonds.is_empty() {
+            continue;
+        }
+        let key = SystemKey::of(mol, &aromatic, &arbonds);
         let slot = cache.slot(key);
-        fill_slot(mol, &atoms, &bonds, &slot);
+        fill_slot(mol, &aromatic, &arbonds, &slot);
         forms.extend(
             slot.borrow()
                 .assignments
                 .iter()
-                .map(|assignment| overlay(mol, &atoms, assignment)),
+                .map(|assignment| overlay(mol, &aromatic, assignment)),
         );
     }
     if forms.is_empty() {
