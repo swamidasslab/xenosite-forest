@@ -631,6 +631,9 @@ impl ResidualKey {
 pub struct SystemKekule {
     pub assignments: Vec<BTreeMap<(Tag, Tag), BondOrder>>,
     pub by_order: BTreeMap<((Tag, Tag), u8), usize>,
+    /// Parallel to `assignments`: Σ|formal charge| after overlay + move_charge.
+    /// Used so `by_order` prefers closed-shell writings (APAP neutral amide).
+    charge_mags: Vec<i32>,
 }
 
 impl SystemKekule {
@@ -648,7 +651,7 @@ impl SystemKekule {
         }
         let mut out = Self::default();
         let mut seen = BTreeSet::new();
-        for assignment in &self.assignments {
+        for (ai, assignment) in self.assignments.iter().enumerate() {
             let ok = forced.iter().all(|&(a, b)| {
                 let key = tag_bond_key(a, b);
                 assignment.get(&key) == Some(&BondOrder::Double)
@@ -664,12 +667,24 @@ impl SystemKekule {
                 continue;
             }
             let index = out.assignments.len();
+            let mag = self.charge_mags.get(ai).copied().unwrap_or(0);
             for (key, order) in assignment {
                 if let Some(code) = order_code(*order) {
-                    out.by_order.insert((*key, code), index);
+                    match out.by_order.get(&(*key, code)) {
+                        None => {
+                            out.by_order.insert((*key, code), index);
+                        }
+                        Some(&prev) => {
+                            let prev_mag = out.charge_mags.get(prev).copied().unwrap_or(i32::MAX);
+                            if mag < prev_mag {
+                                out.by_order.insert((*key, code), index);
+                            }
+                        }
+                    }
                 }
             }
             out.assignments.push(assignment.clone());
+            out.charge_mags.push(mag);
         }
         out
     }
@@ -1214,14 +1229,34 @@ fn fill_slot(
             continue;
         }
         let index = bag.assignments.len();
+        let atom_tags: BTreeSet<Tag> = atoms.iter().filter_map(|&i| tag_of(mol, i)).collect();
+        let charge_mag = overlay_tagged(mol, &atom_tags, &tagged, &config)
+            .map(|p| {
+                p.atoms()
+                    .map(|(_, a)| a.charge.unsigned_abs() as i32)
+                    .sum()
+            })
+            .unwrap_or(0);
         for (key, order) in &tagged {
             if let Some(code) = order_code(*order) {
                 if code == 1 || code == 2 {
-                    bag.by_order.entry((*key, code)).or_insert(index);
+                    match bag.by_order.get(&(*key, code)) {
+                        None => {
+                            bag.by_order.insert((*key, code), index);
+                        }
+                        Some(&prev) => {
+                            // Prefer closed-shell overlay (lower |charge|).
+                            let prev_mag = bag.charge_mags.get(prev).copied().unwrap_or(i32::MAX);
+                            if charge_mag < prev_mag {
+                                bag.by_order.insert((*key, code), index);
+                            }
+                        }
+                    }
                 }
             }
         }
         bag.assignments.push(tagged);
+        bag.charge_mags.push(charge_mag);
     }
 }
 
