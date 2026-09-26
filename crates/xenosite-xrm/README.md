@@ -88,7 +88,7 @@ Regenerate the proposed-term panel after ontology/assignment edits:
 cargo run -p xenosite-xrm --example sample_terms -- --write
 ```
 
-Output: [`data/samples/round-004.md`](data/samples/round-004.md) (and prior rounds under `data/samples/`). Comment on that file (or open an issue citing the case label) to steer the next round.
+Output: [`data/samples/round-005.md`](data/samples/round-005.md) (and prior rounds under `data/samples/`). Comment on that file (or open an issue citing the case label) to steer the next round.
 
 Reactions are tagged with **many cross-cutting terms** from the spines in
 [`data/ontology/SOURCES.md`](data/ontology/SOURCES.md). Med-chem style stacks

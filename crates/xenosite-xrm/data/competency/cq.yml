@@ -150,6 +150,33 @@ questions:
     under: xrm:2400000
     expected_contains_labels: [about parent, about product, about reaction]
 
+  - id: CQ-ABOUT-002
+    layer: tagging
+    question: "Prodrug + active metabolite tags distinguish about-parent vs about-product."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:prodrug", "chem:active-metabolite", "chem:about-parent", "chem:about-product"]
+    expected_labels: [prodrug, pharmacologically active metabolite, about parent, about product]
+
+  - id: CQ-PHARM-002
+    layer: tagging
+    question: "Inactive metabolite tag emits pharmacological role + about product."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:inactive-metabolite", "chem:about-product"]
+    expected_labels: [pharmacologically inactive metabolite, about product, pharmacological role]
+
+  - id: CQ-RM-004
+    layer: tagging
+    question: "Acyl glucuronidation implies forms reactive conjugate framing."
+    type: tagging
+    reactant: "C"
+    product: "C"
+    tags: ["chem:acyl-glucuronidation", "chem:forms-reactive-conjugate"]
+    expected_labels: [acyl glucuronidation, forms reactive conjugate]
+
   # --- Structural delta ---
   - id: CQ-DELTA-001
     layer: ontology

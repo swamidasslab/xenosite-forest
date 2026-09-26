@@ -181,18 +181,51 @@ const CASES: &[Case] = &[
         product: "CCO",
         tags: &["chem:hydroxylation", "chem:mapping-underspecified"],
     },
+    Case {
+        label: "chem:forms-reactive-conjugate + about-product",
+        reactant: "c1ccccc1C(=O)O",
+        product: "c1ccccc1C(=O)O",
+        tags: &[
+            "chem:acyl-glucuronidation",
+            "chem:forms-reactive-conjugate",
+            "chem:about-product",
+            "chem:about-reaction",
+        ],
+    },
+    Case {
+        label: "chem:prodrug + active-metabolite (parent vs product)",
+        reactant: "CC(=O)Oc1ccccc1C(=O)O",
+        product: "Oc1ccccc1C(=O)O",
+        tags: &[
+            "chem:prodrug",
+            "chem:prodrug-activation",
+            "chem:active-metabolite",
+            "chem:about-parent",
+            "chem:about-product",
+            "chem:about-reaction",
+        ],
+    },
+    Case {
+        label: "chem:inactive-metabolite + about-product",
+        reactant: "CCO",
+        product: "CC(=O)O",
+        tags: &[
+            "chem:inactive-metabolite",
+            "chem:about-product",
+            "chem:about-reaction",
+        ],
+    },
 ];
 
 fn main() {
     let write = env::args().any(|a| a == "--write");
     let namer = Namer::from_manifest(DEFAULT_MANIFEST).expect("manifest");
-    let mut out = String::from("# Proposed terms — feedback round 004\n\n");
-    out.push_str("ChatGPT-aligned spines: metabolism phase, chemical transformation, ");
-    out.push_str("Rainbow phase I family, phase II conjugation family, medchem liability, ");
-    out.push_str("reactive metabolite family, site type, structural delta, product status, ");
-    out.push_str("rule provenance, evidence, biological context; plus ambiguity and ");
-    out.push_str("Metabolic Forest map (alias). Site-localized names are templates, not concepts.\n\n");
-    out.push_str("See `data/ontology/ANNOTATION.md` for bundle/link design.\n\n");
+    let mut out = String::from("# Proposed terms — feedback round 005\n\n");
+    out.push_str("Spines include leaving group, pharmacological role (active/inactive/prodrug), ");
+    out.push_str("annotation-about (parent/product/reaction), and forms-reactive-conjugate. ");
+    out.push_str("Metabolism-specific only — not a full chemical ontology. ");
+    out.push_str("Site-localized names are templates, not concepts.\n\n");
+    out.push_str("See `data/ontology/ANNOTATION.md` and `SCOPE.md`.\n\n");
     out.push_str("Regenerate: `cargo run -p xenosite-xrm --example sample_terms -- --write`\n\n");
 
     for case in CASES {
@@ -205,7 +238,7 @@ fn main() {
     }
 
     if write {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/samples/round-004.md");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/samples/round-005.md");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, &out).unwrap();
         eprintln!("wrote {}", path.display());
