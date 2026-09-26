@@ -249,7 +249,7 @@ pub struct EndParents {
 }
 
 /// Bond-order sum for charge-follow (aromatic counts as 1.5, matching RDKit).
-fn bond_order_sums(mol: &Molecule) -> HashMap<usize, f32> {
+pub(crate) fn bond_order_sums(mol: &Molecule) -> HashMap<usize, f32> {
     let mut sums = HashMap::new();
     for (idx, _) in mol.atoms() {
         let i = atom_usize(idx);
@@ -275,12 +275,15 @@ fn bond_order_sums(mol: &Molecule) -> HashMap<usize, f32> {
 /// aromatic atoms do not mint charge from 1.5→1/2 alone; already-charged atoms
 /// and neutral non-aromatic heteroatoms follow the bond (N may gain charge when
 /// bond order rises — iminium / amide resonance / pyridinium bookkeeping).
+///
+/// Closed-shell exception for oxygen: bond-order rise on neutral OH consumes H
+/// (phenol/enol → carbonyl) instead of minting `[OH+]`. Radicals and protonated
+/// carbonyls are not products — emit-path correctness, not sanitize rescue (C10).
 pub fn move_charge_with_bonds(
     mol: &mut Molecule,
     before: &HashMap<usize, f32>,
     aromatic: &HashSet<usize>,
 ) {
-    use chematic::core::Element;
     let after = bond_order_sums(mol);
     let idxs: Vec<usize> = after.keys().copied().collect();
     for i in idxs {
@@ -299,28 +302,26 @@ pub fn move_charge_with_bonds(
         let neutral = charge == 0;
         if neutral && z == 6 {
             // H travels with the bond on neutral carbon.
-            let impl_h = mol.implicit_hydrogen_count(atom_idx(i));
-            let expl = atom.hydrogen_count.unwrap_or(0);
-            let total = expl as i16 + impl_h as i16;
+            let total = mol.implicit_hydrogen_count(atom_idx(i)) as i16;
             let updated = total - delta as i16;
             if updated >= 0 {
-                // Rebuild with explicit H (chematic has no set_hydrogen in-place).
-                let mut next = mol.clone();
-                // Patch via with_atom_charge path style: rebuild one atom's H.
-                *mol = with_atom_explicit_h(&next, atom_idx(i), updated as u8);
-                let _ = next;
+                *mol = with_atom_explicit_h(mol, atom_idx(i), updated as u8);
             }
         } else if neutral && aromatic.contains(&i) {
             continue;
+        } else if neutral && z == 8 && delta > 0 {
+            // Phenol/enol → carbonyl: closed-shell O (H=0, charge=0). Do not
+            // mint [OH+] — after the double is written, valence-inferred H is
+            // already 0 so a "consume H else charge" branch wrongly charges.
+            *mol = with_atom_explicit_h(mol, atom_idx(i), 0);
         } else {
             mol.set_charge(atom_idx(i), charge.saturating_add(delta));
         }
     }
-    let _ = Element::C; // keep import usable if charge path changes
 }
 
-fn with_atom_explicit_h(mol: &Molecule, idx: chematic::core::AtomIdx, h: u8) -> Molecule {
-    use chematic::core::{Atom, MoleculeBuilder};
+pub(crate) fn with_atom_explicit_h(mol: &Molecule, idx: chematic::core::AtomIdx, h: u8) -> Molecule {
+    use chematic::core::MoleculeBuilder;
     let mut builder = MoleculeBuilder::new();
     for (aidx, atom) in mol.atoms() {
         let mut a = atom.clone();
@@ -344,19 +345,64 @@ fn match_assignment(
     bonds: &BTreeSet<(usize, usize)>,
     seed: (usize, usize),
 ) -> Option<BTreeMap<(usize, usize), BondOrder>> {
+    complete_assignment(
+        mol,
+        atoms,
+        bonds,
+        &BTreeSet::from([bond_key(seed.0, seed.1)]),
+        &BTreeSet::new(),
+    )
+}
+
+/// Complete a Kekulé assignment under π constraints.
+///
+/// `forced_doubles` seed the matching (exocyclic carbonyl/imine leaves, edited
+/// single→double edges). `saturate` atoms leave must-match (Hydrogenation
+/// `keep` + adds H — PatternInfo when the edit does not change the graph).
+/// Returns `None` when the residual matching is impossible.
+pub fn complete_assignment(
+    mol: &Molecule,
+    atoms: &BTreeSet<usize>,
+    bonds: &BTreeSet<(usize, usize)>,
+    forced_doubles: &BTreeSet<(usize, usize)>,
+    saturate: &BTreeSet<usize>,
+) -> Option<BTreeMap<(usize, usize), BondOrder>> {
     use chematic::core::kekulization::atom_must_be_matched;
-    if !atoms.contains(&seed.0) || !atoms.contains(&seed.1) {
-        return None;
-    }
-    // Only must-match↔must-match edges are double-bond candidates (pyrrole
-    // [nH] / O / S donate a lone pair — chematic atom_must_be_matched).
     let must: BTreeSet<usize> = atoms
         .iter()
         .copied()
-        .filter(|&i| atom_must_be_matched(mol, atom_idx(i)))
+        .filter(|&i| !saturate.contains(&i) && atom_must_be_matched(mol, atom_idx(i)))
         .collect();
-    if !must.contains(&seed.0) || !must.contains(&seed.1) {
-        return None;
+    let mut doubles: HashMap<usize, usize> = HashMap::new();
+    for &(left, right) in forced_doubles {
+        if doubles.contains_key(&left) || doubles.contains_key(&right) {
+            if doubles.get(&left) != Some(&right) {
+                return None;
+            }
+            continue;
+        }
+        doubles.insert(left, right);
+        doubles.insert(right, left);
+    }
+    // Also treat existing Double bonds touching the system as forced (perception
+    // after end edits — carbonyl O may sit outside `must`).
+    for (_, bond) in mol.bonds() {
+        if bond.order != BondOrder::Double {
+            continue;
+        }
+        let a = atom_usize(bond.atom1);
+        let b = atom_usize(bond.atom2);
+        if !atoms.contains(&a) && !atoms.contains(&b) {
+            continue;
+        }
+        if doubles.contains_key(&a) || doubles.contains_key(&b) {
+            if doubles.get(&a) != Some(&b) {
+                return None;
+            }
+            continue;
+        }
+        doubles.insert(a, b);
+        doubles.insert(b, a);
     }
     let mut adj: HashMap<usize, Vec<usize>> = must.iter().map(|&a| (a, Vec::new())).collect();
     for &(left, right) in bonds {
@@ -369,10 +415,7 @@ fn match_assignment(
     for nbrs in adj.values_mut() {
         nbrs.sort_unstable();
     }
-    // Place doubles on must-match atoms (C and pyridine-type / charged N), not
-    // carbons alone — else pyridinium / pyridine parents never form.
     let places: Vec<usize> = must.iter().copied().collect();
-    let mut doubles = HashMap::from([(seed.0, seed.1), (seed.1, seed.0)]);
     fn place(
         idx: usize,
         places: &[usize],
@@ -406,6 +449,10 @@ fn match_assignment(
     if !place(0, &places, &adj, &mut doubles) {
         return None;
     }
+    // Every must-match atom must be paired.
+    if places.iter().any(|a| !doubles.contains_key(a)) {
+        return None;
+    }
     let mut written = BTreeMap::new();
     for &(left, right) in bonds {
         let is_double = doubles.get(&left) == Some(&right);
@@ -419,6 +466,149 @@ fn match_assignment(
         );
     }
     Some(written)
+}
+
+/// Count distinct complete assignments under the same constraints (multi-resonance).
+pub fn count_assignments(
+    mol: &Molecule,
+    atoms: &BTreeSet<usize>,
+    bonds: &BTreeSet<(usize, usize)>,
+    forced_doubles: &BTreeSet<(usize, usize)>,
+    saturate: &BTreeSet<usize>,
+) -> usize {
+    all_assignments(mol, atoms, bonds, forced_doubles, saturate).len()
+}
+
+/// Every distinct complete assignment under the constraints.
+pub fn all_assignments(
+    mol: &Molecule,
+    atoms: &BTreeSet<usize>,
+    bonds: &BTreeSet<(usize, usize)>,
+    forced_doubles: &BTreeSet<(usize, usize)>,
+    saturate: &BTreeSet<usize>,
+) -> Vec<BTreeMap<(usize, usize), BondOrder>> {
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    let mut consider = |forced: &BTreeSet<(usize, usize)>| {
+        let Some(assignment) = complete_assignment(mol, atoms, bonds, forced, saturate) else {
+            return;
+        };
+        let sig: Vec<_> = assignment
+            .iter()
+            .map(|(&k, &o)| (k, order_code(o)))
+            .collect();
+        if seen.insert(sig) {
+            out.push(assignment);
+        }
+    };
+    consider(forced_doubles);
+    for &seed in bonds {
+        if forced_doubles.contains(&seed) {
+            continue;
+        }
+        let mut forced = forced_doubles.clone();
+        forced.insert(seed);
+        consider(&forced);
+    }
+    out
+}
+
+/// 2-core of a π graph: iteratively drop atoms with degree &lt; 2.
+pub fn two_core(
+    atoms: &BTreeSet<usize>,
+    bonds: &BTreeSet<(usize, usize)>,
+) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
+    let mut atoms = atoms.clone();
+    let mut bonds: BTreeSet<(usize, usize)> = bonds
+        .iter()
+        .copied()
+        .filter(|&(a, b)| atoms.contains(&a) && atoms.contains(&b))
+        .collect();
+    loop {
+        let mut deg: HashMap<usize, usize> = atoms.iter().map(|&a| (a, 0)).collect();
+        for &(a, b) in &bonds {
+            *deg.entry(a).or_default() += 1;
+            *deg.entry(b).or_default() += 1;
+        }
+        let drop: Vec<usize> = deg
+            .iter()
+            .filter(|(_, d)| **d < 2)
+            .map(|(&a, _)| a)
+            .collect();
+        if drop.is_empty() {
+            break;
+        }
+        for a in drop {
+            atoms.remove(&a);
+        }
+        bonds.retain(|&(a, b)| atoms.contains(&a) && atoms.contains(&b));
+    }
+    (atoms, bonds)
+}
+
+/// Atoms that remain aromatic: cyclic 2-core components with a valid Kekulé
+/// state and 4n+2 π electrons (all-carbon benzenoid shortcut).
+///
+/// Build `residual_atoms` / `residual_bonds` **after** dearomatizing edits
+/// (epoxidation: drop the two sp³ atoms; quinone: drop the carbonyl carbon
+/// from the aromatic candidate, or equivalently consume its demand with
+/// forced C=O so it is absent here). Then ask which cyclic 2-core pieces
+/// survive — not whether the original fused system is still aromatic.
+pub fn aromatic_2core_atoms(
+    mol: &Molecule,
+    residual_atoms: &BTreeSet<usize>,
+    residual_bonds: &BTreeSet<(usize, usize)>,
+) -> BTreeSet<usize> {
+    let (core_atoms, core_bonds) = two_core(residual_atoms, residual_bonds);
+    let mut aromatic = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    for &start in &core_atoms {
+        if !seen.insert(start) {
+            continue;
+        }
+        let mut stack = vec![start];
+        let mut comp_atoms = BTreeSet::from([start]);
+        while let Some(a) = stack.pop() {
+            for &(left, right) in &core_bonds {
+                let other = if left == a {
+                    right
+                } else if right == a {
+                    left
+                } else {
+                    continue;
+                };
+                if comp_atoms.insert(other) {
+                    seen.insert(other);
+                    stack.push(other);
+                }
+            }
+        }
+        let comp_bonds: BTreeSet<_> = core_bonds
+            .iter()
+            .copied()
+            .filter(|&(a, b)| comp_atoms.contains(&a) && comp_atoms.contains(&b))
+            .collect();
+        // Cyclic: connected component with at least as many edges as atoms.
+        if comp_bonds.len() < comp_atoms.len() {
+            continue;
+        }
+        if complete_assignment(
+            mol,
+            &comp_atoms,
+            &comp_bonds,
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+        )
+        .is_none()
+        {
+            continue;
+        }
+        let n = comp_atoms.len();
+        if n >= 6 && n % 4 == 2 {
+            aromatic.extend(comp_atoms);
+        }
+    }
+    aromatic
 }
 
 /// Stamp one system's assignment onto `mol`. Other systems stay as they were.
@@ -722,6 +912,83 @@ mod tests {
                 .count();
             assert_eq!(doubles, 3);
         }
+    }
+
+    /// Naphthalene epoxidize outer left bond 0-1: left collapses, right 2-core
+    /// stays aromatic (HEURISTICS cyclic 2-core partial collapse).
+    #[test]
+    fn naphthalene_epoxide_leaves_right_ring_aromatic_2core() {
+        // Graph numbering matches the HEURISTICS example:
+        // left 0-1-2-3-4-5-0, right 2-6-7-8-9-3-2, shared 2-3.
+        let atoms: BTreeSet<usize> = (0..10).collect();
+        let bonds: BTreeSet<(usize, usize)> = [
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5),
+            (5, 0),
+            (2, 6),
+            (6, 7),
+            (7, 8),
+            (8, 9),
+            (9, 3),
+        ]
+        .into_iter()
+        .map(|(a, b)| bond_key(a, b))
+        .collect();
+        // Epoxidation of 0-1 → remove sp³ atoms 0 and 1 from π graph.
+        let mut residual_atoms = atoms.clone();
+        residual_atoms.remove(&0);
+        residual_atoms.remove(&1);
+        let residual_bonds: BTreeSet<_> = bonds
+            .iter()
+            .copied()
+            .filter(|&(a, b)| residual_atoms.contains(&a) && residual_atoms.contains(&b))
+            .collect();
+        let (core_atoms, _) = two_core(&residual_atoms, &residual_bonds);
+        assert_eq!(
+            core_atoms,
+            BTreeSet::from([2, 3, 6, 7, 8, 9]),
+            "dangling 3-4-5 strips; right ring remains"
+        );
+        // Need a real mol for Kekulé check — benzene stands in for the right ring
+        // topology; aromatic_2core on the abstract residual uses complete_assignment
+        // on mol indices, so build a naphthalene mol and map by index.
+        let mol = parse_mol("c1ccc2ccccc2c1").unwrap();
+        let (sys, sys_bonds) = conjugated_component(&mol, 0);
+        assert!(sys.len() >= 10);
+        // Remove two atoms that share an outer (non-fusion) bond.
+        let fusion: BTreeSet<_> = sys_bonds
+            .iter()
+            .copied()
+            .filter(|&(a, b)| {
+                let a_ring = sys_bonds.iter().filter(|&&(x, y)| x == a || y == a).count();
+                let b_ring = sys_bonds.iter().filter(|&&(x, y)| x == b || y == b).count();
+                // fusion carbons have degree 3 in the π graph
+                a_ring == 3 && b_ring == 3
+            })
+            .collect();
+        let outer = sys_bonds
+            .iter()
+            .copied()
+            .find(|&(a, b)| {
+                !fusion.contains(&(a, b))
+                    && sys_bonds.iter().filter(|&&(x, y)| x == a || y == a).count() == 2
+                    && sys_bonds.iter().filter(|&&(x, y)| x == b || y == b).count() == 2
+            })
+            .expect("outer bond");
+        let mut residual_atoms = sys.clone();
+        residual_atoms.remove(&outer.0);
+        residual_atoms.remove(&outer.1);
+        let residual_bonds: BTreeSet<_> = sys_bonds
+            .iter()
+            .copied()
+            .filter(|&(a, b)| residual_atoms.contains(&a) && residual_atoms.contains(&b))
+            .collect();
+        let aromatic = aromatic_2core_atoms(&mol, &residual_atoms, &residual_bonds);
+        assert_eq!(aromatic.len(), 6, "one benzenoid sextet survives: {aromatic:?}");
+        assert!(!aromatic.contains(&outer.0) && !aromatic.contains(&outer.1));
     }
 
     #[test]

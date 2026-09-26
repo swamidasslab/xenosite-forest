@@ -1,15 +1,19 @@
-//! ResonancePair path edits driven by endpoint [`PatternInfo`] data.
+//! ResonancePair edits as π-matching constraints (no path flip).
 //!
-//! Match each [`Edit::PairEndpoint`] SMARTS, join two anchors by an odd
-//! alternating path on a Kekulé form, apply the named end edits, flip the
-//! path. Methide is an effect field — two methide ends are allowed.
+//! Match each [`Edit::PairEndpoint`] SMARTS, apply end edits, perceive forced
+//! doubles / saturate sites, complete the residual Kekulé matching, then mark
+//! surviving aromatic atoms via the cyclic 2-core test (HEURISTICS). Methide
+//! is an effect field — two methide ends are allowed.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chematic::core::{Atom, BondOrder, Element};
 use chematic::perception::find_sssr;
 
-use crate::kekule::{conjugated_component, kekule_forms};
+use crate::kekule::{
+    all_assignments, aromatic_2core_atoms, bond_order_sums, conjugated_component,
+    move_charge_with_bonds, with_atom_explicit_h,
+};
 use crate::mol::{ForestError, Molecule, aromatize, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
 use crate::smarts::smarts_matches;
@@ -17,104 +21,6 @@ use crate::valence::accept_product;
 
 fn bond_key(a: usize, b: usize) -> (usize, usize) {
     if a < b { (a, b) } else { (b, a) }
-}
-
-fn order_value(order: BondOrder) -> Option<i32> {
-    match order {
-        BondOrder::Single => Some(1),
-        BondOrder::Double => Some(2),
-        _ => None,
-    }
-}
-
-fn current_orders(mol: &Molecule) -> HashMap<(usize, usize), i32> {
-    mol.bonds()
-        .filter_map(|(_, bond)| {
-            order_value(bond.order).map(|order| {
-                (
-                    bond_key(atom_usize(bond.atom1), atom_usize(bond.atom2)),
-                    order,
-                )
-            })
-        })
-        .collect()
-}
-
-fn system_neighbors(mol: &Molecule, system: &HashSet<usize>) -> HashMap<usize, Vec<usize>> {
-    let mut neighbors = HashMap::new();
-    for &i in system {
-        let mut nbrs = Vec::new();
-        for (nbr, _) in mol.neighbors(atom_idx(i)) {
-            let j = atom_usize(nbr);
-            if system.contains(&j) {
-                nbrs.push(j);
-            }
-        }
-        neighbors.insert(i, nbrs);
-    }
-    neighbors
-}
-
-fn alternating_from(
-    bond_map: &HashMap<(usize, usize), i32>,
-    start: usize,
-    end: usize,
-    neighbors: &HashMap<usize, Vec<usize>>,
-    first: i32,
-) -> Vec<Vec<usize>> {
-    let mut queue = VecDeque::from([(start, first, vec![start])]);
-    let mut seen = HashSet::from([(start, first)]);
-    let mut found = Vec::new();
-    while let Some((node, want, path)) = queue.pop_front() {
-        let next_want = if want == 2 { 1 } else { 2 };
-        let Some(nbrs) = neighbors.get(&node) else {
-            continue;
-        };
-        for &nbr in nbrs {
-            if path.contains(&nbr) {
-                continue;
-            }
-            let Some(&order) = bond_map.get(&bond_key(node, nbr)) else {
-                continue;
-            };
-            if order != want {
-                continue;
-            }
-            let mut nxt = path.clone();
-            nxt.push(nbr);
-            if nbr == end {
-                found.push(nxt);
-                continue;
-            }
-            if seen.insert((nbr, next_want)) {
-                queue.push_back((nbr, next_want, nxt));
-            }
-        }
-    }
-    found
-}
-
-fn flip_path(mol: &mut Molecule, path: &[usize]) -> bool {
-    let mut flipped = false;
-    for window in path.windows(2) {
-        let a = atom_idx(window[0]);
-        let b = atom_idx(window[1]);
-        let Some((bond_idx, bond)) = mol.bond_between(a, b) else {
-            return false;
-        };
-        match bond.order {
-            BondOrder::Double => {
-                mol.set_bond_order(bond_idx, BondOrder::Single);
-                flipped = true;
-            }
-            BondOrder::Single => {
-                mol.set_bond_order(bond_idx, BondOrder::Double);
-                flipped = true;
-            }
-            _ => {}
-        }
-    }
-    flipped
 }
 
 fn clear_aromatic(mol: &mut Molecule) {
@@ -125,49 +31,150 @@ fn clear_aromatic(mol: &mut Molecule) {
     }
 }
 
+/// Demote aromatic bonds touching `system` to single so matching can assign.
+fn demote_aromatic_bonds(mol: &mut Molecule, system: &HashSet<usize>) {
+    let idxs: Vec<_> = mol
+        .bonds()
+        .filter_map(|(idx, bond)| {
+            if bond.order != BondOrder::Aromatic {
+                return None;
+            }
+            let a = atom_usize(bond.atom1);
+            let b = atom_usize(bond.atom2);
+            if system.contains(&a) || system.contains(&b) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect();
+    for idx in idxs {
+        mol.set_bond_order(idx, BondOrder::Single);
+    }
+}
+
+/// `keep` + adds H → saturate site atoms (leave must-match, +H later).
+fn saturate_sites(pattern: &PatternInfo, mapped: &BTreeMap<u16, usize>) -> BTreeSet<usize> {
+    let Edit::PairEndpoint(edit) = &pattern.edit else {
+        return BTreeSet::new();
+    };
+    if edit.as_str() != "keep" {
+        return BTreeSet::new();
+    }
+    let adds = pattern.effect.adds.as_deref().unwrap_or("");
+    if !adds.contains('H') {
+        return BTreeSet::new();
+    }
+    mapped.get(&1).copied().into_iter().collect()
+}
+
+/// Residual π graph: conjugated edges among system atoms minus saturate sites.
+///
+/// Topology from the parent (pre-edit) conjugated component. Saturate atoms
+/// leave must-match; demand-consumed atoms for the aromatic 2-core gate are
+/// stripped after forced doubles are perceived.
+fn residual_pi_graph(
+    parent: &Molecule,
+    system: &HashSet<usize>,
+    saturate: &BTreeSet<usize>,
+) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
+    let atoms: BTreeSet<usize> = system
+        .iter()
+        .copied()
+        .filter(|a| !saturate.contains(a))
+        .collect();
+    let mut bonds = BTreeSet::new();
+    if let Some(&seed) = atoms.iter().next().or_else(|| system.iter().next()) {
+        let (_, comp_bonds) = conjugated_component(parent, seed);
+        for (a, b) in comp_bonds {
+            if atoms.contains(&a) && atoms.contains(&b) {
+                bonds.insert(bond_key(a, b));
+            }
+        }
+    }
+    // Fallback: any bond between residual atoms (full-mol system path).
+    if bonds.is_empty() {
+        for (_, bond) in parent.bonds() {
+            let a = atom_usize(bond.atom1);
+            let b = atom_usize(bond.atom2);
+            if atoms.contains(&a) && atoms.contains(&b) {
+                match bond.order {
+                    BondOrder::Single
+                    | BondOrder::Double
+                    | BondOrder::Triple
+                    | BondOrder::Aromatic => {
+                        bonds.insert(bond_key(a, b));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    (atoms, bonds)
+}
+
+/// Forced doubles from the post-edit graph (perception; PatternInfo fills gaps
+/// via saturate_sites). Any double touching the residual atoms is a constraint.
+fn perceive_forced_doubles(
+    edited: &Molecule,
+    atoms: &BTreeSet<usize>,
+) -> BTreeSet<(usize, usize)> {
+    let mut forced = BTreeSet::new();
+    for (_, bond) in edited.bonds() {
+        if bond.order != BondOrder::Double {
+            continue;
+        }
+        let a = atom_usize(bond.atom1);
+        let b = atom_usize(bond.atom2);
+        if atoms.contains(&a) || atoms.contains(&b) {
+            forced.insert(bond_key(a, b));
+        }
+    }
+    forced
+}
+
+/// Drop atoms whose π demand is consumed by a forced double (exocyclic leaf or
+/// in-system forced edge) before the cyclic 2-core aromaticity test.
+fn aromatic_residual_after_forced(
+    atoms: &BTreeSet<usize>,
+    bonds: &BTreeSet<(usize, usize)>,
+    forced: &BTreeSet<(usize, usize)>,
+) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
+    let mut arom_atoms = atoms.clone();
+    for &(a, b) in forced {
+        let a_in = arom_atoms.contains(&a);
+        let b_in = arom_atoms.contains(&b);
+        if a_in && b_in {
+            // Forced edge inside the residual (phenol C=O, iminium, …): both
+            // demands consumed — drop both from the aromatic candidate.
+            arom_atoms.remove(&a);
+            arom_atoms.remove(&b);
+        } else if a_in {
+            arom_atoms.remove(&a);
+        } else if b_in {
+            arom_atoms.remove(&b);
+        }
+    }
+    let arom_bonds: BTreeSet<_> = bonds
+        .iter()
+        .copied()
+        .filter(|&(a, b)| arom_atoms.contains(&a) && arom_atoms.contains(&b))
+        .collect();
+    (arom_atoms, arom_bonds)
+}
+
+fn bump_h(mol: &mut Molecule, atom: usize, delta: i8) {
+    let idx = atom_idx(atom);
+    // implicit_hydrogen_count already returns stored hydrogen_count when set.
+    let total = mol.implicit_hydrogen_count(idx) as i16 + delta as i16;
+    if total >= 0 {
+        *mol = with_atom_explicit_h(mol, idx, total as u8);
+    }
+}
+
 /// Capability OR, resolved against whether the conjugated system is aromatic.
 fn merge_dearomatizes(left: &PatternInfo, right: &PatternInfo, system_aromatic: bool) -> bool {
     (left.effect.dearomatizes || right.effect.dearomatizes) && system_aromatic
-}
-
-/// True when the kekulized system is aromatic again after sanitize.
-///
-/// Other aromatic systems may stay. The kekulized one did not if any of its
-/// aromatic atoms is no longer aromatic, or a non-aromatic double or triple
-/// bond still touches it (carbonyl, exocyclic methide). HEURISTICS approved.
-fn system_stayed_aromatic(parent: &Molecule, product: &Molecule, system: &HashSet<usize>) -> bool {
-    let aromatic_idxs: Vec<usize> = system
-        .iter()
-        .copied()
-        .filter(|&i| parent.atom(atom_idx(i)).aromatic)
-        .collect();
-    if aromatic_idxs.len() < 2 {
-        return false;
-    }
-    if aromatic_idxs
-        .iter()
-        .any(|&i| !product.atom(atom_idx(i)).aromatic)
-    {
-        return false;
-    }
-    let aromatic_set: HashSet<usize> = aromatic_idxs.into_iter().collect();
-    for (_, bond) in product.bonds() {
-        let aromatic_bond = bond.order == BondOrder::Aromatic
-            || (product.atom(bond.atom1).aromatic && product.atom(bond.atom2).aromatic);
-        if aromatic_bond {
-            continue;
-        }
-        match bond.order {
-            BondOrder::Double | BondOrder::Triple => {}
-            _ => continue,
-        }
-        let left = atom_usize(bond.atom1);
-        let right = atom_usize(bond.atom2);
-        if aromatic_set.contains(&left) || aromatic_set.contains(&right) {
-            return false;
-        }
-    }
-    true
 }
 
 fn ring_sets(mol: &Molecule) -> HashMap<usize, BTreeSet<usize>> {
@@ -252,6 +259,37 @@ fn edit_end(
     }
 }
 
+/// Atoms whose σ skeleton changed in an end edit (cleavage / atom add). Their
+/// bond-order baseline for [`move_charge_with_bonds`] is the post-edit graph so
+/// H is not double-counted (methyl leave must be CH4, not [CH5]).
+fn skeleton_changed_atoms(
+    left: &PatternInfo,
+    map1: &BTreeMap<u16, usize>,
+    right: &PatternInfo,
+    map2: &BTreeMap<u16, usize>,
+) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    for (pattern, mapped) in [(left, map1), (right, map2)] {
+        let Edit::PairEndpoint(edit) = &pattern.edit else {
+            continue;
+        };
+        match edit.as_str() {
+            "dealkylate" => {
+                if let (Some(&hetero), Some(&alkyl)) = (mapped.get(&2), mapped.get(&3)) {
+                    out.insert(hetero);
+                    out.insert(alkyl);
+                }
+            }
+            "add_carbonyl_o" => {
+                // New oxygen is absent from parent `before`; ring carbon’s new
+                // C=O is a π constraint — keep parent baseline for that carbon.
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 fn edit_single_to_double(
     mol: &mut Molecule,
     mapped: &BTreeMap<u16, usize>,
@@ -311,16 +349,47 @@ fn edit_dealkylate(
     if !edit_single_to_double(mol, mapped, pattern, rings) {
         return false;
     }
-    let Some((bond_idx, _)) = mol.bond_between(atom_idx(hetero), atom_idx(alkyl)) else {
-        return false;
-    };
-    let _ = bond_idx;
-    // Chematic: remove the hetero–alkyl bond by rebuilding without it is heavy;
-    // use with_bond_removed if available.
     if let Some((bi, _)) = mol.bond_between(atom_idx(hetero), atom_idx(alkyl)) {
         *mol = mol.with_bond_removed(bi);
+    } else {
+        return false;
     }
+    // Closed-shell H after cleavage (no radicals, no [CH5]/[CH6]). Fill from
+    // remaining bond orders + charge; do not stack bump on valence-inferred H.
+    fill_closed_shell_h(mol, alkyl);
+    fill_closed_shell_h(mol, hetero);
     true
+}
+
+/// Set explicit H so atom valence is complete (closed shell). Used after
+/// cleavage so leave fragments are CH4 / HN= / O= without sanitize rescue.
+fn fill_closed_shell_h(mol: &mut Molecule, atom: usize) {
+    let idx = atom_idx(atom);
+    let a = mol.atom(idx);
+    let z = a.element.atomic_number();
+    let charge = a.charge as i16;
+    let mut bond_sum = 0.0_f32;
+    for (_nbr, bidx) in mol.neighbors(idx) {
+        bond_sum += match mol.bond(bidx).order {
+            BondOrder::Single | BondOrder::Up | BondOrder::Down => 1.0,
+            BondOrder::Double => 2.0,
+            BondOrder::Triple => 3.0,
+            BondOrder::Aromatic => 1.5,
+            BondOrder::Quadruple => 4.0,
+            _ => 1.0,
+        };
+    }
+    // Organic valence targets (neutral): C 4, N 3, O 2. Charge adjusts.
+    let target = match z {
+        6 => 4 + charge,
+        7 => 3 + charge,
+        8 => 2 + charge,
+        _ => return,
+    };
+    let need = target - bond_sum.round() as i16;
+    if need >= 0 {
+        *mol = with_atom_explicit_h(mol, idx, need as u8);
+    }
 }
 
 /// One pair emission before RuleSet packaging.
@@ -331,11 +400,11 @@ pub struct PairEmission {
     pub products: Vec<String>,
 }
 
-/// Discovered pair site before path flip / product CSMI.
+/// Discovered pair site before constraint materialize / product CSMI.
 ///
 /// Carries merged [`crate::pattern::Effect`] so a search can filter without
-/// running the edit. [`PairCandidate::materialize`] finds alternating paths
-/// and applies end edits.
+/// running the edit. [`PairCandidate::materialize`] applies end edits as π
+/// constraints and completes the residual matching (no path flip).
 ///
 /// [`Self::rule_path`] is the same leaf-first namespace as [`crate::candidate::Candidate`].
 /// Prefer [`crate::ruleset::RuleSet::candidates`] /
@@ -398,53 +467,99 @@ impl PairCandidate {
         Some((a, b))
     }
 
-    /// Conjugated-system anchors for the alternating path (Python `path_ends`).
+    /// Conjugated-system anchors (legacy path_ends; materialize uses constraints).
     pub fn path_ends(&self) -> (usize, usize) {
         (self.start, self.end)
     }
 
     pub fn materialize_mols(&self, mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
-        let forms = kekule_forms(mol)?;
         let rings = ring_sets(mol);
-        let neighbors = system_neighbors(mol, &self.system);
+        let mut rw = mol.clone();
+        clear_aromatic(&mut rw);
+        demote_aromatic_bonds(&mut rw, &self.system);
+        if !edit_end(&mut rw, &self.map1, &self.left, &rings) {
+            return Ok(Vec::new());
+        }
+        if !edit_end(&mut rw, &self.map2, &self.right, &rings) {
+            return Ok(Vec::new());
+        }
+
+        let saturate = saturate_sites(&self.left, &self.map1)
+            .union(&saturate_sites(&self.right, &self.map2))
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let (atoms, bonds) = residual_pi_graph(mol, &self.system, &saturate);
+        let forced = perceive_forced_doubles(&rw, &atoms);
+        let assignments = all_assignments(&rw, &atoms, &bonds, &forced, &saturate);
+        if assignments.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Residual aromaticity: cyclic 2-core after dropping demand-consumed
+        // atoms (forced doubles / saturate) — HEURISTICS, not sanitize flags.
+        let (arom_atoms, arom_bonds) = aromatic_residual_after_forced(&atoms, &bonds, &forced);
+        let aromatic_core = aromatic_2core_atoms(&rw, &arom_atoms, &arom_bonds);
+        if self.effect.dearomatizes {
+            let edited: HashSet<usize> = self
+                .system
+                .iter()
+                .copied()
+                .filter(|i| mol.atom(atom_idx(*i)).aromatic)
+                .collect();
+            if !edited.is_empty() && edited.iter().all(|i| aromatic_core.contains(i)) {
+                // Capability claimed dearomatization; whole edited system still aromatic.
+                return Ok(Vec::new());
+            }
+        }
+
         let mut products = Vec::new();
         let mut local_csmi = BTreeSet::new();
-        for form in &forms {
-            let bond_map = current_orders(form);
-            let mut paths = alternating_from(&bond_map, self.start, self.end, &neighbors, 2);
-            paths.extend(alternating_from(
-                &bond_map, self.end, self.start, &neighbors, 2,
-            ));
-            for path in paths {
-                if path.len() % 2 == 1 {
+        // Charge/H follow parent π bond sums (aromatic = 1.5). Cleaved atoms
+        // use the post-edit baseline so leave fragments stay closed-shell
+        // (CH4 not [CH5]) — no sanitize rescue, no Rust regression on C16.
+        let mut before = bond_order_sums(mol);
+        let post_edit = bond_order_sums(&rw);
+        for a in skeleton_changed_atoms(&self.left, &self.map1, &self.right, &self.map2) {
+            if let Some(&v) = post_edit.get(&a) {
+                before.insert(a, v);
+            }
+        }
+        let was_aromatic: HashSet<usize> = mol
+            .atoms()
+            .filter_map(|(idx, atom)| atom.aromatic.then_some(atom_usize(idx)))
+            .collect();
+        for assignment in assignments {
+            let mut product = rw.clone();
+            for (&(left, right), &order) in &assignment {
+                if let Some((bond_idx, _)) =
+                    product.bond_between(atom_idx(left), atom_idx(right))
+                {
+                    product.set_bond_order(bond_idx, order);
+                }
+            }
+            for &atom in &atoms {
+                if product.atom(atom_idx(atom)).aromatic {
+                    product = product.with_atom_aromatic(atom_idx(atom), false);
+                }
+            }
+            for &atom in &saturate {
+                bump_h(&mut product, atom, 1);
+            }
+            move_charge_with_bonds(&mut product, &before, &was_aromatic);
+            // Stamp surviving aromatic 2-core; leave the rest localized.
+            for &atom in &aromatic_core {
+                product = product.with_atom_aromatic(atom_idx(atom), true);
+            }
+            // Perception finish (RDKit-parity aromaticity). Dearomatize refuse
+            // already used the 2-core gate above — not sanitize flags.
+            let checked = aromatize(&product);
+            for frag in checked.fragments() {
+                if !accept_product(&frag) {
                     continue;
                 }
-                let mut rw = form.clone();
-                clear_aromatic(&mut rw);
-                if !edit_end(&mut rw, &self.map1, &self.left, &rings) {
-                    continue;
-                }
-                if !edit_end(&mut rw, &self.map2, &self.right, &rings) {
-                    continue;
-                }
-                if !flip_path(&mut rw, &path) {
-                    continue;
-                }
-                // Do not valence-gate the possibly-disconnected whole mol —
-                // Python `split_fragments` and SMIRKS `fragments()` sanitize
-                // each piece. find_path bifurcation is `n_products > 1`.
-                let checked = aromatize(&rw);
-                if self.effect.dearomatizes && system_stayed_aromatic(mol, &checked, &self.system) {
-                    continue;
-                }
-                for frag in checked.fragments() {
-                    if !accept_product(&frag) {
-                        continue;
-                    }
-                    let smiles = canon_smiles(&frag);
-                    if local_csmi.insert(smiles) {
-                        products.push(frag);
-                    }
+                let smiles = canon_smiles(&frag);
+                if local_csmi.insert(smiles) {
+                    products.push(frag);
                 }
             }
         }
@@ -536,7 +651,7 @@ fn merge_effect_fields(
     }
 }
 
-/// Discover pair sites without applying path flips.
+/// Discover pair sites without materializing products.
 ///
 /// Crate-internal discovery primitive: returns pairs with empty
 /// [`PairCandidate::rule_path`]. Prefer [`crate::ruleset::RuleSet::candidates`]
@@ -762,7 +877,7 @@ mod tests {
     }
 
     #[test]
-    fn pair_candidates_defer_path_flip() {
+    fn pair_candidates_defer_materialize() {
         let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
         let endpoints: Vec<_> = dehydrogenation()
             .patterns()
@@ -988,5 +1103,22 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert!(!cands.is_empty(), "catechol should still emit pair candidates");
+    }
+
+    #[test]
+    fn constraint_products_are_closed_shell() {
+        // No radicals / overfilled leaves — emit-path correctness (C10), and no
+        // regression on Rust-ahead QF dealkylate (C16).
+        let endpoints = qf_pair_endpoints();
+        for smi in ["Oc1ccc(O)cc1", "COc1ccccc1", "O=C=Nc1ccccc1"] {
+            let mol = parse_mol(smi).unwrap();
+            for c in pair_candidates(&mol, &endpoints).unwrap() {
+                for p in c.materialize(&mol).unwrap() {
+                    assert!(!p.contains("[C]"), "{smi}: radical carbon in {p}");
+                    assert!(!p.contains("[CH5]") && !p.contains("[CH6]"), "{smi}: bad methyl {p}");
+                    assert!(!p.contains("[OH+]"), "{smi}: protonated carbonyl in {p}");
+                }
+            }
+        }
     }
 }

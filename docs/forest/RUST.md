@@ -84,7 +84,7 @@ without applying edits. A search reads `PatternInfo` / `Effect` to filter, then
 survivors. Filter closures on `metabolize` remain for Python parity; they are
 not required. `metabolites(mol)` materializes everything. ResonancePair uses
 [`PairCandidate`](../../crates/xenosite-forest/src/pair_edit.rs) the same way
-(merged `Effect` for filtering; path flip on materialize).
+(merged `Effect` for filtering; π-constraint materialize).
 
 **RuleSet / closures (optional):** Python `FilterRules` / `FilterSites` are
 `Callable`. Rust can still pass `impl Fn` on `RuleSet::metabolize`, or
@@ -97,7 +97,7 @@ Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.c
 **Rule catalog:** every concrete Python reaction rule is a leaf `RuleSet` in
 [`rules.rs`](../../crates/xenosite-forest/src/rules.rs) (`phase_one`,
 `default_ruleset`, `all_rules`). Pair-endpoint patterns metabolize through
-the ResonancePair door (`Edit::PairEndpoint` + path flip). Atom/bond SMIRKS
+the ResonancePair door (`Edit::PairEndpoint` + π-constraint matching). Atom/bond SMIRKS
 use Kekulé `reactant_parent` when the matched bond is aromatic.
 
 ```python
