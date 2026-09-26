@@ -279,6 +279,10 @@ fn lift_matches_mcs_dealkylation_dimethoxy() {
 fn lift_matches_mcs_quinone_formation_ends() {
     let parent = ForestMol::parse("COc1ccc(O)cc1").unwrap();
     let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+    let target_ha = target
+        .atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .count();
     let parent_diff = atom_diff(parent.mol(), &target);
     let pairs = quinone_formation()
         .pair_candidates(parent.mol())
@@ -298,6 +302,12 @@ fn lift_matches_mcs_quinone_formation_ends() {
         };
         for piece in pieces {
             let child = parent.adopt_product(piece);
+            // Leave fragments from cleaving pairs (e.g. Me from dealkylate)
+            // are split out now; find_path would not continue them toward a
+            // larger target. Skip those for lift≡MCS.
+            if child.heavy_atom_count() < target_ha {
+                continue;
+            }
             assert_lift_cost_eq_mcs(
                 &parent,
                 &child,

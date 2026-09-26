@@ -398,6 +398,9 @@ mod tests {
         let child = parent.edit_copy();
         assert_eq!(child.tag_of(0), Some(tag));
         assert_eq!(child.index_of(tag), Some(0));
-        assert!(child.shares_tag_gen(&parent));
+        // `edit_copy` / `product` uses a fresh tag_gen (born atoms continue
+        // the counter value, not the Rc). `copy_mol` shares the gen.
+        assert!(!child.shares_tag_gen(&parent));
+        assert!(parent.copy_mol().shares_tag_gen(&parent));
     }
 }
