@@ -116,6 +116,13 @@ def main() -> None:
         "note: low exact overlap is expected (XRM uses simpler chemist SMARTS; "
         "Forest SMIRKS are denser). Use forest-smarts.jsonl for validation pairs."
     )
+    # Refresh coverage report used by Rust validation tests.
+    import subprocess
+    import sys
+
+    subprocess.check_call(
+        [sys.executable, str(Path(__file__).with_name("validate_forest_coverage.py"))]
+    )
 
 
 if __name__ == "__main__":

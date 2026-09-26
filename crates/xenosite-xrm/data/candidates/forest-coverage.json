@@ -1,0 +1,425 @@
+{
+  "source_harvest": "data/candidates/forest-smarts.jsonl",
+  "n_smirks": 74,
+  "n_rule_classes": 23,
+  "n_pattern_tags": 48,
+  "classes_with_sssom": 20,
+  "classes_assignment_taggable": 21,
+  "unmapped_pattern_count": 4,
+  "unmapped_patterns_sample": [
+    "forest.pattern:ConjugationRule/acetyl",
+    "forest.pattern:NitroaromaticReduction/nitro_charged",
+    "forest.pattern:NitroaromaticReduction/nitro_neutral",
+    "forest.pattern:ThiopheneSulfurOxidation/thiophene_s_oxide"
+  ],
+  "classes": [
+    {
+      "rule_class": "AzoSplitting",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:AzoSplitting",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100403"
+      ],
+      "patterns": [
+        "forest.pattern:AzoSplitting/azo"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:AzoSplitting/azo"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "BenzodioxoleReduction",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:BenzodioxoleReduction",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100541"
+      ],
+      "patterns": [
+        "forest.pattern:BenzodioxoleReduction/dioxole_methylene"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:BenzodioxoleReduction/dioxole_methylene"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "ConjugationRule",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:ConjugationRule",
+      "sssom_rule_mapped": false,
+      "sssom_subjects": [],
+      "patterns": [
+        "forest.pattern:ConjugationRule/acetyl"
+      ],
+      "patterns_sssom_mapped": [],
+      "assignment_taggable": false
+    },
+    {
+      "rule_class": "Dealkylation",
+      "n_smirks": 13,
+      "forest_rule": "forest.rule:Dealkylation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100200"
+      ],
+      "patterns": [
+        "forest.pattern:Dealkylation/cc_alcohol",
+        "forest.pattern:Dealkylation/cc_quaternary_alcohol",
+        "forest.pattern:Dealkylation/hemiaminal",
+        "forest.pattern:Dealkylation/methine_alcohol",
+        "forest.pattern:Dealkylation/methine_carbonyl",
+        "forest.pattern:Dealkylation/methyl_carbonyl",
+        "forest.pattern:Dealkylation/methyl_carboxylic",
+        "forest.pattern:Dealkylation/methylene_alcohol",
+        "forest.pattern:Dealkylation/methylene_carbonyl",
+        "forest.pattern:Dealkylation/methylene_carboxylic",
+        "forest.pattern:Dealkylation/quaternary_alcohol"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Dealkylation/cc_alcohol",
+        "forest.pattern:Dealkylation/cc_quaternary_alcohol",
+        "forest.pattern:Dealkylation/hemiaminal",
+        "forest.pattern:Dealkylation/methine_alcohol",
+        "forest.pattern:Dealkylation/methine_carbonyl",
+        "forest.pattern:Dealkylation/methyl_carbonyl",
+        "forest.pattern:Dealkylation/methyl_carboxylic",
+        "forest.pattern:Dealkylation/methylene_alcohol",
+        "forest.pattern:Dealkylation/methylene_carbonyl",
+        "forest.pattern:Dealkylation/methylene_carboxylic",
+        "forest.pattern:Dealkylation/quaternary_alcohol"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Dehydration",
+      "n_smirks": 3,
+      "forest_rule": "forest.rule:Dehydration",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100501"
+      ],
+      "patterns": [
+        "forest.pattern:Dehydration/beta_elimination"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Dehydration/beta_elimination"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Dehydrogenation",
+      "n_smirks": 4,
+      "forest_rule": "forest.rule:Dehydrogenation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100300"
+      ],
+      "patterns": [
+        "forest.pattern:Dehydrogenation/alcohol",
+        "forest.pattern:Dehydrogenation/amine"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Dehydrogenation/alcohol",
+        "forest.pattern:Dehydrogenation/amine"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Epoxidation",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:Epoxidation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:0000110",
+        "xrm:9100110"
+      ],
+      "patterns": [
+        "forest.pattern:Epoxidation/epoxide"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Epoxidation/epoxide"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "EpoxideOpening",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:EpoxideOpening",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100401"
+      ],
+      "patterns": [
+        "forest.pattern:EpoxideOpening/hydrate"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:EpoxideOpening/hydrate"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Glucuronidation",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:Glucuronidation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:0001000",
+        "xrm:9101000"
+      ],
+      "patterns": [],
+      "patterns_sssom_mapped": [],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Hydrogenation",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:Hydrogenation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100500"
+      ],
+      "patterns": [
+        "forest.pattern:Hydrogenation/alkene",
+        "forest.pattern:Hydrogenation/alkyne"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Hydrogenation/alkene",
+        "forest.pattern:Hydrogenation/alkyne"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Hydrolysis",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:Hydrolysis",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100400"
+      ],
+      "patterns": [
+        "forest.pattern:Hydrolysis/cleave"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Hydrolysis/cleave"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Hydroxylation",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:Hydroxylation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:0000100",
+        "xrm:9100100"
+      ],
+      "patterns": [
+        "forest.pattern:Hydroxylation/h",
+        "forest.pattern:Hydroxylation/h2"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:Hydroxylation/h",
+        "forest.pattern:Hydroxylation/h2"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "NDealkylation",
+      "n_smirks": 10,
+      "forest_rule": "forest.rule:NDealkylation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:0000201",
+        "xrm:9100201"
+      ],
+      "patterns": [],
+      "patterns_sssom_mapped": [],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "NitroaromaticReduction",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:NitroaromaticReduction",
+      "sssom_rule_mapped": false,
+      "sssom_subjects": [],
+      "patterns": [
+        "forest.pattern:NitroaromaticReduction/nitro_charged",
+        "forest.pattern:NitroaromaticReduction/nitro_neutral"
+      ],
+      "patterns_sssom_mapped": [],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "NitrogenOxidation",
+      "n_smirks": 3,
+      "forest_rule": "forest.rule:NitrogenOxidation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100120"
+      ],
+      "patterns": [
+        "forest.pattern:NitrogenOxidation/hydroxylamine",
+        "forest.pattern:NitrogenOxidation/n_oxide"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:NitrogenOxidation/hydroxylamine",
+        "forest.pattern:NitrogenOxidation/n_oxide"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "NitrogenReduction",
+      "n_smirks": 8,
+      "forest_rule": "forest.rule:NitrogenReduction",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100510"
+      ],
+      "patterns": [
+        "forest.pattern:NitrogenReduction/hydroxylamine",
+        "forest.pattern:NitrogenReduction/nitro_anion",
+        "forest.pattern:NitrogenReduction/nitro_both",
+        "forest.pattern:NitrogenReduction/nitro_both_any",
+        "forest.pattern:NitrogenReduction/nitro_charged",
+        "forest.pattern:NitrogenReduction/nitro_neutral",
+        "forest.pattern:NitrogenReduction/nitro_to_amine",
+        "forest.pattern:NitrogenReduction/nitroso"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:NitrogenReduction/hydroxylamine",
+        "forest.pattern:NitrogenReduction/nitro_anion",
+        "forest.pattern:NitrogenReduction/nitro_both",
+        "forest.pattern:NitrogenReduction/nitro_both_any",
+        "forest.pattern:NitrogenReduction/nitro_charged",
+        "forest.pattern:NitrogenReduction/nitro_neutral",
+        "forest.pattern:NitrogenReduction/nitro_to_amine",
+        "forest.pattern:NitrogenReduction/nitroso"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "OxidativeDehalogenation",
+      "n_smirks": 6,
+      "forest_rule": "forest.rule:OxidativeDehalogenation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100210"
+      ],
+      "patterns": [
+        "forest.pattern:OxidativeDehalogenation/alcohol",
+        "forest.pattern:OxidativeDehalogenation/carbonyl",
+        "forest.pattern:OxidativeDehalogenation/gem_carboxylic",
+        "forest.pattern:OxidativeDehalogenation/rearrange"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:OxidativeDehalogenation/alcohol",
+        "forest.pattern:OxidativeDehalogenation/carbonyl",
+        "forest.pattern:OxidativeDehalogenation/gem_carboxylic",
+        "forest.pattern:OxidativeDehalogenation/rearrange"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "OxygenReduction",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:OxygenReduction",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100520"
+      ],
+      "patterns": [
+        "forest.pattern:OxygenReduction/carbonyl",
+        "forest.pattern:OxygenReduction/peroxide"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:OxygenReduction/carbonyl",
+        "forest.pattern:OxygenReduction/peroxide"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "ReductiveDehalogenation",
+      "n_smirks": 2,
+      "forest_rule": "forest.rule:ReductiveDehalogenation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100540"
+      ],
+      "patterns": [
+        "forest.pattern:ReductiveDehalogenation/cleave"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:ReductiveDehalogenation/cleave"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "Sulfation",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:Sulfation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9101010"
+      ],
+      "patterns": [],
+      "patterns_sssom_mapped": [],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "SulfurOxidation",
+      "n_smirks": 3,
+      "forest_rule": "forest.rule:SulfurOxidation",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100130"
+      ],
+      "patterns": [
+        "forest.pattern:SulfurOxidation/hydroxy",
+        "forest.pattern:SulfurOxidation/oxo"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:SulfurOxidation/hydroxy",
+        "forest.pattern:SulfurOxidation/oxo"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "SulfurReduction",
+      "n_smirks": 3,
+      "forest_rule": "forest.rule:SulfurReduction",
+      "sssom_rule_mapped": true,
+      "sssom_subjects": [
+        "xrm:9100530"
+      ],
+      "patterns": [
+        "forest.pattern:SulfurReduction/disulfide",
+        "forest.pattern:SulfurReduction/sulfoxide"
+      ],
+      "patterns_sssom_mapped": [
+        "forest.pattern:SulfurReduction/disulfide",
+        "forest.pattern:SulfurReduction/sulfoxide"
+      ],
+      "assignment_taggable": true
+    },
+    {
+      "rule_class": "ThiopheneSulfurOxidation",
+      "n_smirks": 1,
+      "forest_rule": "forest.rule:ThiopheneSulfurOxidation",
+      "sssom_rule_mapped": false,
+      "sssom_subjects": [],
+      "patterns": [
+        "forest.pattern:ThiopheneSulfurOxidation/thiophene_s_oxide"
+      ],
+      "patterns_sssom_mapped": [],
+      "assignment_taggable": false
+    }
+  ],
+  "policy": {
+    "namer_imports_forest": false,
+    "harvest_is_text_parse_of_rules_py": true,
+    "use": "Validate Forest\u2192XRM SSSOM/tag coverage; promote reviewed SMARTS into assignments; do not link forest into the namer."
+  }
+}

@@ -102,6 +102,10 @@ Abbreviations appear only as opaque `forest.ruleset:*` CURIE object ids in SSSOM
 
 ```bash
 cargo test -p xenosite-xrm
+
+# Refresh Forest SMIRKS harvest + coverage (validation only; namer does not import forest):
+python3 crates/xenosite-xrm/tools/harvest_forest_smarts.py
 ```
 
-Includes schema validation, golden naming, enzyme-orthogonal guards, and dependency boundary checks.
+Includes schema validation, golden naming, Forest opaque-tag coverage, enzyme-orthogonal
+guards, and dependency boundary checks. See `data/ontology/VALIDATION.md`.
