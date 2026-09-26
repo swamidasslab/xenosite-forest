@@ -1,9 +1,10 @@
 //! Reactant→target local diff for candidate filtering.
 //!
 //! Parity door for Python `find_path.atom_diff` / `_site_could_help` /
-//! `_pattern_could_help`. Aligns via chematic MCS with `BondCompare::Any`
-//! (Python `rdFMCS` CompareAny). Multi-placement views merge so a step that
-//! helps any ring is not refused. Filters read [`crate::pattern::Effect`]
+//! `_pattern_could_help`. Aligns via [`mcs_extend`]: chematic MCS
+//! (`BondCompare::Any`) then placeable grow onto free same-element target
+//! atoms (same rules as lift extend). Multi-placement views merge so a step
+//! that helps any ring is not refused. Filters read [`crate::pattern::Effect`]
 //! on deferred candidates — no filter closures required.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -292,8 +293,43 @@ fn mapping_score(reactant: &Molecule, target: &Molecule, aligned: &BTreeMap<usiz
     score
 }
 
-/// All MCS placements: one alignment per distinct reactant atom set.
-fn mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
+/// All alignments: chematic MCS seed, then placeable extend on each placement.
+///
+/// This is the forest alignment door — [`atom_diff`] and lift rematch use it
+/// instead of raw MCS. Extend grows unmapped reactant heavies onto free
+/// same-element target atoms bonded to mapped neighbor images (and a
+/// single-neighbor fallback when the MCS left a multi-valent atom off a
+/// mono-valent partner, e.g. epoxide O → hydroxyl).
+pub fn mcs_extend(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
+    let seeds = mcs_seed_mappings(reactant, target);
+    if seeds.is_empty() {
+        return Vec::new();
+    }
+    let mut best: HashMap<BTreeSet<usize>, (usize, i32, BTreeMap<usize, usize>)> = HashMap::new();
+    for mut aligned in seeds {
+        extend_mapping_where_possible(reactant, target, &mut aligned);
+        if aligned.is_empty() {
+            continue;
+        }
+        let key: BTreeSet<usize> = aligned.keys().copied().collect();
+        let size = aligned.len();
+        let score = mapping_score(reactant, target, &aligned);
+        match best.get(&key) {
+            Some((held_size, held_score, _))
+                if *held_size > size || (*held_size == size && *held_score >= score) => {}
+            _ => {
+                best.insert(key, (size, score, aligned));
+            }
+        }
+    }
+    let mut ranked: Vec<_> = best.into_values().collect();
+    // Larger extended map first, then mapping_score.
+    ranked.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+    ranked.into_iter().map(|(_, _, m)| m).collect()
+}
+
+/// Chematic MCS placements only (no extend). Seed for [`mcs_extend`].
+fn mcs_seed_mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usize, usize>> {
     let cfg = McsConfig {
         bond_compare: BondCompare::Any,
         // match_bonds=false so the QueryMolecule embeds on both aromatic and
@@ -492,7 +528,7 @@ fn merge_views(mut views: Vec<AtomDiff>) -> AtomDiff {
 
 /// Pair reactant atoms with target atoms and record the local change.
 pub fn atom_diff(reactant: &Molecule, target: &Molecule) -> AtomDiff {
-    let maps = mappings(reactant, target);
+    let maps = mcs_extend(reactant, target);
     if maps.is_empty() {
         return AtomDiff {
             reactant_heavy: heavy_atom_count(reactant),
@@ -570,8 +606,9 @@ fn unmapped_heavy_atoms(mol: &Molecule, mapping: &BTreeMap<usize, usize>) -> Vec
 /// unmapped heavies adjacent to the mapped core).
 ///
 /// Same placement rules as [`extend_mapping_for_added`]: free same-element
-/// target atoms bonded to every mapped neighbor image (with single-neighbor
-/// rematch when MCS orientation is flipped).
+/// target atoms bonded to mapped neighbor images (prefer every mapped
+/// neighbor; else any one — connected grow). Used by [`mcs_extend`] after
+/// every MCS seed and by lift.
 pub fn extend_mapping_where_possible(
     child: &Molecule,
     target: &Molecule,
@@ -596,7 +633,7 @@ pub fn extend_mapping_where_possible(
 /// 1. Extend each tag-lifted seed where the mapping gap is placeable.
 /// 2. If any extended map has `field_cost == 0`, keep it (guaranteed — skip MCS).
 /// 3. Otherwise do **not** Aut-chase or trust a non-zero lift — return a fresh
-///    MCS (caller counts `mcs_lift_rematch`). No double work.
+///    [`mcs_extend`] (caller counts `mcs_lift_rematch`). No double work.
 fn best_diff_from_lifted_maps(
     child: &crate::forest_mol::ForestMol,
     target: &Molecule,
@@ -789,6 +826,31 @@ fn place_added_atom(
         }
     }
     if let Some(&best) = direct.iter().min() {
+        return Some(best);
+    }
+
+    // Not adjacent to every mapped neighbor image (e.g. epoxide O → hydroxyl):
+    // place next to any one mapped neighbor — connected grow, same spirit as
+    // MCS with BondCompare::Any (extra child bonds need not exist on target).
+    let mut any_nbr = Vec::new();
+    for t_cand in 0..target.atom_count() {
+        if image.contains(&t_cand) {
+            continue;
+        }
+        if target.atom(atom_idx(t_cand)).element.atomic_number() != z {
+            continue;
+        }
+        let ok = mapped_nbrs.iter().any(|&n| {
+            let t_n = mapping[&n];
+            target
+                .bond_between(atom_idx(t_cand), atom_idx(t_n))
+                .is_some()
+        });
+        if ok {
+            any_nbr.push(t_cand);
+        }
+    }
+    if let Some(&best) = any_nbr.iter().min() {
         return Some(best);
     }
 
@@ -1748,6 +1810,52 @@ mod tests {
         assert!(
             !diff.loses_aromaticity.is_empty() || any_needs_oxygen(&target, &diff),
             "{diff:?}"
+        );
+    }
+
+    #[test]
+    fn epoxide_o_extends_onto_target_hydroxyl() {
+        // Epoxide product of MeOPhOH (site that was an FN under bare MCS primary).
+        let epox = parse_mol("O1C2(C=CC(=CC12)OC)O").unwrap();
+        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let maps = mcs_extend(&epox, &target);
+        assert!(!maps.is_empty(), "mcs_extend should return placements");
+        let primary = &maps[0];
+        let epoxide_o: Vec<usize> = epox
+            .atoms()
+            .filter_map(|(idx, a)| {
+                let i = atom_usize(idx);
+                (a.element.atomic_number() == 8 && epox.neighbors(atom_idx(i)).count() == 2)
+                    .then_some(i)
+            })
+            .collect();
+        assert!(
+            !epoxide_o.is_empty(),
+            "expected a degree-2 oxygen (epoxide)"
+        );
+        let mapped_epox_o = epoxide_o.iter().find(|&&i| primary.contains_key(&i));
+        assert!(
+            mapped_epox_o.is_some(),
+            "mcs_extend should map epoxide O onto a target O; primary O maps={:?}",
+            epox.atoms()
+                .filter(|(_, a)| a.element.atomic_number() == 8)
+                .map(|(idx, _)| {
+                    let i = atom_usize(idx);
+                    (i, primary.get(&i).copied())
+                })
+                .collect::<Vec<_>>()
+        );
+        let &eo = mapped_epox_o.unwrap();
+        let t = primary[&eo];
+        assert_eq!(
+            target.atom(atom_idx(t)).element.atomic_number(),
+            8,
+            "epoxide O should map to a target oxygen"
+        );
+        let diff = atom_diff(&epox, &target);
+        assert!(
+            diff.mapping.contains_key(&eo) || diff.mappings.iter().any(|m| m.contains_key(&eo)),
+            "atom_diff views should keep the extended epoxide O map"
         );
     }
 

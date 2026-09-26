@@ -51,7 +51,7 @@ pub use atom_diff::{
     candidate_could_help, candidate_could_help_on, candidate_order_key, candidate_order_key_on,
     dh_neighbors_match_any_view, dh_product_ends_match, extend_mapping_for_added,
     extend_mapping_where_possible, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
-    pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
+    mcs_extend, pair_could_help, pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
     projected_unaligned_reductions, residual_cost_after_site_cast, site_h_progress,
     site_h_progress_best_placement, site_shell_forecast, try_atom_diff_for_child,
     try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked, try_lift_cleaved_child,
