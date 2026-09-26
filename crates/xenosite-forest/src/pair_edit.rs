@@ -188,6 +188,41 @@ fn site_atom(mapped: &BTreeMap<u16, usize>, pattern: &PatternInfo) -> Option<usi
     mapped.get(&pattern.primary_map()).copied()
 }
 
+/// Non-site mapped atoms when [`Effect::exclusive_partner`] is set.
+fn exclusive_partner_atoms(
+    mapped: &BTreeMap<u16, usize>,
+    pattern: &PatternInfo,
+) -> BTreeSet<usize> {
+    if !pattern.effect.exclusive_partner {
+        return BTreeSet::new();
+    }
+    let Some(site) = site_atom(mapped, pattern) else {
+        return BTreeSet::new();
+    };
+    mapped
+        .values()
+        .copied()
+        .filter(|&idx| idx != site)
+        .collect()
+}
+
+/// True when an exclusive partner atom appears on the other end's map.
+fn shared_exclusive_partner(
+    map1: &BTreeMap<u16, usize>,
+    info1: &PatternInfo,
+    map2: &BTreeMap<u16, usize>,
+    info2: &PatternInfo,
+) -> bool {
+    let exclusive1 = exclusive_partner_atoms(map1, info1);
+    let exclusive2 = exclusive_partner_atoms(map2, info2);
+    if exclusive1.is_empty() && exclusive2.is_empty() {
+        return false;
+    }
+    let other1: BTreeSet<usize> = map2.values().copied().collect();
+    let other2: BTreeSet<usize> = map1.values().copied().collect();
+    !exclusive1.is_disjoint(&other1) || !exclusive2.is_disjoint(&other2)
+}
+
 fn edit_end(
     mol: &mut Molecule,
     mapped: &BTreeMap<u16, usize>,
@@ -490,6 +525,7 @@ fn merge_effect_fields(
         cleaves: left.effect.cleaves || right.effect.cleaves,
         leave_count: left.effect.leave_count.or(right.effect.leave_count),
         methide: left.effect.methide || right.effect.methide,
+        exclusive_partner: left.effect.exclusive_partner || right.effect.exclusive_partner,
         dearomatizes: merge_dearomatizes(left, right, system_aromatic),
         partner: left
             .effect
@@ -585,6 +621,9 @@ pub(crate) fn pair_candidates(
                             continue;
                         };
                         if site_a == site_b {
+                            continue;
+                        }
+                        if shared_exclusive_partner(map1, info1, map2, info2) {
                             continue;
                         }
                         let (n1, n2) = if info1.name <= info2.name {

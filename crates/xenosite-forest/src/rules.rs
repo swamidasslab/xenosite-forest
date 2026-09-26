@@ -226,6 +226,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: Some("H".into()),
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -274,6 +275,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -286,6 +288,7 @@ pub fn quinone_formation() -> RuleSet {
                 Effect {
                     adds: Some("O".into()),
                     dearomatizes: true,
+                    exclusive_partner: true,
                     ..Default::default()
                 },
             )),
@@ -298,9 +301,10 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
-                    partner: None,
+                    partner: Some("N".into()),
                     ..Default::default()
                 },
                 "iminium",
@@ -314,6 +318,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: true,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,

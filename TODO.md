@@ -1,5 +1,9 @@
 # TODO
 
+Parity gap progress gauge (open / in progress / done):
+`docs/forest/RUST_PYTHON_PARITY.md` § Work order (also mirrored in agent store
+`parity-gaps.md`). Flip Status there; do not delete rows.
+
 - find_path: `seen` blocks re-enqueue by child CSMI but chemistry (`mol_edits`) still runs first — MeOPhOH residual bill≈176 is mostly Dealkylation re-attempts into already-seen products (see PERFORMANCE / meophoh_retrace)
 - Expand each rule's `_example_substrates` so examples cover all patterns/whens (meta-test currently only checks site_kind shape)
 

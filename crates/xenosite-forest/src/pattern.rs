@@ -181,6 +181,12 @@ pub struct Effect {
     pub leave_count: Option<u16>,
     /// Effect bit, not a `pathways=("methide",)` switch.
     pub methide: bool,
+    /// Partner atom (non-site mapped) is exclusive to this ResonancePair end.
+    ///
+    /// Set when chemistry consumes that partner (bridging N/O on iminium /
+    /// hetero ``single_to_double`` / dealkylate). Not a global shared-map
+    /// refuse — methide alkyl (`partner == "C"`) leaves this false.
+    pub exclusive_partner: bool,
     /// Capability: pair/path may dearomatize. Resolved against system aromaticity.
     pub dearomatizes: bool,
     /// Methide / alkyl partner element hint (`"C"`). Filters read this.

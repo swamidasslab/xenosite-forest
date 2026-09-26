@@ -582,6 +582,7 @@ def _pattern_could_help(info: PatternInfo, diff: AtomDiff, mol: TracingMol | Mol
         "breaks_ring": False,
         "dearomatizes": False,
         "methide": False,
+        "exclusive_partner": False,
         "needs": "",
     }
     can_cleave = _any_span(span, "cleaves", bool, False)

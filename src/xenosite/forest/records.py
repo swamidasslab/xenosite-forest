@@ -215,6 +215,11 @@ class Effect(TypedDict, total=False):
     breaks_ring: bool
     dearomatizes: bool
     methide: bool
+    # Partner atom (non-site mapped) is exclusive to this end in a ResonancePair
+    # couple — e.g. bridging N/O used by iminium / hetero single_to_double /
+    # dealkylate. Not a global shared-map refuse; set only when chemistry
+    # consumes that partner. Methide alkyl (partner C) does not set this.
+    exclusive_partner: bool
     needs: str
     partner: str
     partner_h: int
@@ -248,6 +253,7 @@ class _SpanCore(TypedDict):
     breaks_ring: _BoolSpan
     dearomatizes: _BoolSpan
     methide: _BoolSpan
+    exclusive_partner: _BoolSpan
     needs: _StrSpan
 
 

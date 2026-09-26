@@ -635,6 +635,7 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
         "breaks_ring": False,
         "dearomatizes": False,
         "methide": False,
+        "exclusive_partner": False,
         "needs": "",
     }
     if not isinstance(value, dict):
@@ -660,6 +661,9 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     methide = value.get("methide")
     if isinstance(methide, bool):
         effect["methide"] = methide
+    exclusive_partner = value.get("exclusive_partner")
+    if isinstance(exclusive_partner, bool):
+        effect["exclusive_partner"] = exclusive_partner
     needs = value.get("needs")
     if isinstance(needs, str):
         effect["needs"] = needs
@@ -815,6 +819,7 @@ _EFFECT_DEFAULTS: Effect = {
     "breaks_ring": False,
     "dearomatizes": False,
     "methide": False,
+    "exclusive_partner": False,
     "needs": "",
 }
 
@@ -1080,6 +1085,9 @@ def merge_effects(
         "cleaves": bool(left.get("cleaves") or right.get("cleaves")),
         "dearomatizes": bool(can and system_aromatic),
         "methide": bool(left.get("methide") or right.get("methide")),
+        "exclusive_partner": bool(
+            left.get("exclusive_partner") or right.get("exclusive_partner")
+        ),
         "needs": needs,
     }
 
@@ -2092,6 +2100,42 @@ def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:
     return mapped[key]
 
 
+def _exclusive_partner_atoms(
+    mapped: Mapping[int, int], info: PatternInfo, effect: Effect
+) -> frozenset[int]:
+    """Non-site mapped atoms when ``exclusive_partner`` is set on the effect.
+
+    Empty when the bit is off — methide alkyl and other chemistry that does
+    not consume an exclusive heteroatom partner stay out of the gate.
+    """
+
+    if not effect.get("exclusive_partner"):
+        return frozenset()
+    site = _site_atoms(mapped, info)
+    if site is None:
+        return frozenset()
+    return frozenset(idx for idx in mapped.values() if idx != site)
+
+
+def _shared_exclusive_partner(
+    map1: Mapping[int, int],
+    info1: PatternInfo,
+    end1: Effect,
+    map2: Mapping[int, int],
+    info2: PatternInfo,
+    end2: Effect,
+) -> bool:
+    """True when an exclusive partner atom appears on the other end's map."""
+
+    exclusive1 = _exclusive_partner_atoms(map1, info1, end1)
+    exclusive2 = _exclusive_partner_atoms(map2, info2, end2)
+    if not exclusive1 and not exclusive2:
+        return False
+    other1 = frozenset(map2.values())
+    other2 = frozenset(map1.values())
+    return bool(exclusive1 & other1) or bool(exclusive2 & other2)
+
+
 def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
@@ -2438,6 +2482,12 @@ class ResonancePairRule(ResonanceRule):
                     site = frozenset((site_a, site_b))
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
+                    # Bridging N/O (and similar): ends that declare
+                    # exclusive_partner must not share that partner atom.
+                    if _shared_exclusive_partner(
+                        map1, info1, end1, map2, info2, end2
+                    ):
+                        continue
                     # Both ends may be methide. A para-quinodimethane is two
                     # alkyl single-to-double ends. The one-side skip was wrong.
                     preview: PairSiteInfo = {
@@ -2852,6 +2902,7 @@ class QuinoneFormation(ResonancePairRule):
                     ),
                     removes="H",
                     dearomatizes=True,
+                    exclusive_partner=True,
                 ),
                 *branches(
                     (
@@ -2894,6 +2945,7 @@ class QuinoneFormation(ResonancePairRule):
                     adds="O",
                     dearomatizes=True,
                     removes_partner=True,
+                    exclusive_partner=True,
                 ),
                 edit="replace_halogen",
                 site_map=1,
@@ -2905,6 +2957,7 @@ class QuinoneFormation(ResonancePairRule):
             describe(
                 partner="N",
                 dearomatizes=True,
+                exclusive_partner=True,
                 edit="iminium",
                 site_map=1,
                 skip_same_rings=True,
@@ -2918,6 +2971,7 @@ class QuinoneFormation(ResonancePairRule):
                     ({"map": 2, "z": 7}, {"map": 2, "z": 8}),
                     cleaves=True,
                     dearomatizes=True,
+                    exclusive_partner=True,
                 ),
                 edit="dealkylate",
                 site_map=1,
