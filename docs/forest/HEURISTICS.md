@@ -274,13 +274,13 @@ Chematic `expand_atomic_number_primitives` turns product `[#6](=[#8])[#6]` into
 **bracket** `[C]`/`[c]`/`[O]`/`[o]` spellings that miss on apply or leave
 residual brackets. Forest `organic_product_variants` / `apply_smirks_at`
 instead rewrite product `#` to **organic-subset** aliphatic then aromatic
-(`C`/`c`, `O`/`o`, …). Aliphatic-all is tried first; aromatic forms are
-included when the aliphatic spelling does not apply — equivalent `#` branch
-coverage without keeping chemically wrong aromatic products when aliphatic
-already succeeds (`accept_product` still gates). Catalog SMARTS keep `#` on
-both sides (Acetylation product is again `[*:1][#6](=[#8])[#6]`). Do not
-hand-replace catalog `#` with organic-only spelling unless aromatic is
-chemically impossible and documented.
+(`C`/`c`, `O`/`o`, …). **Always include both variants** for equivalent `#`
+expand behavior: aliphatic-all is tried first; aromatic forms follow when
+aliphatic does not apply (chemically wrong aromatic products still fail
+`accept_product`). Catalog SMARTS keep `#` on both sides. Meta-test
+`test_parity_fuzz_mols_cover_aliphatic_and_aromatic_smarts_branches` keys off
+mapped ``[#Z]`` data (not rule names) and requires corpus hits for both
+aromaticity states whenever both are reachable.
 
 Tracker: RUST_PYTHON_PARITY #5; `CHEMATIC_ISSUE_acetyl_atomic_product.md`.
 
