@@ -15,6 +15,7 @@ pub mod candidate;
 pub mod canonical_plan;
 pub mod chematic_vendor;
 pub mod cleavage_graph;
+pub mod enumerate;
 pub mod find_path;
 pub mod find_path_ms1;
 pub mod forest;
@@ -78,6 +79,10 @@ pub use cleavage_graph::{
     CleavageNode, CleavageOr, CleavageSeed, CleavageSeedHop, cleavage_first_seeds,
     cleavage_first_seeds_smiles, cleavage_graph_stats, cleavage_layer, cleavage_product_graph,
     fold_cleavage_arms,
+};
+pub use enumerate::{
+    EnumConfig, EnumOrder, Metabolite, MetaboliteEnum, PathHop, PathInfo, bfs, dfs,
+    enumerate_metabolites,
 };
 pub use find_path::{
     FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
