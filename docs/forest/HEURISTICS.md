@@ -40,13 +40,18 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 - **General product graph (all edits).** [`product_graph`](../../crates/xenosite-forest/src/product_graph.rs) BFS of PhaseOne metabolites as CSMI nodes with inbound [`ProductHop`](../../crates/xenosite-forest/src/product_graph.rs) edges (rule, pattern, site Tags, added Tags). Cleavage-only graph stays separate (Or fold). Not find_path; not archive NetworkX `MetaboliteNetwork` (DROPPED). Target MCS gate matches cleavage expand. Status: approved (Rust derisk door). Tests: `product_graph` unit; example `product_graph_bench`.
 - **Yield: remapped free-step twins (keep).** `same_rule_maybe_skeleton` (rule multiset + Maybe side CSMIs + precedes under rule-name align) runs beside exact `same_linearizations` at hit yield. Not orbit-aware — unique-edit canonical sites make that unnecessary. Counters: `PathCounters::dropped_duplicate_plan` (total wasted hits), split into `dropped_exact_plan` vs `dropped_skeleton_twin` (remapped twins only). Dominated-extension yield filter over-collapsed legitimate multipath (dimethylamine→PhCHO); dropped as a yield prune. `PathCounters::signal_contained_plan` still **counts** when a hit would match `dominates_extension_of` — signal only, does not drop. Status: **keep** skeleton twin yield-drop (ablation: off pads `max_paths` with remapped twins); dominated-extension as automatic drop/abort **not approved**.
 
+- **`ApplyN` plan pool (MS1).** [`ApplyN`](../../crates/xenosite-forest/src/canonical_plan.rs) on [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs): OR of elementary rule-name arms + exact apply `count`. Composable with steps / precedes / [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs) (same bag style as Maybe — not archive And/Or trees). Example: long hydroxylation list as arms, `count = N` when the spectrum expects N oxygenations. Pattern-level OR stays on PatternInfo inside a leaf. Status: approved (Rust derisk door). Tests: `apply_n_composes_with_maybe_on_deps`.
+
+- **`find_path_ms1` (m/z target).** Sibling of structure [`find_path`](../../crates/xenosite-forest/src/find_path.rs): hit when formula m/z is within `tol_da` **and** ApplyN pools are exactly filled. Default adduct **[M+H]⁺**. No structure MCS. Closer uses materialized mono mass ([`molecule_mono_mass`](../../crates/xenosite-forest/src/mass.rs): common isotope unless `atom.isotope` labeled). Catalog `delta_formula` is a soft pre-hint — hydroxyl bags stay edit stoichiometry (`+O −H` ≠ sanitized `+O`; heavy-only strip, same soft story as formula_check). EpoxideHydration / EpoxideOpening / N-oxidation nitroso bags were fixed to mass-faithful nets (undeclared H). S-ox hydroxy left O-only (H substrate-dependent). No parallel PatternInfo mass field — fix bags when the declared net was wrong; keep hydroxyl junction bags. Must not break structure find_path (drift tests). Status: approved (Rust derisk door). Tests: `ethane_to_ethanol_ms1_one_hydroxylation` / `ethene_to_glycol_ms1_one_epoxide_hydration` / `structure_find_path_ethane_ethanol_still_works` / `mass::epoxide_hydration_declared_delta_matches_mol_mass` / `mass::labeled_carbon_13_shifts_mono_mass`.
+
 ## Plans are Deps (elementary Steps + precedes)
 
 Status: approved (Rust derisk; shape may replace Python `CanonicalStep`).
 
 The plan language is flat [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs):
 elementary `Step`s (rule name + site notes) plus precedes, plus [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs)
-cleavage bags on the same plan (not a sibling on the path outcome). There is no
+cleavage bags and [`ApplyN`](../../crates/xenosite-forest/src/canonical_plan.rs) OR-pools
+on the same plan (not siblings on the path outcome). There is no
 parallel `CanonicalStep` dialect for search.
 
 Site notes are one enum: known index | `WillAdd(element @ anchor)` | `AddedBy(rule, anchors)`.
@@ -176,7 +181,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
 | Key | Redundant with ``delta_formula``? | Notes |
 | --- | --- | --- |
-| ``adds`` / ``removes`` | **Yes** (bag encoding of the junction part) | Positive ≡ adds bag; negative ≡ removes. Keep bags until callers migrate. Note: sealed pattern delta is edit stoichiometry (hydroxyl ``O:+1,H:-1``); mol ``formula_delta`` after sanitize may differ (``O:+1`` only — OH restores H). |
+| ``adds`` / ``removes`` | **Yes** (bag encoding of the junction part) | Positive ≡ adds bag; negative ≡ removes. Keep bags until callers migrate. Note: sealed pattern delta is usually the **net** mol change; hydroxyl is the documented exception (edit stoichiometry ``O:+1,H:-1`` vs sanitized ``O:+1`` — OH restores H). EpoxideHydration ``OOHH``, EpoxideOpening hydrate ``OHH`` / rearrange ``HH``, N-ox nitroso ``O``/``HH`` match sanitized nets (were undercounting H). S-ox hydroxy stays ``O`` — net H is substrate-dependent (thioether vs thiol). |
 | ``leave_formula`` | **Yes** (negative part of the sealed map) | Positive counts of the named leave; sealed as negatives. ``Me`` → ``{C:1,H:3}``. Open leaves (`leave_count` None) stay empty. |
 | ``leave_count`` | **Partial** | When ``leave_formula`` is set, equals its heavy-atom count. Still useful when leave is open (None) or as a cheap filter without walking the map. |
 | ``partner`` / ``partner_h`` | **No** | Site role / identity, not stoichiometry (though When+delta covers partner *removal*). |

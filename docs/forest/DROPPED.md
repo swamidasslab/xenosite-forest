@@ -152,8 +152,9 @@ Status: approved to drop from the live forest plan.
 Archived `net.py` builds a NetworkX reaction graph from one-step
 `find_path` metabolites (Rxn records, SMILES-order atom maps). That
 network API / `find_network_paths` scaffolding is not in live forest.
-MS1 / MS2 path finding (if pursued) stays on `find_path`-style
-APIs, not a revived `xenosite.net` package.
+MS1 / MS2 path finding stays on `find_path`-style APIs, not a revived
+`xenosite.net` package. Rust door: [`find_path_ms1`](../../crates/xenosite-forest/src/find_path_ms1.rs)
++ [`ApplyN`](../../crates/xenosite-forest/src/canonical_plan.rs) (HEURISTICS).
 
 Old code: `src/xenosite/_archive_forest/net.py`.
 

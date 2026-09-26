@@ -128,8 +128,9 @@ fn catalog_pattern_info_structural() {
             assert_eq!(patterns.len(), 1);
             assert_eq!(patterns[0].name, "diol");
             assert_eq!(patterns[0].site_kind, SiteKind::Bond);
-            assert_eq!(patterns[0].effect.adds.as_deref(), Some("OO"));
+            assert_eq!(patterns[0].effect.adds.as_deref(), Some("OOHH"));
             assert_eq!(patterns[0].effect.delta_formula.get("O"), Some(&2));
+            assert_eq!(patterns[0].effect.delta_formula.get("H"), Some(&2));
             assert!(patterns[0].effect.dearomatizes);
         }
     }

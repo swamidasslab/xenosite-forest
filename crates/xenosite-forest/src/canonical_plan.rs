@@ -282,6 +282,34 @@ pub struct Maybe {
     pub entries: Vec<CleavageSide>,
 }
 
+/// Apply exactly [`Self::count`] elementary steps, each chosen from
+/// [`Self::arms`] (OR). Composable with [`Deps`] beside [`Maybe`].
+///
+/// MS1 example: many hydroxylation / O-placing leaves as arms, `count = 3`
+/// when the spectrum expects three oxygenations. Arms are elementary rule
+/// names (catalog leaf names). Pattern-level OR inside a leaf stays on
+/// [`PatternInfo`] — not duplicated here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApplyN {
+    /// Allowed elementary rule names (OR). Order is not significance.
+    pub arms: Vec<String>,
+    /// Exact number of applications required from `arms`.
+    pub count: u16,
+}
+
+impl ApplyN {
+    pub fn new(arms: impl IntoIterator<Item = impl Into<String>>, count: u16) -> Self {
+        let mut arms: Vec<_> = arms.into_iter().map(Into::into).collect();
+        arms.sort();
+        arms.dedup();
+        Self { arms, count }
+    }
+
+    pub fn allows(&self, rule: &str) -> bool {
+        self.arms.iter().any(|a| a == rule)
+    }
+}
+
 impl Maybe {
     pub fn new(entries: impl IntoIterator<Item = CleavageSide>) -> Self {
         Self {
@@ -329,13 +357,16 @@ impl Maybe {
     }
 }
 
-/// Flat elementary steps plus precedes (transitive reduction) and [`Maybe`].
+/// Flat elementary steps plus precedes (transitive reduction), [`Maybe`],
+/// and [`ApplyN`] pools.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Deps {
     steps: Vec<Step>,
     precedes: Vec<(usize, usize)>,
     /// Discarded cleavage fragments (Python `PathOutcome.maybe`, on the plan).
     maybe: Maybe,
+    /// OR-pools with exact apply counts (MS1 / spectrum constraints).
+    apply_n: Vec<ApplyN>,
 }
 
 impl Deps {
@@ -362,6 +393,7 @@ impl Deps {
             steps,
             precedes,
             maybe: Maybe::default(),
+            apply_n: Vec::new(),
         }
     }
 
@@ -376,6 +408,12 @@ impl Deps {
         self
     }
 
+    /// Attach OR-apply pools (MS1: N hydroxylations from a long arm list).
+    pub fn with_apply_n(mut self, pools: impl IntoIterator<Item = ApplyN>) -> Self {
+        self.apply_n = pools.into_iter().collect();
+        self
+    }
+
     pub fn steps(&self) -> &[Step] {
         &self.steps
     }
@@ -386,6 +424,10 @@ impl Deps {
 
     pub fn maybe(&self) -> &Maybe {
         &self.maybe
+    }
+
+    pub fn apply_n(&self) -> &[ApplyN] {
+        &self.apply_n
     }
 
     /// Delegate to [`Maybe::allows`] (site overlap or discarded side SMILES).
@@ -572,11 +614,12 @@ impl Deps {
         let Ok(reduced) = canonical_dependency_edges(n, &edges) else {
             return 0;
         };
-        // Same nodes + union edges; maybe does not affect required orders.
+        // Same nodes + union edges; maybe / apply_n do not affect required orders.
         Deps {
             steps: self.steps.clone(),
             precedes: reduced,
             maybe: Maybe::default(),
+            apply_n: Vec::new(),
         }
         .n_linearizations()
     }
@@ -1715,6 +1758,33 @@ mod tests {
                 let _ = Deps::new([a, b], [(0, 1), (1, 0)]);
             })
             .is_err()
+        );
+    }
+
+    #[test]
+    fn apply_n_composes_with_maybe_on_deps() {
+        let steps = Deps::new([Step::new("Dealkylation", [PlanAtom::index(0)])], [])
+            .with_maybe(Maybe::new([CleavageSide::new(
+                [0],
+                "C",
+                std::iter::empty::<BTreeSet<usize>>(),
+            )]))
+            .with_apply_n([ApplyN::new(["Hydroxylation", "Epoxidation"], 2)]);
+        assert_eq!(steps.apply_n().len(), 1);
+        assert_eq!(steps.apply_n()[0].count, 2);
+        assert!(steps.apply_n()[0].allows("Hydroxylation"));
+        assert!(steps.apply_n()[0].allows("Epoxidation"));
+        assert!(!steps.apply_n()[0].allows("Dealkylation"));
+        assert!(!steps.maybe().is_empty());
+        assert_eq!(steps.len(), 1);
+    }
+
+    #[test]
+    fn apply_n_dedups_and_sorts_arms() {
+        let pool = ApplyN::new(["Epoxidation", "Hydroxylation", "Hydroxylation"], 3);
+        assert_eq!(
+            pool.arms,
+            vec!["Epoxidation".to_string(), "Hydroxylation".to_string()]
         );
     }
 }

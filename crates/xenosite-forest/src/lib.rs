@@ -16,12 +16,14 @@ pub mod canonical_plan;
 pub mod chematic_vendor;
 pub mod cleavage_graph;
 pub mod find_path;
+pub mod find_path_ms1;
 pub mod forest;
 pub mod forest_mol;
 pub mod formula_check;
 pub mod hydroxylation;
 pub mod kekule;
 pub mod labels;
+pub mod mass;
 pub mod matched_atom;
 pub mod mol;
 pub mod orbits;
@@ -64,8 +66,8 @@ pub use atom_diff::{
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
-    CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
-    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
+    ApplyN, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom,
+    Step, align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
     epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
     identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
     transitive_closure_masks,
@@ -83,6 +85,7 @@ pub use find_path::{
     hop_match_add_score, hop_match_product_score, hop_match_score, log_close_term,
     log_improve_term, neg_log1p_score,
 };
+pub use find_path_ms1::{Ms1Config, find_path_ms1, predicted_mz_after_delta};
 pub use forest::{
     Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
 };
@@ -90,6 +93,10 @@ pub use forest_mol::ForestMol;
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
+pub use mass::{
+    Ms1Adduct, PROTON_MASS, element_mono_mass, formula_apply_delta, formula_mono_mass,
+    isotope_exact_mass, molecule_mono_mass, mz_abs_error, mz_of, mz_of_mol, mz_within,
+};
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
     SiteShellCostOpts, SiteShellMismatch, align_shells, aligned_shells_h_closer_no_n2,

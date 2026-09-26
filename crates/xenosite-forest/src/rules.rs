@@ -854,7 +854,8 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("".into()),
+                    // Open chain saturates: C2H4O → C2H6O (+2H).
+                    adds: Some("HH".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -870,7 +871,8 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("O".into()),
+                    // Vicinal diol: +O and the two H that come with opening/OH.
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -1284,7 +1286,8 @@ pub fn epoxide_hydration() -> RuleSet {
             SiteKind::Bond,
             vec![1, 2],
             Effect {
-                adds: Some("OO".into()),
+                // Alkene → vicinal diol: +2O +2H (each OH carries H).
+                adds: Some("OOHH".into()),
                 removes: None,
                 cleaves: false,
                 methide: false,
@@ -1325,6 +1328,8 @@ pub fn sulfur_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    // Net H is substrate-dependent (thioether may gain H; thiol
+                    // may not). Keep O-only; formula_check strips H.
                     adds: Some("O".into()),
                     removes: None,
                     cleaves: false,
@@ -1382,8 +1387,9 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    // Primary amine → nitroso: +O and lose both N–H.
                     adds: Some("O".into()),
-                    removes: None,
+                    removes: Some("HH".into()),
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -2015,8 +2021,9 @@ mod tests {
         assert_eq!(info.name, "diol");
         assert_eq!(info.site_kind, SiteKind::Bond);
         assert_eq!(info.site_map, vec![1, 2]);
-        assert_eq!(info.effect.adds.as_deref(), Some("OO"));
+        assert_eq!(info.effect.adds.as_deref(), Some("OOHH"));
         assert_eq!(info.effect.delta_formula.get("O"), Some(&2));
+        assert_eq!(info.effect.delta_formula.get("H"), Some(&2));
         assert!(info.effect.dearomatizes, "catalog capability");
         assert!(!info.effect.cleaves);
         match &info.edit {
