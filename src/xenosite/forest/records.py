@@ -299,6 +299,9 @@ class PatternInfo(TypedDict, total=False):
     # ``name``; None / absent → use ``name``. Same resolved group on both
     # ends → unordered orbit; else ordered by ``name``. When may override.
     swap_group: str
+    # SMIRKS map numbers whose topological ranks are unordered in
+    # ``site_signature`` (gem dihalide leaves 1↔3). Absent → all maps ordered.
+    unordered_maps: tuple[int, ...]
 
 
 class _SiteInfoCore(TypedDict):

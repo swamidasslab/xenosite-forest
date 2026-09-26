@@ -927,6 +927,7 @@ def _describe(
     skip_same_rings: bool = False,
     name: str | None = None,
     swap_group: str | None = None,
+    unordered_maps: tuple[int, ...] | None = None,
     **single: EffectField,
 ) -> PatternInfo:
     """Build a :class:`PatternInfo`.
@@ -936,6 +937,8 @@ def _describe(
     ``name`` distinguishes this pattern from the others on the same rule.
     ``swap_group`` is optional; omit when it equals ``name`` (the default).
     Set it only when interchangeable ends group differently from ``name``.
+    ``unordered_maps``: SMIRKS maps whose ranks sort as a swappable group
+    in unique-edit (gem dihalide leaves 1↔3).
     """
 
     if single and possibilities:
@@ -966,6 +969,8 @@ def _describe(
         info["name"] = name
     if swap_group is not None:
         info["swap_group"] = swap_group
+    if unordered_maps:
+        info["unordered_maps"] = tuple(unordered_maps)
     return info
 
 
@@ -1053,12 +1058,22 @@ def _site_map_aromatic(
 def _cleavage_breaks_ring(
     mol: Mol, mapped: Mapping[int, int], site_map: int | tuple[int, ...]
 ) -> bool:
-    """True when the two site atoms share a ring, so the cleaved bond is in it."""
+    """True when the cleaved bond's atoms share a ring.
 
-    if not isinstance(site_map, tuple) or len(site_map) != 2:
+    Prefer PatternInfo ``site_map`` when it names both ends of the cut.
+    Otherwise use maps 1 and 2 when both matched — the usual
+    ``>>[*:1].[*:2]`` cleavage SMIRKS — so peroxide / disulfide get
+    ``breaks_ring`` without widening the unique-edit site to a bond.
+    """
+
+    if isinstance(site_map, tuple) and len(site_map) == 2:
+        left = mapped.get(site_map[0])
+        right = mapped.get(site_map[1])
+    elif 1 in mapped and 2 in mapped:
+        left = mapped[1]
+        right = mapped[2]
+    else:
         return False
-    left = mapped.get(site_map[0])
-    right = mapped.get(site_map[1])
     if not isinstance(left, int) or not isinstance(right, int):
         return False
     rings = mol.xf.rings
@@ -1408,6 +1423,7 @@ class SmirksReactionRule(ReactionRule):
                     rxn_num,
                     effect,
                     site_kind=self.site_kind,
+                    unordered_maps=pattern.get("unordered_maps"),
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
@@ -1822,6 +1838,15 @@ def _report_formula_delta_mismatch(
         and not leave_formula
         and not expected_heavy
         and any(n < 0 for n in actual_heavy.values())
+    ):
+        return True
+    # Ring-open cleavage (breaks_ring): atoms stay on connected product(s);
+    # bifurcation may list regioisomers whose sum is not a sealed leave.
+    if (
+        cleaves
+        and not leave_formula
+        and not expected_heavy
+        and bool(options.get("breaks_ring"))
     ):
         return True
     # Ring-retained leave: cleaves with a named leave, but one product still
@@ -2325,6 +2350,7 @@ class ResonanceRule(SmirksReactionRule):
                     rxn_num,
                     effect,
                     site_kind=self.site_kind,
+                    unordered_maps=pattern.get("unordered_maps"),
                 )
                 if signature in seen:
                     _bump(counters, "sites_skipped")
@@ -3918,9 +3944,6 @@ class OxidativeDehalogenation(SmirksReactionRule):
     phase1_sites_on = "bonds"
     sites_on = "bonds"
     site_kind: RuleSiteKind = "atom"
-    # Geminal multi-halide unique-edit miss until sites/patterns partition;
-    # yield CSMI must not paper over (C11).
-    unique_csmi_compliant = False
     _example_substrates: tuple[str, ...] = ('CCCl', 'Clc1ccccc1')
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
@@ -3988,6 +4011,7 @@ class OxidativeDehalogenation(SmirksReactionRule):
                     cleaves=True,
                 ),
                 site_map=2,
+                unordered_maps=(1, 3),
                 name="gem_carboxylic",
             ),
         ),
@@ -4002,6 +4026,7 @@ class OxidativeDehalogenation(SmirksReactionRule):
                     cleaves=True,
                 ),
                 site_map=2,
+                unordered_maps=(1, 3),
                 name="gem_hydrate",
             ),
         ),

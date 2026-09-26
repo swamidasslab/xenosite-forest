@@ -125,6 +125,12 @@ pub fn check_effect_delta_formula(
     {
         return None;
     }
+    // Ring-open cleavage: atoms stay on connected product(s); bifurcation may
+    // list regioisomers whose sum is not a sealed leave (Python breaks_ring).
+    if effect.cleaves && effect.leave_formula.is_empty() && expected.is_empty() && effect.breaks_ring
+    {
+        return None;
+    }
     // Ring-retained leave: named leave still on the single product (e.g.
     // isoxazole N–O open). Incomplete leave vs fragment split — skip.
     if effect.cleaves

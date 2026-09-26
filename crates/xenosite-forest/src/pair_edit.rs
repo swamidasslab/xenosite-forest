@@ -612,6 +612,7 @@ fn merge_effect_fields(
             leave
         },
         cleaves: left.effect.cleaves || right.effect.cleaves,
+        breaks_ring: left.effect.breaks_ring || right.effect.breaks_ring,
         leave_count: left.effect.leave_count.or(right.effect.leave_count),
         methide: left.effect.methide || right.effect.methide,
         exclusive_partner: left.effect.exclusive_partner || right.effect.exclusive_partner,

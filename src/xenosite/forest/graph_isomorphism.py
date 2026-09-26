@@ -933,11 +933,29 @@ end_roles_symmetric = ends_swappable
 
 
 def map_rank_key(
-    ranks: Mapping[int, int], mapped: Mapping[int, int]
+    ranks: Mapping[int, int],
+    mapped: Mapping[int, int],
+    unordered_maps: tuple[int, ...] | None = None,
 ) -> tuple[tuple[int, int], ...]:
-    """Stable (mapno, topological-rank) embedding identity."""
+    """Stable (mapno, topological-rank) embedding identity.
 
-    return tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items()))
+    ``unordered_maps`` (optional): those map numbers share a swappable role
+    (gem dihalide leaves). Their ranks are sorted into the lower mapnos so
+    map1↔map3 embeddings that yield the same product collapse.
+    """
+
+    if not unordered_maps:
+        return tuple((mapno, ranks[idx]) for mapno, idx in sorted(mapped.items()))
+    unordered = set(unordered_maps)
+    fixed = [
+        (mapno, ranks[idx])
+        for mapno, idx in sorted(mapped.items())
+        if mapno not in unordered
+    ]
+    free_ranks = sorted(ranks[mapped[m]] for m in unordered if m in mapped)
+    free_maps = sorted(m for m in unordered if m in mapped)
+    free = list(zip(free_maps, free_ranks))
+    return tuple(sorted(fixed + free, key=lambda t: t[0]))
 
 
 def bond_rank_key(
@@ -1035,6 +1053,7 @@ def site_signature(
     effect: Effect,
     *,
     site_kind: str = "atom",
+    unordered_maps: tuple[int, ...] | None = None,
 ) -> SiteSignature:
     """Dedup key. Last field is a pair-orbit signature, or ``None`` for one atom.
 
@@ -1044,12 +1063,13 @@ def site_signature(
     pair-path emissions use :func:`pair_site_signature` instead.
     ``"directed_bond"`` / ``"atom"``: directed MapRankKey (Dealkylation map 1
     is the oxygenated carbon).
+    ``unordered_maps``: SMIRKS maps whose ranks sort as a swappable group.
     """
 
     if site_kind in ("bond", "atom_pair"):
         map_key = bond_rank_key(ranks, site)
     else:
-        map_key = map_rank_key(ranks, mapped)
+        map_key = map_rank_key(ranks, mapped, unordered_maps)
     return (
         map_key,
         incident_orders(work, ranks, mapped),
