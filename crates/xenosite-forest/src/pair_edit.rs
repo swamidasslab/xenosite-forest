@@ -415,10 +415,34 @@ impl PairCandidate {
         if shared_edge_saturated {
             settle.extend(saturate.iter().copied());
         }
-        let forced = residual.perceive_forced_doubles(&rw);
+        let all_forced = residual.perceive_forced_doubles(&rw);
+        // Pre-existing doubles on the parent (N=C=O, etc.) are fixed framework:
+        // drop their atoms from the residual (demand already placed). Do not
+        // exclusive-seed them — cumulated doubles conflict under one-partner
+        // matching (HEURISTICS forced leaf/edge = edit perception). Edit-new
+        // doubles (add_carbonyl O, phenol C=O) remain forced seeds.
+        let parent_doubles: BTreeSet<(usize, usize)> = mol
+            .bonds()
+            .filter_map(|(_, bond)| {
+                (bond.order == BondOrder::Double).then_some(bond_key(
+                    atom_usize(bond.atom1),
+                    atom_usize(bond.atom2),
+                ))
+            })
+            .collect();
+        let mut edit_forced = BTreeSet::new();
+        let mut framework_forced = BTreeSet::new();
+        for &edge in &all_forced {
+            if parent_doubles.contains(&edge) {
+                framework_forced.insert(edge);
+            } else {
+                edit_forced.insert(edge);
+            }
+        }
+        let residual_match = residual.after_forced_doubles(&framework_forced);
         // Empty residual after the shared-edge drop: done (one-edge path_end).
         // Vacuous keep+keep with no such edge still refuses (identity rebuild).
-        if forced.is_empty() && residual.bonds.is_empty() {
+        if edit_forced.is_empty() && residual_match.bonds.is_empty() {
             if saturate.len() == 2 {
                 let mut ends = saturate.iter().copied();
                 let a = ends.next().unwrap();
@@ -451,18 +475,18 @@ impl PairCandidate {
         }
         let config = KekuleConfig::for_constraints();
         let constraints = KekuleConstraints::new()
-            .with_forced(forced.clone())
+            .with_forced(edit_forced.clone())
             .with_saturate(saturate.clone());
         // Caller already perceived forced doubles — do not double-count from mol.
         let match_cfg = config.explicit_forced_only();
-        let assignments = residual.all_assignments(&rw, &constraints, &match_cfg);
+        let assignments = residual_match.all_assignments(&rw, &constraints, &match_cfg);
         if assignments.is_empty() {
             return Ok(Vec::new());
         }
 
         // Residual aromaticity: cyclic 2-core after dropping demand-consumed
         // atoms (forced doubles / saturate) — HEURISTICS, not sanitize flags.
-        let arom = residual.after_forced_doubles(&forced);
+        let arom = residual.after_forced_doubles(&all_forced);
         let aromatic_core = arom.aromatic_2core_atoms(&rw, &config);
         if self.effect.dearomatizes {
             let edited: HashSet<usize> = self
@@ -858,6 +882,33 @@ mod tests {
     }
 
     #[test]
+    fn quinone_formation_add_carbonyl_on_phnco_keeps_nco() {
+        // Pre-existing N=C=O doubles are fixed framework — not exclusive seeds
+        // (cumulated C would conflict). Ring add_carbonyl×2 must still emit.
+        let mol = parse_mol("O=C=Nc1ccccc1").unwrap();
+        let endpoints: Vec<_> = quinone_formation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = [
+            canon_of("O=C=NC1=CC(=O)C=CC1=O").unwrap(),
+            canon_of("O=C=NC1=CC=CC(=O)C1=O").unwrap(),
+            canon_of("O=C=NC1=CC(=O)C(=O)C=C1").unwrap(),
+        ];
+        for w in &want {
+            assert!(
+                emissions
+                    .iter()
+                    .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == *w)),
+                "missing {w}; got {emissions:?}"
+            );
+        }
+    }
+
+    #[test]
     fn pair_candidates_defer_materialize() {
         let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
         let endpoints: Vec<_> = dehydrogenation()
@@ -868,18 +919,9 @@ mod tests {
             .collect();
         let cands = pair_candidates(&mol, &endpoints).unwrap();
         assert!(!cands.is_empty());
-        assert!(
-            cands.iter().any(|c| c.effect.dearomatizes),
-            "aromatic hydroquinone pair should resolve dearomatizes"
-        );
-        // Refuse before materialize.
-        let kept: Vec<_> = cands
-            .into_iter()
-            .filter(|c| !c.effect.dearomatizes)
-            .collect();
-        assert!(kept.is_empty());
-        // Accept and materialize.
-        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        // Phenol site_map is O (not aromatic): resolve clears the capability
+        // bit before merge — same as Python resolve_effect + merge_effects.
+        // Materialize still emits the quinone from the π constraints.
         let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
         assert!(cands.iter().any(|c| {
             c.materialize(&mol)

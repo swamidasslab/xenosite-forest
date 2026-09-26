@@ -367,6 +367,14 @@ when needed; prefer perceiving them from the edited graph:
 | **Demand / charge state** | Atom’s allowed `(demand, formal_charge)` set changes | Pyrrole-like demand 0; charged N; mobile skipped site |
 | **Conjunction** | Several of the above in one assignment; empty ⇒ incompatible couple | Para/ortho quinone-like pairs solve; meta on benzene fails |
 
+Pre-existing doubles on the parent that survive demote (cumulated N=C=O,
+exocyclic carbonyl) are **fixed framework**, not edit-forced seeds. Exclusive
+one-partner matching cannot express cumulated demand; those atoms leave the
+residual via [`PiGraph::after_forced_doubles`](../../crates/xenosite-forest/src/kekule.rs)
+before rematch. Only edit-new doubles (forced leaf/edge from the endpoint
+edits) seed [`KekuleConstraints`](../../crates/xenosite-forest/src/kekule.rs).
+Status: approved. Tests: `quinone_formation_add_carbonyl_on_phnco_keeps_nco`.
+
 Carbonyls, imines, methides, and halogen→oxo replacements are the same
 **forced leaf / forced edge** shape with different element and SMARTS — not
 separate algorithms. Cleaving QF dealkylate (C16) is leave split plus forced
