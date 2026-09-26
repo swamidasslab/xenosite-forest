@@ -1,5 +1,8 @@
 //! Shell-cost bench on real mid/hard find_path cases.
 //!
+//! Site cost = Σ normalized |current − target| at site atoms (`site_shell_cost`,
+//! δ = 0). Keep iff cost > 0. Path column is the same residual over all heavies.
+//!
 //! ```text
 //! cargo run -p xenosite-forest --example shell_cost_bench --release
 //! cargo run -p xenosite-forest --example shell_cost_bench --release -- --hard
@@ -8,8 +11,8 @@
 use std::time::Instant;
 
 use xenosite_forest::{
-    FindPathConfig, PathCounters, aligned_shells, atom_diff, candidate_could_help_on,
-    find_path_with, pair_could_help, parse_mol, phase_one,
+    FindPathConfig, PathCounters, atom_diff, candidate_could_help_on, find_path_with,
+    molecule_shells, pair_could_help, parse_mol, phase_one, site_shell_cost,
 };
 
 const MID: &[(&str, &str, &str)] = &[
@@ -86,6 +89,10 @@ fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
     atoms
 }
 
+fn all_heavy(shells: &xenosite_forest::MoleculeShells) -> Vec<usize> {
+    shells.atoms.keys().copied().collect()
+}
+
 struct Row {
     name: String,
     hit: bool,
@@ -99,9 +106,9 @@ struct Row {
     fp: usize,
     tn: usize,
     fn_: usize,
-    hop0_site_cost: Option<usize>,
+    hop0_site_cost: Option<f64>,
     hop0_rank: Option<(usize, usize)>,
-    shell_costs: Vec<usize>,
+    shell_costs: Vec<f64>,
     atom_costs: Vec<usize>,
     shell_mono: bool,
     atom_mono: bool,
@@ -111,15 +118,17 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
     let ra = parse_mol(reactant).unwrap();
     let rb = parse_mol(target).unwrap();
     let set = phase_one();
-    let shells0 = aligned_shells(&ra, &rb);
+    let cur0 = molecule_shells(&ra);
+    let tgt = molecule_shells(&rb);
+    let map0 = atom_diff(&ra, &rb).mapping;
     let ad = atom_diff(&ra, &rb);
 
-    let mut scored: Vec<(usize, bool)> = Vec::new();
+    let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
     for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
         let atoms = site_atoms_cand(&c);
         let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
-        let cost = shells0.at_sites(&atoms).cost();
-        scored.push((cost, gate));
+        let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
+        scored.push((cost, gate, atoms));
     }
     for p in set
         .pair_candidates(&ra)
@@ -130,8 +139,8 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
         let mut atoms = p.plan_site_atoms();
         atoms.sort_unstable();
         atoms.dedup();
-        let cost = shells0.at_sites(&atoms).cost();
-        scored.push((cost, gate));
+        let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
+        scored.push((cost, gate, atoms));
     }
 
     let mut tp = 0usize;
@@ -140,8 +149,8 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
     let mut fn_ = 0usize;
     let mut gate_keep = 0usize;
     let mut shell_keep = 0usize;
-    for &(cost, gate) in &scored {
-        let shell = cost > 0;
+    for &(cost, gate, _) in &scored {
+        let shell = cost > 1e-12;
         if gate {
             gate_keep += 1;
         }
@@ -180,18 +189,19 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
 
     if let Some(hit) = hits.first() {
         steps = hit.steps.len();
-        // Closeness at reactant, each intermediate product, then 0 at target.
         let mut cur = reactant.to_string();
-        let mut prev_s: Option<usize> = None;
+        let mut prev_s: Option<f64> = None;
         let mut prev_a: Option<usize> = None;
         for (i, step) in hit.steps.iter().enumerate() {
             let mol = parse_mol(&cur).unwrap();
-            let sh = aligned_shells(&mol, &rb).without_unchanged().cost();
+            let cur_s = molecule_shells(&mol);
+            let map = atom_diff(&mol, &rb).mapping;
+            let sh = site_shell_cost(&cur_s, None, &tgt, &map, &all_heavy(&cur_s));
             let at = atom_diff(&mol, &rb).cost();
             shell_costs.push(sh);
             atom_costs.push(at);
             if let Some(ps) = prev_s {
-                if sh > ps {
+                if sh > ps + 1e-9 {
                     shell_mono = false;
                 }
             }
@@ -204,25 +214,31 @@ fn eval_case(name: &str, reactant: &str, target: &str) -> Row {
             prev_a = Some(at);
 
             if i == 0 {
-                let atoms = if step.site_orbit.is_empty() {
+                let mut atoms = if step.site_orbit.is_empty() {
                     vec![step.site]
                 } else {
                     step.site_orbit.clone()
                 };
-                let cost = shells0.at_sites(&atoms).cost();
+                atoms.sort_unstable();
+                atoms.dedup();
+                let cost = site_shell_cost(&cur0, None, &tgt, &map0, &atoms);
                 hop0_site_cost = Some(cost);
-                let mut gate_costs: Vec<usize> =
-                    scored.iter().filter(|(_, g)| *g).map(|(c, _)| *c).collect();
-                gate_costs.sort_by(|a, b| b.cmp(a));
-                if let Some(r) = gate_costs.iter().position(|&c| c == cost) {
-                    hop0_rank = Some((r + 1, gate_costs.len()));
-                } else {
-                    hop0_rank = Some((0, gate_costs.len()));
-                }
+                let mut gate_costs: Vec<f64> = scored
+                    .iter()
+                    .filter(|(_, g, _)| *g)
+                    .map(|(c, _, _)| *c)
+                    .collect();
+                gate_costs.sort_by(|a, b| {
+                    b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                let n = gate_costs.len();
+                // Rank by cost value among gate-kept (1 = highest residual).
+                let rank = gate_costs.iter().filter(|&&c| c > cost + 1e-9).count() + 1;
+                hop0_rank = Some(if n == 0 { (0, 0) } else { (rank.min(n), n) });
             }
             cur = step.product.clone();
         }
-        shell_costs.push(0);
+        shell_costs.push(0.0);
         atom_costs.push(0);
     }
 
@@ -276,7 +292,7 @@ fn print_table(title: &str, rows: &[Row]) {
         let hit = if r.hit { "ok" } else { "MISS" };
         let hop = r
             .hop0_site_cost
-            .map(|c| c.to_string())
+            .map(|c| format!("{c:.2}"))
             .unwrap_or_else(|| "-".into());
         let rank = match r.hop0_rank {
             Some((0, n)) => format!("?/{n}"),
@@ -286,7 +302,7 @@ fn print_table(title: &str, rows: &[Row]) {
         let shell_path = r
             .shell_costs
             .iter()
-            .map(|c| c.to_string())
+            .map(|c| format!("{c:.1}"))
             .collect::<Vec<_>>()
             .join("→");
         let atom_path = r
@@ -345,8 +361,9 @@ fn main() {
     let hard = std::env::args().any(|a| a == "--hard");
     let cases = if hard { HARD } else { MID };
     let title = if hard { "HARD" } else { "MID" };
-    println!("shell_cost_bench — at_sites Σ|δ| (missing=0); keep iff cost>0\n");
-    // Baseline find_path wall (filter-only) already known; this adds site-cost panel.
+    println!(
+        "shell_cost_bench — site_shell_cost Σ norm|current−target|; keep iff cost>0\n"
+    );
     let t0 = Instant::now();
     let rows: Vec<Row> = cases.iter().map(|(n, r, t)| eval_case(n, r, t)).collect();
     print_table(title, &rows);
