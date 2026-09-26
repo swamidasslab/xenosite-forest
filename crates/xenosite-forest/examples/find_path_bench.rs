@@ -201,8 +201,9 @@ fn parse_paths(args: &[String]) -> usize {
 fn parse_score_label(label: &str) -> HeapScoreMode {
     match label {
         "soft" | "soft-stack" | "legacy" => HeapScoreMode::SoftStack,
-        "match" | "match-product" | "product" | "product-both" | "default" => {
-            HeapScoreMode::match_product()
+        "match" | "add" | "add-both" | "default" => HeapScoreMode::match_add(),
+        "product" | "product-both" | "match-product" => {
+            HeapScoreMode::Match(MatchScoreSpec::product_both())
         }
         "close" | "dist" | "close-both" => HeapScoreMode::Match(MatchScoreSpec {
             combine: MatchCombine::Close,
@@ -212,11 +213,19 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             combine: MatchCombine::Improve,
             metric: MatchMetric::Both,
         }),
-        "atom" | "product-atom" => HeapScoreMode::Match(MatchScoreSpec {
+        "atom" | "add-atom" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Add,
+            metric: MatchMetric::Atom,
+        }),
+        "formula" | "add-formula" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::Add,
+            metric: MatchMetric::Formula,
+        }),
+        "product-atom" => HeapScoreMode::Match(MatchScoreSpec {
             combine: MatchCombine::Product,
             metric: MatchMetric::Atom,
         }),
-        "formula" | "product-formula" => HeapScoreMode::Match(MatchScoreSpec {
+        "product-formula" => HeapScoreMode::Match(MatchScoreSpec {
             combine: MatchCombine::Product,
             metric: MatchMetric::Formula,
         }),
@@ -237,7 +246,7 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             metric: MatchMetric::Formula,
         }),
         other => panic!(
-            "unknown --score {other} (soft|product-both|close-both|improve-both|…-atom|…-formula)"
+            "unknown --score {other} (soft|add-both|product-both|close-both|improve-both|…-atom|…-formula)"
         ),
     }
 }
@@ -246,7 +255,7 @@ fn parse_score(args: &[String]) -> HeapScoreMode {
     args.windows(2)
         .find(|w| w[0] == "--score")
         .map(|w| parse_score_label(&w[1]))
-        .unwrap_or_else(HeapScoreMode::match_product)
+        .unwrap_or_else(HeapScoreMode::match_add)
 }
 
 #[derive(Clone, Debug)]

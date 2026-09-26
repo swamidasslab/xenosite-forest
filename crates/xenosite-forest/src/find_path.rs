@@ -230,12 +230,15 @@ struct OxygenSite {
 /// How closeness / improvement combine into one soft score.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MatchCombine {
-    /// Closeness only: `SCALE / (1 + child_dist)` (product across metrics).
+    /// Closeness only: Σ [`neg_log1p_score`](child) over active metrics.
     Close,
-    /// Improvement only: `max(0, parent − child) + 1` (product across metrics).
+    /// Hop gain only: Σ (`neg_log1p`(child) − `neg_log1p`(parent)).
     Improve,
-    /// `improvement × closeness` (default).
+    /// Closeness + hop gain (default). Metrics **add**.
     #[default]
+    Add,
+    /// Legacy: `(max(0, parent−child)+1) × (SCALE/(1+child))`, metrics multiply.
+    /// Kept for ablation / `--score product-*` only.
     Product,
 }
 
@@ -246,7 +249,7 @@ pub enum MatchMetric {
     Atom,
     /// Formula L1 vs target (includes H) only.
     Formula,
-    /// Formula × atom_diff factors (default).
+    /// Atom + formula terms (default; **added** under Add/Close/Improve).
     #[default]
     Both,
 }
@@ -259,6 +262,15 @@ pub struct MatchScoreSpec {
 }
 
 impl MatchScoreSpec {
+    /// Default live recipe: −log(1+cost) closeness + delta, atom+formula.
+    pub const fn add_both() -> Self {
+        Self {
+            combine: MatchCombine::Add,
+            metric: MatchMetric::Both,
+        }
+    }
+
+    /// Legacy product×both (SCALE/(1+c) mul). Ablation / CLI only.
     pub const fn product_both() -> Self {
         Self {
             combine: MatchCombine::Product,
@@ -266,7 +278,7 @@ impl MatchScoreSpec {
         }
     }
 
-    /// Bench / CLI label: `product-both`, `close-atom`, …
+    /// Bench / CLI label: `add-both`, `close-atom`, `product-both`, …
     pub fn label(self) -> &'static str {
         match (self.combine, self.metric) {
             (MatchCombine::Close, MatchMetric::Atom) => "close-atom",
@@ -275,20 +287,24 @@ impl MatchScoreSpec {
             (MatchCombine::Improve, MatchMetric::Atom) => "improve-atom",
             (MatchCombine::Improve, MatchMetric::Formula) => "improve-formula",
             (MatchCombine::Improve, MatchMetric::Both) => "improve-both",
+            (MatchCombine::Add, MatchMetric::Atom) => "add-atom",
+            (MatchCombine::Add, MatchMetric::Formula) => "add-formula",
+            (MatchCombine::Add, MatchMetric::Both) => "add-both",
             (MatchCombine::Product, MatchMetric::Atom) => "product-atom",
             (MatchCombine::Product, MatchMetric::Formula) => "product-formula",
             (MatchCombine::Product, MatchMetric::Both) => "product-both",
         }
     }
 
-    /// All nine combine × metric variants (comparison matrix).
+    /// Nine live combines (close|improve|add × atom|formula|both). Legacy
+    /// `Product` is opt-in via CLI, not in this matrix.
     pub fn matrix() -> [Self; 9] {
         let mut out = [Self::default(); 9];
         let mut i = 0;
         for combine in [
             MatchCombine::Close,
             MatchCombine::Improve,
-            MatchCombine::Product,
+            MatchCombine::Add,
         ] {
             for metric in [MatchMetric::Atom, MatchMetric::Formula, MatchMetric::Both] {
                 out[i] = Self { combine, metric };
@@ -305,20 +321,25 @@ pub enum HeapScoreMode {
     /// Soft stack: `search_bias`, site H-progress, `cost_gain`, then `seq`.
     /// Opt-in via `FindPathConfig` / `--score soft`.
     SoftStack,
-    /// Match-family score from [`MatchScoreSpec`] (default: product × both).
+    /// Match-family score from [`MatchScoreSpec`] (default: add × both).
     Match(MatchScoreSpec),
 }
 
 impl Default for HeapScoreMode {
     fn default() -> Self {
-        Self::Match(MatchScoreSpec::product_both())
+        Self::Match(MatchScoreSpec::add_both())
     }
 }
 
 impl HeapScoreMode {
-    /// Default match recipe (product × formula+atom).
+    /// Default match recipe (−log closeness + delta, formula+atom).
+    pub const fn match_add() -> Self {
+        Self::Match(MatchScoreSpec::add_both())
+    }
+
+    /// Alias of [`Self::match_add`] (old name; default is no longer product).
     pub const fn match_product() -> Self {
-        Self::Match(MatchScoreSpec::product_both())
+        Self::match_add()
     }
 
     pub fn label(self) -> &'static str {
@@ -329,22 +350,22 @@ impl HeapScoreMode {
     }
 }
 
-/// Parent→child match-family heap score from [`MatchScoreSpec`].
-///
-/// Per active metric: improvement = max(0, parent − child) + 1; closeness =
-/// `SCALE / (1 + child)`. Inactive metric factors are 1. Combine is close /
-/// improve / product. A target hit is just cost/formula 0 — no hit sentinel.
-pub fn hop_match_score(
-    spec: MatchScoreSpec,
+/// Fixed-point `−ln(1 + cost)`. Higher (less negative) is better; cost 0 → 0.
+pub fn neg_log1p_score(cost: usize) -> i64 {
+    const SCALE: f64 = 1_000_000.0;
+    (-(1.0 + cost as f64).ln() * SCALE).round() as i64
+}
+
+fn legacy_product_score(
     parent_formula_dist: usize,
     child_formula_dist: usize,
     parent_atom_cost: Option<usize>,
     child_atom_cost: Option<usize>,
+    metric: MatchMetric,
 ) -> i64 {
     const SCALE: i64 = 1_000_000;
-    let use_formula = matches!(spec.metric, MatchMetric::Formula | MatchMetric::Both);
-    let use_atom = matches!(spec.metric, MatchMetric::Atom | MatchMetric::Both);
-
+    let use_formula = matches!(metric, MatchMetric::Formula | MatchMetric::Both);
+    let use_atom = matches!(metric, MatchMetric::Atom | MatchMetric::Both);
     let f_imp = if use_formula {
         (parent_formula_dist as i64 - child_formula_dist as i64).max(0) + 1
     } else {
@@ -359,7 +380,6 @@ pub fn hop_match_score(
         1
     };
     let improvement = f_imp.saturating_mul(a_imp);
-
     let f_close = if use_formula {
         SCALE / (1 + child_formula_dist as i64)
     } else {
@@ -373,24 +393,92 @@ pub fn hop_match_score(
     } else {
         1
     };
-    let closeness = f_close.saturating_mul(a_close);
+    improvement.saturating_mul(f_close.saturating_mul(a_close))
+}
+
+/// Parent→child match-family heap score from [`MatchScoreSpec`].
+///
+/// Live path (Close / Improve / Add): per active metric, closeness =
+/// [`neg_log1p_score`](child) and delta = closeness − `neg_log1p`(parent);
+/// metrics **add**. Combine is close, improve, or close+delta. Legacy
+/// [`MatchCombine::Product`] keeps the old SCALE/(1+c) multiply. A target hit
+/// is just cost/formula 0 — no hit sentinel.
+pub fn hop_match_score(
+    spec: MatchScoreSpec,
+    parent_formula_dist: usize,
+    child_formula_dist: usize,
+    parent_atom_cost: Option<usize>,
+    child_atom_cost: Option<usize>,
+) -> i64 {
+    if matches!(spec.combine, MatchCombine::Product) {
+        return legacy_product_score(
+            parent_formula_dist,
+            child_formula_dist,
+            parent_atom_cost,
+            child_atom_cost,
+            spec.metric,
+        );
+    }
+
+    let use_formula = matches!(spec.metric, MatchMetric::Formula | MatchMetric::Both);
+    let use_atom = matches!(spec.metric, MatchMetric::Atom | MatchMetric::Both);
+
+    let mut closeness = 0i64;
+    let mut delta = 0i64;
+    if use_formula {
+        let c = neg_log1p_score(child_formula_dist);
+        let p = neg_log1p_score(parent_formula_dist);
+        closeness += c;
+        delta += c - p;
+    }
+    if use_atom {
+        match (parent_atom_cost, child_atom_cost) {
+            (Some(p), Some(c)) => {
+                let child = neg_log1p_score(c);
+                let parent = neg_log1p_score(p);
+                closeness += child;
+                delta += child - parent;
+            }
+            // Child known only: closeness contributes; no parent → no delta.
+            (None, Some(c)) => {
+                closeness += neg_log1p_score(c);
+            }
+            _ => {}
+        }
+    }
 
     match spec.combine {
         MatchCombine::Close => closeness,
-        MatchCombine::Improve => improvement,
-        MatchCombine::Product => improvement.saturating_mul(closeness),
+        MatchCombine::Improve => delta,
+        MatchCombine::Add => closeness + delta,
+        MatchCombine::Product => unreachable!("handled above"),
     }
 }
 
-/// Convenience: [`MatchScoreSpec::product_both`] (default match recipe).
-pub fn hop_match_product_score(
+/// Convenience: [`MatchScoreSpec::add_both`] (default match recipe).
+pub fn hop_match_add_score(
     parent_formula_dist: usize,
     child_formula_dist: usize,
     parent_atom_cost: Option<usize>,
     child_atom_cost: Option<usize>,
 ) -> i64 {
     hop_match_score(
-        MatchScoreSpec::product_both(),
+        MatchScoreSpec::add_both(),
+        parent_formula_dist,
+        child_formula_dist,
+        parent_atom_cost,
+        child_atom_cost,
+    )
+}
+
+/// Alias of [`hop_match_add_score`] (old product-both name).
+pub fn hop_match_product_score(
+    parent_formula_dist: usize,
+    child_formula_dist: usize,
+    parent_atom_cost: Option<usize>,
+    child_atom_cost: Option<usize>,
+) -> i64 {
+    hop_match_add_score(
         parent_formula_dist,
         child_formula_dist,
         parent_atom_cost,
@@ -751,7 +839,7 @@ impl Default for FindPathConfig {
             // Match Python live `use_filters=True`.
             use_atom_diff: true,
             lazy_closer: false,
-            heap_score: HeapScoreMode::match_product(),
+            heap_score: HeapScoreMode::match_add(),
             drop_skeleton_twins: true,
         }
     }
@@ -2260,23 +2348,29 @@ mod tests {
     }
 
     #[test]
-    fn match_product_prefers_joint_improvement_and_closeness() {
+    fn neg_log1p_score_decreases_with_cost() {
+        assert_eq!(neg_log1p_score(0), 0);
+        assert!(neg_log1p_score(0) > neg_log1p_score(1));
+        assert!(neg_log1p_score(1) > neg_log1p_score(10));
+    }
+
+    #[test]
+    fn match_add_prefers_joint_improvement_and_closeness() {
         // Better atom+formula improvement at same closeness → higher score.
-        let flat = hop_match_product_score(4, 4, Some(10), Some(10));
-        let better = hop_match_product_score(4, 2, Some(10), Some(5));
+        let flat = hop_match_add_score(4, 4, Some(10), Some(10));
+        let better = hop_match_add_score(4, 2, Some(10), Some(5));
         assert!(better > flat, "better={better} flat={flat}");
-        // Closer child beats farther at equal improvement.
-        let close = hop_match_product_score(6, 4, Some(12), Some(10));
-        let far = hop_match_product_score(8, 6, Some(14), Some(12));
-        // Both improve by 2 formula + 2 atom; closer residual wins.
+        // Closer child beats farther at equal hop gain.
+        let close = hop_match_add_score(6, 4, Some(12), Some(10));
+        let far = hop_match_add_score(8, 6, Some(14), Some(12));
         assert!(close > far, "close={close} far={far}");
         // Exact match (cost/formula 0) outranks a partial improvement via closeness.
-        assert!(hop_match_product_score(9, 0, Some(9), Some(0)) > better);
+        assert!(hop_match_add_score(9, 0, Some(9), Some(0)) > better);
     }
 
     #[test]
     fn match_combine_and_metric_axes() {
-        let both_product = MatchScoreSpec::product_both();
+        let both_add = MatchScoreSpec::add_both();
         let close_both = MatchScoreSpec {
             combine: MatchCombine::Close,
             metric: MatchMetric::Both,
@@ -2285,12 +2379,12 @@ mod tests {
             combine: MatchCombine::Improve,
             metric: MatchMetric::Both,
         };
-        let product_atom = MatchScoreSpec {
-            combine: MatchCombine::Product,
+        let add_atom = MatchScoreSpec {
+            combine: MatchCombine::Add,
             metric: MatchMetric::Atom,
         };
-        let product_formula = MatchScoreSpec {
-            combine: MatchCombine::Product,
+        let add_formula = MatchScoreSpec {
+            combine: MatchCombine::Add,
             metric: MatchMetric::Formula,
         };
         // Same residual, different hop gain: improve ranks the gain; close ties.
@@ -2301,17 +2395,23 @@ mod tests {
         let close_b = hop_match_score(close_both, 4, 4, Some(10), Some(10));
         assert_eq!(close_a, close_b, "close ignores hop gain at equal residual");
         // Atom-only ignores formula; formula-only ignores atom.
-        let atom = hop_match_score(product_atom, 0, 9, Some(10), Some(2));
-        let atom_same_a = hop_match_score(product_atom, 9, 0, Some(10), Some(2));
+        let atom = hop_match_score(add_atom, 0, 9, Some(10), Some(2));
+        let atom_same_a = hop_match_score(add_atom, 9, 0, Some(10), Some(2));
         assert_eq!(atom, atom_same_a);
-        let formula = hop_match_score(product_formula, 10, 2, Some(0), Some(9));
-        let formula_same_a = hop_match_score(product_formula, 10, 2, Some(9), Some(0));
+        let formula = hop_match_score(add_formula, 10, 2, Some(0), Some(9));
+        let formula_same_a = hop_match_score(add_formula, 10, 2, Some(9), Some(0));
         assert_eq!(formula, formula_same_a);
-        // Default product-both still beats flat when both axes improve.
-        let joint = hop_match_score(both_product, 4, 2, Some(10), Some(5));
-        let joint_flat = hop_match_score(both_product, 4, 4, Some(10), Some(10));
+        // Default add-both beats flat when both axes improve.
+        let joint = hop_match_score(both_add, 4, 2, Some(10), Some(5));
+        let joint_flat = hop_match_score(both_add, 4, 4, Some(10), Some(10));
         assert!(joint > joint_flat);
         assert_eq!(MatchScoreSpec::matrix().len(), 9);
+        // Additive = close + improve.
+        assert_eq!(
+            hop_match_score(both_add, 8, 4, Some(20), Some(10)),
+            hop_match_score(close_both, 8, 4, Some(20), Some(10))
+                + hop_match_score(improve_both, 8, 4, Some(20), Some(10))
+        );
     }
 
     #[test]

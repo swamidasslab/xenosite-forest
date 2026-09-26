@@ -358,11 +358,30 @@ fn main() {
             },
         },
         Variant {
+            label: "product-both",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                heap_score: HeapScoreMode::Match(MatchScoreSpec::product_both()),
+                ..base_cfg
+            },
+        },
+        Variant {
             label: "close-atom",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {
                 heap_score: HeapScoreMode::Match(MatchScoreSpec {
                     combine: MatchCombine::Close,
+                    metric: MatchMetric::Atom,
+                }),
+                ..base_cfg
+            },
+        },
+        Variant {
+            label: "add-atom",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                heap_score: HeapScoreMode::Match(MatchScoreSpec {
+                    combine: MatchCombine::Add,
                     metric: MatchMetric::Atom,
                 }),
                 ..base_cfg
