@@ -21,7 +21,8 @@ use std::time::Instant;
 use xenosite_forest::{
     FindPathConfig, ForestMol, PathCounters, SiteShellCostOpts, aligned_shells, atom_diff,
     candidate_could_help_on, edit_shells, find_path_with, molecule_shells, pair_could_help,
-    parse_mol, phase_one, site_atoms_with_leave, site_shell_cost_leave, site_shell_cost_opts,
+    parse_mol, phase_one, site_atoms_with_leave, site_shell_cost, site_shell_cost_leave,
+    site_shell_cost_opts,
 };
 
 const MID: &[(&str, &str, &str)] = &[
@@ -818,6 +819,102 @@ fn print_dis_report(diss: &[DisHit], mid: &ShellStats, hard: &ShellStats) {
     );
 }
 
+fn all_heavy(shells: &xenosite_forest::MoleculeShells) -> Vec<usize> {
+    let mut v: Vec<usize> = shells.atoms.keys().copied().collect();
+    v.sort_unstable();
+    v
+}
+
+fn fmt_shell_path(costs: &[f64]) -> String {
+    costs
+        .iter()
+        .map(|c| format!("{c:.1}"))
+        .collect::<Vec<_>>()
+        .join("→")
+}
+
+fn fmt_atom_path(costs: &[usize]) -> String {
+    costs
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join("→")
+}
+
+/// Live `find_path` cost traces on mid/hard — atom_diff field cost and full-mol
+/// shell residual (|current−target| at each node; display only, not a gate).
+fn print_find_path_costs(label: &str, cases: &[(&str, &str, &str)]) {
+    let set = phase_one();
+    println!("\n## find_path costs — {label}");
+    println!(
+        "{:<28} {:>3} {:>4}  {:<28}  {:<18} mono",
+        "case", "hit", "hops", "shell_path", "atom_path"
+    );
+    for &(name, reactant, target) in cases {
+        let rb = parse_mol(target).unwrap();
+        let tgt = molecule_shells(&rb);
+        let mut counters = PathCounters::default();
+        let config = FindPathConfig {
+            max_nodes: 800,
+            max_paths: 1,
+            use_atom_diff: true,
+            ..FindPathConfig::default()
+        };
+        let hits = find_path_with(reactant, target, &set, &mut counters, config, |_| true)
+            .unwrap()
+            .collect_all()
+            .unwrap();
+        let Some(hit) = hits.first() else {
+            println!("{name:<28} MISS {:>4}  —  —  —", 0);
+            continue;
+        };
+        let mut shell_costs = Vec::new();
+        let mut atom_costs = Vec::new();
+        let mut shell_mono = true;
+        let mut atom_mono = true;
+        let mut cur = reactant.to_string();
+        let mut prev_s: Option<f64> = None;
+        let mut prev_a: Option<usize> = None;
+        for step in &hit.steps {
+            let mol = parse_mol(&cur).unwrap();
+            let cur_s = molecule_shells(&mol);
+            let ad = atom_diff(&mol, &rb);
+            let sh = site_shell_cost(&cur_s, None, &tgt, &ad.mapping, &all_heavy(&cur_s));
+            let at = ad.cost();
+            if let Some(ps) = prev_s {
+                if sh > ps + 1e-9 {
+                    shell_mono = false;
+                }
+            }
+            if let Some(pa) = prev_a {
+                if at > pa {
+                    atom_mono = false;
+                }
+            }
+            prev_s = Some(sh);
+            prev_a = Some(at);
+            shell_costs.push(sh);
+            atom_costs.push(at);
+            cur = step.product.clone();
+        }
+        shell_costs.push(0.0);
+        atom_costs.push(0);
+        let mono = format!(
+            "s{} a{}",
+            if shell_mono { "↓" } else { "↑" },
+            if atom_mono { "↓" } else { "↑" }
+        );
+        println!(
+            "{:<28} {:>3} {:>4}  {:<28}  {:<18} {mono}",
+            name,
+            "ok",
+            hit.steps.len(),
+            fmt_shell_path(&shell_costs),
+            fmt_atom_path(&atom_costs),
+        );
+    }
+}
+
 fn main() {
     println!(
         "shell_cost_bench — residual keep-if-drop (gate is comparison, not gold)\n\
@@ -848,6 +945,10 @@ fn main() {
         proj_stats.hard.agree_rate(),
     );
     print_dis_report(&diss, &proj_stats.mid, &proj_stats.hard);
+
+    // Per-case live find_path cost traces (dropped when gate-as-gold was removed).
+    print_find_path_costs("MID", MID);
+    print_find_path_costs("HARD", HARD);
 
     let (best_mode, best, which) = if score_key(&best_b) > score_key(&best_a) {
         (best_b_mode, best_b, "B")
