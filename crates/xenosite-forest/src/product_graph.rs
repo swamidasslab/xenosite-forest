@@ -246,6 +246,7 @@ pub fn product_layer(
     Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)] // target gate + parent walk; keep flat
 fn push_pair_children(
     parent: &ForestMol,
     pair: &PairCandidate,
