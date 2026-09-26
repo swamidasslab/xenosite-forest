@@ -3846,7 +3846,7 @@ class SulfurOxidation(SmirksReactionRule):
             _describe(adds="O", symbol="S", name="zwitterion"),
         ),
         (
-            Smirks("[#16;v2,v4:1]>>[*:1][O]"),
+            Smirks("[#16;v2,v4:1]>>[*:1]O"),
             _describe(adds="O", symbol="S", name="hydroxy"),
         ),
         (

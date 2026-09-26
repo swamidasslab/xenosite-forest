@@ -63,13 +63,13 @@ list; do not drop inventory rows. Each inventory possibility has a designated
 ``CoverIntent`` on a corpus mol (verified by meta-tests).
 Status: **approved**.
 
-### C5 — Focused CoverIntent params by default; full cartesian opt-in
+### C5 — Full rule×mol cartesian by default; focused CoverIntent opt-out
 
-Default parametric parity / CSMI uses focused ``(rule, mol)`` from
-``parity_param_cases`` (one designated cover per inventory possibility) —
-``pytest.mark.parametrize``, not Hypothesis. Full rule×corpus cartesian is
-available for slower exhaustive runs via ``XENOSITE_PARITY_FULL=1`` or
-``pytest --parity-full``. Hypothesis sampling over that grid is redundant.
+Default parametric parity / CSMI uses full ``paired/leaf × corpus`` cartesian
+via ``parity_param_cases`` — ``pytest.mark.parametrize``, not Hypothesis.
+Focused CoverIntent-only (one designated cover per inventory possibility) is
+available for faster CI via ``XENOSITE_PARITY_FULL=0`` or
+``pytest --parity-focused``. Hypothesis sampling over that grid is redundant.
 Status: **approved**.
 
 ### C6 — Attribute exceptions recorded to date
@@ -255,6 +255,16 @@ gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 
 ---
 
+
+### C15 — Specialize SMIRKS for chematic apply (nested, bonds, H0)
+
+``specialize_smirks_for_maps`` is the shared apply door for Python/RDKit
+SMIRKS primitives chematic rejects: nested recursive ``$()`` brackets,
+bond or-queries (``-,:``, ``=,:``) resolved from the live match, and
+product ``[*&H0&+:map]`` → ``[ElH0+:map]`` with post-apply H0 enforcement
+when chematic saturates ``[SH+]``. Hydroxy S-ox product is organic ``O``
+(not radical ``[O]``) on both catalogs. Status: **approved**.
+
 ## Work order (tackle in this sequence)
 
 | # | Issue | Status | Notes |
@@ -262,15 +272,15 @@ gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 | 0 | Corpus meta-test covers every pattern / every ``when`` | **done** | C4 |
 | 1 | Discover all Rust + Python leaves; pair or attribute-exception | **done** | C3, C6 |
 | 2 | Expose rulesets + ``find_path`` + enumerate to Python | **done** | C9; doors wired |
-| 3 | Parametric parity (focused CoverIntent; full via ``--parity-full``) | **done** | C5 |
+| 3 | Parametric parity (full cartesian default; focused via ``--parity-focused``) | **done** | C5 |
 | 4 | **Pair / dual-door unique-edit: partition SMIRKS↔pair overlap** | **open** | C12 — fix data/unique-edit (not no-dedup); H alkene+path_end |
 | 5 | Acetylation: chematic SMIRKS apply miss | **done** | Product keeps ``[#6](=[#8])[#6]``; Rust ``organic_product_variants`` expands ``#`` to organic aliphatic then aromatic (bracket expand misses). Issue: ``CHEMATIC_ISSUE_acetyl_atomic_product.md`` |
-| 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **open** | recursive SMARTS / P valence? |
-| 7 | AzoSplitting / ThiopheneSulfurOxidation: Rust empty on aromatic examples | **open** | ResonanceRule ``=,:`` / Kekulé |
-| 8 | NitrogenReduction: Rust empty on ``CCNO`` (hydroxylamine) | **open** | Resonance / pattern arm |
+| 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **done** | specialize nested ``$()``; phosphate ester apply green |
+| 7 | AzoSplitting / ThiopheneSulfurOxidation: Rust empty on aromatic examples | **done** | specialize bond or-queries ``=,:`` / ``-,:``; charge wildcards |
+| 8 | NitrogenReduction: Rust empty on ``CCNO`` (hydroxylamine) | **done** | specialize ``-,:`` → live bond; hydroxylamine apply green |
 | 9 | BenzodioxoleReduction: wrong products | **open** | catechol vs ring-opened; C8; watch C10 |
-| 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **open** | ``CCSO``+zwitterion vs ``CCS[O]``; watch C10 |
-| 11 | Dehydration: site-count mismatch with matching products | **open** | site_map / topo key align |
+| 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **done** | hydroxy ``[O]``→``O``; enforce H0 on charged S-oxide |
+| 11 | Dehydration: site-count mismatch with matching products | **done** | beta_elim site_map=1 matches Python |
 | 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |
 | 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
 | 14 | ``unique_csmi_compliant`` + CSMI-dup parametric test | **done** | C11 — only that test xfails non-compliant; hard-fail if compliant |

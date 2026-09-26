@@ -6,9 +6,9 @@ correspondences when one mol is the designated cover for several inventory
 possibilities.
 
 Meta-tests verify every intent and inventory completeness.
-Parametric parity / CSMI suites use :func:`parity_rule_mol_cases` (focused) or
-:func:`parity_rule_mol_cases_full` under ``XENOSITE_PARITY_FULL=1`` / the
-``parity_full`` marker (cartesian rule×mol for slower full coverage).
+Parametric parity / CSMI suites use :func:`parity_param_cases`: full
+rule×mol cartesian by default; focused CoverIntent-only under
+``XENOSITE_PARITY_FULL=0`` / ``pytest --parity-focused`` (CI may disable).
 """
 
 from __future__ import annotations
@@ -729,18 +729,17 @@ def parity_rule_mol_cases_full(
 
 
 def parity_full_enabled() -> bool:
-    """True for slower full rule×mol coverage.
+    """True for full rule×mol coverage (default).
 
-    Enable with ``XENOSITE_PARITY_FULL=1`` (or true/yes/full) or
-    ``pytest --parity-full`` (sets the env during configure).
+    Full cartesian is the local default so inventory coverage is guaranteed.
+    Opt into focused CoverIntent-only with ``XENOSITE_PARITY_FULL=0`` /
+    ``false`` / ``focused`` or ``pytest --parity-focused`` (CI may disable).
     """
 
-    return os.environ.get("XENOSITE_PARITY_FULL", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "full",
-    }
+    raw = os.environ.get("XENOSITE_PARITY_FULL", "1").strip().lower()
+    if raw in {"0", "false", "no", "off", "focused"}:
+        return False
+    return True
 
 
 def parity_param_cases(

@@ -111,7 +111,6 @@ fn phaseone_hydrolysis_or_dehydration_acetic() {
 }
 
 #[test]
-#[ignore = "Rust PhaseOne does not yet find COP(=O)(O)O → CO (Python does)"]
 fn phaseone_dephosphorylation() {
     assert_leaf_among("COP(=O)(O)O", "CO", &phase_one(), "Dephosphorylation");
 }

@@ -955,9 +955,10 @@ pub fn dehydration() -> RuleSet {
                 "beta_elimination",
                 "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
                 SiteKind::Atom,
-                // Alcohol carbon + adjacent carbon — site set differs from a
-                // lone hydroxylation site, so OH→beta-elim is not circular.
-                vec![1, 3],
+                // Match Python PatternInfo (default site_map=1): both alcohol
+                // and beta-elim share the alcohol-carbon atom site. Product
+                // bags differ (CC vs C=C); topo collapse is one site.
+                vec![1],
                 o_leave.clone(),
             ),
             smirks_row(
@@ -1332,7 +1333,9 @@ pub fn sulfur_oxidation() -> RuleSet {
             ),
             smirks_row(
                 "hydroxy",
-                "[#16;v2,v4:1]>>[*:1][O]",
+                // Organic `O` (not `[O]`): chematic `[O]` leaves a radical;
+                // RDKit `[O]` becomes OH. Bare `O` matches both (CCSO).
+                "[#16;v2,v4:1]>>[*:1]O",
                 SiteKind::Atom,
                 vec![1],
                 Effect {

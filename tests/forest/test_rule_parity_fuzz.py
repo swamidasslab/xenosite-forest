@@ -1,8 +1,8 @@
 """Rust↔RDKit leaf-rule product parity (parametric over cover intents).
 
-Default: focused ``(rule, mol)`` from :func:`parity_param_cases` — every
-inventory possibility has a designated cover. Full cartesian paired×corpus
-via ``XENOSITE_PARITY_FULL=1`` or ``pytest --parity-full``.
+Default: full paired×corpus cartesian via :func:`parity_param_cases`.
+Focused CoverIntent-only with ``XENOSITE_PARITY_FULL=0`` /
+``pytest --parity-focused`` (CI may disable for speed).
 
 For each ``(rule, mol)``:
 
@@ -199,13 +199,11 @@ def test_leaf_parity_on_example_substrate(rule_name: str) -> None:
     _assert_parity(rule_name, examples[0])
 
 
-def test_parity_param_mode_is_focused_by_default() -> None:
-    """Default collection uses CoverIntent focus, not full cartesian."""
+def test_parity_param_mode_defaults_to_full() -> None:
+    """Default collection uses full cartesian unless focused is requested."""
 
     if not _PAIRED:
         pytest.skip("no paired leaf rules")
-    if parity_full_enabled():
-        pytest.skip("parity_full enabled for this run")
     from .rule_parity_corpus import (
         parity_rule_mol_cases,
         parity_rule_mol_cases_full,
@@ -213,7 +211,9 @@ def test_parity_param_mode_is_focused_by_default() -> None:
 
     focused = parity_rule_mol_cases(_PAIRED)
     full = parity_rule_mol_cases_full(_PAIRED)
-    assert len(_CASES) == len(focused)
-    assert len(focused) < len(full), (
-        f"focused ({len(focused)}) should be smaller than full ({len(full)})"
-    )
+    if parity_full_enabled():
+        assert len(_CASES) == len(full)
+        assert len(full) > len(focused)
+    else:
+        assert len(_CASES) == len(focused)
+        assert len(focused) < len(full)

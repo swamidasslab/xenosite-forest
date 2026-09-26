@@ -12,9 +12,9 @@ parity / chemistry tests run them normally.
 - **Non-compliant:** xfail when a hit is present; fail if the corpus no
   longer hits (then mark ``unique_csmi_compliant = True``).
 
-Default cases: focused CoverIntent ``(rule, mol)`` via
-:func:`parity_param_cases`. Full leaf×corpus cartesian with
-``XENOSITE_PARITY_FULL=1`` / ``pytest --parity-full``.
+Default cases: full leaf×corpus cartesian via :func:`parity_param_cases`.
+Focused CoverIntent-only with ``XENOSITE_PARITY_FULL=0`` /
+``pytest --parity-focused`` (CI may disable for speed).
 """
 
 from __future__ import annotations
@@ -158,16 +158,16 @@ def test_noncompliant_still_hits_somewhere(rule_name: str) -> None:
     )
 
 
-def test_csmi_param_mode_is_focused_by_default() -> None:
-    """Default collection uses CoverIntent focus, not full cartesian."""
+def test_csmi_param_mode_defaults_to_full() -> None:
+    """Default collection uses full cartesian unless focused is requested."""
 
     if not _LEAVES:
         pytest.skip("no Python leaf rules")
-    if parity_full_enabled():
-        pytest.skip("parity_full enabled for this run")
     focused = parity_rule_mol_cases(_LEAVES)
     full = parity_rule_mol_cases_full(_LEAVES)
-    assert len(_CASES) == len(focused)
-    assert len(focused) < len(full), (
-        f"focused ({len(focused)}) should be smaller than full ({len(full)})"
-    )
+    if parity_full_enabled():
+        assert len(_CASES) == len(full)
+        assert len(full) > len(focused)
+    else:
+        assert len(_CASES) == len(focused)
+        assert len(focused) < len(full)

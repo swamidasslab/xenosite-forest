@@ -57,12 +57,237 @@ fn aliphatic_symbol(atomic_number: u8) -> Option<&'static str> {
     Element::from_atomic_number(atomic_number).and_then(|el| element_symbol(el, false))
 }
 
+/// Index of the `]` that closes the `[` at `open` (nested-bracket aware).
+fn closing_bracket(s: &str, open: usize) -> Result<usize, ForestError> {
+    let bytes = s.as_bytes();
+    if open >= bytes.len() || bytes[open] != b'[' {
+        return Err(ForestError::Smirks(format!("expected [ at {open} in {s}")));
+    }
+    let mut depth = 0_i32;
+    for i in open..bytes.len() {
+        match bytes[i] {
+            b'[' => depth += 1,
+            b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Ok(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(ForestError::Smirks(format!("unclosed [ in {s}")))
+}
+
+/// Map number from a bracket body (`…:12`), if present.
+fn map_from_bracket(inner: &str) -> Option<u16> {
+    let colon = inner.rfind(':')?;
+    let map_text = &inner[colon + 1..];
+    if map_text.is_empty() || !map_text.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    map_text.parse().ok()
+}
+
+/// Chematic SMILES bond token for a live mol bond between two atoms.
+fn bond_smiles_token(mol: &Molecule, a: usize, b: usize) -> Option<&'static str> {
+    let (_idx, bond) = mol.bond_between(atom_idx(a), atom_idx(b))?;
+    use chematic::core::BondOrder;
+    // Prefer aromatic colon when either the bond or either atom is aromatic —
+    // chematic apply templates reject `=,:` / `-,:` or-queries.
+    if bond.order == BondOrder::Aromatic
+        || mol.atom(atom_idx(a)).aromatic
+        || mol.atom(atom_idx(b)).aromatic
+    {
+        return Some(":");
+    }
+    Some(match bond.order {
+        BondOrder::Single | BondOrder::Up | BondOrder::Down => "-",
+        BondOrder::Double => "=",
+        BondOrder::Triple => "#",
+        BondOrder::Aromatic => ":",
+        _ => return None,
+    })
+}
+
+/// True when `s` (starting at `i`) is a SMARTS bond or-query (`-,:`, `=,:`, …).
+fn bond_or_query_at(s: &str, i: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    if i >= bytes.len() {
+        return None;
+    }
+    // Bond chars then at least one comma-separated alternative.
+    let mut j = i;
+    let start = j;
+    let is_bond = |b: u8| matches!(b, b'-' | b'=' | b'#' | b':' | b'/' | b'\\');
+    if !is_bond(bytes[j]) {
+        return None;
+    }
+    while j < bytes.len() && (is_bond(bytes[j]) || bytes[j] == b',') {
+        j += 1;
+    }
+    let token = &s[start..j];
+    if token.contains(',') && token.bytes().any(is_bond) {
+        Some(j)
+    } else {
+        None
+    }
+}
+
+/// Nearest map number in a specialized atom bracket left of `pos`.
+fn map_left_of(s: &str, pos: usize) -> Option<u16> {
+    let before = &s[..pos];
+    let open = before.rfind('[')?;
+    let close = closing_bracket(s, open).ok()?;
+    if close >= pos {
+        return None;
+    }
+    map_from_bracket(&s[open + 1..close])
+}
+
+/// Nearest map number in a specialized atom bracket right of `pos`.
+fn map_right_of(s: &str, pos: usize) -> Option<u16> {
+    let bytes = s.as_bytes();
+    let mut i = pos;
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            let close = closing_bracket(s, i).ok()?;
+            return map_from_bracket(&s[i + 1..close]);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Resolve SMARTS bond or-queries using the live matched bond order.
+fn resolve_bond_or_queries(
+    reactant: &str,
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+) -> Result<String, ForestError> {
+    let bytes = reactant.as_bytes();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if let Some(end) = bond_or_query_at(reactant, i) {
+            let left = map_left_of(reactant, i);
+            let right = map_right_of(reactant, end);
+            let token = match (left, right) {
+                (Some(a), Some(b)) => {
+                    let Some(&ai) = mapped.get(&a) else {
+                        return Err(ForestError::Smirks(format!(
+                            "bond or-query missing map {a}"
+                        )));
+                    };
+                    let Some(&bi) = mapped.get(&b) else {
+                        return Err(ForestError::Smirks(format!(
+                            "bond or-query missing map {b}"
+                        )));
+                    };
+                    bond_smiles_token(mol, ai, bi).ok_or_else(|| {
+                        ForestError::Smirks(format!(
+                            "no bond between maps {a}={ai} and {b}={bi}"
+                        ))
+                    })?
+                }
+                _ => {
+                    // No flanking maps — keep as-is (should be rare).
+                    out.push_str(&reactant[i..end]);
+                    i = end;
+                    continue;
+                }
+            };
+            out.push_str(token);
+            i = end;
+            continue;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    Ok(out)
+}
+
+/// Product-side `[*…:map]` / charged wildcards → `[El±:map]` from the match.
+fn specialize_product_wildcards(
+    product: &str,
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+) -> Result<String, ForestError> {
+    let bytes = product.as_bytes();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'[' {
+            out.push(bytes[i] as char);
+            i += 1;
+            continue;
+        }
+        let end = closing_bracket(product, i)?;
+        let inner = &product[i + 1..end];
+        let rewritten = if let Some(mapno) = map_from_bracket(inner) {
+            if let Some(&atom) = mapped.get(&mapno) {
+                // Wildcard or query-heavy product atom tied to a reactant map.
+                // Plain `[*:map]` stays — chematic accepts it and existing
+                // specialize tests rely on that. Charge / & / H0 queries need
+                // an element (e.g. `[*&H0&+:1]` → `[NH0+:1]`).
+                let plain_star = inner.starts_with('*')
+                    && inner.len() > 1
+                    && inner.as_bytes()[1] == b':'
+                    && inner[2..].bytes().all(|b| b.is_ascii_digit());
+                let needs = (inner.starts_with('*') && !plain_star)
+                    || (inner.starts_with('#')
+                        && inner.contains(|c: char| c == 'v' || c == ';'));
+                if needs {                    let a = mol.atom(atom_idx(atom));
+                    let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
+                        ForestError::Smirks(format!("unsupported element for map {mapno}"))
+                    })?;
+                    let charge = if inner.contains('+') {
+                        "+"
+                    } else if inner.contains('-') {
+                        "-"
+                    } else {
+                        ""
+                    };
+                    // Prefer H0 when the query asked for it (n-oxide / S-oxide).
+                    let h0 = inner.contains("H0") || inner.contains("h0");
+                    let mut tok = String::from("[");
+                    tok.push_str(sym);
+                    if h0 {
+                        tok.push_str("H0");
+                    }
+                    tok.push_str(charge);
+                    tok.push(':');
+                    tok.push_str(&mapno.to_string());
+                    tok.push(']');
+                    Some(tok)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(tok) = rewritten {
+            out.push_str(&tok);
+        } else {
+            out.push_str(&product[i..=end]);
+        }
+        i = end + 1;
+    }
+    Ok(out)
+}
+
 /// Rewrite a Python/RDKit SMIRKS so chematic can parse it for this match.
 ///
 /// - Drop product-side grouping parentheses after `>>`.
 /// - Replace every reactant `[…:map]` with `[El:map]` from the matched atom
 ///   (lowercase when that atom is aromatic — chematic `C` is aliphatic-only).
-/// - Leave product `[* :map]` / organic atoms alone when already chematic-clean.
+///   Nested recursive `$()` brackets are handled (not truncated at the first `]`).
+/// - Resolve SMARTS bond or-queries (`-,:`, `=,:`) to the live bond order.
+/// - Rewrite product `[*&H0&+:map]`-style wildcards to `[ElH0+:map]`.
+/// - Leave product organic atoms alone when already chematic-clean.
 pub fn specialize_smirks_for_maps(
     smirks: &str,
     mol: &Molecule,
@@ -83,15 +308,9 @@ pub fn specialize_smirks_for_maps(
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'[' {
-            let end = reactant[i..]
-                .find(']')
-                .map(|o| i + o)
-                .ok_or_else(|| ForestError::Smirks(format!("unclosed [ in {smirks}")))?;
+            let end = closing_bracket(reactant, i)?;
             let bracket = &reactant[i + 1..end];
-            if let Some(colon) = bracket.rfind(':') {
-                let mapno: u16 = bracket[colon + 1..]
-                    .parse()
-                    .map_err(|_| ForestError::Smirks(format!("bad map in [{bracket}]")))?;
+            if let Some(mapno) = map_from_bracket(bracket) {
                 if let Some(&atom) = mapped.get(&mapno) {
                     let a = mol.atom(atom_idx(atom));
                     let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
@@ -113,9 +332,9 @@ pub fn specialize_smirks_for_maps(
             i += 1;
         }
     }
-    out.push_str(">>");
-    out.push_str(product);
-    Ok(out)
+    let reactant = resolve_bond_or_queries(&out, mol, mapped)?;
+    let product = specialize_product_wildcards(product, mol, mapped)?;
+    Ok(format!("{reactant}>>{product}"))
 }
 
 /// One `[#N…]` site on the product side and its organic aliphatic/aromatic spellings.
@@ -136,10 +355,7 @@ fn product_hash_sites(product: &str) -> Result<Vec<HashSite>, ForestError> {
             i += 1;
             continue;
         }
-        let end = product[i..]
-            .find(']')
-            .map(|o| i + o)
-            .ok_or_else(|| ForestError::Smirks(format!("unclosed [ in product {product}")))?;
+        let end = closing_bracket(product, i)?;
         let inner = &product[i + 1..end];
         if !inner.starts_with('#') {
             i = end + 1;
@@ -334,6 +550,8 @@ fn apply_smirks_raw(
 ) -> Result<Vec<Molecule>, ForestError> {
     let matches = find_reaction_matches(smirks, &[mol])
         .map_err(|err| ForestError::Smirks(err.to_string()))?;
+    let product_side = smirks.split_once(">>").map(|(_, p)| p).unwrap_or("");
+    let wants_h0_charge = product_side.contains("H0") && product_side.contains('+');
     for reaction_match in matches {
         let positions = reaction_match
             .atom_map_positions(smirks)
@@ -354,6 +572,11 @@ fn apply_smirks_raw(
         let mut pieces = Vec::new();
         for product in products {
             for frag in product.fragments() {
+                let frag = if wants_h0_charge {
+                    enforce_charged_h0(frag)
+                } else {
+                    frag
+                };
                 if accept_product(&frag) {
                     pieces.push(frag);
                 }
@@ -362,6 +585,41 @@ fn apply_smirks_raw(
         return Ok(pieces);
     }
     Ok(Vec::new())
+}
+
+/// Chematic often saturates `El+` with an implicit H (`[SH+]`) even when the
+/// product template asked for H0 (`[*&H0&+:1]` → `[SH0+:1]`). Strip that H in
+/// the SMILES round-trip so dialkyl S/N oxides match RDKit's closed-shell form.
+fn enforce_charged_h0(mol: Molecule) -> Molecule {
+    use crate::mol::{canon_smiles, parse_mol};
+    let s = canon_smiles(&mol);
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            // Rewrite [XH+] / [xH+] → [X+] / [x+] (single-letter organic els).
+            if i + 5 <= bytes.len()
+                && bytes[i + 2] == b'H'
+                && bytes[i + 3] == b'+'
+                && bytes[i + 4] == b']'
+                && bytes[i + 1].is_ascii_alphabetic()
+            {
+                out.push('[');
+                out.push(bytes[i + 1] as char);
+                out.push('+');
+                out.push(']');
+                i += 5;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    if out == s {
+        return mol;
+    }
+    parse_mol(&out).unwrap_or(mol)
 }
 
 #[cfg(test)]
@@ -493,5 +751,77 @@ mod tests {
             let want = BTreeSet::from([canon_of(want_prod).unwrap()]);
             assert_eq!(got, want, "{smiles} form={form}");
         }
+    }
+
+    #[test]
+    fn specialize_nested_recursive_and_bond_or_query() {
+        let mol = parse_mol("COP(=O)(O)O").unwrap();
+        let smirks =
+            "[#8;$([#8][#6]):1][#15:2](=[#8:3])([#8:4])[#8:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]";
+        let hits = smarts_matches(&mol, smirks.split(">>").next().unwrap()).unwrap();
+        assert_eq!(hits.len(), 1);
+        let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
+        assert_eq!(form, "[O:1][P:2](=[O:3])([O:4])[O:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]");
+        let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
+        let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
+        assert_eq!(
+            got,
+            BTreeSet::from([canon_of("CO").unwrap(), canon_of("O=[PH](O)O").unwrap()])
+        );
+    }
+
+    #[test]
+    fn specialize_hydroxylamine_bond_or_and_n_oxide_charge() {
+        let mol = parse_mol("CCNO").unwrap();
+        let smirks = "[#7:1]-,:[#8:2]>>([*:1].[*:2])";
+        let hits = smarts_matches(&mol, "[#7:1]-,:[#8:2]").unwrap();
+        let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
+        assert_eq!(form, "[N:1]-[O:2]>>[*:1].[*:2]");
+        let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
+        let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
+        assert_eq!(
+            got,
+            BTreeSet::from([canon_of("CCN").unwrap(), canon_of("O").unwrap()])
+        );
+
+        let mol = parse_mol("CN(C)C").unwrap();
+        let smirks = "[#7v3H0:1]>>[*&H0&+:1][O-]";
+        let hits = smarts_matches(&mol, "[#7v3H0:1]").unwrap();
+        let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
+        assert_eq!(form, "[N:1]>>[NH0+:1][O-]");
+        let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
+        let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
+        assert_eq!(got, BTreeSet::from([canon_of("C[N+](C)(C)[O-]").unwrap()]));
+    }
+
+    #[test]
+    fn specialize_azo_bond_or_query() {
+        let mol = parse_mol("c1ccc(/N=N/c2ccccc2)cc1").unwrap();
+        let smirks = "[#7:1]=,:[#7:2]>>[*:1].[*:2]";
+        let hits = smarts_matches(&mol, "[#7:1]=,:[#7:2]").unwrap();
+        assert!(!hits.is_empty());
+        let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
+        assert!(
+            form == "[N:1]=[N:2]>>[*:1].[*:2]" || form == "[N:1]:[N:2]>>[*:1].[*:2]",
+            "got {form}"
+        );
+        let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
+        assert!(!products.is_empty(), "azo apply empty form={form}");
+    }
+
+    #[test]
+    fn sulfur_oxidation_ccs_matches_rdkit_forms() {
+        let mol = parse_mol("CCS").unwrap();
+        let hits = smarts_matches(&mol, "[#16;v2,v4:1]").unwrap();
+        let zw = apply_smirks_at("[#16;v2,v4:1]>>[*&H0&+:1][O-]", &mol, &hits[0]).unwrap();
+        let oh = apply_smirks_at("[#16;v2,v4:1]>>[*:1]O", &mol, &hits[0]).unwrap();
+        assert_eq!(
+            zw.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect::<Vec<_>>(),
+            vec![canon_of("CC[S+][O-]").unwrap()]
+        );
+        assert_eq!(
+            oh.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect::<Vec<_>>(),
+            vec![canon_of("CCSO").unwrap()]
+        );
     }
 }
