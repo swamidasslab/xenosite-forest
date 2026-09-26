@@ -246,8 +246,11 @@ Status: **not approved**. Materializing every Kekulé form inside plain `SmirksR
 
 ## Chematic / RDKit resonance engines for ResonancePair path edits
 
-Status: **not approved** to *replace* path discovery with global re-kekulize;
-**not decided** for materializing the intentional flip via Kekulé parents.
+Status: **not approved** to *replace* path discovery with *blind* global
+re-kekulize / “pick a ResonanceMolSupplier form”;
+**not decided** for (1) materializing the intentional flip via Kekulé parents
+constrained by a discovered path, or (2) **skipping path discovery** when end
+edits are expressible as π-matching constraints (below).
 
 **Chematic** exposes aromatic kekulization (`chematic_core::kekulize` /
 `kekulize_inplace`) and low-level `set_bond_order`. **RDKit**
@@ -258,23 +261,65 @@ atoms, constrained cations/anions left of N, etc.). Forest already uses the
 supplier correctly for **Kekulé parents and conjugated groups**
 (`resonance_bond_maps` / `_kekule_forms`).
 
-Neither API is a conjugated-**path discovery**. ResonancePair still needs an
-odd alternating path between two ends after end edits. Blindly replacing that
-with re-kekulize or “pick a ResonanceMolSupplier form” would choose *some*
-matching, not the intentional path — **not approved**.
+Blind re-kekulize after end edits picks *some* matching, not an intentional
+edit — **not approved**. That is not the same as constraint-directed
+dearomatization.
 
-**Possible refactor (not decided):** keep path discovery as today, but
-materialize the post-reaction flip by overlaying a Kekulé parent whose bond
-orders realize that path (system assignment constrained by the path’s
-single/double pattern), then the same `move_charge_with_bonds` used on
-reactant overlays. That retains charge separation on valid products
-(including N that gains charge when bond order rises — iminium / pyridinium /
-amide resonance) without inventing a second charge model. Kekulé matching
-must place doubles on must-match atoms (C and pyridine-type / charged N —
-`atom_must_be_matched`), not carbons alone. Until that lands, hand
-`flip_path` / `swap_bonds_along_path` plus post-flip H adjust and charge-follow
-stay. Sanitize / C10 failures are usually end-edit / SMIRKS products, not
-missing a library flip.
+### Edit-as-π-constraints (may make path finding unnecessary)
+
+Status: **not decided**. Source:
+[dearomatization patterns](https://chatgpt.com/share/6ab82fa4-1ce8-83ea-8a70-df7abcb443ce)
+on top of [`kekule_components`](https://chatgpt.com/share/6ab82ebc-87d0-83e9-9de5-de28edc0c0ea).
+
+Idea: ResonancePair end edits are **π-graph constraints**; valid matchings
+*are* the dearomatized product writings. No alternating-path search, no
+`flip_path` — enumerate assignments under the constraints, stamp bond orders
+(+ the same `move_charge_with_bonds` as reactant overlays).
+
+Simple patterns from the share (map onto `Edit::PairEndpoint` / Effect data,
+not one-off branches):
+
+| Edit pattern | π constraint | Residual matching |
+|---|---|---|
+| Quinone / DH carbonyl (`add_carbonyl_o`, phenol→ketone `single_to_double`) | Add forced exocyclic demand-1 leaf (`O=C`); consumes that ring atom’s demand | Remaining atoms Kekulize; para/ortho solve, meta empty on benzene |
+| Epoxidation (aromatic C=C consumed) | Require the matched edge selected as double, then **remove** it from the π system (saturated bridge + O) | Other selected edges stay doubles |
+| Two epoxides / two carbonyls | Both constraints in one assignment; incompatible ⇒ no product | Same solver |
+
+**Why this can retire path discovery for QF/DH-shaped pairs:** today’s flow
+(find odd path between ends → edit ends → flip along path) is a procedural
+way to reach a matching that is already fixed by “these atoms are carbonyls /
+this edge was the alkene.” Constraint solving yields the same product bond
+sets (often fewer duplicates than path×parent cartesian). Rust-ahead QF
+dealkylate (C16) fits: forced carbonyl / imine demands on the ring after the
+leave split, then match — not a path through the leave fragment.
+
+**Where path discovery may still earn its keep (do not delete yet):**
+
+- `Hydrogenation` `path_end` / `keep`: ends do not mint forced π leaves; the
+  flip *is* the reduction (H at ends where double→single). Needs a clear
+  demand/edge encoding before path search goes away.
+- Edits whose chemistry is “along a specific walk” rather than “global
+  matching under end constraints” (long-range tautomer stub).
+- Until atom-demand / charge states are shared schema on both doors, bags
+  still diverge (parity judgment below) — constraint solving on the wrong
+  parent bag still misses products.
+
+**Possible refactor (not decided), two tiers:**
+
+1. **Path keep + constrained overlay:** discover path as today; materialize by
+   overlaying a matching constrained by the path’s single/double pattern
+   (same `move_charge_with_bonds`). Cleanup only.
+2. **Path drop for constraint-shaped pairs:** PatternInfo/Edit data declares
+   π constraints (forced leaf, forced/consumed edge, demand change); solve
+   matchings; no `alternating_paths` / `flip_path`. Prefer this when the edit
+   table covers the rule. Do not invent a silent branch per leaf name —
+   name the constraint on the record.
+
+Kekulé matching must place doubles on must-match atoms (C and pyridine-type /
+charged N — `atom_must_be_matched`), not carbons alone. Until a tier lands,
+hand `flip_path` / `swap_bonds_along_path` plus post-flip H adjust and
+charge-follow stay. Sanitize / C10 failures are usually end-edit / SMIRKS
+products, not missing a library flip.
 
 **Parity judgment (examined Kekulé parents both sides):** path-constrained
 overlay is a **weak** parity lever until parent bags match door-by-door.
