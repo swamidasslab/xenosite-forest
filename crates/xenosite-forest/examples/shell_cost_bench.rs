@@ -1,9 +1,12 @@
-//! Incremental shell-cost ablation from baseline.
+//! Shell-cost gate ablation vs live `candidate_could_help` / `pair_could_help`.
 //!
-//! Baseline = `at_sites` raw Σ|δ| (aromatic + n0/n1/n2, missing=0), no leave
-//! expand. Each step tries unused features one at a time; keeps the add that
-//! best improves (agree, then precision, then hop0 top-1) on mid+hard vs the
-//! live gate. Recall stays ~1.0 across trials.
+//! **Never** scores `|current − target|` alone (δ = 0). Site-shell cost is always
+//! `|projected − target|` with `projected = current + editδ` (δ = product − reactant).
+//!
+//! Chains:
+//! - **A** — legacy `at_sites` Σ|δ| baseline; optional jump to projected residual.
+//! - **B** — projected residual (keep when residual drops vs no-edit); try +leave
+//!   and +|Δaromatic| (aromatic bit mismatch 0/1 between projected and target).
 //!
 //! ```text
 //! cargo run -p xenosite-forest --example shell_cost_bench --release
@@ -76,33 +79,37 @@ const HARD: &[(&str, &str, &str)] = &[
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CostKind {
-    /// Legacy baseline: Σ|δ| on kept site atoms only (no cleaved count).
+    /// Legacy: Σ|δ| on kept site atoms only (no cleaved count).
     AtSitesLegacy,
-    /// Current `at_sites().cost()` = Σ|δ| + cleaved + added.
+    /// Σ|δ| + cleaved + added counts.
     AtSitesCleaved,
-    /// Multiset Σ |current−target| (δ=0).
-    MultisetRaw,
-    /// Multiset Σ norm|current−target|; shells only (δ=0).
-    MultisetNormShells,
-    /// Multiset Σ norm|current−target|; shells + |Δaromatic| (δ=0).
-    MultisetNormDear,
-    /// Σ |projected − target| (norm shells); projected=current+editδ; keep iff drop.
-    EditResidualNorm,
-    /// Σ |projected − target| (norm+dear); projected=current+editδ; keep iff drop.
-    EditResidualDear,
+    /// Σ|projected − target|; keep iff residual drops vs no-edit residual.
+    /// No-edit residual is only the progress baseline — never a gate score.
+    ProjResidualDrop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Mode {
     leave: bool,
+    /// Include |Δaromatic| ∈ {0,1} per atom when comparing projected vs target.
+    aromatic_delta: bool,
     kind: CostKind,
 }
 
 impl Mode {
-    fn baseline() -> Self {
+    fn at_sites_baseline() -> Self {
         Self {
             leave: false,
+            aromatic_delta: false,
             kind: CostKind::AtSitesLegacy,
+        }
+    }
+
+    fn proj_baseline() -> Self {
+        Self {
+            leave: false,
+            aromatic_delta: false,
+            kind: CostKind::ProjResidualDrop,
         }
     }
 
@@ -111,16 +118,21 @@ impl Mode {
         parts.push(match self.kind {
             CostKind::AtSitesLegacy => "at_sites Σ|δ| (legacy)",
             CostKind::AtSitesCleaved => "at_sites Σ|δ|+cleaved",
-            CostKind::MultisetRaw => "Σ|cur−tgt| (δ=0)",
-            CostKind::MultisetNormShells => "norm|cur−tgt| shells",
-            CostKind::MultisetNormDear => "norm|cur−tgt|+dear",
-            CostKind::EditResidualNorm => "Σ|proj−tgt| editδ drop?",
-            CostKind::EditResidualDear => "Σ|proj−tgt| dear drop?",
+            CostKind::ProjResidualDrop => "Σ|proj−tgt| keep-if-drop",
         });
+        if self.aromatic_delta {
+            parts.push("+|Δaromatic|");
+        }
         if self.leave {
             parts.push("+leave");
         }
         parts.join(" ")
+    }
+
+    fn opts(self) -> SiteShellCostOpts {
+        SiteShellCostOpts {
+            dearomatic: self.aromatic_delta,
+        }
     }
 }
 
@@ -168,6 +180,17 @@ impl GateStats {
     }
 }
 
+#[derive(Clone, Debug)]
+struct FnHit {
+    suite: &'static str,
+    case: String,
+    kind: &'static str,
+    name: String,
+    before: f64,
+    after: f64,
+    atoms: Vec<usize>,
+}
+
 fn site_atoms_cand(c: &xenosite_forest::Candidate) -> Vec<usize> {
     let mut atoms: Vec<usize> = c
         .pattern
@@ -203,86 +226,15 @@ fn expand_atoms(
     }
 }
 
-fn neighborhood_bag_raw_l1(
-    a: &[xenosite_forest::AtomNeighborhood],
-    b: &[xenosite_forest::AtomNeighborhood],
-) -> f64 {
-    let mut unused = b.to_vec();
-    let mut cost = 0usize;
-    for env in a {
-        if let Some((i, _)) = unused.iter().enumerate().min_by_key(|(_, x)| env.l1(x)) {
-            let other = unused.swap_remove(i);
-            cost += env.l1(&other);
-        } else {
-            cost += env.abs_delta();
-        }
-    }
-    for other in &unused {
-        cost += other.abs_delta();
-    }
-    cost as f64
-}
-
-fn multiset_raw_cost(
-    cur: &xenosite_forest::MoleculeShells,
-    tgt: &xenosite_forest::MoleculeShells,
-    map: &std::collections::BTreeMap<usize, usize>,
-    atoms: &[usize],
-) -> f64 {
-    let mut projected = Vec::new();
-    let mut target_envs = Vec::new();
-    for &r in atoms {
-        let Some(c) = cur.atoms.get(&r) else {
-            continue;
-        };
-        if let Some(&t) = map.get(&r) {
-            if let Some(te) = tgt.atoms.get(&t) {
-                target_envs.push(te.clone());
-            }
-        }
-        projected.push(c.clone());
-    }
-    neighborhood_bag_raw_l1(&projected, &target_envs)
-}
-
-fn site_cost(
+fn residual(
     mode: Mode,
-    align: &xenosite_forest::AlignedShells,
+    delta: Option<&xenosite_forest::AlignedShells>,
     cur: &xenosite_forest::MoleculeShells,
     tgt: &xenosite_forest::MoleculeShells,
     map: &std::collections::BTreeMap<usize, usize>,
     atoms: &[usize],
 ) -> f64 {
-    match mode.kind {
-        CostKind::AtSitesLegacy => align
-            .at_sites(atoms)
-            .atoms
-            .values()
-            .map(|e| e.abs_delta())
-            .sum::<usize>() as f64,
-        CostKind::AtSitesCleaved => align.at_sites(atoms).cost() as f64,
-        CostKind::MultisetRaw => multiset_raw_cost(cur, tgt, map, atoms),
-        CostKind::MultisetNormShells => site_shell_cost_opts(
-            cur,
-            None,
-            tgt,
-            map,
-            atoms,
-            SiteShellCostOpts { dearomatic: false },
-        ),
-        CostKind::MultisetNormDear => site_shell_cost_opts(
-            cur,
-            None,
-            tgt,
-            map,
-            atoms,
-            SiteShellCostOpts { dearomatic: true },
-        ),
-        CostKind::EditResidualNorm | CostKind::EditResidualDear => {
-            // Caller must use residual_after_edit; placeholder.
-            multiset_raw_cost(cur, tgt, map, atoms)
-        }
-    }
+    site_shell_cost_opts(cur, delta, tgt, map, atoms, mode.opts())
 }
 
 fn residual_after_edit(
@@ -295,58 +247,33 @@ fn residual_after_edit(
     atoms: &[usize],
 ) -> f64 {
     let edit = edit_shells(parent, child);
-    let dearomatic = matches!(mode.kind, CostKind::EditResidualDear);
-    site_shell_cost_opts(
-        cur,
-        Some(&edit),
-        tgt,
-        map,
-        atoms,
-        SiteShellCostOpts { dearomatic },
-    )
+    residual(mode, Some(&edit), cur, tgt, map, atoms)
 }
 
-fn is_edit_residual(kind: CostKind) -> bool {
-    matches!(
-        kind,
-        CostKind::EditResidualNorm | CostKind::EditResidualDear
-    )
-}
-
-fn cost_now(
-    mode: Mode,
-    align: &xenosite_forest::AlignedShells,
-    cur: &xenosite_forest::MoleculeShells,
-    tgt: &xenosite_forest::MoleculeShells,
-    map: &std::collections::BTreeMap<usize, usize>,
-    atoms: &[usize],
-) -> f64 {
+fn site_cost_legacy(mode: Mode, align: &xenosite_forest::AlignedShells, atoms: &[usize]) -> f64 {
     match mode.kind {
-        CostKind::EditResidualNorm => site_shell_cost_opts(
-            cur,
-            None,
-            tgt,
-            map,
-            atoms,
-            SiteShellCostOpts { dearomatic: false },
-        ),
-        CostKind::EditResidualDear => site_shell_cost_opts(
-            cur,
-            None,
-            tgt,
-            map,
-            atoms,
-            SiteShellCostOpts { dearomatic: true },
-        ),
-        _ => site_cost(mode, align, cur, tgt, map, atoms),
+        CostKind::AtSitesLegacy => align
+            .at_sites(atoms)
+            .atoms
+            .values()
+            .map(|e| e.abs_delta())
+            .sum::<usize>() as f64,
+        CostKind::AtSitesCleaved => align.at_sites(atoms).cost() as f64,
+        CostKind::ProjResidualDrop => 0.0, // unused
     }
 }
 
-fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
+fn eval_suite(
+    suite: &'static str,
+    cases: &[(&str, &str, &str)],
+    mode: Mode,
+    fns: &mut Vec<FnHit>,
+    collect_fn: bool,
+) -> GateStats {
     let mut stats = GateStats::default();
     let set = phase_one();
-    let edit_mode = is_edit_residual(mode.kind);
-    for &(_name, reactant, target) in cases {
+    let proj = matches!(mode.kind, CostKind::ProjResidualDrop);
+    for &(name, reactant, target) in cases {
         let ra = parse_mol(reactant).unwrap();
         let parent = ForestMol::parse(reactant).unwrap();
         let rb = parse_mol(target).unwrap();
@@ -357,6 +284,7 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
         let map = ad.mapping.clone();
 
         let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
+
         for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
             let leave_n = c.pattern.effect.leave_count.map(|n| n as usize);
             let atoms = expand_atoms(
@@ -367,8 +295,8 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
                 &ad.cleavage_bonds,
             );
             let gate = candidate_could_help_on(&c, &ad, Some(&ra), Some(&rb));
-            let (score, rank_cost) = if edit_mode {
-                let now = cost_now(mode, &align, &cur, &tgt, &map, &atoms);
+            let (score, rank_cost) = if proj {
+                let before = residual(mode, None, &cur, &tgt, &map, &atoms);
                 let Ok(pieces) = c.materialize_mols(&ra) else {
                     continue;
                 };
@@ -377,45 +305,21 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
                 }
                 let child = parent.adopt_product(pieces[0].clone());
                 let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
-                // Keep iff residual drops (current+δ closer to target than current).
-                let keep_score = if now > after + 1e-12 { 1.0 } else { 0.0 };
-                (keep_score, now - after)
-            } else {
-                let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
-                (cost, cost)
-            };
-            scored.push((rank_cost, gate, atoms));
-            let shell = score > 1e-12;
-            match (gate, shell) {
-                (true, true) => stats.tp += 1,
-                (false, false) => stats.tn += 1,
-                (false, true) => stats.fp += 1,
-                (true, false) => stats.fn_ += 1,
-            }
-        }
-        for p in set
-            .pair_candidates(&ra)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
-        {
-            let mut atoms = p.plan_site_atoms();
-            atoms.sort_unstable();
-            atoms.dedup();
-            let gate = pair_could_help(&p, &ad, &ra, &rb);
-            let (score, rank_cost) = if edit_mode {
-                let now = cost_now(mode, &align, &cur, &tgt, &map, &atoms);
-                let Ok(pieces) = p.materialize_mols(&ra) else {
-                    continue;
-                };
-                if pieces.is_empty() {
-                    continue;
+                let keep = before > after + 1e-12;
+                if collect_fn && gate && !keep {
+                    fns.push(FnHit {
+                        suite,
+                        case: name.into(),
+                        kind: "cand",
+                        name: format!("{}:{}", c.leaf_rule().unwrap_or("?"), c.pattern.name),
+                        before,
+                        after,
+                        atoms: atoms.clone(),
+                    });
                 }
-                let child = parent.adopt_product(pieces[0].clone());
-                let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
-                let keep_score = if now > after + 1e-12 { 1.0 } else { 0.0 };
-                (keep_score, now - after)
+                (if keep { 1.0 } else { 0.0 }, before - after)
             } else {
-                let cost = site_cost(mode, &align, &cur, &tgt, &map, &atoms);
+                let cost = site_cost_legacy(mode, &align, &atoms);
                 (cost, cost)
             };
             scored.push((rank_cost, gate, atoms));
@@ -428,7 +332,53 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
             }
         }
 
-        // hop0 rank among gate-kept (needs a path). Higher rank_cost = more progress.
+        for p in set
+            .pair_candidates(&ra)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+        {
+            let mut atoms = p.plan_site_atoms();
+            atoms.sort_unstable();
+            atoms.dedup();
+            let gate = pair_could_help(&p, &ad, &ra, &rb);
+            let (score, rank_cost) = if proj {
+                let before = residual(mode, None, &cur, &tgt, &map, &atoms);
+                let Ok(pieces) = p.materialize_mols(&ra) else {
+                    continue;
+                };
+                if pieces.is_empty() {
+                    continue;
+                }
+                let child = parent.adopt_product(pieces[0].clone());
+                let after = residual_after_edit(mode, &parent, &child, &cur, &tgt, &map, &atoms);
+                let keep = before > after + 1e-12;
+                if collect_fn && gate && !keep {
+                    fns.push(FnHit {
+                        suite,
+                        case: name.into(),
+                        kind: "pair",
+                        name: p.pattern_name.clone(),
+                        before,
+                        after,
+                        atoms: atoms.clone(),
+                    });
+                }
+                (if keep { 1.0 } else { 0.0 }, before - after)
+            } else {
+                let cost = site_cost_legacy(mode, &align, &atoms);
+                (cost, cost)
+            };
+            scored.push((rank_cost, gate, atoms));
+            let shell = score > 1e-12;
+            match (gate, shell) {
+                (true, true) => stats.tp += 1,
+                (false, false) => stats.tn += 1,
+                (false, true) => stats.fp += 1,
+                (true, false) => stats.fn_ += 1,
+            }
+        }
+
+        // hop0 rank among gate-kept. Higher rank_cost = more progress (proj) or cost.
         let mut counters = PathCounters::default();
         let config = FindPathConfig {
             max_nodes: 800,
@@ -454,30 +404,14 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
                     None,
                     &ad.cleavage_bonds,
                 );
-                let hop_cost = site_cost(
-                    Mode {
-                        leave: mode.leave,
-                        kind: match mode.kind {
-                            CostKind::EditResidualNorm => CostKind::MultisetNormShells,
-                            CostKind::EditResidualDear => CostKind::MultisetNormDear,
-                            k => k,
-                        },
-                    },
-                    &align,
-                    &cur,
-                    &tgt,
-                    &map,
-                    &atoms,
-                );
-                // For edit-residual modes, rank by progress among gate-kept.
-                let hop_rank_val = if edit_mode {
+                let hop_rank_val = if proj {
                     scored
                         .iter()
                         .find(|(_, g, a)| *g && a == &atoms)
                         .map(|(c, _, _)| *c)
                         .unwrap_or(0.0)
                 } else {
-                    hop_cost
+                    site_cost_legacy(mode, &align, &atoms)
                 };
                 let mut gate_costs: Vec<f64> = scored
                     .iter()
@@ -502,16 +436,21 @@ fn eval_suite(cases: &[(&str, &str, &str)], mode: Mode) -> GateStats {
     stats
 }
 
-fn run_mode(mode: Mode) -> SuiteStats {
-    SuiteStats {
-        label: mode.label(),
-        mid: eval_suite(MID, mode),
-        hard: eval_suite(HARD, mode),
-    }
+fn run_mode(mode: Mode, collect_fn: bool) -> (SuiteStats, Vec<FnHit>) {
+    let mut fns = Vec::new();
+    let mid = eval_suite("mid", MID, mode, &mut fns, collect_fn);
+    let hard = eval_suite("hard", HARD, mode, &mut fns, collect_fn);
+    (
+        SuiteStats {
+            label: mode.label(),
+            mid,
+            hard,
+        },
+        fns,
+    )
 }
 
 fn score_key(s: &SuiteStats) -> (f64, f64, f64) {
-    // Higher better: combined agree, then precision, then hop0 top1 rate.
     let agree = s.mid.agree() + s.hard.agree();
     let prec = s.mid.prec() + s.hard.prec();
     let top = {
@@ -550,7 +489,7 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
             "+leave".into(),
             Mode {
                 leave: true,
-                kind: base.kind,
+                ..base
             },
         ));
     }
@@ -559,134 +498,39 @@ fn candidates_from(base: Mode) -> Vec<(String, Mode)> {
             out.push((
                 "+cleaved count".into(),
                 Mode {
-                    leave: base.leave,
                     kind: CostKind::AtSitesCleaved,
+                    ..base
                 },
             ));
             out.push((
-                "→ site_shell Σ|cur−tgt|".into(),
+                "→ Σ|proj−tgt| keep-if-drop".into(),
                 Mode {
+                    kind: CostKind::ProjResidualDrop,
+                    aromatic_delta: false,
                     leave: base.leave,
-                    kind: CostKind::MultisetRaw,
-                },
-            ));
-            out.push((
-                "→ site_shell norm shells".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormShells,
-                },
-            ));
-            out.push((
-                "→ site_shell norm+dear".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormDear,
                 },
             ));
         }
         CostKind::AtSitesCleaved => {
             out.push((
-                "→ site_shell Σ|cur−tgt|".into(),
+                "→ Σ|proj−tgt| keep-if-drop".into(),
                 Mode {
+                    kind: CostKind::ProjResidualDrop,
+                    aromatic_delta: false,
                     leave: base.leave,
-                    kind: CostKind::MultisetRaw,
-                },
-            ));
-            out.push((
-                "→ site_shell norm shells".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormShells,
-                },
-            ));
-            out.push((
-                "→ site_shell norm+dear".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormDear,
                 },
             ));
         }
-        CostKind::MultisetRaw => {
-            out.push((
-                "+normalize shells".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormShells,
-                },
-            ));
-            out.push((
-                "+normalize+dearomatic".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormDear,
-                },
-            ));
-            out.push((
-                "+editδ residual-drop (norm)".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::EditResidualNorm,
-                },
-            ));
-            out.push((
-                "+editδ residual-drop (dear)".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::EditResidualDear,
-                },
-            ));
-        }
-        CostKind::MultisetNormShells => {
-            out.push((
-                "+dearomatic".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormDear,
-                },
-            ));
-            out.push((
-                "+editδ residual-drop".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::EditResidualNorm,
-                },
-            ));
-        }
-        CostKind::MultisetNormDear => {
-            out.push((
-                "−dearomatic (shells only)".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::MultisetNormShells,
-                },
-            ));
-            out.push((
-                "+editδ residual-drop".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::EditResidualDear,
-                },
-            ));
-        }
-        CostKind::EditResidualNorm => {
-            out.push((
-                "+dearomatic on residual".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::EditResidualDear,
-                },
-            ));
-        }
-        CostKind::EditResidualDear => {
-            out.push((
-                "−dearomatic on residual".into(),
-                Mode {
-                    leave: base.leave,
-                    kind: CostKind::EditResidualNorm,
-                },
-            ));
+        CostKind::ProjResidualDrop => {
+            if !base.aromatic_delta {
+                out.push((
+                    "+|Δaromatic|".into(),
+                    Mode {
+                        aromatic_delta: true,
+                        ..base
+                    },
+                ));
+            }
         }
     }
     out
@@ -698,7 +542,7 @@ fn run_greedy_chain(
     history: &mut Vec<(String, SuiteStats)>,
 ) -> (Mode, SuiteStats) {
     let mut current = start;
-    let start_stats = run_mode(current);
+    let (start_stats, _) = run_mode(current, false);
     print_row(start_tag, &start_stats);
     history.push((start_tag.into(), start_stats.clone()));
     let mut best = start_stats;
@@ -709,7 +553,7 @@ fn run_greedy_chain(
         if mode == start {
             continue;
         }
-        let s = run_mode(mode);
+        let (s, _) = run_mode(mode, false);
         print_row(&tag, &s);
         history.push((format!("{start_tag} {tag}"), s));
     }
@@ -721,7 +565,7 @@ fn run_greedy_chain(
             if mode == current {
                 continue;
             }
-            let s = run_mode(mode);
+            let (s, _) = run_mode(mode, false);
             print_row(&format!("  try {tag}"), &s);
             if score_key(&s) > score_key(&best) {
                 match &round_best {
@@ -750,12 +594,12 @@ fn run_greedy_chain(
 fn print_ledger(history: &[(String, SuiteStats)]) {
     println!("\n## Ledger (all measured)");
     println!(
-        "{:<36}  {:>22}  {:>22}  config",
-        "step", "mid P/R/A top", "hard P/R/A top"
+        "{:<42} {:>14} {:>5}  {:>14} {:>5}  config",
+        "step", "mid P/R/A", "top", "hard P/R/A", "top"
     );
     for (tag, s) in history {
         println!(
-            "{:<36}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {:>5.2}/{:.2}/{:.2} {:>2}/{:<2}  {}",
+            "{:<42} {:>4.2}/{:.2}/{:.2}  {:>2}/{:<2}  {:>4.2}/{:.2}/{:.2}  {:>2}/{:<2}  {}",
             tag,
             s.mid.prec(),
             s.mid.rec(),
@@ -772,27 +616,59 @@ fn print_ledger(history: &[(String, SuiteStats)]) {
     }
 }
 
+fn print_fn_report(fns: &[FnHit]) {
+    println!(
+        "\n## False negatives (live gate=true, but |proj−tgt| did not drop)\n\
+         These cut recall: the edit is allowed by atom_diff, yet site shells after\n\
+         the applied edit are not closer to the target than before.\n"
+    );
+    if fns.is_empty() {
+        println!("  (none)");
+        return;
+    }
+    println!(
+        "{:<5} {:<28} {:<6} {:<36} {:>8} {:>8} atoms",
+        "suite", "case", "kind", "rule:pattern", "before", "after"
+    );
+    for h in fns {
+        println!(
+            "{:<5} {:<28} {:<6} {:<36} {:>8.3} {:>8.3} {:?}",
+            h.suite, h.case, h.kind, h.name, h.before, h.after, h.atoms
+        );
+    }
+    println!("\n  count: {}", fns.len());
+}
+
 fn main() {
     println!(
         "shell_cost_bench — greedy ablation vs live gate\n\
-         Chain A: legacy at_sites Σ|δ|\n\
-         Chain B: site_shell_cost Σ|current−target| (multiset raw)\n\
+         Never uses |current−target| as a score (that was a bug).\n\
+         Proj cost = |projected−target|, projected = current + editδ.\n\
+         |Δaromatic| = optional 0/1 per-atom aromatic mismatch (was labeled “dear”).\n\
          columns: P/R/Agree  hop0-top1/known\n"
     );
     let t0 = Instant::now();
     let mut history: Vec<(String, SuiteStats)> = Vec::new();
 
     println!("## Chain A — from legacy at_sites baseline");
-    let (best_a_mode, best_a) = run_greedy_chain(Mode::baseline(), "A BASELINE", &mut history);
+    let (best_a_mode, best_a) =
+        run_greedy_chain(Mode::at_sites_baseline(), "A BASELINE", &mut history);
 
-    println!("\n## Chain B — from site_shell_cost Σ|current−target|");
-    let site_start = Mode {
-        leave: false,
-        kind: CostKind::MultisetRaw,
-    };
-    let (best_b_mode, best_b) = run_greedy_chain(site_start, "B SITE_SHELL", &mut history);
+    println!("\n## Chain B — from Σ|proj−tgt| keep-if-drop (shells only)");
+    let (best_b_mode, best_b) = run_greedy_chain(Mode::proj_baseline(), "B PROJ", &mut history);
 
     print_ledger(&history);
+
+    // FN dump for the proj baseline (explains recall < 1).
+    let (proj_stats, fns) = run_mode(Mode::proj_baseline(), true);
+    println!(
+        "\n## Recall check — B PROJ  mid R={:.2} (FN={})  hard R={:.2} (FN={})",
+        proj_stats.mid.rec(),
+        proj_stats.mid.fn_,
+        proj_stats.hard.rec(),
+        proj_stats.hard.fn_
+    );
+    print_fn_report(&fns);
 
     let (best_mode, best, which) = if score_key(&best_b) > score_key(&best_a) {
         (best_b_mode, best_b, "B")

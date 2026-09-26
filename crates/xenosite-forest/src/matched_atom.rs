@@ -436,7 +436,8 @@ fn apply_neighborhood(current: &AtomNeighborhood, delta: &AtomNeighborhood) -> A
 /// Options for [`site_shell_cost_opts`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SiteShellCostOpts {
-    /// Include |Δaromatic| ∈ {0,1} per atom (dearomatization hint).
+    /// When set, each atom also pays |Δaromatic| ∈ {0,1} between projected and
+    /// target (aromatic-bit mismatch). Off by default — still under trial.
     pub dearomatic: bool,
 }
 
@@ -444,7 +445,7 @@ pub struct SiteShellCostOpts {
 ///
 /// `projected = current + δ` with δ signed **product − reactant**. The quantity
 /// compared is the residual between projected and target — not |δ| alone.
-/// Defaults to dearomatization hint on. See [`site_shell_cost_opts`].
+/// Defaults to shells only (no |Δaromatic|). See [`site_shell_cost_opts`].
 pub fn site_shell_cost(
     current: &MoleculeShells,
     delta: Option<&AlignedShells>,
@@ -458,7 +459,7 @@ pub fn site_shell_cost(
         target,
         reactant_to_target,
         site_atoms,
-        SiteShellCostOpts { dearomatic: true },
+        SiteShellCostOpts::default(),
     )
 }
 
