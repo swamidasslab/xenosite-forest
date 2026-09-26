@@ -1,7 +1,8 @@
 # Proposal: Optional find_path adapter for reaction naming tags
 
 **Status:** open for discussion (not implemented in `xenosite-xrm`)  
-**Related PR:** reaction naming crate (`xenosite-xrm`)
+**GitHub issue:** https://github.com/swamidasslab/xenosite-forest/issues/31  
+**Related PR:** https://github.com/swamidasslab/xenosite-forest/pull/30
 
 ## Summary
 
