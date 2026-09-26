@@ -15,6 +15,8 @@ use xenosite_forest::{
 };
 
 const REPEATS: usize = 5;
+/// Drug suite is heavy (sildenafil ~30s Rust); one timed pass + warmup.
+const DRUG_REPEATS: usize = 1;
 
 struct Case {
     name: &'static str,
@@ -167,7 +169,65 @@ const PHASE_ONE_CASES: &[Case] = &[
     },
 ];
 
-fn run_one(set: &RuleSet, case: &Case) -> (usize, f64) {
+/// Real meds at depth 2 (PhaseOne). Skips atorvastatin (~3+ min Rust alone).
+const DRUG_CASES: &[Case] = &[
+    Case {
+        name: "P1 ibuprofen d2 bfs",
+        smiles: "CC(C)Cc1ccc(C(C)C(=O)O)cc1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 naproxen d2 bfs",
+        smiles: "COc1ccc2cc(C(C)C(=O)O)ccc2c1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 omeprazole d2 bfs",
+        smiles: "COc1ccc2[nH]c(S(=O)Cc3ncc(C)c(OC)c3C)nc2c1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 fluoxetine d2 bfs",
+        smiles: "CNCCC(c1ccc(C(F)(F)F)cc1)Oc1ccccc1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 propranolol d2 bfs",
+        smiles: "CC(C)NCC(O)COc1cccc2ccccc12",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 imipramine d2 bfs",
+        smiles: "CN(C)CCCN1c2ccccc2CCc2ccccc21",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 diazepam d2 bfs",
+        smiles: "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 warfarin d2 bfs",
+        smiles: "CC(=O)CC(c1ccccc1)c1c(O)c2ccccc2oc1=O",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 sildenafil d2 bfs",
+        smiles: "CCCc1nn(C)c2c(=O)[nH]c(-c3cc(S(=O)(=O)N4CCN(C)CC4)ccc3OCC)nc12",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+];
+
+fn run_one(set: &RuleSet, case: &Case, repeats: usize) -> (usize, f64) {
     let config = EnumConfig {
         order: case.order,
         max_depth: case.depth,
@@ -180,7 +240,7 @@ fn run_one(set: &RuleSet, case: &Case) -> (usize, f64) {
         .count();
     let mut best = f64::INFINITY;
     let mut n = 0usize;
-    for _ in 0..REPEATS {
+    for _ in 0..repeats {
         let t0 = Instant::now();
         n = enumerate_metabolites(case.smiles, set, config.clone())
             .unwrap()
@@ -194,8 +254,8 @@ fn run_one(set: &RuleSet, case: &Case) -> (usize, f64) {
     (n, best)
 }
 
-fn bench_suite(title: &str, set: &RuleSet, cases: &[Case]) {
-    println!("\n=== {title} (best-of-{REPEATS}) ===");
+fn bench_suite(title: &str, set: &RuleSet, cases: &[Case], repeats: usize) {
+    println!("\n=== {title} (best-of-{repeats}) ===");
     println!(
         "{:<28} {:>6} {:>12} {:>8}",
         "case", "n", "seconds", "µs/hit"
@@ -203,7 +263,7 @@ fn bench_suite(title: &str, set: &RuleSet, cases: &[Case]) {
     let mut total_n = 0usize;
     let mut total_t = 0.0;
     for case in cases {
-        let (n, secs) = run_one(set, case);
+        let (n, secs) = run_one(set, case, repeats);
         let us_per = if n > 0 {
             secs * 1e6 / n as f64
         } else {
@@ -223,14 +283,24 @@ fn bench_suite(title: &str, set: &RuleSet, cases: &[Case]) {
 }
 
 fn main() {
+    let drugs = env::args().any(|a| a == "--drugs");
     let phase_one_only = env::args().any(|a| a == "--phase-one");
     let oh_only = env::args().any(|a| a == "--oh");
     println!("Rust enumerate bfs/dfs  (unlimited nodes)");
 
+    if drugs {
+        bench_suite(
+            "PhaseOne drugs d2",
+            &phase_one(),
+            DRUG_CASES,
+            DRUG_REPEATS,
+        );
+        return;
+    }
     if !phase_one_only {
-        bench_suite("Hydroxylation-only", &hydroxylation(), OH_CASES);
+        bench_suite("Hydroxylation-only", &hydroxylation(), OH_CASES, REPEATS);
     }
     if !oh_only {
-        bench_suite("PhaseOne", &phase_one(), PHASE_ONE_CASES);
+        bench_suite("PhaseOne", &phase_one(), PHASE_ONE_CASES, REPEATS);
     }
 }

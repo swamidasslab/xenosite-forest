@@ -23,6 +23,8 @@ from xenosite.forest.rulesets import PhaseOne, RuleSet
 
 ROOT = Path(__file__).resolve().parents[2]
 REPEATS = 5
+# Drug suite is heavy (sildenafil tens of seconds); one timed pass + warmup.
+DRUG_REPEATS = 1
 
 OH = RuleSet((Hydroxylation,), name="OH")
 
@@ -55,6 +57,19 @@ PHASE_ONE_CASES: list[tuple[str, str, int, str]] = [
     ("P1 phenacetin d2 bfs", "CCOc1ccc(NC(C)=O)cc1", 2, "bfs"),
 ]
 
+# Real meds at depth 2. Atorvastatin omitted (~3+ min Rust alone).
+DRUG_CASES: list[tuple[str, str, int, str]] = [
+    ("P1 ibuprofen d2 bfs", "CC(C)Cc1ccc(C(C)C(=O)O)cc1", 2, "bfs"),
+    ("P1 naproxen d2 bfs", "COc1ccc2cc(C(C)C(=O)O)ccc2c1", 2, "bfs"),
+    ("P1 omeprazole d2 bfs", "COc1ccc2[nH]c(S(=O)Cc3ncc(C)c(OC)c3C)nc2c1", 2, "bfs"),
+    ("P1 fluoxetine d2 bfs", "CNCCC(c1ccc(C(F)(F)F)cc1)Oc1ccccc1", 2, "bfs"),
+    ("P1 propranolol d2 bfs", "CC(C)NCC(O)COc1cccc2ccccc12", 2, "bfs"),
+    ("P1 imipramine d2 bfs", "CN(C)CCCN1c2ccccc2CCc2ccccc21", 2, "bfs"),
+    ("P1 diazepam d2 bfs", "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21", 2, "bfs"),
+    ("P1 warfarin d2 bfs", "CC(=O)CC(c1ccccc1)c1c(O)c2ccccc2oc1=O", 2, "bfs"),
+    ("P1 sildenafil d2 bfs", "CCCc1nn(C)c2c(=O)[nH]c(-c3cc(S(=O)(=O)N4CCN(C)CC4)ccc3OCC)nc12", 2, "bfs"),
+]
+
 
 def _git_sha() -> str:
     try:
@@ -68,14 +83,16 @@ def _git_sha() -> str:
         return "?"
 
 
-def run_one(smiles: str, depth: int, order: str, ruleset) -> tuple[int, float, set[str]]:
+def run_one(
+    smiles: str, depth: int, order: str, ruleset, repeats: int = REPEATS
+) -> tuple[int, float, set[str]]:
     enum = bfs if order == "bfs" else dfs
     # Warmup
     list(enum(smiles, ruleset, depth=depth))
     best = float("inf")
     n = 0
     smiles_set: set[str] = set()
-    for _ in range(REPEATS):
+    for _ in range(repeats):
         t0 = time.perf_counter()
         hits = list(enum(smiles, ruleset, depth=depth))
         elapsed = time.perf_counter() - t0
@@ -86,14 +103,19 @@ def run_one(smiles: str, depth: int, order: str, ruleset) -> tuple[int, float, s
     return n, best, smiles_set
 
 
-def bench_suite(title: str, cases: list[tuple[str, str, int, str]], ruleset) -> dict[str, tuple[int, float]]:
-    print(f"\n=== {title} (best-of-{REPEATS}) ===")
+def bench_suite(
+    title: str,
+    cases: list[tuple[str, str, int, str]],
+    ruleset,
+    repeats: int = REPEATS,
+) -> dict[str, tuple[int, float]]:
+    print(f"\n=== {title} (best-of-{repeats}) ===")
     print(f"{'case':<28} {'n':>6} {'seconds':>12} {'µs/hit':>8}")
     out: dict[str, tuple[int, float]] = {}
     total_n = 0
     total_t = 0.0
     for name, smiles, depth, order in cases:
-        n, secs, _ = run_one(smiles, depth, order, ruleset)
+        n, secs, _ = run_one(smiles, depth, order, ruleset, repeats=repeats)
         us_per = (secs * 1e6 / n) if n else 0.0
         print(f"{name:<28} {n:>6} {secs:>12.6f} {us_per:>8.1f}")
         out[name] = (n, secs)
@@ -167,6 +189,11 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--phase-one", action="store_true")
     group.add_argument("--oh", action="store_true")
+    group.add_argument(
+        "--drugs",
+        action="store_true",
+        help="PhaseOne depth-2 on real meds (ibuprofen…sildenafil)",
+    )
     parser.add_argument(
         "--compare",
         action="store_true",
@@ -174,10 +201,18 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"Python enumerate bfs/dfs  best-of-{REPEATS}  sha={_git_sha()}")
+    repeats = DRUG_REPEATS if args.drugs else REPEATS
+    print(f"Python enumerate bfs/dfs  best-of-{repeats}  sha={_git_sha()}")
     py: dict[str, tuple[int, float]] = {}
     rust_extra: list[str] = []
-    if args.phase_one:
+    if args.drugs:
+        py.update(
+            bench_suite(
+                "PhaseOne drugs d2", DRUG_CASES, PhaseOne, repeats=DRUG_REPEATS
+            )
+        )
+        rust_extra = ["--drugs"]
+    elif args.phase_one:
         py.update(bench_suite("PhaseOne", PHASE_ONE_CASES, PhaseOne))
         rust_extra = ["--phase-one"]
     elif args.oh:
