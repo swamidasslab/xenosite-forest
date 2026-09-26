@@ -654,9 +654,12 @@ impl SystemKekule {
         !self.assignments.is_empty()
     }
 
-    /// Semantic identity of cached writings (assignments + by_order), not `Rc`.
+    /// Semantic identity of cached writings (assignments, by_order, charge
+    /// magnitudes), not `Rc` pointer equality.
     pub fn semantically_eq(&self, other: &Self) -> bool {
-        self.assignments == other.assignments && self.by_order == other.by_order
+        self.assignments == other.assignments
+            && self.by_order == other.by_order
+            && self.charge_mags == other.charge_mags
     }
 
     /// Derived bag: keep assignments where each forced tag-pair is Double.
@@ -2029,6 +2032,148 @@ mod tests {
             shared.semantically_eq(&fresh_bag),
             "shared cache after edit_copy must match fresh fill"
         );
+    }
+
+    /// Every key currently held on `shared` that still names a system on `mol`
+    /// must match a fresh `ensure_graph` fill (internal data ≡ recomputed).
+    fn assert_shared_keys_match_fresh(mol: &Molecule, shared: &KekuleCache) {
+        let mut fresh = KekuleCache::default();
+        for key in shared.system_keys() {
+            // Resolve tag atoms → indexes; skip keys retired by an edit.
+            let Some(atoms) = atoms_to_idxs(mol, &key.atoms) else {
+                continue;
+            };
+            if atoms.len() < 2 {
+                continue;
+            }
+            let seed = *atoms.iter().next().unwrap();
+            let (comp_atoms, comp_bonds) = conjugated_component(mol, seed);
+            // Only compare when this key still describes the live component.
+            let live = SystemKey::of(mol, &comp_atoms, &comp_bonds);
+            if live != key {
+                continue;
+            }
+            let graph = PiGraph::new(comp_atoms, comp_bonds);
+            fresh.ensure_graph(mol, &graph);
+            let shared_bag = shared.get(&key).expect("shared slot").borrow().clone();
+            let fresh_bag = fresh.get(&key).expect("fresh slot").borrow().clone();
+            assert!(
+                shared_bag.is_filled(),
+                "shared bag for {key:?} should be filled"
+            );
+            assert!(
+                shared_bag.semantically_eq(&fresh_bag),
+                "shared bag for {key:?} must equal fresh fill (assignments/by_order/charge_mags)"
+            );
+        }
+    }
+
+    #[test]
+    fn edit_copy_all_cached_systems_match_fresh_fill() {
+        // Fill both biphenyl rings, then edit_copy: every live key ≡ fresh.
+        let parent = ForestMol::parse("c1ccc(-c2ccccc2)cc1").unwrap();
+        let (a0, b0) = conjugated_component(parent.mol(), 0);
+        let seed0 = *b0.iter().next().unwrap();
+        parent.ensure_kekule(seed0.0, seed0.1);
+        let other = other_atom(parent.mol(), &a0);
+        let (a1, b1) = conjugated_component(parent.mol(), other);
+        let seed1 = *b1.iter().next().unwrap();
+        parent.ensure_kekule(seed1.0, seed1.1);
+        assert!(parent.kekule().borrow().system_count() >= 2);
+
+        let child = parent.edit_copy();
+        assert!(child.shares_kekule(&parent));
+        assert_shared_keys_match_fresh(child.mol(), &child.kekule().borrow());
+    }
+
+    #[test]
+    fn untouched_ring_on_edited_biphenyl_matches_fresh() {
+        // Fill both rings; add OH on ring B. Shared bag for untouched ring A
+        // must still equal a fresh fill on the child mol (same tags/topology).
+        let parent = ForestMol::parse("c1ccc(-c2ccccc2)cc1").unwrap();
+        let (sys_a, bonds_a) = conjugated_component(parent.mol(), 0);
+        let seed_a = *bonds_a.iter().next().unwrap();
+        parent.ensure_kekule(seed_a.0, seed_a.1);
+        let other = other_atom(parent.mol(), &sys_a);
+        let (_sys_b, bonds_b) = conjugated_component(parent.mol(), other);
+        let seed_b = *bonds_b.iter().next().unwrap();
+        parent.ensure_kekule(seed_b.0, seed_b.1);
+        let key_a = SystemKey::of(parent.mol(), &sys_a, &bonds_a);
+        let bag_a_before = parent
+            .kekule()
+            .borrow()
+            .get(&key_a)
+            .unwrap()
+            .borrow()
+            .clone();
+
+        let (mut chem, oxygen) = parent
+            .mol()
+            .with_atom_added(Atom::organic(chematic::core::Element::O));
+        chem.add_bond(atom_idx(other), oxygen, BondOrder::Single)
+            .unwrap();
+        let child = ForestMol::product(chem, &parent);
+        assert!(child.shares_kekule(&parent));
+
+        // Untouched ring A: shared slot still present and ≡ fresh on parent
+        // topology (resolve on parent mol — child indexes may shift for O only).
+        let mut fresh = KekuleCache::default();
+        ensure_kekule_parents(parent.mol(), seed_a.0, seed_a.1, &mut fresh);
+        let fresh_a = fresh.get(&key_a).unwrap().borrow().clone();
+        assert!(bag_a_before.semantically_eq(&fresh_a));
+        let shared_a = child
+            .kekule()
+            .borrow()
+            .get(&key_a)
+            .expect("untouched ring A still in shared Rc")
+            .borrow()
+            .clone();
+        assert!(
+            shared_a.semantically_eq(&fresh_a),
+            "untouched system on edited sibling must match fresh fill"
+        );
+    }
+
+    #[test]
+    fn naphthalene_and_phenol_edit_copy_match_fresh() {
+        for smi in ["c1ccc2ccccc2c1", "Oc1ccccc1", "O=C1C=CC(=O)C=C1"] {
+            let parent = ForestMol::parse(smi).unwrap();
+            let (atoms, bonds) = conjugated_component(parent.mol(), 0);
+            if bonds.is_empty() {
+                continue;
+            }
+            let seed = *bonds.iter().next().unwrap();
+            parent.ensure_kekule(seed.0, seed.1);
+            let child = parent.edit_copy();
+            assert!(child.shares_kekule(&parent), "{smi}");
+            assert_shared_keys_match_fresh(child.mol(), &child.kekule().borrow());
+        }
+    }
+
+    #[test]
+    fn copy_mol_and_edit_copy_agree_with_fresh_on_same_keys() {
+        let parent = ForestMol::parse("c1ccccc1").unwrap();
+        let (atoms, bonds) = conjugated_component(parent.mol(), 0);
+        let seed = *bonds.iter().next().unwrap();
+        parent.ensure_kekule(seed.0, seed.1);
+        let key = SystemKey::of(parent.mol(), &atoms, &bonds);
+
+        let copied = parent.copy_mol();
+        let edited = parent.edit_copy();
+        assert!(copied.shares_kekule(&parent));
+        assert!(edited.shares_kekule(&parent));
+
+        let mut fresh = KekuleCache::default();
+        ensure_kekule_parents(parent.mol(), seed.0, seed.1, &mut fresh);
+        let fresh_bag = fresh.get(&key).unwrap().borrow().clone();
+        for (label, fm) in [("copy", &copied), ("edit_copy", &edited), ("parent", &parent)]
+        {
+            let bag = fm.kekule().borrow().get(&key).unwrap().borrow().clone();
+            assert!(
+                bag.semantically_eq(&fresh_bag),
+                "{label} bag must match fresh fill"
+            );
+        }
     }
 
     #[test]
