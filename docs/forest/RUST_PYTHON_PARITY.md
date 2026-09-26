@@ -253,6 +253,21 @@ not a global shared-map disallow. Methide alkyl (``partner=="C"``) does
 Same shape as ``methide`` / ``skip_same_rings``: data on the record, generic
 gate reads it. Status: **approved** (schema + gate). Tracker: work #18.
 
+### C16 — Rust-ahead QF products are the chemical guide (do not regress)
+
+On phenyl isocyanate / isothiocyanate / carbodiimide
+(``O=C=Nc1ccccc1``, ``S=C=Nc1ccccc1``, ``N=C=Nc1ccccc1``), Rust
+``QuinoneFormation`` emits the shared ring-oxidized N=C=X products **and**
+the dealkylate cleavage pair (``C=O``/``C=S``/``C=N`` leave + quinone-imine
+``N=C1C=CC(=O)C=C1`` / ``N=C1C=CC=CC1=O``). Python emits only the
+ring-oxidized set (parity ``rust_extra``).
+
+Those Rust extras are chemically the QF dealkylate door on the exocyclic
+``N–C(=X)`` bond — not junk sanitize survivors. **Closing product parity by
+dropping Rust emissions is not approved** (C8: chemical correctness first).
+Prefer lifting Python to the Rust bag, or a documented Python miss; pin Rust
+with regression tests. Status: **approved**.
+
 ---
 
 

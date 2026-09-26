@@ -840,6 +840,39 @@ mod tests {
         );
     }
 
+    /// C16: Rust QF dealkylates phenyl–N=C=X (isocyanate / isothiocyanate /
+    /// carbodiimide). Python misses the leave + quinone-imine pair — do not
+    /// "fix" parity by dropping these Rust products.
+    #[test]
+    fn quinone_formation_dealkylates_phenyl_ncx_ahead_of_python() {
+        let endpoints = qf_pair_endpoints();
+        for (smi, leave, imines) in [
+            ("O=C=Nc1ccccc1", "C=O", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
+            ("S=C=Nc1ccccc1", "C=S", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
+            ("N=C=Nc1ccccc1", "C=N", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
+        ] {
+            let mol = parse_mol(smi).unwrap();
+            let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+            let products: std::collections::BTreeSet<String> = emissions
+                .iter()
+                .flat_map(|e| e.products.iter().cloned())
+                .map(|s| canon_of(&s).unwrap())
+                .collect();
+            let want_leave = canon_of(leave).unwrap();
+            assert!(
+                products.contains(&want_leave),
+                "{smi}: missing leave {leave}; got {products:?}"
+            );
+            for imine in imines {
+                let want = canon_of(imine).unwrap();
+                assert!(
+                    products.contains(&want),
+                    "{smi}: missing quinone-imine {imine}; got {products:?}"
+                );
+            }
+        }
+    }
+
     fn qf_pair_endpoints() -> Vec<PatternInfo> {
         quinone_formation()
             .patterns()

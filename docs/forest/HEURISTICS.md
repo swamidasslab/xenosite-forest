@@ -310,13 +310,22 @@ discovery with its global CSP; **not decided** for (a) BCC-local state tables
 inside one conjugated system as an enumerator refinement, or (b) atom-demand /
 allowed charge states as *data* that standardizes parent bags.
 
-Share ([Kekulé Decomposition Rules](https://chatgpt.com/share/6ab82c0e-ed18-83ea-89fa-f908d31ecccd)):
-Kekulé = edge selection under atom demand; graph → biconnected edge
-components; each component summarized by boundary-atom usage; global
-compatibility is a CSP (“boundary use sums to demand”). Charge splitting is
-`add_atom_states` + `RequireNetCharge`. Claimed sizes: benzene 2, naphthalene
-3, pyrrole-like 1, Cp⁻ mobile skipped-site 5 at net −1. Local enum is
-exponential per component (bitmask guard; large fused blocks want matching/DP).
+Source reviewed:
+[Kekulé component Rust](https://chatgpt.com/share/6ab82ebc-87d0-83e9-9de5-de28edc0c0ea)
+(`kekule_components` — abstract `PiGraph`, not chematic/RDKit). Companion
+design notes:
+[Kekulé Decomposition Rules](https://chatgpt.com/share/6ab82c0e-ed18-83ea-89fa-f908d31ecccd).
+
+**What the crate actually does:** Kekulé = selected edges (doubles) under per-atom
+`demand`. Atoms may list several `AtomState { demand, formal_charge }` via
+`add_atom_states`. Tarjan biconnected **edge** components; each component
+exhaustively bitmasks its edges (`edges.len() < usize::BITS`) into
+`ComponentState { selected_edges, boundary_use }`. Global search assigns one
+state per component with boundary residual compatibility, then optional
+`ComponentConstraint` (`AllowStates` / `ForbidStates` / `RequireBoundaryUse` /
+`RequireNetCharge`). Tests (5/6 green locally; articulation backtrack panics):
+benzene 2, naphthalene **1 BCC / 3 states**, pyrrole demand-0 → 1, two
+disconnected benzenes → 4, Cp⁻ mobile skipped site → 5 at net −1 / 0 at 0.
 
 **Efficiency claim (2–3 states each vs whole system):** true when a conjugated
 system *has articulations* (rings / chains joined at cut vertices) so the
@@ -337,14 +346,14 @@ Door mismatch (pair conjugated ↔ RMS; pair aromatic ↔ ring-only; rule ↔
 full-conj) remains the parity blocker; BCC enum does not fix APAP
 neutral-amide vs `O−`/`N+` bags.
 
-**Path flipping:** the share enumerates valid global writings; it does not
-discover an odd alternating path between two ResonancePair ends. Replacing
-path discovery with “pick a CSP solution” stays **not approved** (same as
-ResonanceMolSupplier / re-kekulize above). BCC tables *could* support the
-already-not-decided path-constrained overlay: fix bond orders along the
-path, solve only BCCs that touch it, leave the rest. That is materialization
-cleanup after bags match — not a product-set fix and not a reason to vend
-the share zip into `xenosite-forest`.
+**Path flipping:** `RequireBoundaryUse` / `AllowStates` are the natural hooks
+for the already-not-decided path-constrained overlay (fix bond orders /
+boundary residuals along the discovered path, solve only touching BCCs).
+The crate still does not *discover* an odd alternating path between
+ResonancePair ends. Replacing path discovery with “pick a CSP solution”
+stays **not approved**. Do not vend the share zip into `xenosite-forest`;
+steal the schema ideas (demand/charge states, BCC tables, path as
+constraints) when bags match door-by-door.
 
 ## Chematic product-side ``#`` expand → organic aliphatic + aromatic
 
