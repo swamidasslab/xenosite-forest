@@ -1,0 +1,5 @@
+subject_id	predicate_id	object_id	mapping_justification	subject_label	object_label
+xrm:0000100	skos:exactMatch	mop:0000673	semapv:ManualMappingCuration	hydroxylation	hydroxylation
+xrm:0000110	skos:exactMatch	mop:0000671	semapv:ManualMappingCuration	epoxidation	epoxidation
+xrm:0001000	skos:exactMatch	mop:0000156	semapv:ManualMappingCuration	glucuronidation	glucuronosylation
+xrm:0000200	skos:closeMatch	mop:0000669	semapv:ManualMappingCuration	dealkylation	demethylation

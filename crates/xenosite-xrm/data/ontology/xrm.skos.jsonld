@@ -1,0 +1,314 @@
+{
+  "@context": {
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "dct": "http://purl.org/dc/terms/",
+    "xrm": "https://xenosite.org/ontology/xrm#",
+    "id": "@id",
+    "type": "@type",
+    "prefLabel": "skos:prefLabel",
+    "altLabel": "skos:altLabel",
+    "definition": "skos:definition",
+    "broader": { "@id": "skos:broader", "@type": "@id" },
+    "narrower": { "@id": "skos:narrower", "@type": "@id" },
+    "exactMatch": { "@id": "skos:exactMatch", "@type": "@id" },
+    "closeMatch": { "@id": "skos:closeMatch", "@type": "@id" },
+    "broadMatch": { "@id": "skos:broadMatch", "@type": "@id" },
+    "relatedMatch": { "@id": "skos:relatedMatch", "@type": "@id" },
+    "inScheme": { "@id": "skos:inScheme", "@type": "@id" }
+  },
+  "@graph": [
+    {
+      "id": "xrm:scheme",
+      "type": "skos:ConceptScheme",
+      "prefLabel": "Xenobiotic Reaction Metabolism",
+      "iri": "https://xenosite.org/ontology/xrm#"
+    },
+    {
+      "id": "xrm:0000000",
+      "type": "skos:Concept",
+      "prefLabel": "xenobiotic biotransformation",
+      "altLabel": ["xenobiotic metabolism", "biotransformation"],
+      "definition": "Chemical alteration of an exogenous substance in a biological system.",
+      "inScheme": "xrm:scheme",
+      "topConcept": true
+    },
+    {
+      "id": "xrm:0000001",
+      "type": "skos:Concept",
+      "prefLabel": "phase I",
+      "altLabel": ["phase 1", "functionalization", "Metabolic Detoxication, Phase I"],
+      "definition": "Functionalization of xenobiotics (oxidation, reduction, hydrolysis, and related edits).",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:0000002",
+      "type": "skos:Concept",
+      "prefLabel": "phase II",
+      "altLabel": ["phase 2", "conjugation", "Metabolic Detoxication, Phase II"],
+      "definition": "Conjugation of xenobiotics with hydrophilic groups.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:0000010",
+      "type": "skos:Concept",
+      "prefLabel": "stable oxygenation",
+      "altLabel": ["SO", "StableOxygenation"],
+      "definition": "Rainbow / Metabolic Forest stable oxygenation class.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000001"
+    },
+    {
+      "id": "xrm:0000011",
+      "type": "skos:Concept",
+      "prefLabel": "unstable oxygenation",
+      "altLabel": ["UO", "UnstableOxygenation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000001"
+    },
+    {
+      "id": "xrm:0000012",
+      "type": "skos:Concept",
+      "prefLabel": "dehydrogenation",
+      "altLabel": ["DH"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000001"
+    },
+    {
+      "id": "xrm:0000013",
+      "type": "skos:Concept",
+      "prefLabel": "hydrolysis",
+      "altLabel": ["HD"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000001"
+    },
+    {
+      "id": "xrm:0000014",
+      "type": "skos:Concept",
+      "prefLabel": "reduction",
+      "altLabel": ["RD"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000001"
+    },
+    {
+      "id": "xrm:0000100",
+      "type": "skos:Concept",
+      "prefLabel": "hydroxylation",
+      "definition": "Addition of a hydroxyl group to carbon.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000010"
+    },
+    {
+      "id": "xrm:0000101",
+      "type": "skos:Concept",
+      "prefLabel": "aromatic hydroxylation",
+      "altLabel": ["aryl hydroxylation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000100"
+    },
+    {
+      "id": "xrm:0000102",
+      "type": "skos:Concept",
+      "prefLabel": "aliphatic hydroxylation",
+      "altLabel": ["alkyl hydroxylation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000100"
+    },
+    {
+      "id": "xrm:0000110",
+      "type": "skos:Concept",
+      "prefLabel": "epoxidation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000010"
+    },
+    {
+      "id": "xrm:0000120",
+      "type": "skos:Concept",
+      "prefLabel": "nitrogen oxidation",
+      "altLabel": ["N-oxidation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000010"
+    },
+    {
+      "id": "xrm:0000130",
+      "type": "skos:Concept",
+      "prefLabel": "sulfur oxidation",
+      "altLabel": ["S-oxidation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000010"
+    },
+    {
+      "id": "xrm:0000200",
+      "type": "skos:Concept",
+      "prefLabel": "dealkylation",
+      "definition": "Oxidative cleavage of an alkyl group from N, O, S, or C.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000011"
+    },
+    {
+      "id": "xrm:0000201",
+      "type": "skos:Concept",
+      "prefLabel": "N-dealkylation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000200"
+    },
+    {
+      "id": "xrm:0000202",
+      "type": "skos:Concept",
+      "prefLabel": "O-dealkylation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000200"
+    },
+    {
+      "id": "xrm:0000203",
+      "type": "skos:Concept",
+      "prefLabel": "S-dealkylation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000200"
+    },
+    {
+      "id": "xrm:0000204",
+      "type": "skos:Concept",
+      "prefLabel": "C-dealkylation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000200"
+    },
+    {
+      "id": "xrm:0000210",
+      "type": "skos:Concept",
+      "prefLabel": "oxidative dehalogenation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000011"
+    },
+    {
+      "id": "xrm:0000300",
+      "type": "skos:Concept",
+      "prefLabel": "quinone formation",
+      "altLabel": ["quinonation"],
+      "definition": "Formation of a quinone, quinone-imine, or quinone-methide.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000001",
+      "relatedMatch": "xrm:0000012"
+    },
+    {
+      "id": "xrm:0000400",
+      "type": "skos:Concept",
+      "prefLabel": "epoxide opening",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000013"
+    },
+    {
+      "id": "xrm:0000410",
+      "type": "skos:Concept",
+      "prefLabel": "dephosphorylation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000013"
+    },
+    {
+      "id": "xrm:0000500",
+      "type": "skos:Concept",
+      "prefLabel": "hydrogenation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000014"
+    },
+    {
+      "id": "xrm:0000510",
+      "type": "skos:Concept",
+      "prefLabel": "nitrogen reduction",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000014"
+    },
+    {
+      "id": "xrm:0000520",
+      "type": "skos:Concept",
+      "prefLabel": "oxygen reduction",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000014"
+    },
+    {
+      "id": "xrm:0000530",
+      "type": "skos:Concept",
+      "prefLabel": "sulfur reduction",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000014"
+    },
+    {
+      "id": "xrm:0000540",
+      "type": "skos:Concept",
+      "prefLabel": "reductive dehalogenation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000014"
+    },
+    {
+      "id": "xrm:0000550",
+      "type": "skos:Concept",
+      "prefLabel": "dehydration",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000014"
+    },
+    {
+      "id": "xrm:0001000",
+      "type": "skos:Concept",
+      "prefLabel": "glucuronidation",
+      "altLabel": ["glucuronosylation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000002"
+    },
+    {
+      "id": "xrm:0001010",
+      "type": "skos:Concept",
+      "prefLabel": "sulfation",
+      "altLabel": ["sulfonation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000002"
+    },
+    {
+      "id": "xrm:0001020",
+      "type": "skos:Concept",
+      "prefLabel": "acetylation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000002"
+    },
+    {
+      "id": "xrm:0001030",
+      "type": "skos:Concept",
+      "prefLabel": "glutathionation",
+      "altLabel": ["glutathione conjugation", "GSH conjugation"],
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000002"
+    },
+    {
+      "id": "xrm:0001031",
+      "type": "skos:Concept",
+      "prefLabel": "Michael glutathionation",
+      "definition": "Glutathione addition at a Michael acceptor carbon.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0001030"
+    },
+    {
+      "id": "xrm:0001032",
+      "type": "skos:Concept",
+      "prefLabel": "epoxide glutathionation",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0001030"
+    },
+    {
+      "id": "xrm:0002000",
+      "type": "skos:Concept",
+      "prefLabel": "tautomerization",
+      "definition": "Peripheral tautomer interconversion; not phase I or phase II.",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000000"
+    },
+    {
+      "id": "xrm:0003000",
+      "type": "skos:Concept",
+      "prefLabel": "bioactivation",
+      "definition": "Role facet: pathways that form reactive metabolites (not a chemical parent of leaf transforms).",
+      "inScheme": "xrm:scheme",
+      "broader": "xrm:0000000",
+      "relatedMatch": ["xrm:0000110", "xrm:0000300"]
+    }
+  ]
+}

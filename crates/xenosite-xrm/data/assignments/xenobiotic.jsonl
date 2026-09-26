@@ -1,0 +1,19 @@
+# Structural assignment rules. Engine matches SMARTS / formula delta / opaque tags only.
+{"id":"asg:hydroxylation","emit":["xrm:0000100"],"delta":{"O":1},"reactant_smarts":"[#6:1]","product_smarts":"[#6:1][#8H1]","require_map":[1],"priority":10}
+{"id":"asg:aromatic-hydroxylation","emit":["xrm:0000101"],"delta":{"O":1},"reactant_smarts":"[cH:1]","product_smarts":"[c:1][#8H1]","require_map":[1],"site_aromatic":true,"priority":20}
+{"id":"asg:aliphatic-hydroxylation","emit":["xrm:0000102"],"delta":{"O":1},"reactant_smarts":"[CH2,CH3:1]","product_smarts":"[C:1][#8H1]","require_map":[1],"site_aromatic":false,"aromatic_probe_smarts":"[#6:1]","priority":20}
+{"id":"asg:epoxidation","emit":["xrm:0000110"],"delta":{"O":1},"reactant_smarts":"[#6:1]=[#6:2]","product_smarts":"C1OC1","priority":15}
+{"id":"asg:dehydrogenation-alcohol","emit":["xrm:0000012"],"reactant_smarts":"[#6:1][#8H1]","product_smarts":"[#6:1]=O","require_map":[1],"priority":12}
+{"id":"asg:tag-hydroxylation","emit":["xrm:0000100"],"tags_any":["forest.rule:Hydroxylation"],"priority":5}
+{"id":"asg:tag-epoxidation","emit":["xrm:0000110"],"tags_any":["forest.rule:Epoxidation"],"priority":5}
+{"id":"asg:tag-dealkylation","emit":["xrm:0000200"],"tags_any":["forest.rule:Dealkylation"],"priority":5}
+{"id":"asg:tag-n-dealkylation","emit":["xrm:0000201"],"tags_any":["forest.rule:NDealkylation","forest.pattern:Dealkylation/hemiaminal"],"priority":8}
+{"id":"asg:tag-glucuronidation","emit":["xrm:0001000"],"tags_any":["forest.rule:Glucuronidation"],"priority":5}
+{"id":"asg:tag-sulfation","emit":["xrm:0001010"],"tags_any":["forest.rule:Sulfation"],"priority":5}
+{"id":"asg:tag-acetylation","emit":["xrm:0001020"],"tags_any":["forest.rule:Acetylation"],"priority":5}
+{"id":"asg:tag-glutathionation","emit":["xrm:0001030"],"tags_any":["forest.rule:Glutathionation"],"priority":5}
+{"id":"asg:tag-gsh-michael","emit":["xrm:0001031"],"tags_any":["forest.pattern:Glutathionation/michael"],"priority":8}
+{"id":"asg:tag-gsh-epoxide","emit":["xrm:0001032"],"tags_any":["forest.pattern:Glutathionation/epoxide_ch","forest.pattern:Glutathionation/epoxide_ch2","forest.pattern:Glutathionation/epoxide_c"],"priority":8}
+{"id":"asg:tag-quinone","emit":["xrm:0000300"],"tags_any":["forest.rule:QuinoneFormation"],"priority":5}
+{"id":"asg:tag-phase1-ruleset","emit":["xrm:0000001"],"tags_any":["forest.ruleset:PhaseOne","forest.ruleset:PhaseOneRS"],"priority":1}
+{"id":"asg:tag-phase2-ruleset","emit":["xrm:0000002"],"tags_any":["forest.ruleset:Conjugation","forest.ruleset:CJ"],"priority":1}

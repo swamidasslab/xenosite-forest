@@ -1,0 +1,34 @@
+# Opaque CURIEs for Metabolic Forest leaves/patterns. Strings only — xenosite-xrm
+# never imports forest code. Callers or a separate adapter may supply these as tags.
+subject_id	predicate_id	object_id	mapping_justification	subject_label	object_label
+xrm:0000100	skos:relatedMatch	forest.rule:Hydroxylation	semapv:ManualMappingCuration	hydroxylation	Hydroxylation
+xrm:0000100	skos:relatedMatch	forest.pattern:Hydroxylation/h	semapv:ManualMappingCuration	hydroxylation	h
+xrm:0000100	skos:relatedMatch	forest.pattern:Hydroxylation/h2	semapv:ManualMappingCuration	hydroxylation	h2
+xrm:0000110	skos:relatedMatch	forest.rule:Epoxidation	semapv:ManualMappingCuration	epoxidation	Epoxidation
+xrm:0000110	skos:relatedMatch	forest.pattern:Epoxidation/epoxide	semapv:ManualMappingCuration	epoxidation	epoxide
+xrm:0000120	skos:relatedMatch	forest.rule:NitrogenOxidation	semapv:ManualMappingCuration	nitrogen oxidation	NitrogenOxidation
+xrm:0000130	skos:relatedMatch	forest.rule:SulfurOxidation	semapv:ManualMappingCuration	sulfur oxidation	SulfurOxidation
+xrm:0000200	skos:relatedMatch	forest.rule:Dealkylation	semapv:ManualMappingCuration	dealkylation	Dealkylation
+xrm:0000201	skos:relatedMatch	forest.rule:NDealkylation	semapv:ManualMappingCuration	N-dealkylation	NDealkylation
+xrm:0000201	skos:relatedMatch	forest.pattern:Dealkylation/hemiaminal	semapv:ManualMappingCuration	N-dealkylation	hemiaminal
+xrm:0000210	skos:relatedMatch	forest.rule:OxidativeDehalogenation	semapv:ManualMappingCuration	oxidative dehalogenation	OxidativeDehalogenation
+xrm:0000012	skos:relatedMatch	forest.rule:Dehydrogenation	semapv:ManualMappingCuration	dehydrogenation	Dehydrogenation
+xrm:0000300	skos:relatedMatch	forest.rule:QuinoneFormation	semapv:ManualMappingCuration	quinone formation	QuinoneFormation
+xrm:0000013	skos:relatedMatch	forest.rule:Hydrolysis	semapv:ManualMappingCuration	hydrolysis	Hydrolysis
+xrm:0000400	skos:relatedMatch	forest.rule:EpoxideOpening	semapv:ManualMappingCuration	epoxide opening	EpoxideOpening
+xrm:0000410	skos:relatedMatch	forest.rule:Dephosphorylation	semapv:ManualMappingCuration	dephosphorylation	Dephosphorylation
+xrm:0000500	skos:relatedMatch	forest.rule:Hydrogenation	semapv:ManualMappingCuration	hydrogenation	Hydrogenation
+xrm:0000510	skos:relatedMatch	forest.rule:NitrogenReduction	semapv:ManualMappingCuration	nitrogen reduction	NitrogenReduction
+xrm:0000520	skos:relatedMatch	forest.rule:OxygenReduction	semapv:ManualMappingCuration	oxygen reduction	OxygenReduction
+xrm:0000530	skos:relatedMatch	forest.rule:SulfurReduction	semapv:ManualMappingCuration	sulfur reduction	SulfurReduction
+xrm:0000540	skos:relatedMatch	forest.rule:ReductiveDehalogenation	semapv:ManualMappingCuration	reductive dehalogenation	ReductiveDehalogenation
+xrm:0000550	skos:relatedMatch	forest.rule:Dehydration	semapv:ManualMappingCuration	dehydration	Dehydration
+xrm:0001000	skos:relatedMatch	forest.rule:Glucuronidation	semapv:ManualMappingCuration	glucuronidation	Glucuronidation
+xrm:0001010	skos:relatedMatch	forest.rule:Sulfation	semapv:ManualMappingCuration	sulfation	Sulfation
+xrm:0001020	skos:relatedMatch	forest.rule:Acetylation	semapv:ManualMappingCuration	acetylation	Acetylation
+xrm:0001030	skos:relatedMatch	forest.rule:Glutathionation	semapv:ManualMappingCuration	glutathionation	Glutathionation
+xrm:0001031	skos:relatedMatch	forest.pattern:Glutathionation/michael	semapv:ManualMappingCuration	Michael glutathionation	michael
+xrm:0001032	skos:relatedMatch	forest.pattern:Glutathionation/epoxide_ch	semapv:ManualMappingCuration	epoxide glutathionation	epoxide_ch
+xrm:0002000	skos:relatedMatch	forest.rule:Tautomerization	semapv:ManualMappingCuration	tautomerization	Tautomerization
+xrm:0000001	skos:relatedMatch	forest.ruleset:PhaseOne	semapv:ManualMappingCuration	phase I	PhaseOne
+xrm:0000002	skos:relatedMatch	forest.ruleset:Conjugation	semapv:ManualMappingCuration	phase II	Conjugation

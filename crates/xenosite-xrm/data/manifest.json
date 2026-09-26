@@ -1,0 +1,9 @@
+{
+  "ontologies": ["ontology/xrm.skos.jsonld"],
+  "mappings": [
+    "mappings/xrm-mesh.sssom.tsv",
+    "mappings/xrm-mop.sssom.tsv",
+    "mappings/xrm-forest.sssom.tsv"
+  ],
+  "assignments": ["assignments/xenobiotic.jsonl"]
+}

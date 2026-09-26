@@ -3,7 +3,6 @@
 use crate::curie::Curie;
 use crate::error::{Error, Result};
 use crate::term::{OntologyRef, Specificity, Term, TermLink};
-use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -111,6 +110,13 @@ impl Thesaurus {
             return Err(Error::Config("SKOS file has no ConceptScheme".into()));
         }
         Ok(Self { schemes, concepts })
+    }
+
+    pub fn merge(&mut self, other: Thesaurus) {
+        self.schemes.extend(other.schemes);
+        for (id, concept) in other.concepts {
+            self.concepts.insert(id, concept);
+        }
     }
 
     pub fn get(&self, id: &str) -> Option<&SkosConcept> {
@@ -221,22 +227,76 @@ impl Thesaurus {
 
     pub fn ancestors(&self, id: &str) -> Vec<Curie> {
         let mut out = Vec::new();
-        let mut current = id.to_string();
+        let mut stack = vec![id.to_string()];
         let mut seen = BTreeSet::new();
-        while let Some(c) = self.concepts.get(&current) {
+        while let Some(current) = stack.pop() {
             if !seen.insert(current.clone()) {
-                break;
+                continue;
             }
+            let Some(c) = self.concepts.get(&current) else {
+                continue;
+            };
             for b in &c.broader {
                 out.push(b.clone());
-                current = b.as_str().to_string();
-                break;
-            }
-            if c.broader.is_empty() {
-                break;
+                stack.push(b.as_str().to_string());
             }
         }
         out
+    }
+
+    /// Validate DAG: unique ids, known broader targets, no cycles on broader.
+    pub fn validate(&self) -> Result<()> {
+        if self.schemes.is_empty() {
+            return Err(Error::Config("no ConceptScheme".into()));
+        }
+        let mut has_phase1 = false;
+        let mut has_phase2 = false;
+        for c in self.concepts.values() {
+            if c.pref_label.eq_ignore_ascii_case("phase I")
+                || c.pref_label.eq_ignore_ascii_case("phase 1")
+            {
+                has_phase1 = true;
+            }
+            if c.pref_label.eq_ignore_ascii_case("phase II")
+                || c.pref_label.eq_ignore_ascii_case("phase 2")
+            {
+                has_phase2 = true;
+            }
+            for b in &c.broader {
+                if !self.concepts.contains_key(b.as_str()) {
+                    return Err(Error::Config(format!(
+                        "{} broader target {} missing",
+                        c.id, b
+                    )));
+                }
+            }
+            // Cycle check along primary broader chain.
+            let mut slow = c.id.as_str().to_string();
+            let mut fast = c.id.as_str().to_string();
+            loop {
+                let Some(fs) = self.concepts.get(&fast).and_then(|x| x.broader.first()) else {
+                    break;
+                };
+                fast = fs.as_str().to_string();
+                if let Some(fs2) = self.concepts.get(&fast).and_then(|x| x.broader.first()) {
+                    fast = fs2.as_str().to_string();
+                } else {
+                    break;
+                }
+                if let Some(ss) = self.concepts.get(&slow).and_then(|x| x.broader.first()) {
+                    slow = ss.as_str().to_string();
+                }
+                if slow == fast {
+                    return Err(Error::Config(format!("broader cycle at {}", c.id)));
+                }
+            }
+        }
+        if !has_phase1 || !has_phase2 {
+            return Err(Error::Config(
+                "thesaurus must include Phase I and Phase II concepts".into(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -369,7 +429,3 @@ fn parse_concept(node: &Value, id: &str) -> Result<SkosConcept> {
             .unwrap_or(false),
     })
 }
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct UnusedGuard;
