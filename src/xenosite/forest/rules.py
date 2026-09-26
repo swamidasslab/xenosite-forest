@@ -63,7 +63,7 @@ from xenosite.forest.rdkitutil import (
     rw_copy,
     sanitize_catch,
     sanitized_fragments,
-    refuse_dearomatized_ketene,
+    refuse_o_leave_aromatic_collapse,
 )
 from xenosite.forest.records import (
     EditCounters,
@@ -359,7 +359,7 @@ class ReactionRule:
             if leave.get("O") == 1 and not any(
                 k != "O" and v for k, v in leave.items()
             ):
-                if any(refuse_dearomatized_ketene(mol, p) for p in products):
+                if any(refuse_o_leave_aromatic_collapse(mol, p) for p in products):
                     continue
 
             for p in products:
