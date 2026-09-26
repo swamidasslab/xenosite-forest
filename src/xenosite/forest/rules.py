@@ -3016,7 +3016,7 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
         (
-            Smarts("[#6R:1][#7,#8:2][#6:3]"),
+            Smarts("[#6R:1]~[#7,#8:2]~[#6:3]"),
             _describe(
                 *branches(
                     ({"map": 2, "z": 7}, {"map": 2, "z": 8}),

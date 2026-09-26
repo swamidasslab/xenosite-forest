@@ -1644,16 +1644,33 @@ def _sanitize_piece(frag: Mol) -> bool:
     use those hydrogens. ``O=[CH2][CH2]=O`` is that draft of glyoxal.
     The bond orders are the product. The explicit count is not.
     A nitrogen with two double bonds is dropped even when it sanitizes.
+    Closed-shell prefer: refuse ``[NH+]=`` iminium and ``[N-]`` anions
+    (mirrors Rust ``accept_product``).
     """
 
     if not SanitizeMol(frag, catchErrors=True):
-        return not _nitrogen_two_doubles(frag)
+        return not _nitrogen_two_doubles(frag) and not _nitrogen_charge_junk(frag)
     for atom in frag.GetAtoms():
         atom.SetNumExplicitHs(0)
         atom.SetNoImplicit(False)
     if SanitizeMol(frag, catchErrors=True):
         return False
-    return not _nitrogen_two_doubles(frag)
+    return not _nitrogen_two_doubles(frag) and not _nitrogen_charge_junk(frag)
+
+
+def _nitrogen_charge_junk(frag: Mol) -> bool:
+    """True for cationic iminium ``[NH+]=`` or any ``[N-]`` (closed-shell prefer)."""
+
+    for atom in frag.GetAtoms():
+        if atom.GetAtomicNum() != 7:
+            continue
+        charge = atom.GetFormalCharge()
+        if charge < 0:
+            return True
+        if charge > 0 and atom.GetTotalNumHs() > 0:
+            if any(b.GetBondType() == BondType.DOUBLE for b in atom.GetBonds()):
+                return True
+    return False
 
 
 def refuse_dearomatized_ketene(parent: Mol, product: Mol) -> bool:

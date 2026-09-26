@@ -311,7 +311,9 @@ pub fn quinone_formation() -> RuleSet {
             ),
             endpoint_row(
                 "dealkylate",
-                "[#6R:1][#7,#8:2][#6:3]",
+                // ``~`` so isocyanate / carbodiimide N=C matches (RDKit default
+                // SMARTS adjacency is single/aromatic only — C16 PhNCO).
+                "[#6R:1]~[#7,#8:2]~[#6:3]",
                 vec![1],
                 Effect {
                     adds: None,

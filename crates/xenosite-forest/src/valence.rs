@@ -45,6 +45,9 @@ pub fn accept_product(mol: &Molecule) -> bool {
     if nitrogen_iminium(mol) {
         return false;
     }
+    if nitrogen_anion(mol) {
+        return false;
+    }
     closed_shell(mol)
 }
 
@@ -79,6 +82,13 @@ fn nitrogen_iminium(mol: &Molecule) -> bool {
         }
     }
     false
+}
+
+/// Amide / ketene-imine anions (`[N-]C=O`) from ring-open dealk junk.
+/// Closed-shell prefer neutral (HEURISTICS C10).
+fn nitrogen_anion(mol: &Molecule) -> bool {
+    mol.atoms()
+        .any(|(_idx, atom)| atom.element.atomic_number() == 7 && atom.charge < 0)
 }
 
 /// Cumulative `C=C=O` (ketene carbon: C with double bonds to C and O).
