@@ -1779,7 +1779,6 @@ where
     S: Fn(&crate::Molecule, usize, &SiteInfo) -> bool,
 {
     let start = ForestMol::parse(reactant)?;
-    let start_csmi = start.csmi();
     let target_csmi = canon_of(target)?;
     let target_ha = ForestMol::parse(&target_csmi)?.heavy_atom_count();
 
