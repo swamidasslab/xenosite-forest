@@ -1687,23 +1687,6 @@ def refuse_dearomatized_ketene(parent: Mol, product: Mol) -> bool:
     return False
 
 
-def refuse_o_leave_aromatic_collapse(parent: Mol, product: Mol) -> bool:
-    """True when O-leave dropped a full aromatic sextet into junk.
-
-    Covers aliphatic ketenes (possibly with a second aromatic ring still
-    standing) and beta-elim that saturates a nitroarene ring. Keeps products
-    that retain the parent's aromatic count (styrene from PhCH2CH2OH).
-    """
-
-    parent_arom = sum(1 for a in parent.GetAtoms() if a.GetIsAromatic())
-    if parent_arom < 6:
-        return False
-    product_arom = sum(1 for a in product.GetAtoms() if a.GetIsAromatic())
-    if product_arom <= parent_arom - 6:
-        return True
-    return refuse_dearomatized_ketene(parent, product)
-
-
 def carry_forest(src: Mol, dst: Mol) -> Mol:
     """Deep-copy ``src._forest`` onto ``dst``, remapped by ``forestLabel``.
 

@@ -63,7 +63,7 @@ from xenosite.forest.rdkitutil import (
     rw_copy,
     sanitize_catch,
     sanitized_fragments,
-    refuse_o_leave_aromatic_collapse,
+    refuse_dearomatized_ketene,
 )
 from xenosite.forest.records import (
     EditCounters,
@@ -363,8 +363,7 @@ class ReactionRule:
                     return sum(1 for a in p.GetAtoms() if a.GetAtomicNum() > 1) > 1
 
                 if any(
-                    _heavy(p) and refuse_o_leave_aromatic_collapse(mol, p)
-                    for p in products
+                    _heavy(p) and refuse_dearomatized_ketene(mol, p) for p in products
                 ):
                     continue
 

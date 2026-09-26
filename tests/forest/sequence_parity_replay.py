@@ -14,5 +14,6 @@ SEQUENCE_PARITY_REPLAY: tuple[tuple[str, tuple[str, ...]], ...] = (
     ('COc1ccccc1', ('Dealkylation', 'Hydroxylation',)),
     ('CCN', ('NDealkylation', 'Hydroxylation', 'Dehydrogenation',)),
     ('CC(=O)Nc1ccc(O)cc1', ('Dehydrogenation', 'Dealkylation', 'Dehydration',)),
+    ('CC(=O)Nc1ccc(O)cc1', ('Dehydration', 'Epoxidation', 'Dehydrogenation',)),
 )
 
