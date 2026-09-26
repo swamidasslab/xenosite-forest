@@ -385,7 +385,7 @@ impl PairCandidate {
         // (2) saturate→residual edges (styrene vinyl C=C when only the CH2
         //     end is a path_end — else rematch keeps C=C and mints allenes).
         let mut shared_edge_saturated = false;
-        let mut demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
+        let demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
             let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) else {
                 return false;
             };
@@ -434,8 +434,8 @@ impl PairCandidate {
         let all_forced = residual.perceive_forced_doubles(&rw);
         // Cumulated parent doubles (N=C=O: central C has two doubles) cannot
         // exclusive-seed under one-partner matching — drop those atoms from the
-        // residual (fixed framework). Ordinary parent doubles (vinyl C=C,
-        // carbonyl C=O) stay in the residual for path rematch (styrene H).
+        // residual (fixed framework). Hetero parent doubles (other quinone C=O)
+        // exclusive-seed; pure C=C rematch freely after blanking residual π.
         // Edit-new doubles (add_carbonyl O, phenol C=O) remain forced seeds.
         let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
         let parent_doubles: BTreeSet<(usize, usize)> = mol
@@ -461,15 +461,29 @@ impl PairCandidate {
                 // N=C=O: strip from residual (one-partner matching cannot
                 // express cumulated demand).
                 framework_forced.insert(edge);
-            } else {
-                // Edit-new leaves and surviving parent doubles (other quinone
-                // C=O, etc.): exclusive-seed so rematch does not rewrite them
-                // into [O-]/[CH3] junk. Saturate demotes path π first, so
-                // styrene vinyl is gone before perceive and rematches freely.
+            } else if !parent_doubles.contains(&edge) {
+                // Edit-new leaves (add_carbonyl O, phenol C=O): exclusive-seed.
                 edit_forced.insert(edge);
+            } else {
+                // Surviving parent double: exclusive-seed only when a heteroatom
+                // is on the edge (other quinone C=O, amide, imine). Pure C=C
+                // parent doubles rematch freely — locking them blocks
+                // benzoquinone→hydroquinone Kekulé (HEURISTICS).
+                let z_a = rw.atom(atom_idx(a)).element.atomic_number();
+                let z_b = rw.atom(atom_idx(b)).element.atomic_number();
+                if z_a != 6 || z_b != 6 {
+                    edit_forced.insert(edge);
+                }
             }
         }
         let residual_match = residual.after_forced_doubles(&framework_forced);
+        // Blank residual π so atom_must_be_matched does not treat surviving
+        // parent C=C as already-paired (those carbons drop out of must-match,
+        // leaving only demoted carbonyl carbons — para on benzoquinone cannot
+        // pair). Forced constraints re-assert edit-new / hetero leaves.
+        for &(a, b) in &residual_match.bonds {
+            let _ = demote_pi(&mut rw, a, b);
+        }
         // Empty residual: one-edge path_end (shared π saturated) may emit.
         // Vacuous keep+keep, or two carbonyl carbons that only demoted
         // leaf C=O into an empty residual (glyoxal → glycol), refuse.
@@ -1355,6 +1369,28 @@ mod tests {
                 .iter()
                 .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
             "styrene vinyl–ring H should emit exocyclic diene; got {emissions:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_benzoquinone_para_o_emits_hydroquinone() {
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want_hq = canon_of("Oc1ccc(O)cc1").unwrap();
+        let got: Vec<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().map(|p| canon_of(p).unwrap()))
+            .collect();
+        assert!(
+            got.iter().any(|p| *p == want_hq),
+            "benzoquinone para-O path_end should emit hydroquinone; got {emissions:?}"
         );
     }
 

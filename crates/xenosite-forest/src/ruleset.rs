@@ -359,7 +359,8 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
 }
 
 /// Cleavage product oxygenates a carbon (`O-`, `O=`, or carboxylic), or
-/// hydrolysis-style cut of map 2–3 (optional OH on the carbonyl carbon).
+/// hydrolysis-style cut of map 2–3 (optional OH on the carbonyl carbon), or
+/// hemiaminal/hemiacetal collapse (existing OH → carbonyl while cutting C–X).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RingOpenOxygenate {
     Alcohol,
@@ -369,10 +370,13 @@ enum RingOpenOxygenate {
     HydrolysisAddWater,
     /// Same cut without adding water (aldehyde + alcohol pieces).
     HydrolysisCleave,
+    /// Hemiaminal / hemiacetal: cleave map1–map2; promote map3–map1 to double
+    /// (`[*:3]=[*:1].[*:2]`). No new O — the reactant OH collapses to carbonyl.
+    Hemiaminal,
 }
 
 /// Detect `>>(O-[*:1].[*:2])` / `>>([*:2].[*:1]-O)` / carbonyl / carboxylic /
-/// hydrolysis `[*:2](O).[*:3]` forms.
+/// hydrolysis `[*:2](O).[*:3]` / hemiaminal `[*:3]=[*:1].[*:2]` forms.
 fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
     let product = smirks.split_once(">>")?.1.trim();
     let product = product
@@ -390,6 +394,12 @@ fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
     }
     if product.contains("[*:1]=[*:2].[*:3]") {
         return Some(RingOpenOxygenate::HydrolysisCleave);
+    }
+    // Existing OH collapses to carbonyl while cutting C–hetero (map 1–2).
+    // Distinct from adding `O=` / `[*:1]=O` — chematic A.B on a ring drops
+    // connectivity and wrongly bifurcates (cyclic hemiaminal → amino-aldehyde).
+    if product.contains("[*:3]=[*:1].[*:2]") {
+        return Some(RingOpenOxygenate::Hemiaminal);
     }
     // Carboxylic before bare carbonyl (`(=O)O` contains `=O`).
     if product.contains("[*:1](=O)O") {
@@ -420,7 +430,11 @@ fn cleave_oxygenate(
             let hetero = *mapped.get(&3)?;
             (carbon, hetero, carbon)
         }
-        _ => {
+        // Alcohol / Carbonyl / Carboxylic / Hemiaminal: cleave map 1–2.
+        RingOpenOxygenate::Alcohol
+        | RingOpenOxygenate::Carbonyl
+        | RingOpenOxygenate::Carboxylic
+        | RingOpenOxygenate::Hemiaminal => {
             let left = *mapped.get(&1)?;
             let right = *mapped.get(&2)?;
             (left, right, left)
@@ -463,6 +477,19 @@ fn cleave_oxygenate(
                 .ok()?;
         }
         RingOpenOxygenate::HydrolysisCleave => {}
+        RingOpenOxygenate::Hemiaminal => {
+            // Map 3 is the reactant OH oxygen; promote O–C to O=C (no new atom).
+            let oxygen = *mapped.get(&3)?;
+            let (oh_bond_idx, oh_bond) =
+                product.bond_between(atom_idx(oxygen), atom_idx(left))?;
+            match oh_bond.order {
+                BondOrder::Single | BondOrder::Aromatic => {}
+                _ => return None,
+            }
+            product.set_bond_order(oh_bond_idx, BondOrder::Double);
+            let ox_el = product.atom(atom_idx(oxygen)).element;
+            product = product.with_atom_element(atom_idx(oxygen), ox_el);
+        }
     }
     // Bracket H on the cleaved atoms (e.g. pyrrole [nH]) is stale after the
     // bond break; clear so chematic recomputes implicit H (aniline NH2).
@@ -502,18 +529,30 @@ fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
     false
 }
 
-fn mapped_bond_in_ring(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> bool {
-    // Hydrolysis site is map 2–3 (carbonyl C–hetero); dealk / cc_quat is 1–2.
-    let (left, right) = if mapped.contains_key(&3) {
-        let (Some(&a), Some(&b)) = (mapped.get(&2), mapped.get(&3)) else {
-            return false;
-        };
-        (a, b)
-    } else {
-        let (Some(&a), Some(&b)) = (mapped.get(&1), mapped.get(&2)) else {
-            return false;
-        };
-        (a, b)
+/// Atoms of the σ bond the mode cleaves (hydrolysis map 2–3; else map 1–2).
+/// Hemiaminal also maps the OH as 3, so "has map 3" is not hydrolysis.
+fn cleaved_mapped_pair(
+    mode: RingOpenOxygenate,
+    mapped: &BTreeMap<u16, usize>,
+) -> Option<(usize, usize)> {
+    match mode {
+        RingOpenOxygenate::HydrolysisAddWater | RingOpenOxygenate::HydrolysisCleave => {
+            Some((*mapped.get(&2)?, *mapped.get(&3)?))
+        }
+        RingOpenOxygenate::Alcohol
+        | RingOpenOxygenate::Carbonyl
+        | RingOpenOxygenate::Carboxylic
+        | RingOpenOxygenate::Hemiaminal => Some((*mapped.get(&1)?, *mapped.get(&2)?)),
+    }
+}
+
+fn mapped_bond_in_ring(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    mode: RingOpenOxygenate,
+) -> bool {
+    let Some((left, right)) = cleaved_mapped_pair(mode, mapped) else {
+        return false;
     };
     atoms_share_ring(mol, left, right)
 }
@@ -594,7 +633,7 @@ fn apply_edit_mols_raw(
                 // Hydrolysis graph edit is authoritative (chematic A.B drops the
                 // ring hetero). Prefer it on ring cuts and for Hydrolysis* modes
                 // on open esters before SMIRKS junk.
-                let prefer_graph = mapped_bond_in_ring(&work, mapped)
+                let prefer_graph = mapped_bond_in_ring(&work, mapped, mode)
                     || matches!(
                         mode,
                         RingOpenOxygenate::HydrolysisAddWater
@@ -604,7 +643,7 @@ fn apply_edit_mols_raw(
                     if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
                         return Ok(products);
                     }
-                    if mapped_bond_in_ring(&work, mapped) {
+                    if mapped_bond_in_ring(&work, mapped, mode) {
                         // Ring oxygenate refused — do not fall through to aromatic
                         // SMIRKS junk (thiophene `O=CC=CS` / unparseable `:ccs`).
                         return Ok(Vec::new());
@@ -1047,6 +1086,56 @@ mod tests {
     }
 
     #[test]
+    fn n_dealkylation_cyclic_hemiaminal_ring_opens_to_amino_aldehyde() {
+        use crate::rules::n_dealkylation;
+        let got = products_of(
+            &n_dealkylation(),
+            "OC1NCCC1",
+            accept_all_rules,
+            accept_all_sites,
+        );
+        assert!(
+            got.contains(&canon_of("NCCCC=O").unwrap()),
+            "hemiaminal ring-open must keep N on the chain; got {got:?}"
+        );
+        assert!(
+            !(got.contains(&canon_of("CCCC=O").unwrap())
+                && got.contains(&canon_of("CCCN").unwrap())),
+            "must not bifurcate into aldehyde + amine; got {got:?}"
+        );
+    }
+
+    #[test]
+    fn dealkylation_cyclic_hemiacetal_ring_opens_to_hydroxy_aldehyde() {
+        use crate::rules::dealkylation;
+        let got = products_of(
+            &dealkylation(),
+            "OC1OCCC1",
+            accept_all_rules,
+            accept_all_sites,
+        );
+        assert!(
+            got.contains(&canon_of("O=CCCCO").unwrap()),
+            "hemiacetal ring-open; got {got:?}"
+        );
+    }
+
+    #[test]
+    fn open_chain_hemiaminal_still_bifurcates() {
+        use crate::rules::n_dealkylation;
+        let got = products_of(
+            &n_dealkylation(),
+            "OC(N)CC",
+            accept_all_rules,
+            accept_all_sites,
+        );
+        assert!(
+            got.contains(&canon_of("CCC=O").unwrap()) && got.contains(&canon_of("N").unwrap()),
+            "open hemiaminal cleaves to aldehyde + amine; got {got:?}"
+        );
+    }
+
+    #[test]
     fn dealkylation_cleave_oxygenate_on_methyl_acetate() {
         use crate::rules::dealkylation;
         let got = products_of(&dealkylation(), "CC(=O)OC", accept_all_rules, accept_all_sites);
@@ -1132,6 +1221,20 @@ mod hydrolysis_mode_tests {
         assert_eq!(
             ring_open_oxygenate_mode(s),
             Some(RingOpenOxygenate::HydrolysisCleave)
+        );
+    }
+
+    #[test]
+    fn detects_hemiaminal_collapse() {
+        let nd = "[#8H1:3]-[#6:1]-[#7:2]>>([*:3]=[*:1].[*:2])";
+        let dealk = "[#8H1:3]-[#6:1]-[#7,#8,#16:2]>>([*:3]=[*:1].[*:2])";
+        assert_eq!(
+            ring_open_oxygenate_mode(nd),
+            Some(RingOpenOxygenate::Hemiaminal)
+        );
+        assert_eq!(
+            ring_open_oxygenate_mode(dealk),
+            Some(RingOpenOxygenate::Hemiaminal)
         );
     }
 }
