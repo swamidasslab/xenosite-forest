@@ -1798,7 +1798,8 @@ pub fn glutathionation() -> RuleSet {
                 vec![1],
                 Effect {
                     adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                    removes: None,
+                    // Mesyl leaving group OSO2Me eliminated (not a product fragment).
+                    removes: Some("COOOS".into()),
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,

@@ -4307,7 +4307,9 @@ class Glutathionation(ConjugationRule):
         ),
         (
             Smirks("[#6:1][#8:2]S(=O)(=O)>>" + _gsh("[*:1]")),
-            _describe(adds=_GSH_ADDS, site_map=1, name="mesylate"),
+            # Mesyl OSO2Me is eliminated (not a leave fragment); bag matches
+            # observed Δformula (GSH − COOOS).
+            _describe(adds=_GSH_ADDS, removes="COOOS", site_map=1, name="mesylate"),
         ),
         (
             Smirks(

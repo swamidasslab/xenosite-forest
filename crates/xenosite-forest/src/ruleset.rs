@@ -22,14 +22,15 @@
 //! [`RuleSet::metabolize`] pulls the same way and materializes one emission per
 //! yield. Filter closures are optional convenience, not required.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chematic::core::{Atom, BondOrder, Element};
+use chematic::perception::find_sssr;
 use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
 use crate::ForestError;
 use crate::canonical_plan::{CanonicalPlanFn, Step, steps_for_leaf};
-use crate::mol::{Molecule, atom_idx, canon_smiles};
+use crate::mol::{Molecule, atom_idx, atom_usize, canon_smiles};
 use crate::pair_edit::pair_candidates;
 use crate::pattern::{Edit, PatternInfo, SiteInfo};
 use crate::smirks::apply_smirks_at;
@@ -357,6 +358,95 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
     Ok(product)
 }
 
+/// Cleavage product oxygenates map 1 (`O-`, `O=`, or carboxylic).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RingOpenOxygenate {
+    Alcohol,
+    Carbonyl,
+    Carboxylic,
+}
+
+/// Detect `>>(O-[*:1].[*:2])` / `>>([*:2].[*:1]-O)` / carbonyl / carboxylic forms.
+fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
+    let product = smirks.split_once(">>")?.1.trim();
+    let product = product
+        .strip_prefix('(')
+        .and_then(|p| p.strip_suffix(')'))
+        .unwrap_or(product);
+    if !product.contains('.') {
+        return None;
+    }
+    // Carboxylic before bare carbonyl (`(=O)O` contains `=O`).
+    if product.contains("[*:1](=O)O") {
+        return Some(RingOpenOxygenate::Carboxylic);
+    }
+    if product.contains("O=[*:1]") || product.contains("[*:1]=O") {
+        return Some(RingOpenOxygenate::Carbonyl);
+    }
+    if product.contains("O-[*:1]") || product.contains("[*:1]-O") {
+        return Some(RingOpenOxygenate::Alcohol);
+    }
+    None
+}
+
+fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
+    for ring in find_sssr(mol).rings() {
+        let atoms: BTreeSet<usize> = ring.iter().copied().map(atom_usize).collect();
+        if atoms.contains(&left) && atoms.contains(&right) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Chematic cleavage SMIRKS (`A.B`) on a ring bond drops a ring atom. Break the
+/// bond and oxygenate map 1 on the live graph instead (ring stays one piece).
+fn ring_open_oxygenate(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    mode: RingOpenOxygenate,
+) -> Option<Vec<Molecule>> {
+    let (&left, &right) = (mapped.get(&1)?, mapped.get(&2)?);
+    if !atoms_share_ring(mol, left, right) {
+        return None;
+    }
+    let (bond_idx, _) = mol.bond_between(atom_idx(left), atom_idx(right))?;
+    let mut product = mol.with_bond_removed(bond_idx);
+    match mode {
+        RingOpenOxygenate::Alcohol => {
+            let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), oxygen, BondOrder::Single)
+                .ok()?;
+        }
+        RingOpenOxygenate::Carbonyl => {
+            let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), oxygen, BondOrder::Double)
+                .ok()?;
+        }
+        RingOpenOxygenate::Carboxylic => {
+            let (next, oxo) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), oxo, BondOrder::Double)
+                .ok()?;
+            let (next, hydroxy) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(left), hydroxy, BondOrder::Single)
+                .ok()?;
+        }
+    }
+    if accept_product(&product) {
+        Some(vec![product])
+    } else {
+        None
+    }
+}
+
 /// Same as [`apply_edit_mols`], returning product CSMIs.
 pub(crate) fn apply_edit_for_candidate(
     mol: &Molecule,
@@ -400,6 +490,11 @@ pub(crate) fn apply_edit_mols(
             }
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
+            if let Some(mode) = ring_open_oxygenate_mode(smirks) {
+                if let Some(products) = ring_open_oxygenate(&work, mapped, mode) {
+                    return Ok(products);
+                }
+            }
             apply_smirks_at(smirks, &work, mapped)
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
@@ -789,6 +884,17 @@ mod tests {
                     && e.leaf_rule() == Some("Dehydrogenation")
             }),
             "{emissions:?}"
+        );
+    }
+
+    #[test]
+    fn dealkylation_ring_open_on_benzene_keeps_six_carbons() {
+        use crate::rules::dealkylation;
+        let got = products_of(&dealkylation(), "c1ccccc1", accept_all_rules, accept_all_sites);
+        assert_eq!(
+            got,
+            canon_set(["C=CC=CC=CO", "C=CC=CC=C=O"]),
+            "chematic A.B cleavage drops a ring atom; ring-open edit must keep C6"
         );
     }
 
