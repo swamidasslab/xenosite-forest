@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/xenosite-forest",
+    "crates/xenosite-xrm",
     "vendor/chematic/crates/chematic-core",
     "vendor/chematic/crates/chematic-smiles",
     "vendor/chematic/crates/chematic-perception",

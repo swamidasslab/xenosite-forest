@@ -1,0 +1,26 @@
+[package]
+name = "xenosite-xrm"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+description = "Config-driven xenobiotic reaction naming (SKOS + SSSOM + JSONL). No forest rule coupling."
+repository = "https://github.com/swamidasslab/xenosite-forest"
+publish = false
+
+[lib]
+name = "xenosite_xrm"
+path = "src/lib.rs"
+
+[dependencies]
+chematic = { path = "../../vendor/chematic/crates/chematic", default-features = false, features = [
+    "smiles",
+    "smarts",
+    "perception",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
