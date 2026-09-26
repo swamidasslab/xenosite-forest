@@ -228,18 +228,30 @@ struct OxygenSite {
 }
 
 /// How closeness / improvement combine into one soft score.
+///
+/// Live [`Close`] / [`Improve`] / [`Add`] are **log-space** of the same
+/// positive factors [`Product`] multiplies: per metric
+/// `imp = max(0, parent−child)+1` and `close = SCALE/(1+child)`.
+/// `Add = log(∏ factors)` ≡ ranking of `Product` (fixed-point ln).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MatchCombine {
-    /// Closeness only: Σ [`neg_log1p_score`](child) over active metrics.
+    /// Σ `ln(SCALE/(1+child))` over active metrics.
     Close,
-    /// Hop gain only: Σ (`neg_log1p`(child) − `neg_log1p`(parent)).
+    /// Σ `ln(max(0, parent−child)+1)` over active metrics.
     Improve,
-    /// Closeness + hop gain (default). Metrics **add**.
+    /// Close + Improve = `ln` of the Product factors (default).
     #[default]
     Add,
-    /// Legacy: `(max(0, parent−child)+1) × (SCALE/(1+child))`, metrics multiply.
-    /// Kept for ablation / `--score product-*` only.
+    /// Direct multiply of the same factors (ablation / `--score product-*`).
     Product,
+    /// Linear costs → score: Σ `−child` (close only).
+    LinNegC,
+    /// Linear: Σ `−parent − child`.
+    LinNegPC,
+    /// Linear: Σ `parent − 2·child` (close + signed Δ).
+    LinPNeg2C,
+    /// Linear: Σ `−parent − 2·child`.
+    LinNegPNeg2C,
 }
 
 /// Which distance(s) feed the match score.
@@ -262,7 +274,7 @@ pub struct MatchScoreSpec {
 }
 
 impl MatchScoreSpec {
-    /// Default live recipe: −log(1+cost) closeness + delta, atom+formula.
+    /// Default: log-space product of close×imp factors (atom+formula).
     pub const fn add_both() -> Self {
         Self {
             combine: MatchCombine::Add,
@@ -293,6 +305,29 @@ impl MatchScoreSpec {
             (MatchCombine::Product, MatchMetric::Atom) => "product-atom",
             (MatchCombine::Product, MatchMetric::Formula) => "product-formula",
             (MatchCombine::Product, MatchMetric::Both) => "product-both",
+            (MatchCombine::LinNegC, MatchMetric::Atom) => "lin-neg-c-atom",
+            (MatchCombine::LinNegC, MatchMetric::Formula) => "lin-neg-c-formula",
+            (MatchCombine::LinNegC, MatchMetric::Both) => "lin-neg-c",
+            (MatchCombine::LinNegPC, MatchMetric::Atom) => "lin-neg-pc-atom",
+            (MatchCombine::LinNegPC, MatchMetric::Formula) => "lin-neg-pc-formula",
+            (MatchCombine::LinNegPC, MatchMetric::Both) => "lin-neg-pc",
+            (MatchCombine::LinPNeg2C, MatchMetric::Atom) => "lin-p-neg2c-atom",
+            (MatchCombine::LinPNeg2C, MatchMetric::Formula) => "lin-p-neg2c-formula",
+            (MatchCombine::LinPNeg2C, MatchMetric::Both) => "lin-p-neg2c",
+            (MatchCombine::LinNegPNeg2C, MatchMetric::Atom) => "lin-neg-p-neg2c-atom",
+            (MatchCombine::LinNegPNeg2C, MatchMetric::Formula) => "lin-neg-p-neg2c-formula",
+            (MatchCombine::LinNegPNeg2C, MatchMetric::Both) => "lin-neg-p-neg2c",
+        }
+    }
+
+    /// Linear cost→score weight pair `(parent_w, child_w)` for [`MatchCombine::Lin*`].
+    pub fn linear_weights(self) -> Option<(i64, i64)> {
+        match self.combine {
+            MatchCombine::LinNegC => Some((0, -1)),
+            MatchCombine::LinNegPC => Some((-1, -1)),
+            MatchCombine::LinPNeg2C => Some((1, -2)),
+            MatchCombine::LinNegPNeg2C => Some((-1, -2)),
+            _ => None,
         }
     }
 
@@ -332,7 +367,7 @@ impl Default for HeapScoreMode {
 }
 
 impl HeapScoreMode {
-    /// Default match recipe (−log closeness + delta, formula+atom).
+    /// Default match recipe (log of close×imp product, formula+atom).
     pub const fn match_add() -> Self {
         Self::Match(MatchScoreSpec::add_both())
     }
@@ -350,10 +385,64 @@ impl HeapScoreMode {
     }
 }
 
-/// Fixed-point `−ln(1 + cost)`. Higher (less negative) is better; cost 0 → 0.
+/// Closeness scale shared by Product multiply and log-space Add/Close.
+const MATCH_CLOSE_SCALE: f64 = 1_000_000.0;
+/// Fixed-point for `ln` terms (`round(ln(x) * this)`).
+const MATCH_LOG_SCALE: f64 = 1_000_000.0;
+
+/// Fixed-point `ln(x)` for positive factors. Higher is better.
+fn ln_fixed(x: f64) -> i64 {
+    debug_assert!(x > 0.0);
+    (x.ln() * MATCH_LOG_SCALE).round() as i64
+}
+
+/// Log-space closeness factor: `ln(SCALE / (1+cost))`.
+/// Equals [`neg_log1p_score`] plus a metric-count constant.
+pub fn log_close_term(cost: usize) -> i64 {
+    ln_fixed(MATCH_CLOSE_SCALE / (1.0 + cost as f64))
+}
+
+/// Fixed-point `−ln(1 + cost)` (= `log_close_term` − `ln(SCALE)`).
+/// Kept as a named closeness shape; prefer [`log_close_term`] in score.
 pub fn neg_log1p_score(cost: usize) -> i64 {
-    const SCALE: f64 = 1_000_000.0;
-    (-(1.0 + cost as f64).ln() * SCALE).round() as i64
+    (-(1.0 + cost as f64).ln() * MATCH_LOG_SCALE).round() as i64
+}
+
+/// Log-space improvement factor: `ln(max(0, parent−child)+1)`.
+pub fn log_improve_term(parent: usize, child: usize) -> i64 {
+    let imp = (parent as i64 - child as i64).max(0) + 1;
+    ln_fixed(imp as f64)
+}
+
+fn match_factors(
+    parent_formula_dist: usize,
+    child_formula_dist: usize,
+    parent_atom_cost: Option<usize>,
+    child_atom_cost: Option<usize>,
+    metric: MatchMetric,
+) -> (Vec<f64>, Vec<f64>) {
+    let use_formula = matches!(metric, MatchMetric::Formula | MatchMetric::Both);
+    let use_atom = matches!(metric, MatchMetric::Atom | MatchMetric::Both);
+    let mut imps = Vec::new();
+    let mut closes = Vec::new();
+    if use_formula {
+        imps.push(((parent_formula_dist as i64 - child_formula_dist as i64).max(0) + 1) as f64);
+        closes.push(MATCH_CLOSE_SCALE / (1.0 + child_formula_dist as f64));
+    }
+    if use_atom {
+        match (parent_atom_cost, child_atom_cost) {
+            (Some(p), Some(c)) => {
+                imps.push(((p as i64 - c as i64).max(0) + 1) as f64);
+                closes.push(MATCH_CLOSE_SCALE / (1.0 + c as f64));
+            }
+            // Same as Product: missing side → factor 1 (log 0 / mul 1).
+            _ => {
+                imps.push(1.0);
+                closes.push(1.0);
+            }
+        }
+    }
+    (imps, closes)
 }
 
 fn legacy_product_score(
@@ -363,46 +452,56 @@ fn legacy_product_score(
     child_atom_cost: Option<usize>,
     metric: MatchMetric,
 ) -> i64 {
-    const SCALE: i64 = 1_000_000;
-    let use_formula = matches!(metric, MatchMetric::Formula | MatchMetric::Both);
-    let use_atom = matches!(metric, MatchMetric::Atom | MatchMetric::Both);
-    let f_imp = if use_formula {
-        (parent_formula_dist as i64 - child_formula_dist as i64).max(0) + 1
-    } else {
-        1
-    };
-    let a_imp = if use_atom {
-        match (parent_atom_cost, child_atom_cost) {
-            (Some(p), Some(c)) => (p as i64 - c as i64).max(0) + 1,
-            _ => 1,
-        }
-    } else {
-        1
-    };
-    let improvement = f_imp.saturating_mul(a_imp);
-    let f_close = if use_formula {
-        SCALE / (1 + child_formula_dist as i64)
-    } else {
-        1
-    };
-    let a_close = if use_atom {
-        match child_atom_cost {
-            Some(c) => SCALE / (1 + c as i64),
-            None => 1,
-        }
-    } else {
-        1
-    };
-    improvement.saturating_mul(f_close.saturating_mul(a_close))
+    let (imps, closes) = match_factors(
+        parent_formula_dist,
+        child_formula_dist,
+        parent_atom_cost,
+        child_atom_cost,
+        metric,
+    );
+    let mut prod = 1i64;
+    for x in imps.into_iter().chain(closes) {
+        prod = prod.saturating_mul(x as i64);
+    }
+    prod
 }
 
 /// Parent→child match-family heap score from [`MatchScoreSpec`].
 ///
-/// Live path (Close / Improve / Add): per active metric, closeness =
-/// [`neg_log1p_score`](child) and delta = closeness − `neg_log1p`(parent);
-/// metrics **add**. Combine is close, improve, or close+delta. Legacy
-/// [`MatchCombine::Product`] keeps the old SCALE/(1+c) multiply. A target hit
-/// is just cost/formula 0 — no hit sentinel.
+/// [`MatchCombine::Add`] / Close / Improve use fixed-point `ln` of the **same**
+/// positive factors [`MatchCombine::Product`] multiplies — ranking-identical
+/// to Product (up to float rounding). Metrics contribute one imp factor and
+/// one close factor each when active. A target hit is cost/formula 0.
+fn linear_cost_score(
+    parent_w: i64,
+    child_w: i64,
+    parent_formula_dist: usize,
+    child_formula_dist: usize,
+    parent_atom_cost: Option<usize>,
+    child_atom_cost: Option<usize>,
+    metric: MatchMetric,
+) -> i64 {
+    let use_formula = matches!(metric, MatchMetric::Formula | MatchMetric::Both);
+    let use_atom = matches!(metric, MatchMetric::Atom | MatchMetric::Both);
+    let mut score = 0i64;
+    if use_formula {
+        score += parent_w * parent_formula_dist as i64 + child_w * child_formula_dist as i64;
+    }
+    if use_atom {
+        match (parent_atom_cost, child_atom_cost) {
+            (Some(p), Some(c)) => {
+                score += parent_w * p as i64 + child_w * c as i64;
+            }
+            // Child only: parent term 0 (unknown).
+            (None, Some(c)) => {
+                score += child_w * c as i64;
+            }
+            _ => {}
+        }
+    }
+    score
+}
+
 pub fn hop_match_score(
     spec: MatchScoreSpec,
     parent_formula_dist: usize,
@@ -419,39 +518,37 @@ pub fn hop_match_score(
             spec.metric,
         );
     }
-
-    let use_formula = matches!(spec.metric, MatchMetric::Formula | MatchMetric::Both);
-    let use_atom = matches!(spec.metric, MatchMetric::Atom | MatchMetric::Both);
-
-    let mut closeness = 0i64;
-    let mut delta = 0i64;
-    if use_formula {
-        let c = neg_log1p_score(child_formula_dist);
-        let p = neg_log1p_score(parent_formula_dist);
-        closeness += c;
-        delta += c - p;
+    if let Some((pw, cw)) = spec.linear_weights() {
+        return linear_cost_score(
+            pw,
+            cw,
+            parent_formula_dist,
+            child_formula_dist,
+            parent_atom_cost,
+            child_atom_cost,
+            spec.metric,
+        );
     }
-    if use_atom {
-        match (parent_atom_cost, child_atom_cost) {
-            (Some(p), Some(c)) => {
-                let child = neg_log1p_score(c);
-                let parent = neg_log1p_score(p);
-                closeness += child;
-                delta += child - parent;
-            }
-            // Child known only: closeness contributes; no parent → no delta.
-            (None, Some(c)) => {
-                closeness += neg_log1p_score(c);
-            }
-            _ => {}
-        }
-    }
+
+    let (imps, closes) = match_factors(
+        parent_formula_dist,
+        child_formula_dist,
+        parent_atom_cost,
+        child_atom_cost,
+        spec.metric,
+    );
+    let close_sum: i64 = closes.iter().map(|&c| ln_fixed(c)).sum();
+    let improve_sum: i64 = imps.iter().map(|&i| ln_fixed(i)).sum();
 
     match spec.combine {
-        MatchCombine::Close => closeness,
-        MatchCombine::Improve => delta,
-        MatchCombine::Add => closeness + delta,
-        MatchCombine::Product => unreachable!("handled above"),
+        MatchCombine::Close => close_sum,
+        MatchCombine::Improve => improve_sum,
+        MatchCombine::Add => close_sum + improve_sum,
+        MatchCombine::Product
+        | MatchCombine::LinNegC
+        | MatchCombine::LinNegPC
+        | MatchCombine::LinPNeg2C
+        | MatchCombine::LinNegPNeg2C => unreachable!("handled above"),
     }
 }
 
@@ -2352,6 +2449,9 @@ mod tests {
         assert_eq!(neg_log1p_score(0), 0);
         assert!(neg_log1p_score(0) > neg_log1p_score(1));
         assert!(neg_log1p_score(1) > neg_log1p_score(10));
+        // log_close = ln(SCALE) + neg_log1p
+        let ln_scale = ln_fixed(MATCH_CLOSE_SCALE);
+        assert_eq!(log_close_term(3), ln_scale + neg_log1p_score(3));
     }
 
     #[test]
@@ -2366,6 +2466,40 @@ mod tests {
         assert!(close > far, "close={close} far={far}");
         // Exact match (cost/formula 0) outranks a partial improvement via closeness.
         assert!(hop_match_add_score(9, 0, Some(9), Some(0)) > better);
+    }
+
+    #[test]
+    fn match_add_ranks_identically_to_product() {
+        // Add = ln(Product factors); pairwise order must match Product.
+        let both_add = MatchScoreSpec::add_both();
+        let both_prod = MatchScoreSpec::product_both();
+        let cases = [
+            (4, 4, Some(10usize), Some(10usize)),
+            (4, 2, Some(10), Some(5)),
+            (6, 4, Some(12), Some(10)),
+            (8, 6, Some(14), Some(12)),
+            (9, 0, Some(9), Some(0)),
+            (8, 4, Some(20), Some(10)),
+            (0, 0, Some(0), Some(0)),
+            (5, 5, None, None),
+            (3, 1, Some(7), None),
+        ];
+        for (i, a) in cases.iter().enumerate() {
+            for (j, b) in cases.iter().enumerate() {
+                if i >= j {
+                    continue;
+                }
+                let pa = hop_match_score(both_prod, a.0, a.1, a.2, a.3);
+                let pb = hop_match_score(both_prod, b.0, b.1, b.2, b.3);
+                let aa = hop_match_score(both_add, a.0, a.1, a.2, a.3);
+                let ab = hop_match_score(both_add, b.0, b.1, b.2, b.3);
+                assert_eq!(
+                    pa.cmp(&pb),
+                    aa.cmp(&ab),
+                    "product {pa:?} vs {pb:?} but add {aa:?} vs {ab:?} at {a:?} / {b:?}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -2406,7 +2540,7 @@ mod tests {
         let joint_flat = hop_match_score(both_add, 4, 4, Some(10), Some(10));
         assert!(joint > joint_flat);
         assert_eq!(MatchScoreSpec::matrix().len(), 9);
-        // Additive = close + improve.
+        // Add = close + improve (log factors).
         assert_eq!(
             hop_match_score(both_add, 8, 4, Some(20), Some(10)),
             hop_match_score(close_both, 8, 4, Some(20), Some(10))

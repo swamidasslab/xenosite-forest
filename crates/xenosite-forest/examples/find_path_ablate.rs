@@ -366,23 +366,45 @@ fn main() {
             },
         },
         Variant {
-            label: "close-atom",
+            label: "lin-neg-c",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {
                 heap_score: HeapScoreMode::Match(MatchScoreSpec {
-                    combine: MatchCombine::Close,
-                    metric: MatchMetric::Atom,
+                    combine: MatchCombine::LinNegC,
+                    metric: MatchMetric::Both,
                 }),
                 ..base_cfg
             },
         },
         Variant {
-            label: "add-atom",
+            label: "lin-neg-pc",
             rules: RulesKind::PhaseOne,
             config: FindPathConfig {
                 heap_score: HeapScoreMode::Match(MatchScoreSpec {
-                    combine: MatchCombine::Add,
-                    metric: MatchMetric::Atom,
+                    combine: MatchCombine::LinNegPC,
+                    metric: MatchMetric::Both,
+                }),
+                ..base_cfg
+            },
+        },
+        Variant {
+            label: "lin-p-neg2c",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                heap_score: HeapScoreMode::Match(MatchScoreSpec {
+                    combine: MatchCombine::LinPNeg2C,
+                    metric: MatchMetric::Both,
+                }),
+                ..base_cfg
+            },
+        },
+        Variant {
+            label: "lin-neg-p-neg2c",
+            rules: RulesKind::PhaseOne,
+            config: FindPathConfig {
+                heap_score: HeapScoreMode::Match(MatchScoreSpec {
+                    combine: MatchCombine::LinNegPNeg2C,
+                    metric: MatchMetric::Both,
                 }),
                 ..base_cfg
             },

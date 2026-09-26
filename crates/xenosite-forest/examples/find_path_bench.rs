@@ -245,8 +245,24 @@ fn parse_score_label(label: &str) -> HeapScoreMode {
             combine: MatchCombine::Improve,
             metric: MatchMetric::Formula,
         }),
+        "lin-neg-c" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::LinNegC,
+            metric: MatchMetric::Both,
+        }),
+        "lin-neg-pc" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::LinNegPC,
+            metric: MatchMetric::Both,
+        }),
+        "lin-p-neg2c" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::LinPNeg2C,
+            metric: MatchMetric::Both,
+        }),
+        "lin-neg-p-neg2c" => HeapScoreMode::Match(MatchScoreSpec {
+            combine: MatchCombine::LinNegPNeg2C,
+            metric: MatchMetric::Both,
+        }),
         other => panic!(
-            "unknown --score {other} (soft|add-both|product-both|close-both|improve-both|…-atom|…-formula)"
+            "unknown --score {other} (soft|add-both|product-both|lin-neg-c|lin-neg-pc|lin-p-neg2c|lin-neg-p-neg2c|…)"
         ),
     }
 }
