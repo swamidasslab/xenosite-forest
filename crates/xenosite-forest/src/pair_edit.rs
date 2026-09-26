@@ -416,6 +416,7 @@ impl PairCandidate {
 
         let mut products = Vec::new();
         let mut local_csmi = BTreeSet::new();
+        let parent_csmi = canon_smiles(mol);
         // Charge/H follow parent π bond sums (aromatic = 1.5). Edited-valence
         // atoms use the post-edit baseline so leave fragments stay closed-shell
         // (CH4 not [CH5]; phenol O not [OH+]) — no sanitize rescue.
@@ -463,6 +464,11 @@ impl PairCandidate {
                     continue;
                 }
                 let smiles = canon_smiles(&frag);
+                // keep+keep / path rematch must change the molecule — identity
+                // is vacuous (esters, pyrrole, ethene) and not a metabolite.
+                if smiles == parent_csmi {
+                    continue;
+                }
                 if local_csmi.insert(smiles) {
                     products.push(frag);
                 }
@@ -1123,6 +1129,27 @@ mod tests {
         assert!(
             csmi.iter().any(|p| *p == want_13) && csmi.iter().any(|p| *p == want_14),
             "benzene H path_end should emit both cyclohexadienes; got {products:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_ethene_path_end_refuses_identity() {
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("C=C").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let cands = pair_candidates(&mol, &endpoints).unwrap();
+        let products: Vec<String> = cands
+            .iter()
+            .flat_map(|c| c.materialize(&mol).unwrap_or_default())
+            .collect();
+        assert!(
+            products.is_empty(),
+            "ethene path_end must not rebuild reactant; got {products:?}"
         );
     }
 }
