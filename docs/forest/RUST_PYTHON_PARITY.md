@@ -83,7 +83,7 @@ Rust ``atom_pair_orbit_id`` (canonaut). Observed: Hydrogenation ``C=C`` py 2 vs
 rs 1. Options under consideration: (a) fix Python unique-edit, optionally by
 calling a Rust orbit/dedup helper exposed to Python; (b) temporarily iterate
 parity **without** unique-edit dedup on pair rules until (a) lands.
-Status: **not decided** (blocks fair site-count parity for pair leaves).
+Status: **not decided**. Superseded by C12 (investigation + decision).
 
 ### C8 — Adjudication when product sets disagree
 
@@ -116,6 +116,48 @@ Python’s survivor required sanitize. Prefer fixing the emit path over
 widening sanitize. Status: **approved** (goal); tightening emit so sanitize
 is unnecessary remains open work, not an excuse for product mismatch.
 
+### C11 — ``unique_csmi`` product collapse is a soft failure
+
+Yield-layer CSMI dedup (``unique_csmi=True`` dropping a later emission with
+the same ``(rule, PatternInfo.name|SMARTS, fragment-CSMI frozenset)``) is a
+**soft failure**, same family as C10 sanitize: the site unique-edit /
+pattern / ``when`` partition should already have collapsed equivalent edits.
+Ideally a rule dedups from **sites, patterns, and whens alone**; product
+identity is a safety net, not the design.
+
+``SiteDeduplicationWarning`` (check layer: same pattern + CSMI set + site
+ranks) is the unique-edit-miss signal that often accompanies a yield drop.
+Quiet yield drops (unequal ranks, same CSMI) are still soft failures under
+this choice.
+
+Parity / regression: ``tests/forest/test_csmi_dedup_soft_failure.py`` is
+parametric over ``PARITY_FUZZ_MOLS`` × Python leaves. Known hits may use
+temporary ``pytest.xfail`` until partition / unique-edit fixes land — xfail
+is not approval. Status: **approved** (goal).
+
+### C12 — C7 resolution: fix partition / unique-edit, not “no dedup”
+
+Investigation of the C7 citation (Hydrogenation ``C=C`` py 2 vs rs 1):
+
+- Pair ``pair_site_signature`` already keeps one ResonancePair survivor on
+  ethene. The second Python emission is the **alkene SMIRKS** door on the
+  same unordered atom-pair site (dual door, not pynauty↔canonaut orbit
+  disagreement). Parametric site bags (C2) already collapse that to one
+  topo class — site-count parity is green there.
+- ``unique_csmi`` does **not** collapse those two (distinct pattern tokens:
+  ``alkene`` vs pair ``None``). Relying on CSMI to paper that over would be
+  C11; the real fix is **data partition** (or shared site unique-edit across
+  SMIRKS + pair doors) so sites/patterns/whens alone yield one edit — same
+  style as Hydroxylation ``h``/``h2`` and Dealkylation H0/h SMARTS splits.
+- Option (b) from C7 (parity without unique-edit) is **not approved**: it
+  hides the miss. Option (a) is **approved** as: fix unique-edit and/or
+  partition overlapping SMIRKS↔pair coverage; do not use yield CSMI as the
+  dedup. Longer conjugated-path Hydrogenation gaps vs Rust also track
+  incomplete Rust ``conjugated_component`` (chemistry work order), not C7
+  alone.
+
+Status: **approved** (supersedes C7’s undecided fork).
+
 ---
 
 ## Work order (tackle in this sequence)
@@ -126,16 +168,17 @@ is unnecessary remains open work, not an excuse for product mismatch.
 | 1 | Discover all Rust + Python leaves; pair or attribute-exception | **done** | C3, C6 |
 | 2 | Expose rulesets + ``find_path`` + enumerate to Python | **done** | C9; doors wired |
 | 3 | Parametric parity (bounded corpus × paired leaves), not Hypothesis | **done** | C5 |
-| 4 | **Python pair unique-edit / topology dedup is wrong for pairs** | **open** | C7 — decide (a) fix vs (b) no-dedup iteration |
+| 4 | **Pair / dual-door unique-edit: partition SMIRKS↔pair overlap** | **open** | C12 — fix data/unique-edit (not no-dedup); H alkene+path_end |
 | 5 | Acetylation: chematic SMIRKS apply miss | **open** | ``[*:1][#6](=[#8])[#6]`` no apply; ``[*:1]C(=O)C`` OK |
 | 6 | Dephosphorylation: Rust emits nothing on ``COP(=O)(O)O`` | **open** | recursive SMARTS / P valence? |
 | 7 | AzoSplitting / ThiopheneSulfurOxidation: Rust empty on aromatic examples | **open** | ResonanceRule ``=,:`` / Kekulé |
 | 8 | NitrogenReduction: Rust empty on ``CCNO`` (hydroxylamine) | **open** | Resonance / pattern arm |
 | 9 | BenzodioxoleReduction: wrong products | **open** | catechol vs ring-opened; C8; watch C10 |
 | 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **open** | ``CCSO``+zwitterion vs ``CCS[O]``; watch C10 |
-| 11 | Dehydration: site-count mismatch with matching products | **open** | may clear after C7 / site_map align |
+| 11 | Dehydration: site-count mismatch with matching products | **open** | site_map / topo key align |
 | 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |
 | 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
+| 14 | Parametric ``unique_csmi`` yield-drop / SiteDeduplicationWarning | **done** (xfail soft hits) | C11 — ``test_csmi_dedup_soft_failure``; clear xfails when fixed |
 
 Depth-1 PhaseOne product diffs (separate probe, not leaf-only):
 ``tests/forest/probe_d1_diff.py`` / ``artifacts/d1_*`` — Dealkylation-heavy;
