@@ -80,18 +80,21 @@ impl ForestMol {
     /// Indexes of atoms that still exist are assumed stable (clone / append).
     /// SMIRKS apply that rewrites indexes must use [`Self::from_apply`].
     ///
+    /// Born-atom tags continue from this mol's counter on a **fresh** `tag_gen`
+    /// cell so sibling adopts from the same parent get the same labels (plan
+    /// replay / heap expand). Parent's counter is unchanged.
+    ///
     /// Unmodified systems still hit. An edit that changes a system's shape
     /// is a new [`crate::kekule::SystemKey`] and starts an empty bag.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
         let mut mol = mol;
-        let next = parent.tag_gen.get();
-        let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), next);
-        parent.tag_gen.set(next);
+        let start = parent.tag_gen.get();
+        let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), start);
         sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
-            tag_gen: Rc::clone(&parent.tag_gen),
+            tag_gen: Rc::new(Cell::new(next)),
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&parent.kekule),
             is_terminal_product: Cell::new(false),
@@ -99,16 +102,18 @@ impl ForestMol {
     }
 
     /// Product of a reindexing apply. `src_to_new[src] = Some(dst)` or `None`.
+    ///
+    /// Same sibling-stable tag counter as [`Self::product`]: child gets a new
+    /// cell starting after remapped labels; parent is not advanced.
     pub fn from_apply(&self, mol: Molecule, src_to_new: &[Option<usize>]) -> Self {
         let mut mol = mol;
-        let next = self.tag_gen.get();
-        let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), next);
-        self.tag_gen.set(next);
+        let start = self.tag_gen.get();
+        let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), start);
         sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
-            tag_gen: Rc::clone(&self.tag_gen),
+            tag_gen: Rc::new(Cell::new(next)),
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&self.kekule),
             is_terminal_product: Cell::new(false),

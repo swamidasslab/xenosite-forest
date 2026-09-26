@@ -581,7 +581,7 @@ pub fn lift_mappings(
     child: &crate::forest_mol::ForestMol,
     parent_maps: &[BTreeMap<usize, usize>],
 ) -> Option<Vec<BTreeMap<usize, usize>>> {
-    if !parent.shares_tag_gen(child) || parent_maps.is_empty() {
+    if parent_maps.is_empty() {
         return None;
     }
     let mut lifted = Vec::new();
@@ -1063,14 +1063,14 @@ pub fn try_lift_cleaved_child_tracked(
     target: &Molecule,
     mut mcs_rematch: Option<&mut usize>,
 ) -> Option<AtomDiff> {
-    if !parent.shares_tag_gen(child) {
-        return None;
-    }
     let parent_maps = if parent_diff.mappings.is_empty() {
         vec![parent_diff.mapping.clone()]
     } else {
         parent_diff.mappings.clone()
     };
+    if parent_maps.is_empty() {
+        return None;
+    }
     match lift_mappings(parent, child, &parent_maps) {
         Some(lifted) => {
             let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
@@ -2292,7 +2292,7 @@ mod tests {
         assert_eq!(lifted.cost(), 0, "{lifted:?}");
         let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
         assert_eq!(via.cost(), 0, "{via:?}");
-        assert!(child.shares_tag_gen(&parent));
+        assert!(!child.shares_tag_gen(&parent));
     }
 
     #[test]

@@ -132,6 +132,11 @@ impl Candidate {
     }
 
     /// Like [`Self::identity_plan`], reusing cached generators (ForestMol).
+    ///
+    /// Site notes cover the full pattern `site_map` (AtomPair candidates name
+    /// both ends — e.g. alcohol DH C+O). Discovery `site` alone is wrong for
+    /// pairs: replay cannot rematch the unique-edit orbit representative onto
+    /// the tagged partner.
     pub fn identity_plan_with_gens(
         &self,
         generators: &[crate::orbits::AtomBondGenerator],
@@ -142,10 +147,20 @@ impl Candidate {
             .leaf_rule()
             .unwrap_or(self.pattern.name.as_str())
             .to_string();
+        let mut site_atoms: Vec<usize> = self
+            .pattern
+            .site_map
+            .iter()
+            .filter_map(|m| self.mapped.get(m).copied())
+            .collect();
+        if site_atoms.is_empty() {
+            site_atoms.push(self.site);
+        }
         let orbit = crate::orbits::atom_orbit_with_gens(generators, n_atoms, self.site);
-        identity_plan_at_indexes(rule.clone(), mol, [self.site], orbit.iter().copied()).unwrap_or_else(
-            |_| crate::canonical_plan::identity_plan_with_orbit(rule, [self.site], orbit),
-        )
+        identity_plan_at_indexes(rule.clone(), mol, site_atoms.iter().copied(), orbit.iter().copied())
+            .unwrap_or_else(|_| {
+                crate::canonical_plan::identity_plan_with_orbit(rule, site_atoms, orbit)
+            })
     }
 
     pub fn is_pair_endpoint(&self) -> bool {

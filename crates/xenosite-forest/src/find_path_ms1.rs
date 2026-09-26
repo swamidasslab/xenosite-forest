@@ -10,10 +10,11 @@
 //! find_path — see `mass` / catalog tests for drift guards).
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, BTreeSet, HashSet};
 
 use crate::ForestError;
 use crate::canonical_plan::{ApplyN, Step, as_deps};
+use crate::candidate::Candidate;
 use crate::find_path::{PathCounters, PathOutcome, PathStep};
 use crate::forest_mol::ForestMol;
 use crate::mass::{Ms1Adduct, formula_apply_delta, mz_abs_error, mz_of, mz_of_mol, mz_within};
@@ -130,6 +131,38 @@ fn walk_mz(mol: &ForestMol, adduct: Ms1Adduct) -> Option<f64> {
     // Prefer atom walk so explicit isotope labels shift mass; formula path
     // is element-symbol only (common isotopes).
     mz_of_mol(mol.mol(), adduct).or_else(|| mz_of(mol.formula().as_ref(), adduct))
+}
+
+fn candidate_site_atoms(candidate: &Candidate) -> BTreeSet<usize> {
+    let mut atoms: BTreeSet<usize> = candidate
+        .pattern
+        .site_map
+        .iter()
+        .filter_map(|m| candidate.mapped.get(m).copied())
+        .collect();
+    if atoms.is_empty() {
+        atoms.insert(candidate.site);
+    }
+    atoms
+}
+
+/// Same plan emission as structure [`crate::find_path`]: composite leaves use
+/// their `canonical_plan` hook (`WillAdd` notes → precedes at [`as_deps`]);
+/// otherwise identity at site labels.
+fn plan_steps_for_candidate(
+    cand: &Candidate,
+    mol: &crate::Molecule,
+    gens: &[crate::orbits::AtomBondGenerator],
+) -> Vec<Step> {
+    let atoms: Vec<usize> = candidate_site_atoms(cand).into_iter().collect();
+    match cand
+        .leaf_rule()
+        .and_then(crate::rules::leaf_rule)
+        .filter(|leaf| leaf.has_plan_hook())
+    {
+        Some(leaf) => leaf.canonical_plan(mol, &atoms, None),
+        None => cand.identity_plan_with_gens(gens, mol.atom_count(), mol),
+    }
 }
 
 /// Predict child mz from PatternInfo `delta_formula` (no materialize).
@@ -286,7 +319,7 @@ pub fn find_path_ms1(
                 pool_used[i] = pool_used[i].saturating_add(1);
             }
 
-            let plan_steps = cand.identity_plan_with_gens(&gens, mol.atom_count(), mol);
+            let plan_steps = plan_steps_for_candidate(&cand, mol, &gens);
             let path_step = PathStep {
                 rule_path: cand.rule_path.clone(),
                 pattern_name: cand.pattern.name.clone(),
@@ -341,6 +374,7 @@ mod tests {
     ///
     /// Raw `Step::apply` molecules can keep pre-aromatic H counts; scoring the
     /// re-parsed CSMI aligns plan-replay mass with `ForestMol` products.
+    #[allow(dead_code)]
     fn mz_of_sanitized(mol: &crate::mol::Molecule, adduct: Ms1Adduct) -> Option<f64> {
         let csmi = canon_smiles(mol);
         let parsed = ForestMol::parse(&csmi).ok()?;
@@ -363,7 +397,6 @@ mod tests {
         assert!(!hits.is_empty(), "expected at least one MS1 hit");
         let start = ForestMol::parse(reactant).unwrap();
         let start_mz = mz_of_mol(start.mol(), Ms1Adduct::MPlusH).unwrap();
-        let reactant_mol = start.mol();
         for h in hits {
             let mut prev_err = crate::mass::mz_abs_error(start_mz, mz);
             for (i, step) in h.steps.iter().enumerate() {
@@ -414,12 +447,12 @@ mod tests {
                     h.smiles
                 );
                 for (li, lin) in h.plan.linearizations().into_iter().enumerate() {
-                    let lin_products = lin.apply(reactant_mol).unwrap_or_default();
+                    let lin_products = lin.apply_forest(&start).unwrap_or_default();
                     if lin_products.is_empty() {
                         continue;
                     }
                     if lin_products.len() == 1 {
-                        let pmz = mz_of_sanitized(&lin_products[0], Ms1Adduct::MPlusH).unwrap();
+                        let pmz = mz_of_mol(lin_products[0].mol(), Ms1Adduct::MPlusH).unwrap();
                         assert!(
                             mz_within(pmz, mz, tol_da),
                             "plan lin{li} product mz={pmz} outside tol of {mz} (hit {})",
@@ -427,13 +460,13 @@ mod tests {
                         );
                     } else {
                         let all_at_target = lin_products.iter().all(|p| {
-                            mz_of_sanitized(p, Ms1Adduct::MPlusH)
+                            mz_of_mol(p.mol(), Ms1Adduct::MPlusH)
                                 .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
                         });
                         if !all_at_target {
                             let hit_ok = lin_products.iter().any(|p| {
-                                canon_smiles(p) == h.smiles
-                                    && mz_of_sanitized(p, Ms1Adduct::MPlusH)
+                                p.csmi().as_ref() == h.smiles
+                                    && mz_of_mol(p.mol(), Ms1Adduct::MPlusH)
                                         .is_some_and(|pmz| mz_within(pmz, mz, tol_da))
                             });
                             assert!(
@@ -871,168 +904,466 @@ mod tests {
         );
     }
 
-    /// One-hop span across Phase I leaves (oxidation, reduction, cleavage,
-    /// hydrolysis). Complements the hydroxylation / epoxide multi-hop cases.
-    #[test]
-    fn harder_span_one_hop_heteroatom_and_redox() {
-        assert_chain_in_ms1(
-            "CCS",
-            &sulfur_oxidation(),
-            &["SulfurOxidation"],
-            1,
-            &["SulfurOxidation"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "CN",
-            &nitrogen_oxidation(),
-            &["NitrogenOxidation"],
-            1,
-            &["NitrogenOxidation"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "CCO",
-            &dehydrogenation(),
-            &["Dehydrogenation"],
-            1,
-            &["Dehydrogenation"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "C#C",
-            &crate::rules::hydrogenation(),
-            &["Hydrogenation"],
-            1,
-            &["Hydrogenation"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "Clc1ccccc1",
-            &crate::rules::oxidative_dehalogenation(),
-            &["OxidativeDehalogenation"],
-            1,
-            &["OxidativeDehalogenation"],
-            2000,
-        );
-        assert_chain_in_ms1(
-            "Clc1ccccc1",
-            &crate::rules::reductive_dehalogenation(),
-            &["ReductiveDehalogenation"],
-            1,
-            &["ReductiveDehalogenation"],
-            2000,
-        );
-        assert_chain_in_ms1(
-            "CC(=O)OC",
-            &crate::rules::hydrolysis(),
-            &["Hydrolysis"],
-            1,
-            &["Hydrolysis"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "CCO",
-            &crate::rules::dehydration(),
-            &["Dehydration"],
-            1,
-            &["Dehydration"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "CS(=O)C",
-            &crate::rules::sulfur_reduction(),
-            &["SulfurReduction"],
-            1,
-            &["SulfurReduction"],
-            800,
-        );
-        assert_chain_in_ms1(
-            "O=Nc1ccccc1",
-            &crate::rules::nitrogen_reduction(),
-            &["NitrogenReduction"],
-            1,
-            &["NitrogenReduction"],
-            2000,
-        );
-        assert_chain_in_ms1(
-            "c1ccc2c(c1)C(=O)c1ccccc1C2=O",
-            &crate::rules::oxygen_reduction(),
-            &["OxygenReduction"],
-            1,
-            &["OxygenReduction"],
-            3000,
-        );
-        assert_chain_in_ms1(
-            "c1ccc2c(c1)OCO2",
-            &crate::rules::benzodioxole_reduction(),
-            &["BenzodioxoleReduction"],
-            1,
-            &["BenzodioxoleReduction"],
-            2000,
-        );
+    /// Broad leaf set for hard multi-hop MS1 (PhaseOne + NDealkylation).
+    fn hard_span_ruleset() -> RuleSet {
+        RuleSet::compose(
+            Some("HardSpan".into()),
+            [
+                hydroxylation(),
+                epoxidation(),
+                epoxide_hydration(),
+                epoxide_opening(),
+                sulfur_oxidation(),
+                nitrogen_oxidation(),
+                dehydrogenation(),
+                dealkylation(),
+                crate::rules::n_dealkylation(),
+                crate::rules::hydrogenation(),
+                crate::rules::oxidative_dehalogenation(),
+                crate::rules::reductive_dehalogenation(),
+                crate::rules::hydrolysis(),
+                crate::rules::dehydration(),
+                crate::rules::sulfur_reduction(),
+                crate::rules::nitrogen_reduction(),
+                crate::rules::oxygen_reduction(),
+                crate::rules::benzodioxole_reduction(),
+            ],
+        )
     }
 
-    #[test]
-    fn harder_span_ethane_hydroxylation_then_dehydrogenation() {
-        assert_chain_in_ms1(
-            "CC",
-            &phase_one(),
-            &["Hydroxylation", "Dehydrogenation"],
-            2,
-            &["Hydroxylation", "Dehydrogenation"],
-            3000,
-        );
+    /// Chain-apply keeping the largest fragment each hop (cleavage-safe).
+    fn chain_apply_largest(reactant: &str, leaves: &[&str]) -> (String, f64) {
+        let mut cur = ForestMol::parse(reactant).unwrap();
+        for leaf in leaves {
+            let set = crate::rules::leaf_rule(leaf).unwrap_or_else(|| panic!("missing {leaf}"));
+            let mol = cur.mol();
+            let mut best: Option<(usize, ForestMol)> = None;
+            for cand in set.candidates(mol) {
+                let cand = cand.unwrap();
+                let pieces = cand.materialize_mols(mol).unwrap();
+                if pieces.is_empty() {
+                    continue;
+                }
+                let piece = pieces.into_iter().max_by_key(|p| p.atom_count()).unwrap();
+                let n = piece.atom_count();
+                if best.as_ref().map(|(b, _)| n > *b).unwrap_or(true) {
+                    best = Some((n, cur.adopt_product(piece)));
+                }
+            }
+            cur = best
+                .unwrap_or_else(|| panic!("{reactant} chain failed at {leaf}"))
+                .1;
+        }
+        let mz = mz_of_mol(cur.mol(), Ms1Adduct::MPlusH).unwrap();
+        (cur.csmi().as_ref().to_string(), mz)
     }
 
+    fn assert_hard_chain_in_ms1(
+        reactant: &str,
+        pool_arms: &[&str],
+        leaves: &[&str],
+        max_nodes: usize,
+        require_replay: bool,
+    ) {
+        let (csmi, mz) = chain_apply_largest(reactant, leaves);
+        let set = hard_span_ruleset();
+        let pools = [ApplyN::new(pool_arms.iter().copied(), leaves.len() as u16)];
+        let mut counters = PathCounters::default();
+        let hits = find_path_ms1(
+            reactant,
+            &set,
+            &pools,
+            &mut counters,
+            Ms1Config {
+                mz,
+                tol_da: 0.001,
+                adduct: Ms1Adduct::MPlusH,
+                max_paths: 24,
+                max_nodes,
+            },
+        )
+        .unwrap();
+        assert!(
+            hits.iter().any(|h| h.smiles == csmi),
+            "hard chain {leaves:?} on {reactant} → {csmi} (mz={mz}) missing from {:?}; billed={}",
+            hits.iter().map(|h| h.smiles.as_str()).collect::<Vec<_>>(),
+            counters.billed()
+        );
+        assert_hits_mz_only(&hits, reactant, mz, 0.001);
+        if require_replay {
+            let matched: Vec<_> = hits.iter().filter(|h| h.smiles == csmi).collect();
+            assert!(
+                matched
+                    .iter()
+                    .any(|h| h.plan.reaches(reactant, &csmi).unwrap_or(false)),
+                "hard chain {leaves:?} on {reactant} hit {csmi} but plan does not replay; plans={:?}",
+                matched.iter().map(|h| &h.plan).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    /// Hard multi-hop cases spanning diverse Phase I chemistry (not one-hop toys).
+    /// `require_replay=true` cases must also plan-reach the chain CSMI.
     #[test]
-    fn harder_span_butene_epoxidation_then_opening() {
-        assert_chain_in_ms1(
-            "C/C=C/C",
-            &phase_one(),
+    fn hard_span_two_hop_mixed_reactions() {
+        // Alkene oxygenation + redox
+        assert_hard_chain_in_ms1(
+            "C=C",
             &[
-                "Epoxidation",
-                "EpoxideOpening",
                 "EpoxideHydration",
+                "Dehydrogenation",
                 "Hydroxylation",
-            ],
-            2,
-            &["Epoxidation", "EpoxideOpening"],
-            4000,
-        );
-    }
-
-    #[test]
-    fn harder_span_chlorobenzene_oxdehal_under_phase_one_or() {
-        assert_chain_in_ms1(
-            "Clc1ccccc1",
-            &phase_one(),
-            &[
-                "OxidativeDehalogenation",
-                "Hydroxylation",
-                "ReductiveDehalogenation",
                 "Epoxidation",
             ],
-            1,
-            &["OxidativeDehalogenation"],
-            4000,
+            &["EpoxideHydration", "Dehydrogenation"],
+            6000,
+            true,
         );
-    }
-
-    #[test]
-    fn harder_span_ethanethiol_sox_under_phase_one_or() {
-        assert_chain_in_ms1(
+        assert_hard_chain_in_ms1(
+            "C/C=C/C",
+            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation", "Epoxidation"],
+            &["EpoxideHydration", "Dehydrogenation"],
+            8000,
+            true,
+        );
+        // Heteroatom ox then carbon ox / DH
+        assert_hard_chain_in_ms1(
             "CCS",
-            &phase_one(),
             &[
                 "SulfurOxidation",
                 "Hydroxylation",
                 "Dehydrogenation",
                 "Dealkylation",
             ],
-            1,
-            &["SulfurOxidation"],
-            3000,
+            &["SulfurOxidation", "Hydroxylation"],
+            8000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CSC",
+            &["SulfurOxidation", "Hydroxylation", "Dehydrogenation"],
+            &["SulfurOxidation", "Hydroxylation"],
+            6000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CN",
+            &["NitrogenOxidation", "Hydroxylation", "Dehydrogenation"],
+            &["NitrogenOxidation", "Hydroxylation"],
+            6000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCN",
+            &["NitrogenOxidation", "Hydroxylation", "Dehydrogenation"],
+            &["NitrogenOxidation", "Hydroxylation"],
+            8000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCO",
+            &["Dehydrogenation", "Hydroxylation", "Dehydration"],
+            &["Dehydrogenation", "Hydroxylation"],
+            6000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCC",
+            &["Hydroxylation", "Dehydrogenation", "Epoxidation"],
+            &["Hydroxylation", "Dehydrogenation"],
+            6000,
+            true,
+        );
+        // Aryl multi-OH
+        assert_hard_chain_in_ms1(
+            "Cc1ccccc1",
+            &[
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+                "Dehydrogenation",
+            ],
+            &["Hydroxylation", "Hydroxylation"],
+            10000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "Oc1ccccc1",
+            &["Hydroxylation", "Epoxidation", "Dehydrogenation"],
+            &["Hydroxylation", "Hydroxylation"],
+            10000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCCCc1ccccc1",
+            &["Hydroxylation", "Epoxidation", "Dehydrogenation"],
+            &["Hydroxylation", "Hydroxylation"],
+            12000,
+            true,
+        );
+        // Reduction + ox
+        assert_hard_chain_in_ms1(
+            "c1ccc2c(c1)C(=O)c1ccccc1C2=O",
+            &["OxygenReduction", "Hydroxylation", "Dehydrogenation"],
+            &["OxygenReduction", "Hydroxylation"],
+            12000,
+            true,
+        );
+        // Cleavage after hydroxylation (label-stable order)
+        assert_hard_chain_in_ms1(
+            "COc1ccccc1",
+            &["Dealkylation", "Hydroxylation", "Epoxidation"],
+            &["Hydroxylation", "Dealkylation"],
+            15000,
+            true,
+        );
+        // Thioanisole
+        assert_hard_chain_in_ms1(
+            "CSc1ccccc1",
+            &[
+                "SulfurOxidation",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dealkylation",
+            ],
+            &["SulfurOxidation", "Hydroxylation"],
+            12000,
+            true,
+        );
+        // Oxdehal / cleavage-first: MS1 recovery required; plan replay still soft
+        // (site labels / multi-effect leaves).
+        assert_hard_chain_in_ms1(
+            "Clc1ccccc1",
+            &[
+                "OxidativeDehalogenation",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dehydrogenation",
+                "EpoxideHydration",
+            ],
+            &["OxidativeDehalogenation", "Hydroxylation"],
+            12000,
+            false,
+        );
+        assert_hard_chain_in_ms1(
+            "Brc1ccccc1",
+            &[
+                "OxidativeDehalogenation",
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+            ],
+            &["OxidativeDehalogenation", "Hydroxylation"],
+            12000,
+            false,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccccc1",
+            &[
+                "Dealkylation",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dehydrogenation",
+            ],
+            &["Dealkylation", "Hydroxylation"],
+            15000,
+            false,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccc(OC)cc1",
+            &["Dealkylation", "Hydroxylation", "Epoxidation"],
+            &["Dealkylation", "Hydroxylation"],
+            15000,
+            false,
+        );
+        assert_hard_chain_in_ms1(
+            "c1ccc2c(c1)OCO2",
+            &[
+                "BenzodioxoleReduction",
+                "Hydroxylation",
+                "Epoxidation",
+                "Dehydrogenation",
+            ],
+            &["BenzodioxoleReduction", "Hydroxylation"],
+            10000,
+            false,
+        );
+        assert_hard_chain_in_ms1(
+            "CCCCc1ccccc1",
+            &[
+                "Hydroxylation",
+                "Dehydrogenation",
+                "Epoxidation",
+                "EpoxideHydration",
+            ],
+            &["Hydroxylation", "Dehydrogenation"],
+            12000,
+            false,
+        );
+        // Alkyne → ene → diol: EpoxideHydration expands with WillAdd deps;
+        // Opening names both carbons so replay survives hydrogenation tags.
+        assert_hard_chain_in_ms1(
+            "C#C",
+            &[
+                "Hydrogenation",
+                "EpoxideHydration",
+                "Epoxidation",
+                "Hydroxylation",
+            ],
+            &["Hydrogenation", "EpoxideHydration"],
+            8000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "C#C",
+            &["Hydrogenation", "Epoxidation", "EpoxideHydration"],
+            &["Hydrogenation", "Epoxidation"],
+            8000,
+            false, // identity Epoxidation is one-atom site; bond replay soft
+        );
+    }
+
+    #[test]
+    fn hard_span_three_hop_mixed_reactions() {
+        assert_hard_chain_in_ms1(
+            "C=C",
+            &[
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideOpening",
+            ],
+            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CC",
+            &["Hydroxylation", "Dehydrogenation", "Epoxidation"],
+            &["Hydroxylation", "Hydroxylation", "Dehydrogenation"],
+            10000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCC",
+            &["Hydroxylation", "Dehydrogenation"],
+            &["Hydroxylation", "Hydroxylation", "Dehydrogenation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCS",
+            &[
+                "SulfurOxidation",
+                "Hydroxylation",
+                "Dehydrogenation",
+                "Dealkylation",
+            ],
+            &["SulfurOxidation", "Hydroxylation", "Dehydrogenation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "c1ccccc1",
+            &["Hydroxylation", "Epoxidation", "Dehydrogenation"],
+            &["Hydroxylation", "Hydroxylation", "Hydroxylation"],
+            10000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "C/C=C/C",
+            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation", "Epoxidation"],
+            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation"],
+            15000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCN",
+            &["NitrogenOxidation", "Hydroxylation", "Dehydrogenation"],
+            &["NitrogenOxidation", "Hydroxylation", "Dehydrogenation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "C#C",
+            &[
+                "Hydrogenation",
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
+            &["Hydrogenation", "EpoxideHydration", "Dehydrogenation"],
+            12000,
+            true,
+        );
+    }
+
+    #[test]
+    fn hard_span_larger_scaffolds() {
+        assert_hard_chain_in_ms1(
+            "COc1cc(CC=C)ccc1O",
+            &[
+                "Dealkylation",
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+            ],
+            &["Dealkylation"],
+            10000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccc2c(OC)cccc2c1",
+            &["Dealkylation", "Hydroxylation", "Epoxidation"],
+            &["Dealkylation"],
+            12000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "COc1ccc(CC=C)c(OC)c1",
+            &[
+                "Epoxidation",
+                "EpoxideOpening",
+                "EpoxideHydration",
+                "Dealkylation",
+                "Hydroxylation",
+            ],
+            &["Epoxidation", "EpoxideHydration"],
+            18000,
+            false, // two independent oxygenations; free OR order
+        );
+        assert_hard_chain_in_ms1(
+            "c1ccc2[nH]ccc2c1",
+            &[
+                "Hydroxylation",
+                "Epoxidation",
+                "EpoxideHydration",
+                "Dehydrogenation",
+            ],
+            &["Hydroxylation", "Hydroxylation"],
+            15000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "O=c1ccc2ccccc2o1",
+            &["Hydroxylation", "Epoxidation", "OxygenReduction"],
+            &["Hydroxylation", "Hydroxylation"],
+            15000,
+            true,
+        );
+        assert_hard_chain_in_ms1(
+            "CCOc1ccc(NC(C)=O)cc1",
+            &[
+                "Dealkylation",
+                "Hydroxylation",
+                "Hydrolysis",
+                "NDealkylation",
+            ],
+            &["Dealkylation"],
+            12000,
+            true,
         );
     }
 
@@ -1115,6 +1446,21 @@ mod tests {
         .unwrap();
         assert_eq!(hits.len(), 1, "{hits:?} billed={}", counters.billed());
         assert_eq!(hits[0].steps[0].leaf_rule(), Some("EpoxideHydration"));
+        // Composite leaf expands to Epoxidation ≺ EpoxideOpening (WillAdd bind),
+        // same deps as structure find_path; ApplyN bag still on the plan.
+        assert_eq!(
+            hits[0]
+                .plan
+                .steps()
+                .iter()
+                .map(|s| s.rule.as_str())
+                .collect::<Vec<_>>(),
+            ["Epoxidation", "EpoxideOpening"]
+        );
+        assert_eq!(hits[0].plan.precedes(), &[(0, 1)]);
+        assert_eq!(hits[0].plan.apply_n().len(), 1);
+        assert_eq!(hits[0].plan.apply_n()[0].count, 1);
+        assert!(hits[0].plan.reaches("C=C", "OCCO").unwrap());
         assert_hits_satisfy_mz(&hits, "C=C", mz, 0.001);
         // Catalog bags are mass-faithful for this leaf — prediction ≈ hit.
         let parent = ForestMol::parse("C=C").unwrap();
