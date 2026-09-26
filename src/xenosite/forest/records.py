@@ -239,7 +239,7 @@ _LeaveSpan: TypeAlias = int | None | tuple[int | None, ...]
 class _SpanCore(TypedDict):
     """Effect fields :func:`~xenosite.forest.rules._span` always writes.
 
-    Every possibility from :func:`~xenosite.forest.rules.describe` carries
+    Every possibility from :func:`~xenosite.forest.rules._describe` carries
     these keys, so the collapsed span does too. A certain value stays bare;
     disagreeing branches become a tuple of the distinct values.
     """
@@ -380,7 +380,7 @@ SitesOn: TypeAlias = Literal["atom_hydrogen", "bonds", "atoms", "atom_pairs"]
 # ``"atom_pair"`` ResonancePair path/ends only — never on plain SMARTS rules.
 RuleSiteKind: TypeAlias = Literal["atom", "bond", "directed_bond", "atom_pair"]
 
-# Keyword values :func:`~xenosite.forest.rules.describe` / ``branches`` accept.
+# Keyword values :func:`~xenosite.forest.rules._describe` / ``branches`` accept.
 EffectField: TypeAlias = str | bool | int | When | dict[str, int] | None
 
 

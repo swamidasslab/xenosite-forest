@@ -13,7 +13,7 @@ from xenosite.forest.rules import (
     RuleSiteKind,
     SiteDeduplicationWarning,
     SmirksReactionRule,
-    describe,
+    _describe,
 )
 from xenosite.forest.rulesets import PhaseOne, RuleSet
 
@@ -27,7 +27,7 @@ class OverlapOhA(SmirksReactionRule):
     smirks: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6h3:1]>>[*:1]O",
-            describe(adds="O", removes="H", name="oh", site_map=1),
+            _describe(adds="O", removes="H", name="oh", site_map=1),
         ),
     )
 
@@ -39,7 +39,7 @@ class OverlapOhB(SmirksReactionRule):
     smirks: tuple[tuple[str, PatternInfo], ...] = (
         (
             "[#6h3:1]>>[*:1]O",
-            describe(adds="O", removes="H", name="oh", site_map=1),
+            _describe(adds="O", removes="H", name="oh", site_map=1),
         ),
     )
 

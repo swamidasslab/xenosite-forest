@@ -14,7 +14,7 @@ from xenosite.forest.rules import (
     Dehydrogenation,
     Hydroxylation,
     _repeats_ancestor_dedup_smi,
-    describe,
+    _describe,
 )
 
 
@@ -41,13 +41,13 @@ def test_hydroxylation_product_does_not_repeat_parent():
 
 def test_is_dehydrogenation_effect_shape():
     assert _is_dehydrogenation_effect(
-        describe(removes="H", dearomatizes=True)["possibilities"][0]
+        _describe(removes="H", dearomatizes=True)["possibilities"][0]
     )
     assert not _is_dehydrogenation_effect(
-        describe(adds="O", removes="H")["possibilities"][0]
+        _describe(adds="O", removes="H")["possibilities"][0]
     )
     assert not _is_dehydrogenation_effect(
-        describe(removes="H", dearomatizes=True, cleaves=True)["possibilities"][0]
+        _describe(removes="H", dearomatizes=True, cleaves=True)["possibilities"][0]
     )
 
 

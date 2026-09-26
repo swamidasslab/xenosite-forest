@@ -19,7 +19,7 @@ from xenosite.forest.rules import (
     Hydroxylation,
     ReactionRule,
     SmirksReactionRule,
-    describe,
+    _describe,
 )
 from xenosite.forest.rulesets import PhaseOne
 
@@ -149,7 +149,7 @@ class _CarbonToOxygen(SmirksReactionRule):
     smirks = (
         (
             "[C:1]Cl>>[O:1].[Cl:2]",
-            describe(
+            _describe(
                 site_map=1,
                 adds="O",
                 removes="C",

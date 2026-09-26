@@ -1,7 +1,7 @@
 """Reactant-to-target search over the proof-of-concept rules.
 
 One atom diff drives ``filter_rules`` and ``filter_sites``. A rule is a
-SMARTS pattern plus ``describe()``; it does not grow this search. The yield
+SMARTS pattern plus ``_describe()``; it does not grow this search. The yield
 is a phase-I :class:`~xenosite._archive_forest.step_plan.Deps` plus the cleavage
 fragments that were not expanded.
 """
