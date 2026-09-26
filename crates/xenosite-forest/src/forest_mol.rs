@@ -86,7 +86,8 @@ impl ForestMol {
     /// `tag_gen` so tags stay on the same generator.
     ///
     /// Unmodified systems still hit. An edit that changes a system's shape
-    /// is a new [`crate::kekule::SystemKey`] and starts an empty bag.
+    /// is a new [`crate::kekule::SystemKey`] (tag-keyed, not index-keyed) and
+    /// starts an empty bag.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
         let mut mol = mol;
         let start = labels::next_tag(&parent.labels);

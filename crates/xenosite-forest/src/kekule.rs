@@ -5,12 +5,22 @@
 //!
 //! - assigns **one** conjugated component (other systems stay aromatic)
 //! - fills **on demand** when a match names a bond in that system
-//! - stores **assignment maps**, not baked mols, keyed by the system's
-//!   atom set plus a fingerprint of its aromatic/bond shape
+//! - stores **assignment maps**, not baked mols
 //! - lives on [`crate::forest_mol::ForestMol`] as one `Rc` for a copy tree: the first
 //!   relative to fill a key shares it with every relative whose system
 //!   still matches. An edit that changes kekulization of a system misses
 //!   that key and starts a new bag.
+//!
+//! # Tag keys, not indexes
+//!
+//! Reusable Kekulé objects ([`SystemKey`], [`SystemKekule`] assignments /
+//! `by_order`, and residual/constraint keys when they land) are keyed by
+//! forest **labels** ([`Tag`] / chematic `Atom.tag`), **not** atom indexes.
+//! Indexes are only for perception and matching on the *current* mol layout;
+//! they move under rewrite and canonical reorder. Tags are stable in a
+//! ForestMol copy tree, so untouched systems keep hitting the shared bag after
+//! `product` / `edit_copy`. Overlay resolves tags → indexes on the mol being
+//! stamped.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -20,10 +30,84 @@ use chematic::core::BondOrder;
 use chematic::perception::find_sssr;
 use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
+use crate::labels::Tag;
 use crate::mol::{ForestError, Molecule, atom_idx, atom_usize};
 
 fn bond_key(a: usize, b: usize) -> (usize, usize) {
     if a < b { (a, b) } else { (b, a) }
+}
+
+fn tag_bond_key(a: Tag, b: Tag) -> (Tag, Tag) {
+    if a <= b { (a, b) } else { (b, a) }
+}
+
+/// Chematic `Atom.tag` as a forest [`Tag`].
+fn tag_of(mol: &Molecule, idx: usize) -> Option<Tag> {
+    mol.atom(atom_idx(idx)).tag.map(Tag)
+}
+
+/// Current index holding `tag`, if any.
+fn index_of_tag(mol: &Molecule, tag: Tag) -> Option<usize> {
+    mol.atoms().find_map(|(idx, atom)| {
+        (atom.tag == Some(tag.0)).then_some(atom_usize(idx))
+    })
+}
+
+/// Stamp `Atom.tag = Some(i as u32)` on every untagged atom.
+///
+/// ForestMol always stamps real copy-tree labels. Bare mols (one-shot
+/// [`kekule_forms`], unit tests) need tags before cache insert — index-as-tag
+/// is only stable on that mol instance, not across rewrite. Prefer ForestMol
+/// labels for reuse across `product` / `edit_copy`.
+pub fn stamp_missing_index_tags(mol: &mut Molecule) {
+    let n = mol.atom_count();
+    for i in 0..n {
+        if mol.atom(atom_idx(i)).tag.is_none() {
+            mol.set_tag(atom_idx(i), Some(i as u32));
+        }
+    }
+}
+
+fn tags_for_atoms(mol: &Molecule, atoms: &BTreeSet<usize>) -> Option<BTreeSet<Tag>> {
+    let mut tags = BTreeSet::new();
+    for &i in atoms {
+        tags.insert(tag_of(mol, i)?);
+    }
+    Some(tags)
+}
+
+fn assignment_to_tags(
+    mol: &Molecule,
+    assignment: &BTreeMap<(usize, usize), BondOrder>,
+) -> Option<BTreeMap<(Tag, Tag), BondOrder>> {
+    let mut out = BTreeMap::new();
+    for (&(a, b), &order) in assignment {
+        let ta = tag_of(mol, a)?;
+        let tb = tag_of(mol, b)?;
+        out.insert(tag_bond_key(ta, tb), order);
+    }
+    Some(out)
+}
+
+fn assignment_to_idxs(
+    mol: &Molecule,
+    assignment: &BTreeMap<(Tag, Tag), BondOrder>,
+) -> Option<BTreeMap<(usize, usize), BondOrder>> {
+    let mut out = BTreeMap::new();
+    for (&(ta, tb), &order) in assignment {
+        let a = index_of_tag(mol, ta)?;
+        let b = index_of_tag(mol, tb)?;
+        out.insert(bond_key(a, b), order);
+    }
+    Some(out)
+}
+
+fn atoms_to_idxs(mol: &Molecule, tags: &BTreeSet<Tag>) -> Option<BTreeSet<usize>> {
+    let mut out = BTreeSet::new();
+    for &t in tags {
+        out.insert(index_of_tag(mol, t)?);
+    }
+    Some(out)
 }
 
 #[cfg(test)]
@@ -165,44 +249,86 @@ fn order_code(order: BondOrder) -> Option<u8> {
     }
 }
 
-/// Identity of one conjugated system: indexes plus kekulization-relevant shape.
+/// Identity of one conjugated system for cache reuse.
+///
+/// **Tag-keyed, not index-keyed.** `atoms` and `shape` bond endpoints are
+/// [`Tag`]s (cheatic `Atom.tag`). Indexes would break reuse after rewrite or
+/// canonical reorder; tags survive on the ForestMol copy-tree `Rc` cache.
 ///
 /// An edit that changes aromatic flags or bond orders inside the system is a
 /// new key, so that bag is not reused. An edit elsewhere leaves this key
 /// identical, so relatives share the bag.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SystemKey {
-    pub atoms: BTreeSet<usize>,
-    shape: Vec<((usize, usize), u8, bool, bool)>,
+    /// Conjugated-system atoms as forest labels.
+    pub atoms: BTreeSet<Tag>,
+    /// Kekulization-relevant shape: tag-pair bonds with order code + aromatic bits.
+    shape: Vec<((Tag, Tag), u8, bool, bool)>,
 }
 
 impl SystemKey {
-    pub fn of(mol: &Molecule, atoms: &BTreeSet<usize>, bonds: &BTreeSet<(usize, usize)>) -> Self {
+    /// Build a tag-keyed system identity from the current mol's indexes.
+    ///
+    /// Perception still uses indexes; the returned key stores only tags.
+    /// Returns `None` if any system atom lacks `Atom.tag` — call
+    /// [`stamp_missing_index_tags`] on bare mols, or use a [`crate::forest_mol::ForestMol`].
+    pub fn try_of(
+        mol: &Molecule,
+        atoms: &BTreeSet<usize>,
+        bonds: &BTreeSet<(usize, usize)>,
+    ) -> Option<Self> {
+        let tag_atoms = tags_for_atoms(mol, atoms)?;
         let mut shape: Vec<_> = bonds
             .iter()
             .map(|&(a, b)| {
+                let ta = tag_of(mol, a)?;
+                let tb = tag_of(mol, b)?;
                 let order = mol
                     .bond_between(atom_idx(a), atom_idx(b))
                     .map(|(_, bond)| order_code(bond.order).unwrap_or(0))
                     .unwrap_or(0);
                 let a_aro = mol.atom(atom_idx(a)).aromatic;
                 let b_aro = mol.atom(atom_idx(b)).aromatic;
-                ((a, b), order, a_aro, b_aro)
+                Some((tag_bond_key(ta, tb), order, a_aro, b_aro))
             })
-            .collect();
+            .collect::<Option<Vec<_>>>()?;
         shape.sort_unstable();
-        Self {
-            atoms: atoms.clone(),
+        Some(Self {
+            atoms: tag_atoms,
             shape,
-        }
+        })
+    }
+
+    /// Like [`Self::try_of`], panicking if tags are missing (ForestMol / stamped mols).
+    pub fn of(mol: &Molecule, atoms: &BTreeSet<usize>, bonds: &BTreeSet<(usize, usize)>) -> Self {
+        Self::try_of(mol, atoms, bonds).expect(
+            "SystemKey requires Atom.tag on every system atom (ForestMol stamps; \
+             bare mols: stamp_missing_index_tags)",
+        )
     }
 }
 
+/// Residual / constraint view key (secondary cache beside [`SystemKey`]).
+///
+/// **Tag-keyed:** `removed` and `forced_doubles` are labels / label-pairs, not
+/// indexes — so a child mol with the same tags can reuse a parent-derived
+/// residual after index shuffle. See HEURISTICS edit-as-π-constraints cache plan.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ResidualKey {
+    pub parent: SystemKey,
+    pub removed: BTreeSet<Tag>,
+    pub forced_doubles: BTreeSet<(Tag, Tag)>,
+}
+
 /// One system's kekulé assignments (bond-order maps, not baked mols).
+///
+/// Bond endpoints in `assignments` and `by_order` are [`Tag`] pairs — reusable
+/// across index permutations. Callers resolve to indexes via the current mol
+/// when overlaying.
 #[derive(Clone, Debug, Default)]
 pub struct SystemKekule {
-    pub assignments: Vec<BTreeMap<(usize, usize), BondOrder>>,
-    pub by_order: BTreeMap<((usize, usize), u8), usize>,
+    pub assignments: Vec<BTreeMap<(Tag, Tag), BondOrder>>,
+    pub by_order: BTreeMap<((Tag, Tag), u8), usize>,
 }
 
 impl SystemKekule {
@@ -212,6 +338,8 @@ impl SystemKekule {
 }
 
 /// Shared forest-level map. One `Rc` per copy tree.
+///
+/// Keys and stored writings are tag-keyed ([`SystemKey`], [`SystemKekule`]).
 #[derive(Clone, Debug, Default)]
 pub struct KekuleCache {
     systems: BTreeMap<SystemKey, Rc<RefCell<SystemKekule>>>,
@@ -613,6 +741,9 @@ pub fn aromatic_2core_atoms(
 
 /// Stamp one system's assignment onto `mol`. Other systems stay as they were.
 ///
+/// `atoms` and `assignment` are **index**-keyed for the current mol layout
+/// (perception). Cached bags store tag-keyed maps — resolve before calling.
+///
 /// Applies [`move_charge_with_bonds`] so charge separation on valid writings
 /// (including N that gains charge) matches Python reactant overlays.
 pub fn overlay(
@@ -640,6 +771,17 @@ pub fn overlay(
     out
 }
 
+/// Overlay from a **tag-keyed** cached assignment (resolves tags → indexes).
+pub fn overlay_tagged(
+    mol: &Molecule,
+    atom_tags: &BTreeSet<Tag>,
+    assignment: &BTreeMap<(Tag, Tag), BondOrder>,
+) -> Option<Molecule> {
+    let atoms = atoms_to_idxs(mol, atom_tags)?;
+    let orders = assignment_to_idxs(mol, assignment)?;
+    Some(overlay(mol, &atoms, &orders))
+}
+
 fn fill_slot(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
@@ -655,7 +797,10 @@ fn fill_slot(
         let Some(bond_orders) = match_assignment(mol, atoms, bonds, seed) else {
             continue;
         };
-        let signature: Vec<_> = bond_orders
+        let Some(tagged) = assignment_to_tags(mol, &bond_orders) else {
+            continue;
+        };
+        let signature: Vec<_> = tagged
             .iter()
             .map(|(&k, &o)| (k, order_code(o)))
             .collect();
@@ -663,14 +808,14 @@ fn fill_slot(
             continue;
         }
         let index = bag.assignments.len();
-        for (key, order) in &bond_orders {
+        for (key, order) in &tagged {
             if let Some(code) = order_code(*order) {
                 if code == 1 || code == 2 {
                     bag.by_order.entry((*key, code)).or_insert(index);
                 }
             }
         }
-        bag.assignments.push(bond_orders);
+        bag.assignments.push(tagged);
     }
 }
 
@@ -692,7 +837,7 @@ pub fn ensure_kekule_parents(
     cache: &mut KekuleCache,
 ) -> Rc<RefCell<SystemKekule>> {
     let (key, bonds) = system_of(mol, left, right);
-    let atoms = key.atoms.clone();
+    let atoms: BTreeSet<usize> = atoms_to_idxs(mol, &key.atoms).expect("system tags resolve");
     let slot = cache.slot(key);
     fill_slot(mol, &atoms, &bonds, &slot);
     slot
@@ -709,9 +854,11 @@ pub fn parent_for_bond(
     let (key, _) = system_of(mol, left, right);
     let slot = cache.get(&key)?;
     let bag = slot.borrow();
-    let index = *bag.by_order.get(&(bond_key(left, right), order))?;
+    let ta = tag_of(mol, left)?;
+    let tb = tag_of(mol, right)?;
+    let index = *bag.by_order.get(&(tag_bond_key(ta, tb), order))?;
     let assignment = bag.assignments.get(index)?;
-    Some(overlay(mol, &key.atoms, assignment))
+    overlay_tagged(mol, &key.atoms, assignment)
 }
 
 /// Parents covering `start` and `end`. Different systems: union, not a product.
@@ -738,13 +885,13 @@ pub fn parents_for_ends(
             };
         }
         let key = SystemKey::of(mol, atoms, &bonds);
-        let slot = cache.slot(key);
+        let slot = cache.slot(key.clone());
         fill_slot(mol, atoms, &bonds, &slot);
         let parents = slot
             .borrow()
             .assignments
             .iter()
-            .map(|assignment| overlay(mol, atoms, assignment))
+            .filter_map(|assignment| overlay_tagged(mol, &key.atoms, assignment))
             .collect();
         return EndParents {
             parents,
@@ -755,7 +902,7 @@ pub fn parents_for_ends(
     let (end_atoms, end_bonds) = conjugated_component(mol, end);
     let start_key = SystemKey::of(mol, &start_atoms, &start_bonds);
     let end_key = SystemKey::of(mol, &end_atoms, &end_bonds);
-    let start_slot = cache.slot(start_key);
+    let start_slot = cache.slot(start_key.clone());
     fill_slot(mol, &start_atoms, &start_bonds, &start_slot);
     let same = start_atoms == end_atoms;
     if !same {
@@ -766,18 +913,19 @@ pub fn parents_for_ends(
         .borrow()
         .assignments
         .iter()
-        .map(|assignment| overlay(mol, &start_atoms, assignment))
+        .filter_map(|assignment| overlay_tagged(mol, &start_key.atoms, assignment))
         .collect();
     if !same {
         let end_slot = cache
             .get(&SystemKey::of(mol, &end_atoms, &end_bonds))
             .expect("end system filled");
+        let end_key = SystemKey::of(mol, &end_atoms, &end_bonds);
         parents.extend(
             end_slot
                 .borrow()
                 .assignments
                 .iter()
-                .map(|assignment| overlay(mol, &end_atoms, assignment)),
+                .filter_map(|assignment| overlay_tagged(mol, &end_key.atoms, assignment)),
         );
     }
     EndParents {
@@ -795,10 +943,16 @@ pub fn parents_for_ends(
 /// not the pair door. A ResonanceRule should call [`ensure_kekule_parents`]
 /// for the matched bond instead of this. Counts are a **sum** of systems,
 /// not a product.
+///
+/// Stamps missing index tags on a clone so bare mols can fill a local cache;
+/// ForestMol callers already carry copy-tree labels.
 pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
     if !mol.atoms().any(|(_, atom)| atom.aromatic) {
         return Ok(vec![mol.clone()]);
     }
+    let mut mol = mol.clone();
+    stamp_missing_index_tags(&mut mol);
+    let mol = &mol;
     let mut cache = KekuleCache::default();
     let mut covered = BTreeSet::new();
     let mut forms = Vec::new();
@@ -829,13 +983,13 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
             continue;
         }
         let key = SystemKey::of(mol, &aromatic, &arbonds);
-        let slot = cache.slot(key);
+        let slot = cache.slot(key.clone());
         fill_slot(mol, &aromatic, &arbonds, &slot);
         forms.extend(
             slot.borrow()
                 .assignments
                 .iter()
-                .map(|assignment| overlay(mol, &aromatic, assignment)),
+                .filter_map(|assignment| overlay_tagged(mol, &key.atoms, assignment)),
         );
     }
     if forms.is_empty() {
@@ -890,12 +1044,41 @@ mod tests {
     }
 
     fn fill(smiles: &str) -> (Molecule, KekuleCache) {
-        let mol = parse_mol(smiles).unwrap();
+        let mut mol = parse_mol(smiles).unwrap();
+        stamp_missing_index_tags(&mut mol);
         let mut cache = KekuleCache::default();
         for mapped in smarts_matches(&mol, "[#6:1]=,:[#6:2]").unwrap() {
             ensure_kekule_parents(&mol, mapped[&1], mapped[&2], &mut cache);
         }
         (mol, cache)
+    }
+
+    #[test]
+    fn system_key_and_assignments_are_tag_keyed_not_index() {
+        // Reusable cache objects store Tags (forest labels), not atom indexes.
+        let parent = ForestMol::parse("c1ccccc1").unwrap();
+        let (atoms, bonds) = conjugated_component(parent.mol(), 0);
+        let key = SystemKey::of(parent.mol(), &atoms, &bonds);
+        assert!(
+            key.atoms.iter().all(|t| parent.index_of(*t).is_some()),
+            "SystemKey atoms are Tags resolvable on the mol"
+        );
+        let seed = *bonds.iter().next().expect("ring bond");
+        parent.ensure_kekule(seed.0, seed.1);
+        let kekule_rc = parent.kekule();
+        let cache = kekule_rc.borrow();
+        let slot = cache.get(&key).expect("filled");
+        let asg = &slot.borrow().assignments[0];
+        for &(ta, tb) in asg.keys() {
+            assert!(parent.index_of(ta).is_some() && parent.index_of(tb).is_some());
+        }
+        // ResidualKey is also tag-shaped (removed / forced are Tags).
+        let residual = ResidualKey {
+            parent: key.clone(),
+            removed: BTreeSet::new(),
+            forced_doubles: BTreeSet::new(),
+        };
+        assert_eq!(residual.parent.atoms, key.atoms);
     }
 
     #[test]
@@ -1014,7 +1197,8 @@ mod tests {
 
     #[test]
     fn biphenyl_ends_are_a_union_not_a_product() {
-        let mol = parse_mol("c1ccc(-c2ccccc2)cc1").unwrap();
+        let mut mol = parse_mol("c1ccc(-c2ccccc2)cc1").unwrap();
+        stamp_missing_index_tags(&mut mol);
         let (sys_a, _) = conjugated_component(&mol, 0);
         let other = (0..mol.atom_count())
             .find(|&i| conjugated_component(&mol, i).0 != sys_a)
@@ -1095,7 +1279,8 @@ mod tests {
 
     #[test]
     fn thiophene_s_oxidation_picks_single_s_c_parent() {
-        let mol = parse_mol("c1ccsc1").unwrap();
+        let mut mol = parse_mol("c1ccsc1").unwrap();
+        stamp_missing_index_tags(&mut mol);
         let smarts = "[#6:2]1=,:[#6:3][#6:4]=,:[#6:5][#16;v2,v4:1]1";
         let apply = "[S:1]>>[S+:1][O-]";
         let hits = smarts_matches(&mol, smarts).unwrap();
@@ -1121,7 +1306,8 @@ mod tests {
 
     #[test]
     fn epoxidation_picks_double_parent_on_benzene() {
-        let mol = parse_mol("c1ccccc1").unwrap();
+        let mut mol = parse_mol("c1ccccc1").unwrap();
+        stamp_missing_index_tags(&mut mol);
         let smirks = "[#6:1]=[#6,#7:2]>>[*:1]1-[*:2][O]1";
         let hits = smarts_matches(&mol, "[#6:1]=,:[#6:2]").unwrap();
         assert_eq!(hits.len(), 6);

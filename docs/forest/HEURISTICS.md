@@ -360,18 +360,20 @@ product mols — stamp bond orders / aromatic flags on demand from maps.
 
 | Field | Why |
 |---|---|
-| `atoms`, `bonds`, adjacency | π topology once |
-| `assignments` (+ `by_order`) | unconstrained Kekulé maps (ResonanceRule `reactant_parent`) |
+| `atoms`, `bonds`, adjacency as **`Tag`s** (not indexes) | π topology once; survives rewrite / reorder |
+| `assignments` (+ `by_order`) as **tag-pair** bond maps | unconstrained Kekulé maps (ResonanceRule `reactant_parent`) |
 | optional BCC component tables | when factorization lands — local 2–3-state bags |
 | optional full-system 2-core aromatic atom set | pristine aromatic cores |
 
 Fill on demand when a match first touches the system. Untouched systems on
-an edited child **keep hitting** the same keys on the shared `Rc`.
+an edited child **keep hitting** the same keys on the shared `Rc` because
+keys are labels, not indexes.
 
 **Secondary object (constraint / residual views — derive, don’t duplicate topology):**
 
-Key: `(parent SystemKey, removed_atoms, forced_doubles)` (saturate / sp³ /
-demand-consumed carbons; perceived forced doubles).
+Key: [`ResidualKey`](../../crates/xenosite-forest/src/kekule.rs) =
+`(parent SystemKey, removed_tags, forced_doubles as tag-pairs)` (saturate /
+sp³ / demand-consumed carbons; perceived forced doubles).
 
 | Field | Why |
 |---|---|
