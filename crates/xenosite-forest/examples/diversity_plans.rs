@@ -86,7 +86,7 @@ struct Run {
     plans: Vec<String>,
 }
 
-fn run_case(name: &str, start: &str, target: &str, diversity: bool) -> Run {
+fn run_case(start: &str, target: &str, diversity: bool) -> Run {
     let mut counters = PathCounters::default();
     let t0 = Instant::now();
     let hits = find_path_with(
