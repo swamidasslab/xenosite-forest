@@ -335,7 +335,6 @@ fn record_decision(
             before,
             after,
             atoms,
-            gate_kept: true,
         });
     }
 }
@@ -622,8 +621,9 @@ fn run_mode(mode: Mode, collect_dis: bool) -> (SuiteStats, Vec<DisHit>) {
     )
 }
 
-/// Prefer fewer path misses, then higher residual↔gate agree, then hop0 top1.
-fn score_key(s: &SuiteStats) -> (i64, f64, f64) {
+/// Prefer residual keep-if-drop modes, then fewer path misses, then gate agree, then hop0 top1.
+fn score_key(s: &SuiteStats) -> (bool, i64, f64, f64) {
+    let proj = s.label.contains("keep-if-drop");
     let miss = -((s.mid.path_miss + s.hard.path_miss) as i64);
     let agree = s.mid.agree_rate() + s.hard.agree_rate();
     let top = {
@@ -634,7 +634,7 @@ fn score_key(s: &SuiteStats) -> (i64, f64, f64) {
             (s.mid.top1 + s.hard.top1) as f64 / k as f64
         }
     };
-    (miss, agree, top)
+    (proj, miss, agree, top)
 }
 
 fn print_row(tag: &str, s: &SuiteStats) {
