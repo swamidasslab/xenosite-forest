@@ -6,6 +6,25 @@ Store of the design note (metabolism-specific XRM adaptation). Every competency
 question is a regression test: if the ontology cannot answer it, add terms/links
 or mark the question out of scope.
 
+## Gap coverage from failures (not ad-hoc emit patches)
+
+When gold / tagging fails on a missing product-class or liability companion:
+
+1. Record the failure class (`missing_product_for_transformation`, …).
+2. Run `tools/cover_gaps_from_failures.py` — wires general
+   `skos:relatedMatch` links (failure pairs + name heuristics).
+3. The namer expands `relatedMatch` into product / medchem / leaving-group
+   spines for every emit (see `Namer::name`). Do **not** append one-off
+   product-class ids to assignment `emit` lists.
+
+```bash
+cargo test -p xenosite-xrm --test gold_score
+python3 crates/xenosite-xrm/tools/score_gold_set.py
+python3 crates/xenosite-xrm/tools/cover_gaps_from_failures.py
+python3 crates/xenosite-xrm/tools/yaml_to_skos.py
+# re-score until gap_coverage_report.json stabilizes
+```
+
 ## Layers
 
 1. **Ontology competency** — Can the vocabulary express the concept?

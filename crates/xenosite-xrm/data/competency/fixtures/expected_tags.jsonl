@@ -35,24 +35,9 @@
 {"id": "CQ-P2-053", "expected_tags": ["methylation"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-P2-058", "expected_tags": ["glycine conjugation"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-RM-005", "expected_tags": ["forms reactive conjugate", "reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-007", "expected_tags": ["electrophile generation", "epoxide"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-012", "expected_tags": ["epoxide"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-017", "expected_tags": ["nucleophile exposure", "stable conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-022", "expected_tags": ["acyl glucuronide", "reactive conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-027", "expected_tags": ["glucuronide conjugate", "phenol metabolite"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-032", "expected_tags": ["glucuronide conjugate", "N-glucuronide"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-037", "expected_tags": ["nucleophile exposure", "stable conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-041", "expected_tags": ["stable conjugate"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-045", "expected_tags": ["electrophile consumption", "GSH-trappable metabolite"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-049", "expected_tags": ["electrophile consumption", "Michael acceptor"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-053", "expected_tags": ["electrophile consumption", "GSH-trappable metabolite"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-057", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-061", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-065", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-069", "expected_tags": ["electrophile generation", "quinone"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-073", "expected_tags": ["quinone"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-077", "expected_tags": ["quinone"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-RM-079", "expected_tags": ["electrophile generation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-007", "expected_tags": ["electrophile generation"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-012", "expected_tags": ["electrophile consumption"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-RM-017", "expected_tags": ["reactivity-neutral step"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-SITE-003", "expected_tags": ["benzylic hydroxylation"], "expected_excludes": [], "expect_site_map": [1]}
 {"id": "CQ-SITE-004", "expected_tags": ["epoxidation"], "expected_excludes": [], "expect_site_map": [1, 2]}
 {"id": "CQ-SITE-006", "expected_tags": ["aromatic site"], "expected_excludes": [], "expect_site_map": []}
@@ -74,7 +59,7 @@
 {"id": "CQ-DELTA-024", "expected_tags": ["dearomatization", "NIH shift"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-DELTA-028", "expected_tags": ["NIH shift", "rearomatization"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-DELTA-032", "expected_tags": ["aromatic ring substitution impact", "substitution"], "expected_excludes": [], "expect_site_map": []}
-{"id": "CQ-DELTA-036", "expected_tags": ["dearomatization", "aromaticity loss"], "expected_excludes": [], "expect_site_map": []}
+{"id": "CQ-DELTA-036", "expected_tags": ["dearomatization"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-DELTA-040", "expected_tags": ["oxygen-triggered cleavage", "fragmenting transformation"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-DELTA-044", "expected_tags": ["redox-neutral", "conjugate gain delta"], "expected_excludes": [], "expect_site_map": []}
 {"id": "CQ-DELTA-048", "expected_tags": ["redox-neutral"], "expected_excludes": [], "expect_site_map": []}

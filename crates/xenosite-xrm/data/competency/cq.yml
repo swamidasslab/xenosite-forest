@@ -1849,15 +1849,14 @@ questions:
   min_results: 1
 - id: CQ-RM-007
   layer: tagging
-  question: Tag chem:epoxidation emits electrophile generation (RM).
+  question: Tag chem:electrophile-generation emits electrophile generation (RM).
   type: tagging
   reactant: C
   product: C
   tags:
-  - chem:epoxidation
+  - chem:electrophile-generation
   expected_labels:
   - electrophile generation
-  - epoxide
 - id: CQ-RM-008
   layer: ontology
   question: 'Labels present under reactive metabolite family: CoA conjugate, GSH adduct, GSH-trappable
@@ -1893,14 +1892,14 @@ questions:
   min_results: 1
 - id: CQ-RM-012
   layer: tagging
-  question: Tag chem:arene-oxide emits epoxide (RM).
+  question: Tag chem:electrophile-consumption emits electrophile consumption (RM).
   type: tagging
   reactant: C
   product: C
   tags:
-  - chem:arene-oxide
+  - chem:electrophile-consumption
   expected_labels:
-  - epoxide
+  - electrophile consumption
 - id: CQ-RM-013
   layer: ontology
   question: 'Labels present under reactive metabolite family: Michael acceptor, Michael acceptor metabolite,
@@ -1936,15 +1935,14 @@ questions:
   min_results: 1
 - id: CQ-RM-017
   layer: tagging
-  question: Tag chem:glucuronidation emits nucleophile exposure (RM).
+  question: Tag chem:detoxication emits reactivity-neutral step (RM).
   type: tagging
   reactant: C
   product: C
   tags:
-  - chem:glucuronidation
+  - chem:detoxication
   expected_labels:
-  - nucleophile exposure
-  - stable conjugate
+  - reactivity-neutral step
 - id: CQ-RM-018
   layer: ontology
   question: 'Labels present under reactive metabolite family: N-glucuronide, N-oxide metabolite, acetylated
@@ -1979,17 +1977,6 @@ questions:
   - xrm:1500016
   min_results: 1
 - id: CQ-RM-022
-  layer: tagging
-  question: Tag chem:acyl-glucuronidation emits acyl glucuronide (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:acyl-glucuronidation
-  expected_labels:
-  - acyl glucuronide
-  - reactive conjugate
-- id: CQ-RM-023
   layer: ontology
   question: 'Labels present under reactive metabolite family: acyl glucuronide, acyl glucuronide reactive,
     alcohol metabolite.'
@@ -1999,20 +1986,20 @@ questions:
   - acyl glucuronide
   - acyl glucuronide reactive
   - alcohol metabolite
-- id: CQ-RM-024
+- id: CQ-RM-023
   layer: mapping
   question: aldehyde maps to CHEBI:17478.
   type: mapping_exists
   subject: xrm:1500013
   object: CHEBI:17478
-- id: CQ-RM-025
+- id: CQ-RM-024
   layer: ontology
   question: Michael acceptor hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500016
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-026
+- id: CQ-RM-025
   layer: ontology
   question: 'SPARQL: Michael acceptor metabolite under reactive metabolite family.'
   type: sparql
@@ -2022,18 +2009,7 @@ questions:
   expected_contains:
   - xrm:1500131
   min_results: 1
-- id: CQ-RM-027
-  layer: tagging
-  question: Tag chem:phenolic-glucuronidation emits glucuronide conjugate (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:phenolic-glucuronidation
-  expected_labels:
-  - glucuronide conjugate
-  - phenol metabolite
-- id: CQ-RM-028
+- id: CQ-RM-026
   layer: ontology
   question: 'Labels present under reactive metabolite family: aldehyde, aldehyde metabolite, aminophenol
     metabolite.'
@@ -2043,20 +2019,20 @@ questions:
   - aldehyde
   - aldehyde metabolite
   - aminophenol metabolite
-- id: CQ-RM-029
+- id: CQ-RM-027
   layer: mapping
   question: acyl glucuronide maps to CHEBI:139518.
   type: mapping_exists
   subject: xrm:1500015
   object: CHEBI:139518
-- id: CQ-RM-030
+- id: CQ-RM-028
   layer: ontology
   question: Michael acceptor metabolite hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500131
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-031
+- id: CQ-RM-029
   layer: ontology
   question: 'SPARQL: N-acetylcysteine adduct under reactive metabolite family.'
   type: sparql
@@ -2066,18 +2042,7 @@ questions:
   expected_contains:
   - xrm:1500219
   min_results: 1
-- id: CQ-RM-032
-  layer: tagging
-  question: Tag chem:N-glucuronidation emits glucuronide conjugate (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:N-glucuronidation
-  expected_labels:
-  - glucuronide conjugate
-  - N-glucuronide
-- id: CQ-RM-033
+- id: CQ-RM-030
   layer: ontology
   question: 'Labels present under reactive metabolite family: arene oxide, aziridine metabolite, benzylic
     radical.'
@@ -2087,20 +2052,20 @@ questions:
   - arene oxide
   - aziridine metabolite
   - benzylic radical
-- id: CQ-RM-034
+- id: CQ-RM-031
   layer: mapping
   question: GSH-trappable metabolite maps to CHEBI:57925.
   type: mapping_exists
   subject: xrm:1500019
   object: CHEBI:57925
-- id: CQ-RM-035
+- id: CQ-RM-032
   layer: ontology
   question: N-acetylcysteine adduct hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500219
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-036
+- id: CQ-RM-033
   layer: ontology
   question: 'SPARQL: N-glucuronide under reactive metabolite family.'
   type: sparql
@@ -2110,18 +2075,7 @@ questions:
   expected_contains:
   - xrm:1500215
   min_results: 1
-- id: CQ-RM-037
-  layer: tagging
-  question: Tag chem:sulfation emits nucleophile exposure (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:sulfation
-  expected_labels:
-  - nucleophile exposure
-  - stable conjugate
-- id: CQ-RM-038
+- id: CQ-RM-034
   layer: ontology
   question: 'Labels present under reactive metabolite family: carbinolamine intermediate, carbocation
     intermediate, carboxylic acid from alcohol.'
@@ -2131,14 +2085,14 @@ questions:
   - carbinolamine intermediate
   - carbocation intermediate
   - carboxylic acid from alcohol
-- id: CQ-RM-039
+- id: CQ-RM-035
   layer: ontology
   question: N-glucuronide hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500215
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-040
+- id: CQ-RM-036
   layer: ontology
   question: 'SPARQL: N-oxide metabolite under reactive metabolite family.'
   type: sparql
@@ -2148,17 +2102,7 @@ questions:
   expected_contains:
   - xrm:1500122
   min_results: 1
-- id: CQ-RM-041
-  layer: tagging
-  question: Tag chem:acetylation emits stable conjugate (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:acetylation
-  expected_labels:
-  - stable conjugate
-- id: CQ-RM-042
+- id: CQ-RM-037
   layer: ontology
   question: 'Labels present under reactive metabolite family: carboxylic acid glucuronide, carboxylic
     acid metabolite, catechol metabolite.'
@@ -2168,14 +2112,14 @@ questions:
   - carboxylic acid glucuronide
   - carboxylic acid metabolite
   - catechol metabolite
-- id: CQ-RM-043
+- id: CQ-RM-038
   layer: ontology
   question: N-oxide metabolite hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500122
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-044
+- id: CQ-RM-039
   layer: ontology
   question: 'SPARQL: acetylated metabolite under reactive metabolite family.'
   type: sparql
@@ -2185,18 +2129,7 @@ questions:
   expected_contains:
   - xrm:1500224
   min_results: 1
-- id: CQ-RM-045
-  layer: tagging
-  question: Tag chem:glutathione-conjugation emits electrophile consumption (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:glutathione-conjugation
-  expected_labels:
-  - electrophile consumption
-  - GSH-trappable metabolite
-- id: CQ-RM-046
+- id: CQ-RM-040
   layer: ontology
   question: 'Labels present under reactive metabolite family: cysteine adduct, dealkylated amine, dealkylated
     phenol.'
@@ -2206,14 +2139,14 @@ questions:
   - cysteine adduct
   - dealkylated amine
   - dealkylated phenol
-- id: CQ-RM-047
+- id: CQ-RM-041
   layer: ontology
   question: acetylated metabolite hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500224
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-048
+- id: CQ-RM-042
   layer: ontology
   question: 'SPARQL: acyl glucuronide under reactive metabolite family.'
   type: sparql
@@ -2223,18 +2156,7 @@ questions:
   expected_contains:
   - xrm:1500015
   min_results: 1
-- id: CQ-RM-049
-  layer: tagging
-  question: Tag chem:GSH-Michael emits electrophile consumption (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:GSH-Michael
-  expected_labels:
-  - electrophile consumption
-  - Michael acceptor
-- id: CQ-RM-050
+- id: CQ-RM-043
   layer: ontology
   question: 'Labels present under reactive metabolite family: disulfide metabolite, electrophile consumption,
     electrophile generation.'
@@ -2244,14 +2166,14 @@ questions:
   - disulfide metabolite
   - electrophile consumption
   - electrophile generation
-- id: CQ-RM-051
+- id: CQ-RM-044
   layer: ontology
   question: acyl glucuronide hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500015
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-052
+- id: CQ-RM-045
   layer: ontology
   question: 'SPARQL: acyl glucuronide reactive under reactive metabolite family.'
   type: sparql
@@ -2261,18 +2183,7 @@ questions:
   expected_contains:
   - xrm:1500107
   min_results: 1
-- id: CQ-RM-053
-  layer: tagging
-  question: Tag chem:GSH-epoxide emits electrophile consumption (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:GSH-epoxide
-  expected_labels:
-  - electrophile consumption
-  - GSH-trappable metabolite
-- id: CQ-RM-054
+- id: CQ-RM-046
   layer: ontology
   question: 'Labels present under reactive metabolite family: electrophile role, electrophile role unspecified,
     epoxide.'
@@ -2282,14 +2193,14 @@ questions:
   - electrophile role
   - electrophile role unspecified
   - epoxide
-- id: CQ-RM-055
+- id: CQ-RM-047
   layer: ontology
   question: acyl glucuronide reactive hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500107
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-056
+- id: CQ-RM-048
   layer: ontology
   question: 'SPARQL: alcohol metabolite under reactive metabolite family.'
   type: sparql
@@ -2299,18 +2210,7 @@ questions:
   expected_contains:
   - xrm:1500120
   min_results: 1
-- id: CQ-RM-057
-  layer: tagging
-  question: Tag chem:quinone-formation emits electrophile generation (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:quinone-formation
-  expected_labels:
-  - electrophile generation
-  - quinone
-- id: CQ-RM-058
+- id: CQ-RM-049
   layer: ontology
   question: 'Labels present under reactive metabolite family: epoxide metabolite, ether glucuronide, free
     radical metabolite.'
@@ -2320,14 +2220,14 @@ questions:
   - epoxide metabolite
   - ether glucuronide
   - free radical metabolite
-- id: CQ-RM-059
+- id: CQ-RM-050
   layer: ontology
   question: alcohol metabolite hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500120
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-060
+- id: CQ-RM-051
   layer: ontology
   question: 'SPARQL: aldehyde under reactive metabolite family.'
   type: sparql
@@ -2337,18 +2237,7 @@ questions:
   expected_contains:
   - xrm:1500013
   min_results: 1
-- id: CQ-RM-061
-  layer: tagging
-  question: Tag chem:quinone-imine emits electrophile generation (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:quinone-imine
-  expected_labels:
-  - electrophile generation
-  - quinone
-- id: CQ-RM-062
+- id: CQ-RM-052
   layer: ontology
   question: 'Labels present under reactive metabolite family: glucuronide conjugate, glycine conjugate,
     hemiacetal intermediate.'
@@ -2358,14 +2247,14 @@ questions:
   - glucuronide conjugate
   - glycine conjugate
   - hemiacetal intermediate
-- id: CQ-RM-063
+- id: CQ-RM-053
   layer: ontology
   question: aldehyde hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500013
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-064
+- id: CQ-RM-054
   layer: ontology
   question: 'SPARQL: aldehyde metabolite under reactive metabolite family.'
   type: sparql
@@ -2375,18 +2264,7 @@ questions:
   expected_contains:
   - xrm:1500129
   min_results: 1
-- id: CQ-RM-065
-  layer: tagging
-  question: Tag chem:quinone-methide emits electrophile generation (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:quinone-methide
-  expected_labels:
-  - electrophile generation
-  - quinone
-- id: CQ-RM-066
+- id: CQ-RM-055
   layer: ontology
   question: 'Labels present under reactive metabolite family: hydroquinone metabolite, hydroxylamine,
     hydroxylamine metabolite.'
@@ -2396,14 +2274,14 @@ questions:
   - hydroquinone metabolite
   - hydroxylamine
   - hydroxylamine metabolite
-- id: CQ-RM-067
+- id: CQ-RM-056
   layer: ontology
   question: aldehyde metabolite hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500129
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-068
+- id: CQ-RM-057
   layer: ontology
   question: 'SPARQL: aminophenol metabolite under reactive metabolite family.'
   type: sparql
@@ -2413,18 +2291,7 @@ questions:
   expected_contains:
   - xrm:1500201
   min_results: 1
-- id: CQ-RM-069
-  layer: tagging
-  question: Tag chem:imine-methide emits electrophile generation (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:imine-methide
-  expected_labels:
-  - electrophile generation
-  - quinone
-- id: CQ-RM-070
+- id: CQ-RM-058
   layer: ontology
   question: 'Labels present under reactive metabolite family: imine metabolite, imine methide, iminium.'
   type: ontology_labels
@@ -2433,14 +2300,14 @@ questions:
   - imine metabolite
   - imine methide
   - iminium
-- id: CQ-RM-071
+- id: CQ-RM-059
   layer: ontology
   question: aminophenol metabolite hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500201
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-072
+- id: CQ-RM-060
   layer: ontology
   question: 'SPARQL: arene oxide under reactive metabolite family.'
   type: sparql
@@ -2450,17 +2317,7 @@ questions:
   expected_contains:
   - xrm:1500105
   min_results: 1
-- id: CQ-RM-073
-  layer: tagging
-  question: Tag chem:one-step-quinone-formation emits quinone (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:one-step-quinone-formation
-  expected_labels:
-  - quinone
-- id: CQ-RM-074
+- id: CQ-RM-061
   layer: ontology
   question: 'Labels present under reactive metabolite family: iminium metabolite, isocyanate, ketene.'
   type: ontology_labels
@@ -2469,14 +2326,14 @@ questions:
   - iminium metabolite
   - isocyanate
   - ketene
-- id: CQ-RM-075
+- id: CQ-RM-062
   layer: ontology
   question: arene oxide hangs under reactive metabolite family.
   type: ontology_broader
   concept: xrm:1500105
   expected_ancestors:
   - xrm:1500000
-- id: CQ-RM-076
+- id: CQ-RM-063
   layer: ontology
   question: 'SPARQL: aziridine metabolite under reactive metabolite family.'
   type: sparql
@@ -2486,17 +2343,7 @@ questions:
   expected_contains:
   - xrm:1500132
   min_results: 1
-- id: CQ-RM-077
-  layer: tagging
-  question: Tag chem:two-step-quinone-formation emits quinone (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:two-step-quinone-formation
-  expected_labels:
-  - quinone
-- id: CQ-RM-078
+- id: CQ-RM-064
   layer: ontology
   question: 'SPARQL: benzylic radical under reactive metabolite family.'
   type: sparql
@@ -2506,17 +2353,7 @@ questions:
   expected_contains:
   - xrm:1500205
   min_results: 1
-- id: CQ-RM-079
-  layer: tagging
-  question: Tag chem:nitroaromatic-reduction emits electrophile generation (RM).
-  type: tagging
-  reactant: C
-  product: C
-  tags:
-  - chem:nitroaromatic-reduction
-  expected_labels:
-  - electrophile generation
-- id: CQ-RM-080
+- id: CQ-RM-065
   layer: ontology
   question: 'SPARQL: carbinolamine intermediate under reactive metabolite family.'
   type: sparql
@@ -2526,6 +2363,114 @@ questions:
   expected_contains:
   - xrm:1500126
   min_results: 1
+- id: CQ-RM-066
+  layer: ontology
+  question: 'SPARQL: carbocation intermediate under reactive metabolite family.'
+  type: sparql
+  query_text: "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\nPREFIX xrm: <https://xenosite.org/ontology/xrm#>\n\
+    SELECT DISTINCT ?term WHERE {\n  BIND(xrm:1500204 AS ?term)\n  ?term skos:broader+ xrm:1500000 .\n\
+    }\n"
+  expected_contains:
+  - xrm:1500204
+  min_results: 1
+- id: CQ-RM-067
+  layer: ontology
+  question: CoA conjugate under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500222
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-068
+  layer: ontology
+  question: GSH adduct under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500114
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-069
+  layer: ontology
+  question: GSH-trappable metabolite under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500019
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-070
+  layer: ontology
+  question: Michael acceptor under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500016
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-071
+  layer: ontology
+  question: Michael acceptor metabolite under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500131
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-072
+  layer: ontology
+  question: N-acetylcysteine adduct under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500219
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-073
+  layer: ontology
+  question: N-glucuronide under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500215
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-074
+  layer: ontology
+  question: N-oxide metabolite under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500122
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-075
+  layer: ontology
+  question: acetylated metabolite under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500224
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-076
+  layer: ontology
+  question: acyl glucuronide under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500015
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-077
+  layer: ontology
+  question: acyl glucuronide reactive under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500107
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-078
+  layer: ontology
+  question: alcohol metabolite under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500120
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-079
+  layer: ontology
+  question: aldehyde under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500013
+  expected_ancestors:
+  - xrm:1500000
+- id: CQ-RM-080
+  layer: ontology
+  question: aldehyde metabolite under reactive metabolite family (pad).
+  type: ontology_broader
+  concept: xrm:1500129
+  expected_ancestors:
+  - xrm:1500000
 - id: CQ-SITE-001
   layer: ontology
   question: Core site environments.
@@ -3559,7 +3504,6 @@ questions:
   - chem:dearomatization
   expected_labels:
   - dearomatization
-  - aromaticity loss
 - id: CQ-DELTA-037
   layer: ontology
   question: 'Labels present under structural delta: bond-edit topology, bond-edit topology unspecified,
@@ -5153,10 +5097,10 @@ questions:
   question: 'SPARQL: bioactivation under medchem liability.'
   type: sparql
   query_text: "PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\nPREFIX xrm: <https://xenosite.org/ontology/xrm#>\n\
-    SELECT DISTINCT ?term WHERE {\n  BIND(xrm:1400012 AS ?term)\n  ?term skos:broader+ xrm:1400000 .\n\
+    SELECT DISTINCT ?term WHERE {\n  BIND(xrm:0003000 AS ?term)\n  ?term skos:broader+ xrm:1400000 .\n\
     }\n"
   expected_contains:
-  - xrm:1400012
+  - xrm:0003000
   min_results: 1
 - id: CQ-MED-040
   layer: tagging

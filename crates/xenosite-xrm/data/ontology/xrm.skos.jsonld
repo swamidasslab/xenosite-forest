@@ -406,7 +406,8 @@
         "xrm:7700001",
         "xrm:1500012",
         "xrm:1300117",
-        "xrm:1500019"
+        "xrm:1500019",
+        "xrm:1500128"
       ]
     },
     {
@@ -415,7 +416,8 @@
       "prefLabel": "alkene epoxidation",
       "inScheme": "xrm:scheme",
       "definition": "alkene epoxidation: xenobiotic-metabolism term under epoxidation.",
-      "broader": "xrm:0000110"
+      "broader": "xrm:0000110",
+      "relatedMatch": "xrm:1500012"
     },
     {
       "id": "xrm:0000112",
@@ -431,7 +433,10 @@
         "xrm:0000110",
         "xrm:0000101"
       ],
-      "relatedMatch": "xrm:8000007"
+      "relatedMatch": [
+        "xrm:8000007",
+        "xrm:1500105"
+      ]
     },
     {
       "id": "xrm:0000113",
@@ -445,7 +450,9 @@
       ],
       "relatedMatch": [
         "xrm:0004001",
-        "xrm:8000006"
+        "xrm:8000006",
+        "xrm:1500012",
+        "xrm:1500106"
       ]
     },
     {
@@ -535,7 +542,8 @@
       "altLabel": [
         "sulfoxide formation"
       ],
-      "broader": "xrm:0000130"
+      "broader": "xrm:0000130",
+      "relatedMatch": "xrm:1500123"
     },
     {
       "id": "xrm:0000132",
@@ -1443,7 +1451,11 @@
       "inScheme": "xrm:scheme",
       "definition": "phenolic glucuronidation: xenobiotic-metabolism term under O-glucuronidation.",
       "broader": "xrm:0001001",
-      "relatedMatch": "xrm:1600135"
+      "relatedMatch": [
+        "xrm:1600135",
+        "xrm:1500116",
+        "xrm:1500118"
+      ]
     },
     {
       "id": "xrm:0001003",
@@ -1482,7 +1494,11 @@
       "inScheme": "xrm:scheme",
       "definition": "N-glucuronidation: xenobiotic-metabolism term under glucuronidation.",
       "broader": "xrm:0001000",
-      "relatedMatch": "xrm:1600136"
+      "relatedMatch": [
+        "xrm:1600136",
+        "xrm:1500116",
+        "xrm:1500215"
+      ]
     },
     {
       "id": "xrm:0001006",
@@ -1600,7 +1616,8 @@
       "prefLabel": "N-acetylation",
       "inScheme": "xrm:scheme",
       "definition": "N-acetylation: xenobiotic-metabolism term under acetylation.",
-      "broader": "xrm:0001020"
+      "broader": "xrm:0001020",
+      "relatedMatch": "xrm:1500219"
     },
     {
       "id": "xrm:0001022",
@@ -1658,7 +1675,9 @@
       "relatedMatch": [
         "xrm:8000004",
         "xrm:8000008",
-        "xrm:7500002"
+        "xrm:7500002",
+        "xrm:1500114",
+        "xrm:1500019"
       ]
     },
     {
@@ -1670,7 +1689,11 @@
       "altLabel": [
         "GSH epoxide conjugation"
       ],
-      "broader": "xrm:0001030"
+      "broader": "xrm:0001030",
+      "relatedMatch": [
+        "xrm:1500114",
+        "xrm:1500019"
+      ]
     },
     {
       "id": "xrm:0001033",
@@ -1681,7 +1704,11 @@
       "altLabel": [
         "GSH nucleophilic aromatic/aliphatic substitution"
       ],
-      "broader": "xrm:0001030"
+      "broader": "xrm:0001030",
+      "relatedMatch": [
+        "xrm:1500114",
+        "xrm:1500019"
+      ]
     },
     {
       "id": "xrm:0001034",
@@ -1689,7 +1716,11 @@
       "prefLabel": "isocyanate glutathionation",
       "inScheme": "xrm:scheme",
       "definition": "isocyanate glutathionation: xenobiotic-metabolism term under glutathionation.",
-      "broader": "xrm:0001030"
+      "broader": "xrm:0001030",
+      "relatedMatch": [
+        "xrm:1500114",
+        "xrm:1500019"
+      ]
     },
     {
       "id": "xrm:0001035",
@@ -1697,7 +1728,11 @@
       "prefLabel": "aziridine glutathionation",
       "inScheme": "xrm:scheme",
       "definition": "aziridine glutathionation: xenobiotic-metabolism term under glutathionation.",
-      "broader": "xrm:0001030"
+      "broader": "xrm:0001030",
+      "relatedMatch": [
+        "xrm:1500114",
+        "xrm:1500019"
+      ]
     },
     {
       "id": "xrm:0001036",
@@ -1708,7 +1743,9 @@
       "broader": "xrm:0001030",
       "relatedMatch": [
         "xrm:0000300",
-        "xrm:8000008"
+        "xrm:8000008",
+        "xrm:1500114",
+        "xrm:1500019"
       ]
     },
     {
@@ -1724,7 +1761,8 @@
         "xrm:0001030",
         "xrm:1300000",
         "xrm:0000002"
-      ]
+      ],
+      "relatedMatch": "xrm:1500115"
     },
     {
       "id": "xrm:0001040",
@@ -1802,7 +1840,8 @@
         "xrm:0001050",
         "xrm:1300000",
         "xrm:0000002"
-      ]
+      ],
+      "relatedMatch": "xrm:1500220"
     },
     {
       "id": "xrm:0001052",
@@ -1825,7 +1864,8 @@
         "xrm:0001050",
         "xrm:1300000",
         "xrm:0000002"
-      ]
+      ],
+      "relatedMatch": "xrm:1500221"
     },
     {
       "id": "xrm:0001054",
@@ -1862,7 +1902,8 @@
       "broader": [
         "xrm:0000002",
         "xrm:1300000"
-      ]
+      ],
+      "relatedMatch": "xrm:1500222"
     },
     {
       "id": "xrm:0002000",
@@ -2339,7 +2380,8 @@
         "arene epoxidation",
         "aromatic_epoxidation"
       ],
-      "broader": "xrm:1200000"
+      "broader": "xrm:1200000",
+      "relatedMatch": "xrm:1500012"
     },
     {
       "id": "xrm:1200101",
@@ -2350,7 +2392,8 @@
       "altLabel": [
         "aliphatic_epoxidation"
       ],
-      "broader": "xrm:1200000"
+      "broader": "xrm:1200000",
+      "relatedMatch": "xrm:1500012"
     },
     {
       "id": "xrm:1200102",
@@ -2362,7 +2405,8 @@
         "nitrogen oxidation class",
         "n_oxidation"
       ],
-      "broader": "xrm:1200000"
+      "broader": "xrm:1200000",
+      "relatedMatch": "xrm:1500122"
     },
     {
       "id": "xrm:1200103",
@@ -3546,7 +3590,13 @@
         "oxirane metabolite"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:0000110"
+      "relatedMatch": [
+        "xrm:0000110",
+        "xrm:0000111",
+        "xrm:0000113",
+        "xrm:1200100",
+        "xrm:1200101"
+      ]
     },
     {
       "id": "xrm:1500013",
@@ -3596,7 +3646,8 @@
       "prefLabel": "nitroso",
       "inScheme": "xrm:scheme",
       "definition": "Nitroso reactive metabolite.",
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0000123"
     },
     {
       "id": "xrm:1500018",
@@ -3604,7 +3655,8 @@
       "prefLabel": "hydroxylamine",
       "inScheme": "xrm:scheme",
       "definition": "Hydroxylamine reactive metabolite.",
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0000122"
     },
     {
       "id": "xrm:1500019",
@@ -3616,7 +3668,16 @@
         "gsh_trappable_metabolite"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:1400030"
+      "relatedMatch": [
+        "xrm:1400030",
+        "xrm:0001030",
+        "xrm:0001031",
+        "xrm:0001032",
+        "xrm:0001033",
+        "xrm:0001034",
+        "xrm:0001035",
+        "xrm:0001036"
+      ]
     },
     {
       "id": "xrm:1500030",
@@ -3703,7 +3764,8 @@
       "altLabel": [
         "arene_oxide"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0000112"
     },
     {
       "id": "xrm:1500106",
@@ -3714,7 +3776,8 @@
       "altLabel": [
         "thiophene_epoxide"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0000113"
     },
     {
       "id": "xrm:1500107",
@@ -3795,7 +3858,15 @@
         "gsh_adduct"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:0001030"
+      "relatedMatch": [
+        "xrm:0001030",
+        "xrm:0001031",
+        "xrm:0001032",
+        "xrm:0001033",
+        "xrm:0001034",
+        "xrm:0001035",
+        "xrm:0001036"
+      ]
     },
     {
       "id": "xrm:1500115",
@@ -3806,7 +3877,8 @@
       "altLabel": [
         "mercapturic_acid"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0001037"
     },
     {
       "id": "xrm:1500116",
@@ -3818,7 +3890,11 @@
         "glucuronide_conjugate"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:0001000"
+      "relatedMatch": [
+        "xrm:0001000",
+        "xrm:0001005",
+        "xrm:0001002"
+      ]
     },
     {
       "id": "xrm:1500117",
@@ -3842,7 +3918,10 @@
         "phenol_metabolite"
       ],
       "broader": "xrm:1500000",
-      "relatedMatch": "xrm:0000101"
+      "relatedMatch": [
+        "xrm:0000101",
+        "xrm:0001002"
+      ]
     },
     {
       "id": "xrm:1500119",
@@ -3886,7 +3965,8 @@
       "altLabel": [
         "n_oxide_metabolite"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:1200102"
     },
     {
       "id": "xrm:1500123",
@@ -3897,7 +3977,8 @@
       "altLabel": [
         "sulfoxide_metabolite"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0000131"
     },
     {
       "id": "xrm:1500124",
@@ -3953,7 +4034,8 @@
         "epoxide product",
         "epoxide_metabolite"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0000110"
     },
     {
       "id": "xrm:1500129",
@@ -4196,7 +4278,8 @@
       "altLabel": [
         "n_glucuronide"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0001005"
     },
     {
       "id": "xrm:1500216",
@@ -4241,7 +4324,8 @@
         "NAC adduct",
         "n_acetylcysteine_adduct"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0001021"
     },
     {
       "id": "xrm:1500220",
@@ -4252,7 +4336,8 @@
       "altLabel": [
         "glycine_conjugate"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0001051"
     },
     {
       "id": "xrm:1500221",
@@ -4263,7 +4348,8 @@
       "altLabel": [
         "taurine_conjugate"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0001053"
     },
     {
       "id": "xrm:1500222",
@@ -4274,7 +4360,8 @@
       "altLabel": [
         "coa_conjugate"
       ],
-      "broader": "xrm:1500000"
+      "broader": "xrm:1500000",
+      "relatedMatch": "xrm:0001061"
     },
     {
       "id": "xrm:1500223",

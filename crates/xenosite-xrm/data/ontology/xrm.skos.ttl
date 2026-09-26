@@ -256,13 +256,15 @@ xrm:0000110 a skos:Concept ;
   skos:relatedMatch xrm:7700001 ;
   skos:relatedMatch xrm:1500012 ;
   skos:relatedMatch xrm:1300117 ;
-  skos:relatedMatch xrm:1500019 .
+  skos:relatedMatch xrm:1500019 ;
+  skos:relatedMatch xrm:1500128 .
 
 xrm:0000111 a skos:Concept ;
   skos:prefLabel "alkene epoxidation" ;
   skos:definition "alkene epoxidation: xenobiotic-metabolism term under epoxidation." ;
   skos:inScheme xrm:scheme ;
-  skos:broader xrm:0000110 .
+  skos:broader xrm:0000110 ;
+  skos:relatedMatch xrm:1500012 .
 
 xrm:0000112 a skos:Concept ;
   skos:prefLabel "arene oxide formation" ;
@@ -272,7 +274,8 @@ xrm:0000112 a skos:Concept ;
   skos:altLabel "arene oxide" ;
   skos:broader xrm:0000110 ;
   skos:broader xrm:0000101 ;
-  skos:relatedMatch xrm:8000007 .
+  skos:relatedMatch xrm:8000007 ;
+  skos:relatedMatch xrm:1500105 .
 
 xrm:0000113 a skos:Concept ;
   skos:prefLabel "thiophene epoxidation" ;
@@ -281,7 +284,9 @@ xrm:0000113 a skos:Concept ;
   skos:broader xrm:0000110 ;
   skos:broader xrm:8000006 ;
   skos:relatedMatch xrm:0004001 ;
-  skos:relatedMatch xrm:8000006 .
+  skos:relatedMatch xrm:8000006 ;
+  skos:relatedMatch xrm:1500012 ;
+  skos:relatedMatch xrm:1500106 .
 
 xrm:0000120 a skos:Concept ;
   skos:prefLabel "nitrogen oxidation" ;
@@ -340,7 +345,8 @@ xrm:0000131 a skos:Concept ;
   skos:definition "sulfoxidation: xenobiotic-metabolism term under sulfur oxidation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "sulfoxide formation" ;
-  skos:broader xrm:0000130 .
+  skos:broader xrm:0000130 ;
+  skos:relatedMatch xrm:1500123 .
 
 xrm:0000132 a skos:Concept ;
   skos:prefLabel "sulfone formation" ;
@@ -980,7 +986,9 @@ xrm:0001002 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001001 ;
   skos:relatedMatch xrm:1600135 ;
-  xmet:hasAttachmentAtomType xrm:1600135 .
+  xmet:hasAttachmentAtomType xrm:1600135 ;
+  skos:relatedMatch xrm:1500116 ;
+  skos:relatedMatch xrm:1500118 .
 
 xrm:0001003 a skos:Concept ;
   skos:prefLabel "alcoholic glucuronidation" ;
@@ -1010,7 +1018,9 @@ xrm:0001005 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001000 ;
   skos:relatedMatch xrm:1600136 ;
-  xmet:hasAttachmentAtomType xrm:1600136 .
+  xmet:hasAttachmentAtomType xrm:1600136 ;
+  skos:relatedMatch xrm:1500116 ;
+  skos:relatedMatch xrm:1500215 .
 
 xrm:0001006 a skos:Concept ;
   skos:prefLabel "quaternary N-glucuronidation" ;
@@ -1096,7 +1106,8 @@ xrm:0001021 a skos:Concept ;
   skos:prefLabel "N-acetylation" ;
   skos:definition "N-acetylation: xenobiotic-metabolism term under acetylation." ;
   skos:inScheme xrm:scheme ;
-  skos:broader xrm:0001020 .
+  skos:broader xrm:0001020 ;
+  skos:relatedMatch xrm:1500219 .
 
 xrm:0001022 a skos:Concept ;
   skos:prefLabel "O-acetylation" ;
@@ -1135,33 +1146,43 @@ xrm:0001031 a skos:Concept ;
   skos:broader xrm:0001030 ;
   skos:relatedMatch xrm:8000004 ;
   skos:relatedMatch xrm:8000008 ;
-  skos:relatedMatch xrm:7500002 .
+  skos:relatedMatch xrm:7500002 ;
+  skos:relatedMatch xrm:1500114 ;
+  skos:relatedMatch xrm:1500019 .
 
 xrm:0001032 a skos:Concept ;
   skos:prefLabel "epoxide glutathionation" ;
   skos:definition "epoxide glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "GSH epoxide conjugation" ;
-  skos:broader xrm:0001030 .
+  skos:broader xrm:0001030 ;
+  skos:relatedMatch xrm:1500114 ;
+  skos:relatedMatch xrm:1500019 .
 
 xrm:0001033 a skos:Concept ;
   skos:prefLabel "halide displacement glutathionation" ;
   skos:definition "halide displacement glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "GSH nucleophilic aromatic/aliphatic substitution" ;
-  skos:broader xrm:0001030 .
+  skos:broader xrm:0001030 ;
+  skos:relatedMatch xrm:1500114 ;
+  skos:relatedMatch xrm:1500019 .
 
 xrm:0001034 a skos:Concept ;
   skos:prefLabel "isocyanate glutathionation" ;
   skos:definition "isocyanate glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
-  skos:broader xrm:0001030 .
+  skos:broader xrm:0001030 ;
+  skos:relatedMatch xrm:1500114 ;
+  skos:relatedMatch xrm:1500019 .
 
 xrm:0001035 a skos:Concept ;
   skos:prefLabel "aziridine glutathionation" ;
   skos:definition "aziridine glutathionation: xenobiotic-metabolism term under glutathionation." ;
   skos:inScheme xrm:scheme ;
-  skos:broader xrm:0001030 .
+  skos:broader xrm:0001030 ;
+  skos:relatedMatch xrm:1500114 ;
+  skos:relatedMatch xrm:1500019 .
 
 xrm:0001036 a skos:Concept ;
   skos:prefLabel "quinone glutathionation" ;
@@ -1169,7 +1190,9 @@ xrm:0001036 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:broader xrm:0001030 ;
   skos:relatedMatch xrm:0000300 ;
-  skos:relatedMatch xrm:8000008 .
+  skos:relatedMatch xrm:8000008 ;
+  skos:relatedMatch xrm:1500114 ;
+  skos:relatedMatch xrm:1500019 .
 
 xrm:0001037 a skos:Concept ;
   skos:prefLabel "mercapturic acid formation" ;
@@ -1178,7 +1201,8 @@ xrm:0001037 a skos:Concept ;
   skos:altLabel "mercapturic_acid_formation" ;
   skos:broader xrm:0001030 ;
   skos:broader xrm:1300000 ;
-  skos:broader xrm:0000002 .
+  skos:broader xrm:0000002 ;
+  skos:relatedMatch xrm:1500115 .
 
 xrm:0001040 a skos:Concept ;
   skos:prefLabel "methylation" ;
@@ -1231,7 +1255,8 @@ xrm:0001051 a skos:Concept ;
   skos:altLabel "glycine_conjugation" ;
   skos:broader xrm:0001050 ;
   skos:broader xrm:1300000 ;
-  skos:broader xrm:0000002 .
+  skos:broader xrm:0000002 ;
+  skos:relatedMatch xrm:1500220 .
 
 xrm:0001052 a skos:Concept ;
   skos:prefLabel "glutamine conjugation" ;
@@ -1246,7 +1271,8 @@ xrm:0001053 a skos:Concept ;
   skos:altLabel "taurine_conjugation" ;
   skos:broader xrm:0001050 ;
   skos:broader xrm:1300000 ;
-  skos:broader xrm:0000002 .
+  skos:broader xrm:0000002 ;
+  skos:relatedMatch xrm:1500221 .
 
 xrm:0001054 a skos:Concept ;
   skos:prefLabel "serine conjugation" ;
@@ -1269,7 +1295,8 @@ xrm:0001061 a skos:Concept ;
   skos:altLabel "acyl-CoA formation" ;
   skos:altLabel "coa_conjugation" ;
   skos:broader xrm:0000002 ;
-  skos:broader xrm:1300000 .
+  skos:broader xrm:1300000 ;
+  skos:relatedMatch xrm:1500222 .
 
 xrm:0002000 a skos:Concept ;
   skos:prefLabel "tautomerization" ;
@@ -1600,14 +1627,16 @@ xrm:1200100 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "arene epoxidation" ;
   skos:altLabel "aromatic_epoxidation" ;
-  skos:broader xrm:1200000 .
+  skos:broader xrm:1200000 ;
+  skos:relatedMatch xrm:1500012 .
 
 xrm:1200101 a skos:Concept ;
   skos:prefLabel "aliphatic epoxidation" ;
   skos:definition "Epoxidation of an aliphatic alkene." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "aliphatic_epoxidation" ;
-  skos:broader xrm:1200000 .
+  skos:broader xrm:1200000 ;
+  skos:relatedMatch xrm:1500012 .
 
 xrm:1200102 a skos:Concept ;
   skos:prefLabel "N-oxidation" ;
@@ -1615,7 +1644,8 @@ xrm:1200102 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "nitrogen oxidation class" ;
   skos:altLabel "n_oxidation" ;
-  skos:broader xrm:1200000 .
+  skos:broader xrm:1200000 ;
+  skos:relatedMatch xrm:1500122 .
 
 xrm:1200103 a skos:Concept ;
   skos:prefLabel "S-oxidation" ;
@@ -2380,7 +2410,11 @@ xrm:1500012 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "oxirane metabolite" ;
   skos:broader xrm:1500000 ;
-  skos:relatedMatch xrm:0000110 .
+  skos:relatedMatch xrm:0000110 ;
+  skos:relatedMatch xrm:0000111 ;
+  skos:relatedMatch xrm:0000113 ;
+  skos:relatedMatch xrm:1200100 ;
+  skos:relatedMatch xrm:1200101 .
 
 xrm:1500013 a skos:Concept ;
   skos:prefLabel "aldehyde" ;
@@ -2414,13 +2448,15 @@ xrm:1500017 a skos:Concept ;
   skos:prefLabel "nitroso" ;
   skos:definition "Nitroso reactive metabolite." ;
   skos:inScheme xrm:scheme ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0000123 .
 
 xrm:1500018 a skos:Concept ;
   skos:prefLabel "hydroxylamine" ;
   skos:definition "Hydroxylamine reactive metabolite." ;
   skos:inScheme xrm:scheme ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0000122 .
 
 xrm:1500019 a skos:Concept ;
   skos:prefLabel "GSH-trappable metabolite" ;
@@ -2428,7 +2464,14 @@ xrm:1500019 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "gsh_trappable_metabolite" ;
   skos:broader xrm:1500000 ;
-  skos:relatedMatch xrm:1400030 .
+  skos:relatedMatch xrm:1400030 ;
+  skos:relatedMatch xrm:0001030 ;
+  skos:relatedMatch xrm:0001031 ;
+  skos:relatedMatch xrm:0001032 ;
+  skos:relatedMatch xrm:0001033 ;
+  skos:relatedMatch xrm:0001034 ;
+  skos:relatedMatch xrm:0001035 ;
+  skos:relatedMatch xrm:0001036 .
 
 xrm:1500030 a skos:Concept ;
   skos:prefLabel "reactive conjugate" ;
@@ -2485,14 +2528,16 @@ xrm:1500105 a skos:Concept ;
   skos:definition "Arene oxide reactive intermediate." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "arene_oxide" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0000112 .
 
 xrm:1500106 a skos:Concept ;
   skos:prefLabel "thiophene epoxide" ;
   skos:definition "Thiophene S-oxide/epoxide-like reactive intermediate." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "thiophene_epoxide" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0000113 .
 
 xrm:1500107 a skos:Concept ;
   skos:prefLabel "acyl glucuronide reactive" ;
@@ -2547,14 +2592,21 @@ xrm:1500114 a skos:Concept ;
   skos:altLabel "glutathione adduct" ;
   skos:altLabel "gsh_adduct" ;
   skos:broader xrm:1500000 ;
-  skos:relatedMatch xrm:0001030 .
+  skos:relatedMatch xrm:0001030 ;
+  skos:relatedMatch xrm:0001031 ;
+  skos:relatedMatch xrm:0001032 ;
+  skos:relatedMatch xrm:0001033 ;
+  skos:relatedMatch xrm:0001034 ;
+  skos:relatedMatch xrm:0001035 ;
+  skos:relatedMatch xrm:0001036 .
 
 xrm:1500115 a skos:Concept ;
   skos:prefLabel "mercapturic acid" ;
   skos:definition "Mercapturic acid product class." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "mercapturic_acid" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0001037 .
 
 xrm:1500116 a skos:Concept ;
   skos:prefLabel "glucuronide conjugate" ;
@@ -2562,7 +2614,9 @@ xrm:1500116 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "glucuronide_conjugate" ;
   skos:broader xrm:1500000 ;
-  skos:relatedMatch xrm:0001000 .
+  skos:relatedMatch xrm:0001000 ;
+  skos:relatedMatch xrm:0001005 ;
+  skos:relatedMatch xrm:0001002 .
 
 xrm:1500117 a skos:Concept ;
   skos:prefLabel "sulfate conjugate" ;
@@ -2578,7 +2632,8 @@ xrm:1500118 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "phenol_metabolite" ;
   skos:broader xrm:1500000 ;
-  skos:relatedMatch xrm:0000101 .
+  skos:relatedMatch xrm:0000101 ;
+  skos:relatedMatch xrm:0001002 .
 
 xrm:1500119 a skos:Concept ;
   skos:prefLabel "catechol metabolite" ;
@@ -2606,14 +2661,16 @@ xrm:1500122 a skos:Concept ;
   skos:definition "N-oxide metabolite product class." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "n_oxide_metabolite" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:1200102 .
 
 xrm:1500123 a skos:Concept ;
   skos:prefLabel "sulfoxide metabolite" ;
   skos:definition "Sulfoxide metabolite product class." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "sulfoxide_metabolite" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0000131 .
 
 xrm:1500124 a skos:Concept ;
   skos:prefLabel "sulfone metabolite" ;
@@ -2649,7 +2706,8 @@ xrm:1500128 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "epoxide product" ;
   skos:altLabel "epoxide_metabolite" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0000110 .
 
 xrm:1500129 a skos:Concept ;
   skos:prefLabel "aldehyde metabolite" ;
@@ -2804,7 +2862,8 @@ xrm:1500215 a skos:Concept ;
   skos:definition "N-linked glucuronide product." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "n_glucuronide" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0001005 .
 
 xrm:1500216 a skos:Concept ;
   skos:prefLabel "quaternary ammonium glucuronide" ;
@@ -2833,28 +2892,32 @@ xrm:1500219 a skos:Concept ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "NAC adduct" ;
   skos:altLabel "n_acetylcysteine_adduct" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0001021 .
 
 xrm:1500220 a skos:Concept ;
   skos:prefLabel "glycine conjugate" ;
   skos:definition "Glycine-conjugated metabolite." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "glycine_conjugate" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0001051 .
 
 xrm:1500221 a skos:Concept ;
   skos:prefLabel "taurine conjugate" ;
   skos:definition "Taurine-conjugated metabolite." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "taurine_conjugate" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0001053 .
 
 xrm:1500222 a skos:Concept ;
   skos:prefLabel "CoA conjugate" ;
   skos:definition "Coenzyme A conjugate intermediate/product." ;
   skos:inScheme xrm:scheme ;
   skos:altLabel "coa_conjugate" ;
-  skos:broader xrm:1500000 .
+  skos:broader xrm:1500000 ;
+  skos:relatedMatch xrm:0001061 .
 
 xrm:1500223 a skos:Concept ;
   skos:prefLabel "methylated metabolite" ;

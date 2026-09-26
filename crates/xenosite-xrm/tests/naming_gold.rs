@@ -77,6 +77,8 @@ fn glucuronidation_via_opaque_tag() {
     let labs = labels(&terms);
     assert!(labs.contains(&"glucuronidation"), "{labs:?}");
     assert!(labs.contains(&"phase II"), "{labs:?}");
+    // Product-class companion via skos:relatedMatch expansion (not assignment emit).
+    assert!(labs.contains(&"glucuronide conjugate"), "{labs:?}");
 }
 
 #[test]

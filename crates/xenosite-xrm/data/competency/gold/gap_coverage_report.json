@@ -1,0 +1,267 @@
+{
+  "gold_failures_seen": [],
+  "related_match_wired": [
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500222",
+      "to_label": "CoA conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500117",
+      "to_label": "sulfate conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500116",
+      "to_label": "glucuronide conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500220",
+      "to_label": "glycine conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500030",
+      "to_label": "reactive conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500221",
+      "to_label": "taurine conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000024",
+      "from_label": "conjugation",
+      "to": "xrm:1500031",
+      "to_label": "stable conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000100",
+      "from_label": "hydroxylation",
+      "to": "xrm:1500111",
+      "to_label": "hydroxylamine metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000108",
+      "from_label": "\u03c9-hydroxylation",
+      "to": "xrm:1500111",
+      "to_label": "hydroxylamine metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000110",
+      "from_label": "epoxidation",
+      "to": "xrm:1500106",
+      "to_label": "thiophene epoxide",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000110",
+      "from_label": "epoxidation",
+      "to": "xrm:1500128",
+      "to_label": "epoxide metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000111",
+      "from_label": "alkene epoxidation",
+      "to": "xrm:1500012",
+      "to_label": "epoxide",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000113",
+      "from_label": "thiophene epoxidation",
+      "to": "xrm:1500012",
+      "to_label": "epoxide",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000113",
+      "from_label": "thiophene epoxidation",
+      "to": "xrm:1500106",
+      "to_label": "thiophene epoxide",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0000131",
+      "from_label": "sulfoxidation",
+      "to": "xrm:1500123",
+      "to_label": "sulfoxide metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001020",
+      "from_label": "acetylation",
+      "to": "xrm:1500224",
+      "to_label": "acetylated metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001020",
+      "from_label": "acetylation",
+      "to": "xrm:1500219",
+      "to_label": "N-acetylcysteine adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001021",
+      "from_label": "N-acetylation",
+      "to": "xrm:1500219",
+      "to_label": "N-acetylcysteine adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001031",
+      "from_label": "Michael glutathionation",
+      "to": "xrm:1500114",
+      "to_label": "GSH adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001031",
+      "from_label": "Michael glutathionation",
+      "to": "xrm:1500019",
+      "to_label": "GSH-trappable metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001032",
+      "from_label": "epoxide glutathionation",
+      "to": "xrm:1500114",
+      "to_label": "GSH adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001032",
+      "from_label": "epoxide glutathionation",
+      "to": "xrm:1500019",
+      "to_label": "GSH-trappable metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001033",
+      "from_label": "halide displacement glutathionation",
+      "to": "xrm:1500114",
+      "to_label": "GSH adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001033",
+      "from_label": "halide displacement glutathionation",
+      "to": "xrm:1500019",
+      "to_label": "GSH-trappable metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001034",
+      "from_label": "isocyanate glutathionation",
+      "to": "xrm:1500114",
+      "to_label": "GSH adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001034",
+      "from_label": "isocyanate glutathionation",
+      "to": "xrm:1500019",
+      "to_label": "GSH-trappable metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001035",
+      "from_label": "aziridine glutathionation",
+      "to": "xrm:1500114",
+      "to_label": "GSH adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001035",
+      "from_label": "aziridine glutathionation",
+      "to": "xrm:1500019",
+      "to_label": "GSH-trappable metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001036",
+      "from_label": "quinone glutathionation",
+      "to": "xrm:1500114",
+      "to_label": "GSH adduct",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001036",
+      "from_label": "quinone glutathionation",
+      "to": "xrm:1500019",
+      "to_label": "GSH-trappable metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001040",
+      "from_label": "methylation",
+      "to": "xrm:1500223",
+      "to_label": "methylated metabolite",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001051",
+      "from_label": "glycine conjugation",
+      "to": "xrm:1500220",
+      "to_label": "glycine conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001053",
+      "from_label": "taurine conjugation",
+      "to": "xrm:1500221",
+      "to_label": "taurine conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:0001061",
+      "from_label": "CoA conjugation",
+      "to": "xrm:1500222",
+      "to_label": "CoA conjugate",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:1200100",
+      "from_label": "aromatic epoxidation",
+      "to": "xrm:1500012",
+      "to_label": "epoxide",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:1200101",
+      "from_label": "aliphatic epoxidation",
+      "to": "xrm:1500012",
+      "to_label": "epoxide",
+      "reason": "name-heuristic"
+    },
+    {
+      "from": "xrm:1200102",
+      "from_label": "N-oxidation",
+      "to": "xrm:1500122",
+      "to_label": "N-oxide metabolite",
+      "reason": "name-heuristic"
+    }
+  ],
+  "definitions_filled": 0,
+  "assignment_emits_stripped": [],
+  "policy": "Failures drive general relatedMatch wiring; namer expands relatedMatch into product/medchem/leaving-group spines. Do not add one-off product-class IDs to assignment emit lists."
+}

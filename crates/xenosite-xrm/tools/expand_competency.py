@@ -605,12 +605,23 @@ def expand_category(
             }
         )
 
+    # Prefer expecting transformation / phase-family labels from emit lists.
+    # Product-class companions are covered by relatedMatch expansion + gold gaps,
+    # not by asserting every former ad-hoc emit id.
+    chem_desc = set()
+    for root in ("xrm:1100000", "xrm:1200000", "xrm:1300000"):
+        chem_desc |= descendants(children, root)
+
     seen_tags = set()
     for rule in tag_rules:
         if len(buckets["tagging"]) >= n_tag:
             break
-        emit_in_spine = [e for e in rule["emit"] if e in desc]
-        if not emit_in_spine:
+        # Primary expects: emits in this category spine that are also chem transforms,
+        # else any emit in this spine (for RM/SITE/MED-native tags).
+        primary_ids = [e for e in rule["emit"] if e in desc and e in chem_desc]
+        if not primary_ids:
+            primary_ids = [e for e in rule["emit"] if e in desc]
+        if not primary_ids:
             continue
         tag = next((t for t in rule["tags"] if t.startswith("chem:")), None)
         if not tag:
@@ -620,7 +631,7 @@ def expand_category(
             continue
         seen_tags.add(base_tag)
         expect = pick_primary_labels(
-            [by_id[e]["preferred_label"] for e in emit_in_spine if e in by_id],
+            [by_id[e]["preferred_label"] for e in primary_ids if e in by_id],
             limit=2,
         )
         if not expect:

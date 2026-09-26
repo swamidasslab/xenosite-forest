@@ -82,6 +82,13 @@ impl Namer {
         let mut evidence: BTreeMap<(String, SiteRef), Vec<String>> = BTreeMap::new();
         let mut keys: BTreeSet<(String, SiteRef)> = BTreeSet::new();
 
+        // Companion spines reached via skos:relatedMatch (data), not ad-hoc emit lists.
+        const RELATED_EMIT_SPINES: &[&str] = &[
+            "xrm:1500000", // reactive metabolite / product class
+            "xrm:1400000", // medchem liability
+            "xrm:2200000", // leaving group
+        ];
+
         for hit in hits {
             for id in &hit.rule.emit {
                 if self.thesaurus.get(id).is_none() {
@@ -96,6 +103,18 @@ impl Namer {
                 for anc in self.thesaurus.ancestors(id) {
                     let akey = (anc.as_str().to_string(), hit.site.clone());
                     keys.insert(akey);
+                }
+                // General gap coverage: follow relatedMatch into companion spines.
+                for rel in self
+                    .thesaurus
+                    .related_under_spines(id, RELATED_EMIT_SPINES)
+                {
+                    let rkey = (rel.as_str().to_string(), hit.site.clone());
+                    evidence
+                        .entry(rkey.clone())
+                        .or_default()
+                        .push(hit.rule.id.clone());
+                    keys.insert(rkey);
                 }
             }
         }

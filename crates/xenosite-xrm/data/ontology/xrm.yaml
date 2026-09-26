@@ -342,6 +342,7 @@ concepts:
   parents:
   - xrm:0000102
   definition: 'ω-hydroxylation: xenobiotic-metabolism term under aliphatic hydroxylation.'
+  related_match: []
 - id: xrm:0000109
   preferred_label: ω-1 hydroxylation
   synonyms:
@@ -367,6 +368,7 @@ concepts:
   - xrm:1500012
   - xrm:1300117
   - xrm:1500019
+  - xrm:1500128
   synonyms:
   - alkene epoxidation
   - oxirane formation
@@ -375,6 +377,8 @@ concepts:
   parents:
   - xrm:0000110
   definition: 'alkene epoxidation: xenobiotic-metabolism term under epoxidation.'
+  related_match:
+  - xrm:1500012
 - id: xrm:0000112
   preferred_label: arene oxide formation
   synonyms:
@@ -386,6 +390,7 @@ concepts:
   - xrm:0000101
   related_match:
   - xrm:8000007
+  - xrm:1500105
 - id: xrm:0000113
   preferred_label: thiophene epoxidation
   parents:
@@ -394,6 +399,8 @@ concepts:
   related_match:
   - xrm:0004001
   - xrm:8000006
+  - xrm:1500012
+  - xrm:1500106
   definition: 'thiophene epoxidation: xenobiotic-metabolism term under epoxidation, heteroaromatic oxidation
     impact.'
 - id: xrm:0000120
@@ -456,6 +463,8 @@ concepts:
   parents:
   - xrm:0000130
   definition: 'sulfoxidation: xenobiotic-metabolism term under sulfur oxidation.'
+  related_match:
+  - xrm:1500123
 - id: xrm:0000132
   preferred_label: sulfone formation
   parents:
@@ -1088,6 +1097,8 @@ concepts:
   - xrm:0001001
   related_match:
   - xrm:1600135
+  - xrm:1500116
+  - xrm:1500118
   definition: 'phenolic glucuronidation: xenobiotic-metabolism term under O-glucuronidation.'
 - id: xrm:0001003
   preferred_label: alcoholic glucuronidation
@@ -1117,6 +1128,8 @@ concepts:
   - xrm:0001000
   related_match:
   - xrm:1600136
+  - xrm:1500116
+  - xrm:1500215
   definition: 'N-glucuronidation: xenobiotic-metabolism term under glucuronidation.'
 - id: xrm:0001006
   preferred_label: quaternary N-glucuronidation
@@ -1199,6 +1212,8 @@ concepts:
   parents:
   - xrm:0001020
   definition: 'N-acetylation: xenobiotic-metabolism term under acetylation.'
+  related_match:
+  - xrm:1500219
 - id: xrm:0001022
   preferred_label: O-acetylation
   parents:
@@ -1238,6 +1253,8 @@ concepts:
   - xrm:8000004
   - xrm:8000008
   - xrm:7500002
+  - xrm:1500114
+  - xrm:1500019
 - id: xrm:0001032
   preferred_label: epoxide glutathionation
   synonyms:
@@ -1245,6 +1262,9 @@ concepts:
   parents:
   - xrm:0001030
   definition: 'epoxide glutathionation: xenobiotic-metabolism term under glutathionation.'
+  related_match:
+  - xrm:1500114
+  - xrm:1500019
 - id: xrm:0001033
   preferred_label: halide displacement glutathionation
   synonyms:
@@ -1252,16 +1272,25 @@ concepts:
   parents:
   - xrm:0001030
   definition: 'halide displacement glutathionation: xenobiotic-metabolism term under glutathionation.'
+  related_match:
+  - xrm:1500114
+  - xrm:1500019
 - id: xrm:0001034
   preferred_label: isocyanate glutathionation
   parents:
   - xrm:0001030
   definition: 'isocyanate glutathionation: xenobiotic-metabolism term under glutathionation.'
+  related_match:
+  - xrm:1500114
+  - xrm:1500019
 - id: xrm:0001035
   preferred_label: aziridine glutathionation
   parents:
   - xrm:0001030
   definition: 'aziridine glutathionation: xenobiotic-metabolism term under glutathionation.'
+  related_match:
+  - xrm:1500114
+  - xrm:1500019
 - id: xrm:0001036
   preferred_label: quinone glutathionation
   parents:
@@ -1269,6 +1298,8 @@ concepts:
   related_match:
   - xrm:0000300
   - xrm:8000008
+  - xrm:1500114
+  - xrm:1500019
   definition: 'quinone glutathionation: xenobiotic-metabolism term under glutathionation.'
 - id: xrm:0001037
   preferred_label: mercapturic acid formation
@@ -1279,6 +1310,8 @@ concepts:
   - xrm:0000002
   synonyms:
   - mercapturic_acid_formation
+  related_match:
+  - xrm:1500115
 - id: xrm:0001040
   preferred_label: methylation
   synonyms:
@@ -1287,6 +1320,7 @@ concepts:
   - xrm:0000002
   - xrm:1300000
   definition: 'methylation: xenobiotic-metabolism term under phase II, phase II conjugation family.'
+  related_match: []
 - id: xrm:0001041
   preferred_label: O-methylation
   synonyms:
@@ -1333,6 +1367,8 @@ concepts:
   - xrm:0000002
   definition: 'glycine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II
     conjugation family, phase II.'
+  related_match:
+  - xrm:1500220
 - id: xrm:0001052
   preferred_label: glutamine conjugation
   parents:
@@ -1348,6 +1384,8 @@ concepts:
   - taurine_conjugation
   definition: 'taurine conjugation: xenobiotic-metabolism term under amino acid conjugation, phase II
     conjugation family, phase II.'
+  related_match:
+  - xrm:1500221
 - id: xrm:0001054
   preferred_label: serine conjugation
   parents:
@@ -1370,6 +1408,8 @@ concepts:
   parents:
   - xrm:0000002
   - xrm:1300000
+  related_match:
+  - xrm:1500222
 - id: xrm:0002000
   preferred_label: tautomerization
   definition: Tautomer interconversion; often peripheral to labeled metabolism.
@@ -1687,6 +1727,8 @@ concepts:
   synonyms:
   - arene epoxidation
   - aromatic_epoxidation
+  related_match:
+  - xrm:1500012
 - id: xrm:1200101
   preferred_label: aliphatic epoxidation
   definition: Epoxidation of an aliphatic alkene.
@@ -1694,6 +1736,8 @@ concepts:
   - xrm:1200000
   synonyms:
   - aliphatic_epoxidation
+  related_match:
+  - xrm:1500012
 - id: xrm:1200102
   preferred_label: N-oxidation
   definition: Oxidation at nitrogen.
@@ -1702,6 +1746,8 @@ concepts:
   synonyms:
   - nitrogen oxidation class
   - n_oxidation
+  related_match:
+  - xrm:1500122
 - id: xrm:1200103
   preferred_label: S-oxidation
   definition: Oxidation at sulfur.
@@ -2455,6 +2501,10 @@ concepts:
   - xrm:1500000
   related_match:
   - xrm:0000110
+  - xrm:0000111
+  - xrm:0000113
+  - xrm:1200100
+  - xrm:1200101
   synonyms:
   - oxirane metabolite
 - id: xrm:1500013
@@ -2489,11 +2539,15 @@ concepts:
   definition: Nitroso reactive metabolite.
   parents:
   - xrm:1500000
+  related_match:
+  - xrm:0000123
 - id: xrm:1500018
   preferred_label: hydroxylamine
   definition: Hydroxylamine reactive metabolite.
   parents:
   - xrm:1500000
+  related_match:
+  - xrm:0000122
 - id: xrm:1500019
   preferred_label: GSH-trappable metabolite
   definition: Metabolite that forms a glutathione adduct.
@@ -2503,6 +2557,13 @@ concepts:
   - gsh_trappable_metabolite
   related_match:
   - xrm:1400030
+  - xrm:0001030
+  - xrm:0001031
+  - xrm:0001032
+  - xrm:0001033
+  - xrm:0001034
+  - xrm:0001035
+  - xrm:0001036
 - id: xrm:1500030
   preferred_label: reactive conjugate
   definition: Conjugate product class that is chemically reactive (acyl glucuronide, etc.).
@@ -2517,6 +2578,7 @@ concepts:
   definition: Conjugate product class expected to be chemically stable.
   parents:
   - xrm:1500000
+  related_match: []
 - id: xrm:1500100
   preferred_label: quinone-like reactive metabolite
   definition: Broad class of quinoid reactive metabolites.
@@ -2560,6 +2622,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - arene_oxide
+  related_match:
+  - xrm:0000112
 - id: xrm:1500106
   preferred_label: thiophene epoxide
   definition: Thiophene S-oxide/epoxide-like reactive intermediate.
@@ -2567,6 +2631,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - thiophene_epoxide
+  related_match:
+  - xrm:0000113
 - id: xrm:1500107
   preferred_label: acyl glucuronide reactive
   definition: Reactive acyl glucuronide.
@@ -2598,6 +2664,7 @@ concepts:
   - xrm:1500000
   synonyms:
   - hydroxylamine_metabolite
+  related_match: []
 - id: xrm:1500112
   preferred_label: nitrene
   definition: Nitrene reactive species.
@@ -2620,6 +2687,12 @@ concepts:
   - gsh_adduct
   related_match:
   - xrm:0001030
+  - xrm:0001031
+  - xrm:0001032
+  - xrm:0001033
+  - xrm:0001034
+  - xrm:0001035
+  - xrm:0001036
 - id: xrm:1500115
   preferred_label: mercapturic acid
   definition: Mercapturic acid product class.
@@ -2627,6 +2700,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - mercapturic_acid
+  related_match:
+  - xrm:0001037
 - id: xrm:1500116
   preferred_label: glucuronide conjugate
   definition: Glucuronide conjugate product class.
@@ -2634,6 +2709,8 @@ concepts:
   - xrm:1500000
   related_match:
   - xrm:0001000
+  - xrm:0001005
+  - xrm:0001002
   synonyms:
   - glucuronide_conjugate
 - id: xrm:1500117
@@ -2652,6 +2729,7 @@ concepts:
   - xrm:1500000
   related_match:
   - xrm:0000101
+  - xrm:0001002
   synonyms:
   - phenol_metabolite
 - id: xrm:1500119
@@ -2682,6 +2760,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - n_oxide_metabolite
+  related_match:
+  - xrm:1200102
 - id: xrm:1500123
   preferred_label: sulfoxide metabolite
   definition: Sulfoxide metabolite product class.
@@ -2689,6 +2769,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - sulfoxide_metabolite
+  related_match:
+  - xrm:0000131
 - id: xrm:1500124
   preferred_label: sulfone metabolite
   definition: Sulfone metabolite product class.
@@ -2725,6 +2807,8 @@ concepts:
   synonyms:
   - epoxide product
   - epoxide_metabolite
+  related_match:
+  - xrm:0000110
 - id: xrm:1500129
   preferred_label: aldehyde metabolite
   definition: Aldehyde metabolite product class.
@@ -2881,6 +2965,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - n_glucuronide
+  related_match:
+  - xrm:0001005
 - id: xrm:1500216
   preferred_label: quaternary ammonium glucuronide
   definition: Quaternary N-glucuronide product.
@@ -2910,6 +2996,8 @@ concepts:
   synonyms:
   - NAC adduct
   - n_acetylcysteine_adduct
+  related_match:
+  - xrm:0001021
 - id: xrm:1500220
   preferred_label: glycine conjugate
   definition: Glycine-conjugated metabolite.
@@ -2917,6 +3005,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - glycine_conjugate
+  related_match:
+  - xrm:0001051
 - id: xrm:1500221
   preferred_label: taurine conjugate
   definition: Taurine-conjugated metabolite.
@@ -2924,6 +3014,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - taurine_conjugate
+  related_match:
+  - xrm:0001053
 - id: xrm:1500222
   preferred_label: CoA conjugate
   definition: Coenzyme A conjugate intermediate/product.
@@ -2931,6 +3023,8 @@ concepts:
   - xrm:1500000
   synonyms:
   - coa_conjugate
+  related_match:
+  - xrm:0001061
 - id: xrm:1500223
   preferred_label: methylated metabolite
   definition: Methyl-conjugated metabolite product.
@@ -2938,6 +3032,7 @@ concepts:
   - xrm:1500000
   synonyms:
   - methylated_metabolite
+  related_match: []
 - id: xrm:1500224
   preferred_label: acetylated metabolite
   definition: Acetyl-conjugated metabolite product.
@@ -2945,6 +3040,7 @@ concepts:
   - xrm:1500000
   synonyms:
   - acetylated_metabolite
+  related_match: []
 - id: xrm:1500225
   preferred_label: dealkylated amine
   definition: Amine product after N-dealkylation.

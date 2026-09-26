@@ -245,6 +245,35 @@ impl Thesaurus {
         out
     }
 
+    /// True when `id` is `ancestor` or has `ancestor` on a `skos:broader` path.
+    pub fn is_under(&self, id: &str, ancestor: &str) -> bool {
+        if id == ancestor {
+            return true;
+        }
+        self.ancestors(id)
+            .iter()
+            .any(|a| a.as_str() == ancestor)
+    }
+
+    /// `skos:relatedMatch` targets of `id` that hang under any of `spines`.
+    ///
+    /// Used by the namer for general gap coverage: assignment emits stay lean;
+    /// product / liability companions ride on thesaurus relatedMatch data.
+    pub fn related_under_spines(&self, id: &str, spines: &[&str]) -> Vec<Curie> {
+        let Some(c) = self.concepts.get(id) else {
+            return Vec::new();
+        };
+        c.related_match
+            .iter()
+            .filter(|rel| {
+                let r = rel.as_str();
+                self.concepts.contains_key(r)
+                    && spines.iter().any(|spine| self.is_under(r, spine))
+            })
+            .cloned()
+            .collect()
+    }
+
     /// Validate DAG: unique ids, known broader targets, no cycles on broader.
     pub fn validate(&self) -> Result<()> {
         if self.schemes.is_empty() {

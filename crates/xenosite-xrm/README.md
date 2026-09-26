@@ -118,6 +118,9 @@ python3 crates/xenosite-xrm/tools/run_competency_tests.py --refresh-ttl
 cargo test -p xenosite-xrm --test competency
 cargo test -p xenosite-xrm --test gold_score
 python3 crates/xenosite-xrm/tools/score_gold_set.py
+# Failures → general relatedMatch wiring (not ad-hoc assignment emits):
+python3 crates/xenosite-xrm/tools/cover_gaps_from_failures.py
+python3 crates/xenosite-xrm/tools/yaml_to_skos.py
 ```
 
 See `data/competency/PLAN.md` (executable CQ design), `data/ontology/VALIDATION.md`,

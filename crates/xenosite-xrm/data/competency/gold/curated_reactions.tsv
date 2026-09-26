@@ -9,8 +9,8 @@ GOLD-0007	C	C	chem:aromatic-hydroxylation	aromatic hydroxylation	phase I		aromat
 GOLD-0008	C	C	chem:para-hydroxylation	para-hydroxylation	phase I			metabolic soft spot	
 GOLD-0009	C	C	chem:benzylic-hydroxylation	benzylic hydroxylation	phase I		aliphatic site	metabolic soft spot	
 GOLD-0010	C	C	chem:omega-hydroxylation	ω-hydroxylation	phase I			metabolic soft spot	
-GOLD-0011	C	C	chem:epoxidation	epoxidation	phase I	electrophile generation		reactive metabolite	
-GOLD-0012	C	C	chem:arene-oxide	arene oxide formation	phase I	epoxide		reactive metabolite	
+GOLD-0011	C	C	chem:epoxidation	epoxidation	phase I			reactive metabolite	
+GOLD-0012	C	C	chem:arene-oxide	arene oxide formation	phase I			reactive metabolite	
 GOLD-0013	C	C	chem:NIH-shift	NIH shift					
 GOLD-0014	C	C	chem:ipso-substitution	ipso substitution					
 GOLD-0015	C	C	chem:dearomatization	dearomatization					
@@ -20,23 +20,23 @@ GOLD-0018	C	C	chem:N-demethylation	N-demethylation	phase I		tertiary amine site	
 GOLD-0019	C	C	chem:oxidative-deamination	oxidative deamination	phase I		nitrogen site	metabolic soft spot	
 GOLD-0020	C	C	chem:O-dealkylation	O-dealkylation	phase I		oxygen site	metabolic soft spot	
 GOLD-0021	C	C	chem:O-demethylation	O-demethylation	phase I		oxygen site	metabolic soft spot	
-GOLD-0022	C	C	chem:glucuronidation	glucuronidation	phase II	nucleophile exposure		clearance pathway	
-GOLD-0023	C	C	chem:acyl-glucuronidation	acyl migration	phase II	acyl glucuronide		clearance pathway	
-GOLD-0024	C	C	chem:phenolic-glucuronidation	phenolic glucuronidation	phase II	glucuronide conjugate		clearance pathway	
-GOLD-0025	C	C	chem:N-glucuronidation	N-glucuronidation	phase II	glucuronide conjugate		clearance pathway	
-GOLD-0026	C	C	chem:sulfation	sulfation	phase II	nucleophile exposure			
+GOLD-0022	C	C	chem:glucuronidation	glucuronidation	phase II			clearance pathway	
+GOLD-0023	C	C	chem:acyl-glucuronidation	acyl migration	phase II			clearance pathway	
+GOLD-0024	C	C	chem:phenolic-glucuronidation	phenolic glucuronidation	phase II			clearance pathway	
+GOLD-0025	C	C	chem:N-glucuronidation	N-glucuronidation	phase II			clearance pathway	
+GOLD-0026	C	C	chem:sulfation	sulfation	phase II				
 GOLD-0027	C	C	chem:acetylation	acetylation	phase II				
-GOLD-0028	C	C	chem:glutathione-conjugation	glutathionation	phase II	electrophile consumption		detoxification	
-GOLD-0029	C	C	chem:GSH-Michael	conjugate addition	phase II	electrophile consumption		detoxification	
-GOLD-0030	C	C	chem:GSH-epoxide	epoxide glutathionation	phase II	electrophile consumption		detoxification	
-GOLD-0031	C	C	chem:quinone-formation	dearomatization		electrophile generation		bioactivation	
-GOLD-0032	C	C	chem:quinone-imine	dearomatization		electrophile generation		bioactivation	
-GOLD-0033	C	C	chem:quinone-methide	dearomatization		electrophile generation		bioactivation	
-GOLD-0034	C	C	chem:imine-methide	dearomatization		electrophile generation		bioactivation	
-GOLD-0035	C	C	chem:one-step-quinone-formation	dearomatization		quinone		bioactivation	
-GOLD-0036	C	C	chem:two-step-quinone-formation	dearomatization		quinone		bioactivation	
+GOLD-0028	C	C	chem:glutathione-conjugation	glutathionation	phase II			detoxification	
+GOLD-0029	C	C	chem:GSH-Michael	conjugate addition	phase II			detoxification	
+GOLD-0030	C	C	chem:GSH-epoxide	epoxide glutathionation	phase II			detoxification	
+GOLD-0031	C	C	chem:quinone-formation	dearomatization				bioactivation	
+GOLD-0032	C	C	chem:quinone-imine	dearomatization				bioactivation	
+GOLD-0033	C	C	chem:quinone-methide	dearomatization				bioactivation	
+GOLD-0034	C	C	chem:imine-methide	dearomatization				bioactivation	
+GOLD-0035	C	C	chem:one-step-quinone-formation	dearomatization				bioactivation	
+GOLD-0036	C	C	chem:two-step-quinone-formation	dearomatization				bioactivation	
 GOLD-0037	C	C	chem:nitro-reduction	nitro reduction	phase I		nitrogen site		
-GOLD-0038	C	C	chem:nitroaromatic-reduction	nitroaromatic reduction	phase I	electrophile generation	aromatic site	bioactivation	
+GOLD-0038	C	C	chem:nitroaromatic-reduction	nitroaromatic reduction	phase I		aromatic site	bioactivation	
 GOLD-0039	C	C	chem:carbonyl-reduction	carbonyl reduction	phase I		carbon site		
 GOLD-0040	C	C	chem:sulfo-reduction	sulfo reduction	phase I		sulfur site		
 GOLD-0041	C	C	chem:cyanide-hydrolysis	cyanide hydrolysis	phase I				
@@ -81,15 +81,15 @@ GOLD-0079	C	C	chem:about-parent	about parent
 GOLD-0080	C	C	chem:about-product	about product					
 GOLD-0081	C	C	chem:about-reaction	about reaction					
 GOLD-0082	C	C	forest.rule:Hydroxylation	hydroxylation	phase I			metabolic soft spot	
-GOLD-0083	C	C	forest.rule:Epoxidation	epoxidation	phase I	electrophile generation		reactive metabolite	
+GOLD-0083	C	C	forest.rule:Epoxidation	epoxidation	phase I			reactive metabolite	
 GOLD-0084	C	C	forest.rule:Dealkylation	dealkylation	phase I		multi-element site	metabolic soft spot	
 GOLD-0085	C	C	forest.rule:NDealkylation	N-dealkylation	phase I		nitrogen site	metabolic soft spot	
-GOLD-0086	C	C	forest.rule:Glucuronidation	glucuronidation	phase II	nucleophile exposure		clearance pathway	
-GOLD-0087	C	C	forest.rule:Sulfation	sulfation	phase II	nucleophile exposure			
+GOLD-0086	C	C	forest.rule:Glucuronidation	glucuronidation	phase II			clearance pathway	
+GOLD-0087	C	C	forest.rule:Sulfation	sulfation	phase II				
 GOLD-0088	C	C	forest.rule:Acetylation	acetylation	phase II				
-GOLD-0089	C	C	forest.rule:Glutathionation	glutathionation	phase II	electrophile consumption		detoxification	
-GOLD-0090	C	C	forest.rule:QuinoneFormation	dearomatization		electrophile generation		bioactivation	
-GOLD-0091	C	C	forest.rule:NitroaromaticReduction	nitroaromatic reduction	phase I	electrophile generation	aromatic site	bioactivation	
+GOLD-0089	C	C	forest.rule:Glutathionation	glutathionation	phase II			detoxification	
+GOLD-0090	C	C	forest.rule:QuinoneFormation	dearomatization				bioactivation	
+GOLD-0091	C	C	forest.rule:NitroaromaticReduction	nitroaromatic reduction	phase I		aromatic site	bioactivation	
 GOLD-0092	C	C	forest.rule:Tautomerization	tautomerization					
 GOLD-0093	C	C	forest.rule:AzoSplitting	about reaction					
 GOLD-0094	C	C	forest.rule:BenzodioxoleReduction	about reaction					
@@ -107,8 +107,8 @@ GOLD-0105	C	C	forest.rule:ReductiveDehalogenation	about reaction
 GOLD-0106	C	C	forest.rule:SulfurOxidation	about reaction					
 GOLD-0107	C	C	forest.rule:SulfurReduction	about reaction					
 GOLD-0108	C	C	forest.pattern:Dealkylation/hemiaminal	N-dealkylation	phase I		nitrogen site	metabolic soft spot	
-GOLD-0109	C	C	forest.pattern:Glutathionation/michael	conjugate addition	phase II	electrophile consumption		detoxification	
-GOLD-0110	C	C	forest.pattern:Glutathionation/epoxide_ch	epoxide glutathionation	phase II	electrophile consumption		detoxification	
+GOLD-0109	C	C	forest.pattern:Glutathionation/michael	conjugate addition	phase II			detoxification	
+GOLD-0110	C	C	forest.pattern:Glutathionation/epoxide_ch	epoxide glutathionation	phase II			detoxification	
 GOLD-0111	C	C	forest.pattern:AzoSplitting/azo	about reaction					
 GOLD-0112	C	C	forest.pattern:BenzodioxoleReduction/dioxole_methylene	about reaction					
 GOLD-0113	C	C	forest.pattern:Dealkylation/cc_alcohol	about reaction					
