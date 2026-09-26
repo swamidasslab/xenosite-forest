@@ -356,16 +356,21 @@ impl PairCandidate {
                 if !flip_path(&mut rw, &path) {
                     continue;
                 }
-                if !accept_product(&rw) {
-                    continue;
-                }
+                // Do not valence-gate the possibly-disconnected whole mol —
+                // Python `split_fragments` and SMIRKS `fragments()` sanitize
+                // each piece. find_path bifurcation is `n_products > 1`.
                 let checked = aromatize(&rw);
                 if self.effect.dearomatizes && system_stayed_aromatic(mol, &checked, &self.system) {
                     continue;
                 }
-                let smiles = canon_smiles(&checked);
-                if local_csmi.insert(smiles) {
-                    products.push(checked);
+                for frag in checked.fragments() {
+                    if !accept_product(&frag) {
+                        continue;
+                    }
+                    let smiles = canon_smiles(&frag);
+                    if local_csmi.insert(smiles) {
+                        products.push(frag);
+                    }
                 }
             }
         }
@@ -703,5 +708,51 @@ mod tests {
                 .iter()
                 .any(|p| canon_of(p).unwrap() == want)
         }));
+    }
+
+    #[test]
+    fn quinone_dealkylate_splits_fragments_like_find_path() {
+        // Python split_fragments: ['C', 'O=C1C=CC(=O)C=C1'] as two products.
+        // find_path bifurcation needs n_products >= 2 (not one C.quinone mol).
+        use crate::forest_mol::ForestMol;
+        use crate::product_graph::{ProductGraphConfig, product_layer};
+        use crate::rules::quinone_formation;
+
+        let set = quinone_formation();
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let layer = ProductGraphConfig {
+            target: None,
+            max_nodes: usize::MAX,
+            max_depth: usize::MAX,
+        };
+        let children = product_layer(&parent, &set, &layer).unwrap();
+        let want_q = canon_of("O=C1C=CC(=O)C=C1").unwrap();
+        let want_me = canon_of("C").unwrap();
+        let csmi: Vec<String> = children
+            .iter()
+            .map(|c| c.child.csmi().as_ref().to_string())
+            .collect();
+        assert!(
+            csmi.iter().any(|s| canon_of(s).unwrap() == want_q),
+            "quinone fragment missing: {csmi:?}"
+        );
+        assert!(
+            csmi.iter().any(|s| canon_of(s).unwrap() == want_me),
+            "methyl fragment missing: {csmi:?}"
+        );
+        assert!(
+            csmi.iter().all(|s| !s.contains('.')),
+            "disconnected CSMI should be split before yield: {csmi:?}"
+        );
+        let with_both = children.iter().any(|c| {
+            c.hop.cleaves
+                && c.hop.products.len() >= 2
+                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_q)
+                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+        });
+        assert!(
+            with_both,
+            "cleaving hop.products should list both fragments (find_path sides)"
+        );
     }
 }
