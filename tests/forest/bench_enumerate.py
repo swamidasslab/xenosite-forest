@@ -57,13 +57,16 @@ PHASE_ONE_CASES: list[tuple[str, str, int, str]] = [
     ("P1 phenacetin d2 bfs", "CCOc1ccc(NC(C)=O)cc1", 2, "bfs"),
 ]
 
-# Real meds at depth 2. Atorvastatin omitted (~3+ min Rust alone).
+# Real meds at depth 2. Default = faster half; --drugs-all adds imipramine…sildenafil.
 DRUG_CASES: list[tuple[str, str, int, str]] = [
     ("P1 ibuprofen d2 bfs", "CC(C)Cc1ccc(C(C)C(=O)O)cc1", 2, "bfs"),
     ("P1 naproxen d2 bfs", "COc1ccc2cc(C(C)C(=O)O)ccc2c1", 2, "bfs"),
     ("P1 omeprazole d2 bfs", "COc1ccc2[nH]c(S(=O)Cc3ncc(C)c(OC)c3C)nc2c1", 2, "bfs"),
     ("P1 fluoxetine d2 bfs", "CNCCC(c1ccc(C(F)(F)F)cc1)Oc1ccccc1", 2, "bfs"),
     ("P1 propranolol d2 bfs", "CC(C)NCC(O)COc1cccc2ccccc12", 2, "bfs"),
+]
+
+DRUG_CASES_ALL: list[tuple[str, str, int, str]] = DRUG_CASES + [
     ("P1 imipramine d2 bfs", "CN(C)CCCN1c2ccccc2CCc2ccccc21", 2, "bfs"),
     ("P1 diazepam d2 bfs", "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21", 2, "bfs"),
     ("P1 warfarin d2 bfs", "CC(=O)CC(c1ccccc1)c1c(O)c2ccccc2oc1=O", 2, "bfs"),
@@ -192,7 +195,12 @@ def main() -> None:
     group.add_argument(
         "--drugs",
         action="store_true",
-        help="PhaseOne depth-2 on real meds (ibuprofen…sildenafil)",
+        help="PhaseOne depth-2 on smaller real meds (ibuprofen…propranolol)",
+    )
+    group.add_argument(
+        "--drugs-all",
+        action="store_true",
+        help="PhaseOne depth-2 including imipramine…sildenafil",
     )
     parser.add_argument(
         "--compare",
@@ -201,17 +209,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    repeats = DRUG_REPEATS if args.drugs else REPEATS
+    repeats = DRUG_REPEATS if (args.drugs or args.drugs_all) else REPEATS
     print(f"Python enumerate bfs/dfs  best-of-{repeats}  sha={_git_sha()}")
     py: dict[str, tuple[int, float]] = {}
     rust_extra: list[str] = []
-    if args.drugs:
-        py.update(
-            bench_suite(
-                "PhaseOne drugs d2", DRUG_CASES, PhaseOne, repeats=DRUG_REPEATS
-            )
+    if args.drugs or args.drugs_all:
+        cases = DRUG_CASES_ALL if args.drugs_all else DRUG_CASES
+        title = (
+            "PhaseOne drugs d2 (all)" if args.drugs_all else "PhaseOne drugs d2"
         )
-        rust_extra = ["--drugs"]
+        py.update(bench_suite(title, cases, PhaseOne, repeats=DRUG_REPEATS))
+        rust_extra = ["--drugs-all"] if args.drugs_all else ["--drugs"]
     elif args.phase_one:
         py.update(bench_suite("PhaseOne", PHASE_ONE_CASES, PhaseOne))
         rust_extra = ["--phase-one"]

@@ -169,8 +169,42 @@ const PHASE_ONE_CASES: &[Case] = &[
     },
 ];
 
-/// Real meds at depth 2 (PhaseOne). Skips atorvastatin (~3+ min Rust alone).
+/// Real meds at depth 2 (PhaseOne). Heavier ones (diazepam+) are optional
+/// via `--drugs-all`; default `--drugs` keeps the faster half.
 const DRUG_CASES: &[Case] = &[
+    Case {
+        name: "P1 ibuprofen d2 bfs",
+        smiles: "CC(C)Cc1ccc(C(C)C(=O)O)cc1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 naproxen d2 bfs",
+        smiles: "COc1ccc2cc(C(C)C(=O)O)ccc2c1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 omeprazole d2 bfs",
+        smiles: "COc1ccc2[nH]c(S(=O)Cc3ncc(C)c(OC)c3C)nc2c1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 fluoxetine d2 bfs",
+        smiles: "CNCCC(c1ccc(C(F)(F)F)cc1)Oc1ccccc1",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+    Case {
+        name: "P1 propranolol d2 bfs",
+        smiles: "CC(C)NCC(O)COc1cccc2ccccc12",
+        depth: 2,
+        order: EnumOrder::Bfs,
+    },
+];
+
+const DRUG_CASES_ALL: &[Case] = &[
     Case {
         name: "P1 ibuprofen d2 bfs",
         smiles: "CC(C)Cc1ccc(C(C)C(=O)O)cc1",
@@ -283,18 +317,20 @@ fn bench_suite(title: &str, set: &RuleSet, cases: &[Case], repeats: usize) {
 }
 
 fn main() {
-    let drugs = env::args().any(|a| a == "--drugs");
+    let drugs_all = env::args().any(|a| a == "--drugs-all");
+    let drugs = drugs_all || env::args().any(|a| a == "--drugs");
     let phase_one_only = env::args().any(|a| a == "--phase-one");
     let oh_only = env::args().any(|a| a == "--oh");
     println!("Rust enumerate bfs/dfs  (unlimited nodes)");
 
     if drugs {
-        bench_suite(
-            "PhaseOne drugs d2",
-            &phase_one(),
-            DRUG_CASES,
-            DRUG_REPEATS,
-        );
+        let cases = if drugs_all { DRUG_CASES_ALL } else { DRUG_CASES };
+        let title = if drugs_all {
+            "PhaseOne drugs d2 (all)"
+        } else {
+            "PhaseOne drugs d2"
+        };
+        bench_suite(title, &phase_one(), cases, DRUG_REPEATS);
         return;
     }
     if !phase_one_only {
