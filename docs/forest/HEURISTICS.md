@@ -97,9 +97,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 - `find_path` and `ReactionRule.metabolize` / `RuleSet.metabolize` raise `ValueError` on `None` input (invalid parse must not soft-pass as any-path).
 - Lazy heap / stale-priority handling on the find_path frontier. Status: approved (shape).
 
-  **Current default — `HeapScoreMode::Match(MatchScoreSpec::add_both())`.** Heap key is score then `seq` only — no `target_hit` / `novel_site` bool tiers and no hit sentinel. A target hit is just atom_diff / formula distance 0 (closeness max). Live score: per metric `−ln(1+cost)` (fixed-point [`neg_log1p_score`]); closeness = child term, delta = child − parent; metrics **add**; combine default is **Add** = closeness + delta (atom+formula). Legacy `MatchCombine::Product` (`SCALE/(1+c)` mul) kept for ablation / `--score product-both`. Plain [`BinaryHeap::pop`]. Bench: `find_path_bench --score add-both`; `--matrix` runs close|improve|add × 3 metrics + soft. Status: approved (Rust derisk) pending multipath matrix.
-
-  **Prior default — product-both** (`improvement × SCALE/(1+child)`, metrics multiply). Replaced for numerical safety and additive combine. Status: kept as opt-in ablation only.
+  **Current default — `HeapScoreMode::Match(MatchScoreSpec::add_both())`.** Heap key is score then `seq`. **Add = fixed-point `ln` of the same factors Product multiplies** (`imp=max(0,p−c)+1`, `close=SCALE/(1+c)` per metric) — ranking-identical to product-both (hard p5 bill 1309=1309). Product kept for ablation. Trial linear cost→score (`LinNegC`/`LinNegPC`/`LinPNeg2C`/`LinNegPNeg2C`): hard p5 all tied at bill 1538 (worse); SoftStack still 1170. Status: add-both default OK as log-Product; linear forms not decided (sibling order collapses to `−child`).
 
   **Match-score matrix (filter-only, plain pop; mid + hard).** Axes: combine = close | improve | product; metric = atom | formula | both. SoftStack included as baseline. Cost = MCS HA gaps only; `formula_l1` includes H (no special `h_off`).
 
