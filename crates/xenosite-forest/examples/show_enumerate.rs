@@ -67,4 +67,22 @@ fn main() {
             show_path(&hit.path)
         );
     }
+
+    println!("\n=== Propane OH×2: unique_csmi vs all_paths ===");
+    let oh = xenosite_forest::hydroxylation();
+    let dedup_n = enumerate_metabolites("CCC", &oh, EnumConfig::bfs(2))
+        .unwrap()
+        .count();
+    let all: Vec<_> = enumerate_metabolites("CCC", &oh, EnumConfig::bfs(2).with_all_paths())
+        .unwrap()
+        .map(|h| h.unwrap())
+        .collect();
+    println!("  unique_csmi yields={dedup_n}  all_paths yields={}", all.len());
+    let mut by = std::collections::BTreeMap::<String, usize>::new();
+    for h in &all {
+        *by.entry(h.smiles()).or_default() += 1;
+    }
+    for (smi, n) in by.iter().filter(|(_, n)| **n > 1) {
+        println!("  {smi} ×{n} paths");
+    }
 }
