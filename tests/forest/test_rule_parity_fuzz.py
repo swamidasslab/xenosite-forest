@@ -12,10 +12,9 @@ For each ``(rule, mol)``:
 4. Assert equal product sets after **RDKit** CSMI.
 
 C18 gaps are annotated on the corpus mol as
-:class:`~.rule_parity_corpus.ProductParityXfail` (rule + reason). When an
-assertion fails for an annotated pair, the test calls ``pytest.xfail`` with
-that reason — no pre-mark side table. Remove the annotation when Phase 1–3
-closes the gap against **approved chemistry**.
+:class:`~.rule_parity_corpus.ProductParityXfail` (rule + reason). Those
+params are marked ``xfail(strict=True)``: still broken → XFAIL; fixed →
+**XPASS** (remove the annotation and decrement ``C18_OPEN_PRODUCT_XFAIL_COUNT``).
 
 Pairing / exceptions: :mod:`test_rule_parity_pairs` (attribute data on rules).
 Corpus coverage: :mod:`test_rule_parity_corpus` (every pattern / every when).
@@ -146,7 +145,7 @@ def _rust_emissions(
 
 
 def _assert_parity(rule_name: str, smiles: str) -> None:
-    """Compare bags; ``pytest.xfail`` if a corpus ``ProductParityXfail`` matches."""
+    """Compare product / site bags (raise on mismatch)."""
 
     cls = python_leaf_classes()[rule_name]
     rule = instantiate_rule(cls)
@@ -154,34 +153,28 @@ def _assert_parity(rule_name: str, smiles: str) -> None:
     py_sites, py_prods = _python_emissions(rule, smiles, kind)
     rs_sites, rs_prods = _rust_emissions(rule_name, smiles, kind)
 
-    try:
-        if py_prods != rs_prods:
-            only_py = sorted(py_prods - rs_prods)
-            only_rs = sorted(rs_prods - py_prods)
-            raise AssertionError(
-                f"product CSMI mismatch for {rule_name} on {smiles!r}:\n"
-                f"  only Python ({len(only_py)}): {only_py[:12]}\n"
-                f"  only Rust   ({len(only_rs)}): {only_rs[:12]}"
-            )
+    if py_prods != rs_prods:
+        only_py = sorted(py_prods - rs_prods)
+        only_rs = sorted(rs_prods - py_prods)
+        raise AssertionError(
+            f"product CSMI mismatch for {rule_name} on {smiles!r}:\n"
+            f"  only Python ({len(only_py)}): {only_py[:12]}\n"
+            f"  only Rust   ({len(only_rs)}): {only_rs[:12]}"
+        )
 
-        if sum(py_sites.values()) != sum(rs_sites.values()):
-            raise AssertionError(
-                f"topological site count mismatch for {rule_name} on {smiles!r}: "
-                f"python={sum(py_sites.values())} rust={sum(rs_sites.values())} "
-                f"(product sets already match)"
-            )
+    if sum(py_sites.values()) != sum(rs_sites.values()):
+        raise AssertionError(
+            f"topological site count mismatch for {rule_name} on {smiles!r}: "
+            f"python={sum(py_sites.values())} rust={sum(rs_sites.values())} "
+            f"(product sets already match)"
+        )
 
-        if py_sites != rs_sites:
-            raise AssertionError(
-                f"site→product bag mismatch for {rule_name} on {smiles!r}: "
-                f"python_bags={len(py_sites)} rust_bags={len(rs_sites)} "
-                f"(counts matched, bag multiset differed)"
-            )
-    except AssertionError:
-        reason = product_parity_xfail_reason(rule_name, smiles)
-        if reason:
-            pytest.xfail(reason)
-        raise
+    if py_sites != rs_sites:
+        raise AssertionError(
+            f"site→product bag mismatch for {rule_name} on {smiles!r}: "
+            f"python_bags={len(py_sites)} rust_bags={len(rs_sites)} "
+            f"(counts matched, bag multiset differed)"
+        )
 
 
 def _paired_names() -> list[str]:
@@ -190,12 +183,33 @@ def _paired_names() -> list[str]:
     return paired_rule_names()
 
 
+def _parity_param_cases() -> list:
+    """Parametrize; corpus ``ProductParityXfail`` → ``xfail(strict=True)``."""
+
+    raw = (
+        parity_param_cases(_PAIRED)
+        if _PAIRED
+        else (("Hydroxylation", "CCO"),)
+    )
+    out = []
+    for rule_name, smiles in raw:
+        reason = product_parity_xfail_reason(rule_name, smiles)
+        if reason:
+            out.append(
+                pytest.param(
+                    rule_name,
+                    smiles,
+                    marks=pytest.mark.xfail(reason=reason, strict=True),
+                    id=f"{rule_name}-{smiles}",
+                )
+            )
+        else:
+            out.append(pytest.param(rule_name, smiles, id=f"{rule_name}-{smiles}"))
+    return out
+
+
 _PAIRED = _paired_names()
-_CASES = (
-    parity_param_cases(_PAIRED)
-    if _PAIRED
-    else (("Hydroxylation", "CCO"),)
-)
+_CASES = _parity_param_cases()
 
 
 @pytest.mark.parametrize("rule_name,smiles", _CASES)
@@ -216,6 +230,7 @@ def test_leaf_parity_on_example_substrate(rule_name: str) -> None:
     cls = python_leaf_classes()[rule_name]
     examples = getattr(cls, "_example_substrates", ()) or ()
     assert examples, f"{rule_name} lacks _example_substrates"
+    # Example substrates are not the C18 gap set; unmarked assert (hard fail).
     _assert_parity(rule_name, examples[0])
 
 

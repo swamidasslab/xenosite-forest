@@ -3,8 +3,9 @@
 Each :class:`ParityEntry` is ``(smiles, covers, product_xfails=())``.
 ``covers`` is a tuple of :class:`CoverIntent` (rule, pattern, possibility
 index, when key). Optional ``product_xfails`` annotates C18 leaf product
-parity gaps for this mol (rule + reason); the parametric suite xfails when
-that assertion fires.
+parity gaps for this mol (rule + reason). The parametric suite marks those
+params ``xfail``: expected fail → XFAIL; unexpected pass → **XPASS** (strict;
+remove the annotation).
 
 Meta-tests verify every intent and inventory completeness.
 Parametric parity / CSMI suites use :func:`parity_param_cases`: full
@@ -30,8 +31,9 @@ class CoverIntent(NamedTuple):
 class ProductParityXfail(NamedTuple):
     """Known leaf product-parity gap for ``(rule, smiles)`` under C18.
 
-    Parametric parity calls ``pytest.xfail(reason)`` when an assertion fails
-    for this pair — annotations live on the corpus mol, not a side table.
+    Parametric parity marks the case ``xfail(reason, strict=True)``: still
+    failing → XFAIL; fixed without removing this row → **XPASS**. Annotations
+    live on the corpus mol with the reason string.
     """
 
     rule: str

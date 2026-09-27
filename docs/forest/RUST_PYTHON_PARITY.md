@@ -358,11 +358,11 @@ template difference — do not normalize away.
 
 Open product-parity gaps are annotated on the corpus mol as
 ``ProductParityXfail(rule, reason)`` on ``ParityEntry.product_xfails``
-(``tests/forest/rule_parity_corpus.py``). The parametric suite runs the
-assertion and calls ``pytest.xfail(reason)`` when that pair fails — reasons
-live with the example, not a side table. Meta-tests refuse stale PASS
-annotations and unmarked live gaps. Remove the annotation when Phase 1–3
-closes it against **approved chemistry**.
+(``tests/forest/rule_parity_corpus.py``). The parametric suite marks those
+params ``xfail(strict=True)`` with that reason: still broken → XFAIL; fixed
+without removing the annotation → **XPASS**. Meta-tests also refuse unmarked
+live gaps. Remove the annotation when Phase 1–3 closes it against **approved
+chemistry**.
 
 **Product / charge / tautomer standardization** (nitro ``[N+](=O)[O-]``,
 isoxazole keto–enamine, etc.) must be implemented as **explicit Rust

@@ -18,9 +18,9 @@ Artifact `parity_full_exocyclic.out` still lists 32 (stale on those three).
 not literal Python parity. Phase 1 / policy / defer listed there.
 
 Parametric product-parity gaps are annotated on corpus mols as
-``ProductParityXfail(rule, reason)``; the suite xfails with that reason when
-the assertion fires. Standardization = explicit Rust transforms (no sanitize
-black boxes).
+``ProductParityXfail(rule, reason)``; params are ``xfail(strict=True)`` —
+XFAIL while broken, **XPASS** when fixed (then drop the annotation).
+Standardization = explicit Rust transforms (no sanitize black boxes).
 
 Columns: **sym** = harness symptom; **chem** = who looks more correct;
 **fix** = fixability.
