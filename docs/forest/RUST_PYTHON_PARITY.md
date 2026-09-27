@@ -241,6 +241,11 @@ Status: **not decided**. Tracker: work order #15. Soft-fail xfail for
 aspirin Dealkylation stays under C11 until this choice is approved and
 implemented.
 
+**Reproduce / live bags:** [PARITY_REMAINING.md](PARITY_REMAINING.md)
+(aspirin + full remaining-fail table with SMILES). Chemical note on aspirin:
+one ester hydrolysis → one product bag is right; Rust site count is closer
+but only via silent ``unique_csmi`` (not approved as the design).
+
 ### C14 — ``exclusive_partner`` on Effect (bridging N/O)
 
 ResonancePair ends that consume a heteroatom partner (iminium, O/N
