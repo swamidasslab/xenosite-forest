@@ -33,7 +33,11 @@ from xenosite.forest.find_path_rust import native_available
 from xenosite.forest.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.forest.rules import ReactionRule
 
-from .parity_xfail_cases import PARITY_PRODUCT_XFAIL, parity_xfail_reason
+from .parity_xfail_cases import (
+    C18_OPEN_PRODUCT_XFAIL_COUNT,
+    PARITY_PRODUCT_XFAIL,
+    parity_xfail_reason,
+)
 from .pattern_info_inventory import instantiate_rule
 from .rule_parity_corpus import parity_full_enabled, parity_param_cases
 from .rule_parity_pairs import paired_rule_names, python_leaf_classes
@@ -254,6 +258,10 @@ def test_parity_product_xfail_table_covers_live_gaps_only() -> None:
     """Xfail table keys are unique; no stale PASS entries (strict cleanup)."""
 
     assert len(PARITY_PRODUCT_XFAIL) == len(set(PARITY_PRODUCT_XFAIL))
+    assert len(PARITY_PRODUCT_XFAIL) == C18_OPEN_PRODUCT_XFAIL_COUNT, (
+        f"update C18_OPEN_PRODUCT_XFAIL_COUNT when editing PARITY_PRODUCT_XFAIL "
+        f"(baseline tag py-rust-parity-c18-baseline was {C18_OPEN_PRODUCT_XFAIL_COUNT})"
+    )
     # Every xfail key must still fail; otherwise remove it (Phase close).
     stale: list[str] = []
     for (rule_name, smiles), reason in sorted(PARITY_PRODUCT_XFAIL.items()):
@@ -263,7 +271,8 @@ def test_parity_product_xfail_table_covers_live_gaps_only() -> None:
             continue
         stale.append(f"{rule_name} {smiles!r} ({reason})")
     assert not stale, (
-        "parity xfail entries now PASS — remove from PARITY_PRODUCT_XFAIL:\n  "
+        "parity xfail entries now PASS — remove from PARITY_PRODUCT_XFAIL "
+        "and decrement C18_OPEN_PRODUCT_XFAIL_COUNT:\n  "
         + "\n  ".join(stale)
     )
 

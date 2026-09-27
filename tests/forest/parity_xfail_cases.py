@@ -6,9 +6,16 @@ Phase 1–3 close them against **approved chemistry**, not literal Python match.
 Product / charge / tautomer **standardization** belongs in Rust as explicit,
 auditable transforms — not RDKit ``SanitizeMol``, Chematic black-box
 reparsing, or silent unique_csmi (C11 / C18).
+
+Milestone tag ``py-rust-parity-c18-baseline`` locks this table at
+``C18_OPEN_PRODUCT_XFAIL_COUNT`` entries. Decrement the constant when removing
+a closed row.
 """
 
 from __future__ import annotations
+
+# Locked by tag py-rust-parity-c18-baseline. Update together with table edits.
+C18_OPEN_PRODUCT_XFAIL_COUNT = 29
 
 # (rule_name, substrate_smiles) → short reason (C18 tag).
 # Keep SMILES exactly as in the parametric corpus / PARITY_REMAINING.md.

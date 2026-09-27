@@ -370,6 +370,11 @@ normalizer, or silent ``unique_csmi`` as chemistry. Display identity may
 still round-trip RDKit CSMI (C1); the chemical rewrite itself stays in
 forest Rust.
 
+**Milestone tag:** ``py-rust-parity-c18-baseline`` — parametric leaf product
+parity green with ``C18_OPEN_PRODUCT_XFAIL_COUNT`` (29) known gaps xfailed;
+chemistry-first plan (this entry) recorded; arom-model ruled out (C17).
+Decrement the constant when closing a row.
+
 #### Work order impact
 
 - Phase 1 → drive work #12 toward green on approved chemistry (not blind match).
