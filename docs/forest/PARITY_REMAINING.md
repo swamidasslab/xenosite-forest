@@ -17,9 +17,10 @@ Artifact `parity_full_exocyclic.out` still lists 32 (stale on those three).
 **Plan adoption:** [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C18** — chemistry-first;
 not literal Python parity. Phase 1 / policy / defer listed there.
 
-Parametric product-parity gaps are ``xfail`` in
-``tests/forest/parity_xfail_cases.py`` until closed. Standardization =
-explicit Rust transforms (no sanitize black boxes).
+Parametric product-parity gaps are annotated on corpus mols as
+``ProductParityXfail(rule, reason)``; the suite xfails with that reason when
+the assertion fires. Standardization = explicit Rust transforms (no sanitize
+black boxes).
 
 Columns: **sym** = harness symptom; **chem** = who looks more correct;
 **fix** = fixability.

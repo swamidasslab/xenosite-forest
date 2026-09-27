@@ -1,9 +1,10 @@
 """Parity corpus: mol + intended rule/pattern/when correspondences.
 
-Each :class:`ParityEntry` is ``(smiles, covers)``. ``covers`` is a tuple of
-:class:`CoverIntent` (rule, pattern, possibility index, when key) — a list of
-correspondences when one mol is the designated cover for several inventory
-possibilities.
+Each :class:`ParityEntry` is ``(smiles, covers, product_xfails=())``.
+``covers`` is a tuple of :class:`CoverIntent` (rule, pattern, possibility
+index, when key). Optional ``product_xfails`` annotates C18 leaf product
+parity gaps for this mol (rule + reason); the parametric suite xfails when
+that assertion fires.
 
 Meta-tests verify every intent and inventory completeness.
 Parametric parity / CSMI suites use :func:`parity_param_cases`: full
@@ -26,11 +27,23 @@ class CoverIntent(NamedTuple):
     when: tuple[int | None, int | None, int | None] | None
 
 
+class ProductParityXfail(NamedTuple):
+    """Known leaf product-parity gap for ``(rule, smiles)`` under C18.
+
+    Parametric parity calls ``pytest.xfail(reason)`` when an assertion fails
+    for this pair — annotations live on the corpus mol, not a side table.
+    """
+
+    rule: str
+    reason: str
+
+
 class ParityEntry(NamedTuple):
-    """Corpus row: substrate SMILES + correspondence list."""
+    """Corpus row: substrate SMILES + cover intents + optional product xfails."""
 
     smiles: str
     covers: tuple[CoverIntent, ...]
+    product_xfails: tuple[ProductParityXfail, ...] = ()
 
 
 PARITY_CORPUS: tuple[ParityEntry, ...] = (
@@ -90,6 +103,13 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         'OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O',
         (
             CoverIntent('AzoSplitting', 'azo', 0, None),
+        ),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P1/P3: olsalazine Dealk ring-open extras'),
+            ProductParityXfail('Dehydration', 'C18 P1: Py ketene-like junk; Rust refuse'),
+            ProductParityXfail('Dehydrogenation', 'C18 P3: olsalazine linked-π DH — defer'),
+            ProductParityXfail('Hydrogenation', 'C18 P3: olsalazine no generic path across azo — defer'),
+            ProductParityXfail('QuinoneFormation', 'C18 P3: olsalazine cross-azo QF — defer'),
         ),
     ),
     ParityEntry(
@@ -252,6 +272,10 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
             CoverIntent('OxygenReduction', 'carbonyl', 1, (2, 7, None)),
             CoverIntent('QuinoneFormation', 'iminium', 0, None),
         ),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P1: nitro charge form — normalize to [N+](=O)[O-] in Rust'),
+            ProductParityXfail('Hydrogenation', 'C18 P2: nitro out of generic H → NitrogenReduction'),
+        ),
     ),
     ParityEntry(
         'CS(=O)O',
@@ -291,6 +315,9 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         (
             CoverIntent('Epoxidation', 'epoxide', 1, (2, 7, None)),
             CoverIntent('Glutathionation', 'isocyanate', 0, (3, 8, None)),
+        ),
+        (
+            ProductParityXfail('Hydrogenation', 'C18 P1: cumulated×ring H refuse (Rust-ahead)'),
         ),
     ),
     ParityEntry(
@@ -381,6 +408,9 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         (
             CoverIntent('Glutathionation', 'isocyanate', 1, (3, 16, None)),
         ),
+        (
+            ProductParityXfail('Hydrogenation', 'C18 P1: cumulated×ring H refuse (Rust-ahead)'),
+        ),
     ),
     ParityEntry(
         'C#C',
@@ -400,6 +430,9 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         'O=Nc1ccccc1',
         (
             CoverIntent('NitrogenReduction', 'nitroso', 0, None),
+        ),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P1: nitrosobenzene ring-open extras (Rust-ahead)'),
         ),
     ),
     ParityEntry(
@@ -422,6 +455,12 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         'O=C(NCC(O)c1ccc([N+](=O)[O-])cc1)C(Cl)Cl',
         (
             CoverIntent('OxidativeDehalogenation', 'carbonyl', 1, (1, 17, None)),
+        ),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P1: nitro charge form (chloramphenicol)'),
+            ProductParityXfail('Dehydration', 'C18 P1: Py quinoid junk; Rust refuse'),
+            ProductParityXfail('Hydrogenation', 'C18 P2: nitro out of generic H (chloramphenicol)'),
+            ProductParityXfail('NDealkylation', 'C18 P1: nitro leave charge form'),
         ),
     ),
     ParityEntry(
@@ -553,6 +592,10 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         (
             CoverIntent('Sulfation', 'epoxide_methyl_sulfone', 0, None),
         ),
+        (
+            ProductParityXfail('Dehydrogenation', 'C18 P2/C13: benzene-oxide DH event identity'),
+            ProductParityXfail('QuinoneFormation', 'C18 P3: benzene-oxide QF until quinonoid contract — defer'),
+        ),
     ),
     ParityEntry(
         'CCSO',
@@ -571,12 +614,33 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
     ParityEntry('c1ccccc1C1CO1', ()),
     ParityEntry('ClCc1ccccc1', ()),
     ParityEntry('Nc1ccccc1', ()),
-    ParityEntry('N=C=Nc1ccccc1', ()),
+    ParityEntry(
+        'N=C=Nc1ccccc1',
+        (),
+        (
+            ProductParityXfail('Hydrogenation', 'C18 P1: cumulated×ring H refuse (Rust-ahead)'),
+        ),
+    ),
     ParityEntry('CC(=O)Nc1ccccc1', ()),
     ParityEntry('C=Cc1ccccc1', ()),
-    ParityEntry('CC(=O)Oc1ccccc1C(=O)O', ()),
+    ParityEntry(
+        'CC(=O)Oc1ccccc1C(=O)O',
+        (),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P2/C13: aspirin equivalent-embedding (scissile bond)'),
+        ),
+    ),
     ParityEntry('CN(C)CCOC(c1ccccc1)c1ccccc1', ()),
-    ParityEntry('Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1', ()),
+    ParityEntry(
+        'Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1',
+        (),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P1: SMx C–N cleavage Rust-ahead'),
+            ProductParityXfail('Hydrogenation', 'C18 P1: refuse generic S=O hydrogenation'),
+            ProductParityXfail('NDealkylation', 'C18 P1: SMx C–N cleavage Rust-ahead'),
+            ProductParityXfail('NitrogenReduction', 'C18 P2: isoxazole tautomer canon (Rust, not sanitize)'),
+        ),
+    ),
     ParityEntry('CSC', ()),
     ParityEntry('OC(C)N(C)C', ()),
     ParityEntry('NC(O)C', ()),
@@ -641,14 +705,36 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
     ParityEntry('CC(=C)c1ccccc1C(=C)C', ()),
     ParityEntry('O=CC=O', ()),
     ParityEntry('O=CC=CC=O', ()),
-    ParityEntry('c1ccc(N(C)c2ccccc2)cc1', ()),
-    ParityEntry('c1ccc2c(c1)Nc1ccccc1C2', ()),
+    ParityEntry(
+        'c1ccc(N(C)c2ccccc2)cc1',
+        (),
+        (
+            ProductParityXfail('QuinoneFormation', 'C18 P1: Ph2NMe enumerate Me and Ph carbon leaves'),
+        ),
+    ),
+    ParityEntry(
+        'c1ccc2c(c1)Nc1ccccc1C2',
+        (),
+        (
+            ProductParityXfail('Dehydrogenation', 'C18 P1: dihydroacridine→acridine under DH (Rust-ahead)'),
+            ProductParityXfail('QuinoneFormation', 'C18 P2: acridine is DH-only, not QF'),
+        ),
+    ),
     ParityEntry('c1ccc2c(c1)Nc1ccccc1O2', ()),
     ParityEntry('[nH]1cccc1', ()),
     ParityEntry('c1ccncc1', ()),
     # Ring-context cleavage substrates (meta-test: cleaving SMARTS with a
     # reachable ring hit must appear in-corpus with a mapped atom in a ring).
-    ParityEntry('c1ccc2nnccc2c1', ()),  # cyclic azo (cinnoline)
+    ParityEntry(
+        'c1ccc2nnccc2c1',
+        (),
+        (
+            ProductParityXfail('Dealkylation', 'C18 P1: cinnoline ring-open keep N=N (not NN)'),
+            ProductParityXfail('Hydrogenation', 'C18 P3: cinnoline multi-ring H — defer (P1 owns ring-open N=N)'),
+            ProductParityXfail('NDealkylation', 'C18 P1: cinnoline ring-open N=N'),
+            ProductParityXfail('QuinoneFormation', 'C18 P3: cinnoline multi-ring QF — defer'),
+        ),
+    ),  # cyclic azo (cinnoline)
     ParityEntry('OC1NCCC1', ()),  # cyclic hemiaminal
     ParityEntry('C1COP(=O)(O)OC1', ()),  # cyclic phosphate
     ParityEntry('O=C1CCCCO1', ()),  # lactone
@@ -667,6 +753,36 @@ def parity_fuzz_mols() -> tuple[str, ...]:
 
 # Back-compat alias for suites that still iterate mols alone.
 PARITY_FUZZ_MOLS: tuple[str, ...] = parity_fuzz_mols()
+
+# Milestone ``py-rust-parity-c18-baseline``: open product gaps on corpus.
+# Decrement when removing a closed ``ProductParityXfail`` row.
+C18_OPEN_PRODUCT_XFAIL_COUNT = 29
+
+
+def product_parity_xfail_reason(rule_name: str, smiles: str) -> str | None:
+    """C18 reason annotated on the corpus mol for ``(rule, smiles)``, if any."""
+
+    for entry in PARITY_CORPUS:
+        if entry.smiles != smiles:
+            continue
+        for xf in entry.product_xfails:
+            if xf.rule == rule_name:
+                return xf.reason
+        return None
+    return None
+
+
+def product_parity_xfail_cases() -> dict[tuple[str, str], str]:
+    """All corpus ``(rule, smiles) → reason`` product-parity xfails."""
+
+    out: dict[tuple[str, str], str] = {}
+    for entry in PARITY_CORPUS:
+        for xf in entry.product_xfails:
+            key = (xf.rule, entry.smiles)
+            if key in out:
+                raise ValueError(f"duplicate ProductParityXfail for {key}")
+            out[key] = xf.reason
+    return out
 
 
 def _filter_rules(

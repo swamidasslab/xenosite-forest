@@ -356,11 +356,13 @@ template difference — do not normalize away.
 
 #### Parametric xfail + Rust standardization — **approved**
 
-Open ``(rule, smiles)`` product-parity gaps on the parametric grid are
-``pytest.mark.xfail`` via data in
-``tests/forest/parity_xfail_cases.py`` (``PARITY_PRODUCT_XFAIL``). Meta-tests
-refuse stale PASS entries and unmarked live gaps. Remove a row when Phase
-1–3 closes it against **approved chemistry**.
+Open product-parity gaps are annotated on the corpus mol as
+``ProductParityXfail(rule, reason)`` on ``ParityEntry.product_xfails``
+(``tests/forest/rule_parity_corpus.py``). The parametric suite runs the
+assertion and calls ``pytest.xfail(reason)`` when that pair fails — reasons
+live with the example, not a side table. Meta-tests refuse stale PASS
+annotations and unmarked live gaps. Remove the annotation when Phase 1–3
+closes it against **approved chemistry**.
 
 **Product / charge / tautomer standardization** (nitro ``[N+](=O)[O-]``,
 isoxazole keto–enamine, etc.) must be implemented as **explicit Rust
@@ -371,7 +373,7 @@ still round-trip RDKit CSMI (C1); the chemical rewrite itself stays in
 forest Rust.
 
 **Milestone tag:** ``py-rust-parity-c18-baseline`` — parametric leaf product
-parity green with ``C18_OPEN_PRODUCT_XFAIL_COUNT`` (29) known gaps xfailed;
+parity green with ``C18_OPEN_PRODUCT_XFAIL_COUNT`` (29) known gaps annotated;
 chemistry-first plan (this entry) recorded; arom-model ruled out (C17).
 Decrement the constant when closing a row.
 
