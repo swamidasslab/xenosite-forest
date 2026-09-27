@@ -1738,7 +1738,12 @@ def _kekulize_aromatic_soh_ring(frag: Mol) -> bool:
 
 
 def _nitrogen_charge_junk(frag: Mol) -> bool:
-    """True for cationic iminium ``[NH+]=`` or any ``[N-]`` (closed-shell prefer)."""
+    """True for iminium ``C=[N+]`` (no oxide) or any ``[N-]`` (closed-shell prefer).
+
+    Mirrors Rust ``nitrogen_iminium`` / ``nitrogen_anion``: quaternary
+    ``C[N+](C)=C`` and ``[NH+]=`` are refused; nitro / N-oxide
+    ``[N+]([O-])=`` stay (O- neighbor on N+).
+    """
 
     for atom in frag.GetAtoms():
         if atom.GetAtomicNum() != 7:
@@ -1746,9 +1751,21 @@ def _nitrogen_charge_junk(frag: Mol) -> bool:
         charge = atom.GetFormalCharge()
         if charge < 0:
             return True
-        if charge > 0 and atom.GetTotalNumHs() > 0:
-            if any(b.GetBondType() == BondType.DOUBLE for b in atom.GetBonds()):
-                return True
+        if charge <= 0:
+            continue
+        double_to_carbon = False
+        oxide = False
+        for bond in atom.GetBonds():
+            other = bond.GetOtherAtom(atom)
+            if (
+                bond.GetBondType() == BondType.DOUBLE
+                and other.GetAtomicNum() == 6
+            ):
+                double_to_carbon = True
+            if other.GetAtomicNum() == 8 and other.GetFormalCharge() < 0:
+                oxide = True
+        if double_to_carbon and not oxide:
+            return True
     return False
 
 

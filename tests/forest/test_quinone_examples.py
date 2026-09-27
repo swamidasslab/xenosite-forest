@@ -42,8 +42,8 @@ def test_quinone_emits_historical_product(name, reactant, product, site):
 def test_carbamazepine_does_not_emit_two_double_nitrogen():
     """Iminium plus dealkylation must not leave ``C=[N+]=C``.
 
-    Charge on a tertiary nitrogen with one double bond is still an iminium.
-    Chlorpromazine keeps that product. Carbamazepine site ``{4, 17}`` does not.
+    Closed-shell prefer (Rust ``accept_product``): quaternary iminium
+    ``C[N+](C)=`` is also refused — chlorpromazine QF must not keep it.
     """
 
     bad = "C1=c2ccccc2=[N+]=c2ccccc2=C1"
@@ -63,7 +63,10 @@ def test_carbamazepine_does_not_emit_two_double_nitrogen():
         for products, _info in QuinoneFormation().metabolize(cpz)
         for p in products
     }
-    assert any("[n+]" in smi or "[N+]" in smi for smi in cpz_products)
+    # Quaternary iminium quinones are refuse (HEURISTICS C10 / Rust-ahead).
+    assert not any(
+        "[N+]" in smi and "=" in smi and "[O-]" not in smi for smi in cpz_products
+    )
 
 
 def test_alprazolam_re_aromatized_cation_is_not_a_quinone():

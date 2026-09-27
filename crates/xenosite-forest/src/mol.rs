@@ -164,4 +164,68 @@ mod tests {
             "RDKit-parity pyridone should keep the ring aromatic, got {aromatic}"
         );
     }
+
+    /// Remaining leaf-parity fail substrates: aromatic atom sets must match
+    /// live RDKit (`MolFromSmiles` → `GetIsAromatic`). If this fails, a
+    /// chematic↔RDKit aromaticity-model gap is implicated; otherwise those
+    /// parity fails are **not** arom-model (see RUST_PYTHON_PARITY C17).
+    #[test]
+    fn remaining_parity_substrates_match_rdkit_aromatic_atoms() {
+        // (name, smiles, RDKit aromatic atom indexes — verified 2026-09-27)
+        let cases: &[(&str, &str, &[u32])] = &[
+            ("PhNCO", "O=C=Nc1ccccc1", &[3, 4, 5, 6, 7, 8]),
+            ("PhNCS", "S=C=Nc1ccccc1", &[3, 4, 5, 6, 7, 8]),
+            ("PhNCN", "N=C=Nc1ccccc1", &[3, 4, 5, 6, 7, 8]),
+            ("nitrobenzene", "[O-][N+](=O)c1ccccc1", &[3, 4, 5, 6, 7, 8]),
+            (
+                "olsalazine",
+                "OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O",
+                &[3, 4, 5, 8, 9, 10, 11, 12, 13, 18, 19, 20],
+            ),
+            ("cinnoline", "c1ccc2nnccc2c1", &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            (
+                "sulfamethoxazole",
+                "Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1",
+                &[1, 2, 3, 8, 9, 10, 11, 13, 14, 15, 16],
+            ),
+            ("benzene-oxide", "C1=CC2OC2C=C1", &[]),
+            ("dimethylaniline", "CN(C)c1ccccc1", &[3, 4, 5, 6, 7, 8]),
+            ("aziridine-Ph", "c1ccccc1N1CC1", &[0, 1, 2, 3, 4, 5]),
+            (
+                "Ph2NMe",
+                "c1ccc(N(C)c2ccccc2)cc1",
+                &[0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13],
+            ),
+            (
+                "dihydroacridine",
+                "c1ccc2c(c1)Nc1ccccc1C2",
+                &[0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12],
+            ),
+            ("aspirin", "CC(=O)Oc1ccccc1C(=O)O", &[4, 5, 6, 7, 8, 9]),
+            (
+                "chloramphenicol",
+                "O=C(NCC(O)c1ccc([N+](=O)[O-])cc1)C(Cl)Cl",
+                &[6, 7, 8, 9, 13, 14],
+            ),
+            ("nitrosobenzene", "O=Nc1ccccc1", &[2, 3, 4, 5, 6, 7]),
+            (
+                "dimethylaminophenol",
+                "CN(C)c1ccc(O)cc1",
+                &[3, 4, 5, 6, 8, 9],
+            ),
+        ];
+        for (name, smi, want) in cases {
+            let mol = parse_mol(smi).unwrap_or_else(|e| panic!("{name} parse: {e}"));
+            let got: Vec<u32> = mol
+                .atoms()
+                .filter(|(_, a)| a.aromatic)
+                .map(|(i, _)| i.0)
+                .collect();
+            assert_eq!(
+                got.as_slice(),
+                *want,
+                "{name}: forest RDKit-parity arom atoms {got:?} != RDKit {want:?}"
+            );
+        }
+    }
 }

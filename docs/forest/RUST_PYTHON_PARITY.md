@@ -268,6 +268,24 @@ dropping Rust emissions is not approved** (C8: chemical correctness first).
 Prefer lifting Python to the Rust bag, or a documented Python miss; pin Rust
 with regression tests. Status: **approved**.
 
+### C17 — Remaining leaf-parity fails are **not** RDKit↔Chematic arom-model
+
+Checked (2026-09-27) the open parametric fail substrates (olsalazine, cinnoline,
+nitro/nitroso, PhNCO/S/N, sulfamethoxazole, benzene-oxide, dialkylanilines,
+aziridine-Ph, dihydroacridine, aspirin, chloramphenicol, …):
+
+| Check | Result |
+|-------|--------|
+| Forest `parse_mol` / `aromatize` | already `apply_aromaticity_rdkit_parity_experimental` (`mol.rs`) |
+| Chematic Hückel vs `RdkitLike` vs experimental parity | **identical** aromatic atom/bond sets on every fail substrate |
+| Those sets vs live RDKit `GetIsAromatic` | **identical** (pinned in `mol.rs` test `remaining_parity_substrates_match_rdkit_aromatic_atoms`) |
+
+**None** of the current leaf product-parity fails are marked arom-model.
+Switching engines / “turning on” RDKit compat cannot close them — compat is
+already the production path. Treat remaining gaps as edit / accept / form /
+site-bag issues (H cumulated paths, QF extras, Dealk ring-open, etc.).
+Status: **approved**.
+
 ---
 
 
