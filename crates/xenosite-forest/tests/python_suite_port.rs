@@ -199,20 +199,30 @@ fn pair_cleave_splits_like_python_split_fragments() {
     let bifurcate = children.iter().any(|c| {
         c.hop.cleaves
             && c.hop.products.len() >= 2
-            && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_q)
-            && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+            && c.hop
+                .products
+                .iter()
+                .any(|p| canon_of(p).unwrap() == want_q)
+            && c.hop
+                .products
+                .iter()
+                .any(|p| canon_of(p).unwrap() == want_me)
     });
     assert!(
         bifurcate,
         "QF dealkylate must look like find_path bifurcation (n_products>=2)"
     );
     // Separate child nodes for each fragment (enumerate / product_graph).
-    assert!(children
-        .iter()
-        .any(|c| canon_of(c.child.csmi().as_ref()).unwrap() == want_q));
-    assert!(children
-        .iter()
-        .any(|c| canon_of(c.child.csmi().as_ref()).unwrap() == want_me));
+    assert!(
+        children
+            .iter()
+            .any(|c| canon_of(c.child.csmi().as_ref()).unwrap() == want_q)
+    );
+    assert!(
+        children
+            .iter()
+            .any(|c| canon_of(c.child.csmi().as_ref()).unwrap() == want_me)
+    );
 }
 
 #[test]
@@ -250,6 +260,9 @@ fn quinone_imidazole_pyridine_ring_opened_goldens() {
         .collect();
     for g in goldens {
         let want = canon_of(g).unwrap();
-        assert!(found.contains(&want), "missing {g} / {want}; have {found:?}");
+        assert!(
+            found.contains(&want),
+            "missing {g} / {want}; have {found:?}"
+        );
     }
 }

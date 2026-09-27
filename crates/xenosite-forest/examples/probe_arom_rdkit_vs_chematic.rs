@@ -22,11 +22,7 @@ fn arom_bonds(mol: &chematic::core::Molecule) -> BTreeSet<(u32, u32)> {
         .filter(|(_, b)| matches!(b.order, BondOrder::Aromatic))
         .map(|(_, b)| {
             let (x, y) = (b.atom1.0, b.atom2.0);
-            if x < y {
-                (x, y)
-            } else {
-                (y, x)
-            }
+            if x < y { (x, y) } else { (y, x) }
         })
         .collect()
 }
@@ -46,7 +42,10 @@ fn main() {
         ("Ph2NMe", "c1ccc(N(C)c2ccccc2)cc1"),
         ("dihydroacridine", "c1ccc2c(c1)Nc1ccccc1C2"),
         ("aspirin", "CC(=O)Oc1ccccc1C(=O)O"),
-        ("chloramphenicol", "O=C(NCC(O)c1ccc([N+](=O)[O-])cc1)C(Cl)Cl"),
+        (
+            "chloramphenicol",
+            "O=C(NCC(O)c1ccc([N+](=O)[O-])cc1)C(Cl)Cl",
+        ),
         ("nitrosobenzene", "O=Nc1ccccc1"),
         ("dimethylaminophenol", "CN(C)c1ccc(O)cc1"),
     ];

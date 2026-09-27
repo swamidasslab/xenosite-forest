@@ -1834,11 +1834,8 @@ where
                 )
             })
             .unwrap_or(0);
-        let plan = candidate.plan_with_gens(
-            &self.parent.atom_bond_generators(),
-            mol.atom_count(),
-            mol,
-        );
+        let plan =
+            candidate.plan_with_gens(&self.parent.atom_bond_generators(), mol.atom_count(), mol);
         let effect = candidate.effect();
         Ok(Some(ForestEmission {
             site: candidate.site(),

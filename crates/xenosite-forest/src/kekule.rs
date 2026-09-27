@@ -29,7 +29,7 @@
 //!
 //! Reusable Kekulé objects ([`SystemKey`], [`SystemKekule`] assignments /
 //! `by_order`, and residual/constraint keys when they land) are keyed by
-//! forest **labels** ([`Tag`] / chematic `Atom.tag`), **not** atom indexes.
+//! forest **labels** ([`Tag`] / chematic molecule tags), **not** atom indexes.
 //! Indexes are only for perception and matching on the *current* mol layout;
 //! they move under rewrite and canonical reorder. Tags are stable in a
 //! ForestMol copy tree, so untouched systems keep hitting the shared bag after
@@ -55,19 +55,17 @@ fn tag_bond_key(a: Tag, b: Tag) -> (Tag, Tag) {
     if a <= b { (a, b) } else { (b, a) }
 }
 
-/// Chematic `Atom.tag` as a forest [`Tag`].
+/// Chematic molecule tag as a forest [`Tag`].
 fn tag_of(mol: &Molecule, idx: usize) -> Option<Tag> {
-    mol.atom(atom_idx(idx)).tag.map(Tag)
+    crate::labels::tag_at(mol, idx)
 }
 
 /// Current index holding `tag`, if any.
 fn index_of_tag(mol: &Molecule, tag: Tag) -> Option<usize> {
-    mol.atoms().find_map(|(idx, atom)| {
-        (atom.tag == Some(tag.0)).then_some(atom_usize(idx))
-    })
+    (0..mol.atom_count()).find(|&i| crate::labels::tag_at(mol, i) == Some(tag))
 }
 
-/// Stamp `Atom.tag = Some(i as u32)` on every untagged atom.
+/// Stamp molecule tags so index `i` → forest [`Tag(i)`] (Chematic `i + 1`).
 ///
 /// ForestMol always stamps real copy-tree labels. Bare mols (one-shot
 /// [`kekule_forms`], unit tests) need tags before cache insert — index-as-tag
@@ -76,8 +74,8 @@ fn index_of_tag(mol: &Molecule, tag: Tag) -> Option<usize> {
 pub fn stamp_missing_index_tags(mol: &mut Molecule) {
     let n = mol.atom_count();
     for i in 0..n {
-        if mol.atom(atom_idx(i)).tag.is_none() {
-            mol.set_tag(atom_idx(i), Some(i as u32));
+        if crate::labels::tag_at(mol, i).is_none() {
+            crate::labels::set_mol_tag(mol, atom_idx(i), Some(Tag(i as u32)));
         }
     }
 }
@@ -478,8 +476,7 @@ impl PiGraph {
             if comp.bonds.len() < comp.atoms.len() {
                 continue;
             }
-            if complete_assignment(mol, &comp.atoms, &comp.bonds, &empty, &match_cfg).is_none()
-            {
+            if complete_assignment(mol, &comp.atoms, &comp.bonds, &empty, &match_cfg).is_none() {
                 continue;
             }
             let n = comp.atoms.len();
@@ -513,7 +510,7 @@ fn order_code(order: BondOrder) -> Option<u8> {
 /// Identity of one conjugated system for cache reuse.
 ///
 /// **Tag-keyed, not index-keyed.** `atoms` and `shape` bond endpoints are
-/// [`Tag`]s (cheatic `Atom.tag`). Indexes would break reuse after rewrite or
+/// [`Tag`]s (chematic molecule tags). Indexes would break reuse after rewrite or
 /// canonical reorder; tags survive on the ForestMol copy-tree `Rc` cache.
 ///
 /// An edit that changes aromatic flags or bond orders inside the system is a
@@ -531,7 +528,7 @@ impl SystemKey {
     /// Build a tag-keyed system identity from the current mol's indexes.
     ///
     /// Perception still uses indexes; the returned key stores only tags.
-    /// Returns `None` if any system atom lacks `Atom.tag` — call
+    /// Returns `None` if any system atom lacks a molecule tag — call
     /// [`stamp_missing_index_tags`] on bare mols, or use a [`crate::forest_mol::ForestMol`].
     pub fn try_of(
         mol: &Molecule,
@@ -563,7 +560,7 @@ impl SystemKey {
     /// Like [`Self::try_of`], panicking if tags are missing (ForestMol / stamped mols).
     pub fn of(mol: &Molecule, atoms: &BTreeSet<usize>, bonds: &BTreeSet<(usize, usize)>) -> Self {
         Self::try_of(mol, atoms, bonds).expect(
-            "SystemKey requires Atom.tag on every system atom (ForestMol stamps; \
+            "SystemKey requires molecule tags on every system atom (ForestMol stamps; \
              bare mols: stamp_missing_index_tags)",
         )
     }
@@ -748,11 +745,7 @@ impl KekuleCache {
     }
 
     /// Fill (or reuse) the bag for `graph`'s [`SystemKey`].
-    pub fn ensure_graph(
-        &mut self,
-        mol: &Molecule,
-        graph: &PiGraph,
-    ) -> Rc<RefCell<SystemKekule>> {
+    pub fn ensure_graph(&mut self, mol: &Molecule, graph: &PiGraph) -> Rc<RefCell<SystemKekule>> {
         let key = graph.system_key(mol);
         let slot = self.slot(key);
         fill_slot(mol, &graph.atoms, &graph.bonds, &slot);
@@ -945,23 +938,15 @@ pub fn move_charge_with_bonds(
     }
 }
 
-pub(crate) fn with_atom_explicit_h(mol: &Molecule, idx: chematic::core::AtomIdx, h: u8) -> Molecule {
-    use chematic::core::MoleculeBuilder;
-    let mut builder = MoleculeBuilder::new();
-    for (aidx, atom) in mol.atoms() {
-        let mut a = atom.clone();
-        if aidx == idx {
-            a.hydrogen_count = Some(h);
-        }
-        builder.add_atom(a);
-    }
-    for (_, bond) in mol.bonds() {
-        let _ = builder.add_bond(bond.atom1, bond.atom2, bond.order);
-    }
-    builder.copy_stereo_from(mol);
-    builder.copy_r_groups_from(mol);
-    builder.copy_bond_directions_from(mol);
-    builder.build()
+pub(crate) fn with_atom_explicit_h(
+    mol: &Molecule,
+    idx: chematic::core::AtomIdx,
+    h: u8,
+) -> Molecule {
+    // Clone preserves molecule tags (unlike rebuilding via Atom copies).
+    let mut out = mol.clone();
+    out.set_hydrogen_count(idx, Some(h));
+    out
 }
 
 fn match_assignment(
@@ -997,9 +982,7 @@ pub fn complete_assignment(
     let must: BTreeSet<usize> = atoms
         .iter()
         .copied()
-        .filter(|&i| {
-            !constraints.saturate.contains(&i) && atom_must_be_matched(mol, atom_idx(i))
-        })
+        .filter(|&i| !constraints.saturate.contains(&i) && atom_must_be_matched(mol, atom_idx(i)))
         .collect();
     let mut doubles: HashMap<usize, usize> = HashMap::new();
     for &(left, right) in &constraints.forced_doubles {
@@ -1247,21 +1230,14 @@ fn fill_slot(
         let Some(tagged) = assignment_to_tags(mol, &bond_orders) else {
             continue;
         };
-        let signature: Vec<_> = tagged
-            .iter()
-            .map(|(&k, &o)| (k, order_code(o)))
-            .collect();
+        let signature: Vec<_> = tagged.iter().map(|(&k, &o)| (k, order_code(o))).collect();
         if !seen.insert(signature) {
             continue;
         }
         let index = bag.assignments.len();
         let atom_tags: BTreeSet<Tag> = atoms.iter().filter_map(|&i| tag_of(mol, i)).collect();
         let charge_mag = overlay_tagged(mol, &atom_tags, &tagged, &config)
-            .map(|p| {
-                p.atoms()
-                    .map(|(_, a)| a.charge.unsigned_abs() as i32)
-                    .sum()
-            })
+            .map(|p| p.atoms().map(|(_, a)| a.charge.unsigned_abs() as i32).sum())
             .unwrap_or(0);
         for (key, order) in &tagged {
             if let Some(code) = order_code(*order) {
@@ -1289,8 +1265,7 @@ fn fill_slot(
 fn system_of(mol: &Molecule, left: usize, right: usize) -> (SystemKey, PiGraph) {
     let mut graph = PiGraph::conjugated(mol, left);
     let seed = bond_key(left, right);
-    if !graph.bonds.contains(&seed) && mol.bond_between(atom_idx(left), atom_idx(right)).is_some()
-    {
+    if !graph.bonds.contains(&seed) && mol.bond_between(atom_idx(left), atom_idx(right)).is_some() {
         graph.bonds.insert(seed);
         graph.atoms.insert(right);
     }
@@ -1389,9 +1364,20 @@ pub fn parents_for_ends(
         .collect();
     if !same {
         let end_slot = cache.get(&end_key).expect("end system filled");
-        parents.extend(end_slot.borrow().assignments.iter().filter_map(|assignment| {
-            overlay_tagged(mol, &end_key.atoms, assignment, &KekuleConfig::for_parents())
-        }));
+        parents.extend(
+            end_slot
+                .borrow()
+                .assignments
+                .iter()
+                .filter_map(|assignment| {
+                    overlay_tagged(
+                        mol,
+                        &end_key.atoms,
+                        assignment,
+                        &KekuleConfig::for_parents(),
+                    )
+                }),
+        );
     }
     EndParents {
         parents,
@@ -1437,14 +1423,9 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         }
         let key = aromatic.system_key(mol);
         let slot = cache.ensure_graph(mol, &aromatic);
-        forms.extend(
-            slot.borrow()
-                .assignments
-                .iter()
-                .filter_map(|assignment| {
-                    overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
-                }),
-        );
+        forms.extend(slot.borrow().assignments.iter().filter_map(|assignment| {
+            overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
+        }));
     }
     if forms.is_empty() {
         Ok(vec![mol.clone()])
@@ -1570,7 +1551,6 @@ mod tests {
             assert_eq!(doubles, 3);
         }
     }
-
 
     /// Naphthalene → 1,4-naphthoquinone: one fused aromatic system partially
     /// collapses. Reactant `c1ccc2ccccc2c1` is one connected conjugated
@@ -1730,7 +1710,11 @@ mod tests {
             &residual_bonds,
             &KekuleConfig::for_constraints(),
         );
-        assert_eq!(aromatic.len(), 6, "one benzenoid sextet survives: {aromatic:?}");
+        assert_eq!(
+            aromatic.len(),
+            6,
+            "one benzenoid sextet survives: {aromatic:?}"
+        );
         assert!(!aromatic.contains(&outer.0) && !aromatic.contains(&outer.1));
     }
 
@@ -1739,13 +1723,7 @@ mod tests {
         let mol = parse_mol("c1ccccc1").unwrap();
         let (atoms, bonds) = conjugated_component(&mol, 0);
         let empty = KekuleConstraints::default();
-        let multi = all_assignments(
-            &mol,
-            &atoms,
-            &bonds,
-            &empty,
-            &KekuleConfig::for_parents(),
-        );
+        let multi = all_assignments(&mol, &atoms, &bonds, &empty, &KekuleConfig::for_parents());
         assert!(multi.len() >= 2, "default enumerates bond seeds");
         let single = all_assignments(
             &mol,
@@ -1754,7 +1732,11 @@ mod tests {
             &empty,
             &KekuleConfig::for_parents().single_assignment(),
         );
-        assert_eq!(single.len(), 1, "single_assignment stops after one complete");
+        assert_eq!(
+            single.len(),
+            1,
+            "single_assignment stops after one complete"
+        );
 
         // Cyclobutadiene-shaped 4-atom cyclic 2-core: valid matching, fails 4n+2.
         let four: BTreeSet<usize> = BTreeSet::from([0, 1, 2, 3]);
@@ -1796,15 +1778,28 @@ mod tests {
             .iter()
             .copied()
             .find(|&(a, b)| {
-                let da = parent.bonds.iter().filter(|&&(x, y)| x == a || y == a).count();
-                let db = parent.bonds.iter().filter(|&&(x, y)| x == b || y == b).count();
+                let da = parent
+                    .bonds
+                    .iter()
+                    .filter(|&&(x, y)| x == a || y == a)
+                    .count();
+                let db = parent
+                    .bonds
+                    .iter()
+                    .filter(|&&(x, y)| x == b || y == b)
+                    .count();
                 da == 2 && db == 2
             })
             .map(|(a, b)| BTreeSet::from([a, b]))
             .expect("outer bond");
         let residual = parent.without_atoms(&drop);
         let core = residual.two_core();
-        assert_eq!(core.atoms.len(), 6, "one benzenoid 2-core: {:?}", core.atoms);
+        assert_eq!(
+            core.atoms.len(),
+            6,
+            "one benzenoid 2-core: {:?}",
+            core.atoms
+        );
         assert_eq!(core.components().len(), 1);
 
         let mut cache = KekuleCache::default();
@@ -2199,8 +2194,11 @@ mod tests {
         let mut fresh = KekuleCache::default();
         ensure_kekule_parents(parent.mol(), seed.0, seed.1, &mut fresh);
         let fresh_bag = fresh.get(&key).unwrap().borrow().clone();
-        for (label, fm) in [("copy", &copied), ("edit_copy", &edited), ("parent", &parent)]
-        {
+        for (label, fm) in [
+            ("copy", &copied),
+            ("edit_copy", &edited),
+            ("parent", &parent),
+        ] {
             let bag = fm.kekule().borrow().get(&key).unwrap().borrow().clone();
             assert!(
                 bag.semantically_eq(&fresh_bag),
@@ -2213,8 +2211,8 @@ mod tests {
     fn product_that_breaks_system_misses_parent_key() {
         // Hydroxylate a ring carbon → new structure; shared Rc still holds the
         // old key, but a fresh fill on the product builds its own bag.
-        use crate::rules::hydroxylation;
         use crate::Candidate;
+        use crate::rules::hydroxylation;
         let parent = ForestMol::parse("c1ccccc1").unwrap();
         let (atoms, bonds) = conjugated_component(parent.mol(), 0);
         let seed = *bonds.iter().next().unwrap();

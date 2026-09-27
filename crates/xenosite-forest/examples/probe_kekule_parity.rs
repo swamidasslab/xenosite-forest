@@ -1,10 +1,8 @@
 //! Compare Rust kekule parents to Python ResonanceMolSupplier / reactant_parent.
-use xenosite_forest::kekule::{
-    ensure_kekule_parents, kekule_forms, reactant_parent, KekuleCache,
-};
+use std::collections::BTreeMap;
+use xenosite_forest::kekule::{KekuleCache, ensure_kekule_parents, kekule_forms, reactant_parent};
 use xenosite_forest::mol::{atom_idx, canon_smiles, parse_mol};
 use xenosite_forest::smarts::smarts_matches;
-use std::collections::BTreeMap;
 
 fn dump_forms(label: &str, smi: &str) {
     let mol = parse_mol(smi).unwrap();
@@ -20,7 +18,13 @@ fn dump_forms(label: &str, smi: &str) {
     }
 }
 
-fn dump_reactant_parent(label: &str, smi: &str, smarts: &str, smirks: &str, map: [(u16, usize); 2]) {
+fn dump_reactant_parent(
+    label: &str,
+    smi: &str,
+    smarts: &str,
+    smirks: &str,
+    map: [(u16, usize); 2],
+) {
     let mol = parse_mol(smi).unwrap();
     let mapped: BTreeMap<u16, usize> = map.into_iter().collect();
     let mut cache = KekuleCache::default();
@@ -30,7 +34,12 @@ fn dump_reactant_parent(label: &str, smi: &str, smarts: &str, smirks: &str, map:
     let charges: Vec<_> = parent
         .atoms()
         .filter(|(i, a)| a.charge != 0 || i.0 <= 4)
-        .map(|(i, a)| format!("{}:{} ch={} h={:?}", i.0, a.element, a.charge, a.hydrogen_count))
+        .map(|(i, a)| {
+            format!(
+                "{}:{} ch={} h={:?}",
+                i.0, a.element, a.charge, a.hydrogen_count
+            )
+        })
         .collect();
     println!(
         "\n=== Rust reactant_parent | {label} map={:?} ===\n  {} bond={:?}\n  {:?}",
@@ -63,7 +72,11 @@ fn main() {
         "[#6H0:1][#7:2]>>([*:2].[*:1]-O)",
         [(1, 4), (2, 3)],
     );
-    for (label, site) in [("indole 5-6", (5, 6)), ("indole 6-7", (6, 7)), ("indole 0-1", (0, 1))] {
+    for (label, site) in [
+        ("indole 5-6", (5, 6)),
+        ("indole 6-7", (6, 7)),
+        ("indole 0-1", (0, 1)),
+    ] {
         dump_reactant_parent(
             label,
             "c1ccc2[nH]ccc2c1",

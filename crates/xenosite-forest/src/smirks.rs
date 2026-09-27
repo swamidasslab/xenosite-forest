@@ -186,9 +186,7 @@ fn resolve_bond_or_queries(
                         )));
                     };
                     bond_smiles_token(mol, ai, bi).ok_or_else(|| {
-                        ForestError::Smirks(format!(
-                            "no bond between maps {a}={ai} and {b}={bi}"
-                        ))
+                        ForestError::Smirks(format!("no bond between maps {a}={ai} and {b}={bi}"))
                     })?
                 }
                 _ => {
@@ -236,9 +234,9 @@ fn specialize_product_wildcards(
                     && inner.as_bytes()[1] == b':'
                     && inner[2..].bytes().all(|b| b.is_ascii_digit());
                 let needs = (inner.starts_with('*') && !plain_star)
-                    || (inner.starts_with('#')
-                        && inner.contains(|c: char| c == 'v' || c == ';'));
-                if needs {                    let a = mol.atom(atom_idx(atom));
+                    || (inner.starts_with('#') && inner.contains(|c: char| c == 'v' || c == ';'));
+                if needs {
+                    let a = mol.atom(atom_idx(atom));
                     let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
                         ForestError::Smirks(format!("unsupported element for map {mapno}"))
                     })?;
@@ -314,14 +312,15 @@ fn h_count_from_bracket(inner: &str) -> Option<u8> {
             }
             continue;
         }
-        if (bytes[i] == b'H' || bytes[i] == b'h') && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit()
+        if (bytes[i] == b'H' || bytes[i] == b'h')
+            && i + 1 < bytes.len()
+            && bytes[i + 1].is_ascii_digit()
         {
             return Some((bytes[i + 1] - b'0') as u8);
         }
         // Bare `H` / `h` before `:` means H1 (RDKit).
         if (bytes[i] == b'H' || bytes[i] == b'h')
-            && (i + 1 == bytes.len()
-                || matches!(bytes[i + 1], b':' | b';' | b',' | b'&' | b'!'))
+            && (i + 1 == bytes.len() || matches!(bytes[i + 1], b':' | b';' | b',' | b'&' | b'!'))
         {
             return Some(1);
         }
@@ -452,8 +451,8 @@ fn product_hash_sites(product: &str) -> Result<Vec<HashSite>, ForestError> {
             continue;
         };
         let aliphatic = organic_atom_token(ali, h_count, map_suffix);
-        let aromatic = aromatic_symbol(atomic_number)
-            .map(|aro| organic_atom_token(aro, h_count, map_suffix));
+        let aromatic =
+            aromatic_symbol(atomic_number).map(|aro| organic_atom_token(aro, h_count, map_suffix));
         sites.push(HashSite {
             start: i,
             end: end + 1,
@@ -503,7 +502,12 @@ pub fn organic_product_variants(smirks: &str) -> Result<Vec<String>, ForestError
 
     // Variant 0: every site aliphatic.
     let mut variants = Vec::new();
-    variants.push(rewrite_product(reactant, product, &sites, &vec![false; sites.len()]));
+    variants.push(rewrite_product(
+        reactant,
+        product,
+        &sites,
+        &vec![false; sites.len()],
+    ));
 
     // Further variants: flip aromaticable sites to aromatic (single flips, then
     // all-aromatic). Enough to cover chematic's aliphatic/aromatic branches
@@ -629,8 +633,7 @@ fn strip_reactant_h_counts(smirks: &str) -> String {
                     continue;
                 }
                 if (ib[j] == b'H' || ib[j] == b'h')
-                    && (j + 1 == ib.len()
-                        || matches!(ib[j + 1], b':' | b';' | b',' | b'&' | b'!'))
+                    && (j + 1 == ib.len() || matches!(ib[j + 1], b':' | b';' | b',' | b'&' | b'!'))
                 {
                     j += 1;
                     continue;
@@ -830,7 +833,11 @@ mod tests {
         );
         // Aliphatic-all is first so chemically correct acetyl wins before
         // aromatic carbonyl spellings.
-        assert!(!vars[0].chars().any(|c| matches!(c, 'c' | 'n' | 'o' | 's' | 'p')));
+        assert!(
+            !vars[0]
+                .chars()
+                .any(|c| matches!(c, 'c' | 'n' | 'o' | 's' | 'p'))
+        );
     }
 
     /// Atomic product `#` applies via organic expand (aliphatic branch).
@@ -839,8 +846,7 @@ mod tests {
         let mol = parse_mol("CCO").unwrap();
         let hits = smarts_matches(&mol, "[#8h1:1]").unwrap();
         assert_eq!(hits.len(), 1);
-        let products =
-            apply_smirks_at("[#8h1:1]>>[*:1][#6](=[#8])[#6]", &mol, &hits[0]).unwrap();
+        let products = apply_smirks_at("[#8h1:1]>>[*:1][#6](=[#8])[#6]", &mol, &hits[0]).unwrap();
         assert_eq!(
             products
                 .iter()
@@ -859,10 +865,26 @@ mod tests {
             ("CCO", "[OH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)OCC"),
             ("CCN", "[NH2:1]>>[*:1][#6](=[#8])[#6]", "CCNC(C)=O"),
             ("CS", "[SH1:1]>>[*:1][#6](=[#8])[#6]", "CSC(C)=O"),
-            ("Oc1ccccc1", "[OH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Oc1ccccc1"),
-            ("Nc1ccccc1", "[NH2:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Nc1ccccc1"),
-            ("Sc1ccccc1", "[SH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)Sc1ccccc1"),
-            ("[nH]1cccc1", "[nH1:1]>>[*:1][#6](=[#8])[#6]", "CC(=O)n1cccc1"),
+            (
+                "Oc1ccccc1",
+                "[OH1:1]>>[*:1][#6](=[#8])[#6]",
+                "CC(=O)Oc1ccccc1",
+            ),
+            (
+                "Nc1ccccc1",
+                "[NH2:1]>>[*:1][#6](=[#8])[#6]",
+                "CC(=O)Nc1ccccc1",
+            ),
+            (
+                "Sc1ccccc1",
+                "[SH1:1]>>[*:1][#6](=[#8])[#6]",
+                "CC(=O)Sc1ccccc1",
+            ),
+            (
+                "[nH]1cccc1",
+                "[nH1:1]>>[*:1][#6](=[#8])[#6]",
+                "CC(=O)n1cccc1",
+            ),
         ];
         for (smiles, want_form, want_prod) in cases {
             let mol = parse_mol(smiles).unwrap();
@@ -888,9 +910,15 @@ mod tests {
         let hits = smarts_matches(&mol, smirks.split(">>").next().unwrap()).unwrap();
         assert_eq!(hits.len(), 1);
         let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
-        assert_eq!(form, "[O:1][P:2](=[O:3])([O:4])[O:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]");
+        assert_eq!(
+            form,
+            "[O:1][P:2](=[O:3])([O:4])[O:5]>>[*:1].[*:2](=[*:3])([*:4])[*:5]"
+        );
         let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
-        let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
+        let got: BTreeSet<_> = products
+            .iter()
+            .map(|p| canon_of(&canon_smiles(p)).unwrap())
+            .collect();
         assert_eq!(
             got,
             BTreeSet::from([canon_of("CO").unwrap(), canon_of("O=[PH](O)O").unwrap()])
@@ -905,7 +933,10 @@ mod tests {
         let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
         assert_eq!(form, "[N:1]-[O:2]>>[*:1].[*:2]");
         let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
-        let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
+        let got: BTreeSet<_> = products
+            .iter()
+            .map(|p| canon_of(&canon_smiles(p)).unwrap())
+            .collect();
         assert_eq!(
             got,
             BTreeSet::from([canon_of("CCN").unwrap(), canon_of("O").unwrap()])
@@ -917,7 +948,10 @@ mod tests {
         let form = specialize_smirks_for_maps(smirks, &mol, &hits[0]).unwrap();
         assert_eq!(form, "[NH0:1]>>[NH0+:1][O-]");
         let products = apply_smirks_at(smirks, &mol, &hits[0]).unwrap();
-        let got: BTreeSet<_> = products.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect();
+        let got: BTreeSet<_> = products
+            .iter()
+            .map(|p| canon_of(&canon_smiles(p)).unwrap())
+            .collect();
         assert_eq!(got, BTreeSet::from([canon_of("C[N+](C)(C)[O-]").unwrap()]));
     }
 
@@ -943,11 +977,15 @@ mod tests {
         let zw = apply_smirks_at("[#16;v2,v4:1]>>[*&H0&+:1][O-]", &mol, &hits[0]).unwrap();
         let oh = apply_smirks_at("[#16;v2,v4:1]>>[*:1]O", &mol, &hits[0]).unwrap();
         assert_eq!(
-            zw.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect::<Vec<_>>(),
+            zw.iter()
+                .map(|p| canon_of(&canon_smiles(p)).unwrap())
+                .collect::<Vec<_>>(),
             vec![canon_of("CC[S+][O-]").unwrap()]
         );
         assert_eq!(
-            oh.iter().map(|p| canon_of(&canon_smiles(p)).unwrap()).collect::<Vec<_>>(),
+            oh.iter()
+                .map(|p| canon_of(&canon_smiles(p)).unwrap())
+                .collect::<Vec<_>>(),
             vec![canon_of("CCSO").unwrap()]
         );
     }

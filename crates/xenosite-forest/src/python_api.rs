@@ -692,7 +692,9 @@ fn enumerate(
             )));
         }
     };
-    config = config.with_max_nodes(max_nodes).with_unique_csmi(unique_csmi);
+    config = config
+        .with_max_nodes(max_nodes)
+        .with_unique_csmi(unique_csmi);
     let stream = enumerate_metabolites(reactant, rules, config).map_err(py_err)?;
     enum_hits_to_py(py, stream)
 }

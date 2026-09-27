@@ -15,11 +15,11 @@
 //! find_path — see `mass` / catalog tests for drift guards).
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, BTreeSet, HashSet};
+use std::collections::{BTreeSet, BinaryHeap, HashSet};
 
 use crate::ForestError;
-use crate::canonical_plan::{ApplyN, Step, as_deps};
 use crate::candidate::Candidate;
+use crate::canonical_plan::{ApplyN, Step, as_deps};
 use crate::find_path::{PathCounters, PathOutcome, PathStep};
 use crate::forest_mol::ForestMol;
 use crate::mass::{Ms1Adduct, formula_apply_delta, mz_abs_error, mz_of, mz_of_mol, mz_within};
@@ -1105,7 +1105,12 @@ mod tests {
         );
         assert_hard_chain_in_ms1(
             "C/C=C/C",
-            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation", "Epoxidation"],
+            &[
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
             &["EpoxideHydration", "Dehydrogenation"],
             8000,
             true,
@@ -1486,7 +1491,12 @@ mod tests {
         );
         assert_hard_chain_in_ms1(
             "C/C=C/C",
-            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation", "Epoxidation"],
+            &[
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
             &["EpoxideHydration", "Dehydrogenation", "Hydroxylation"],
             15000,
             true,
@@ -1738,7 +1748,12 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(hits.len(), 3, "{:?}", hits.iter().map(|h| &h.smiles).collect::<Vec<_>>());
+        assert_eq!(
+            hits.len(),
+            3,
+            "{:?}",
+            hits.iter().map(|h| &h.smiles).collect::<Vec<_>>()
+        );
         assert_no_redundant_emitted_plans(&hits);
         assert_eq!(counters.dropped_exact_plan, 0);
         assert_eq!(counters.dropped_skeleton_twin, 0);
@@ -1761,8 +1776,11 @@ mod tests {
         .unwrap();
         // All benzene diols share formula mass.
         for p in &emitted {
-            let pmz = mz_of_mol(ForestMol::parse(&p.smiles).unwrap().mol(), Ms1Adduct::MPlusH)
-                .unwrap();
+            let pmz = mz_of_mol(
+                ForestMol::parse(&p.smiles).unwrap().mol(),
+                Ms1Adduct::MPlusH,
+            )
+            .unwrap();
             assert!(mz_within(pmz, mz, 0.001), "{} mz drift", p.smiles);
         }
         let mut counters = PathCounters::default();

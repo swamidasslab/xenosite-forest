@@ -420,8 +420,8 @@ when chematic saturates ``[SH+]``. Hydroxy S-ox product is organic ``O``
 | 22 | C18 Phase 1: nitro form, cinnoline N=N, S=O H refuse, SMx C–N pin, cumulated H refuse, Ph2NMe both leaves, DH acridine | **open** | C18 |
 | 23 | C18 Phase 2: nitro≠generic H; QF↔DH contract; isoxazole tautomer canon | **open** | C18 |
 | 24 | C18 Phase 3: olsalazine/cinnoline/benzene-oxide QF — defer + instrument | **deferred** | C18 |
-| 16 | Chematic atom-tracking migrate; drop vendored patch | **blocked on parity** | TODO.md § After parity — pass tracking tests, remove `vendor/chematic` |
-| 17 | Centralize ForestMol cache + copy/edit behind ForestMol methods | **blocked on parity** | TODO.md § After parity — private-to-find-strays; keep user-visible cache |
+| 16 | Chematic atom-tracking migrate; drop vendored patch | **done** | crates.io chematic 1.0.27; `AtomTracker` + visit-order APIs; no `vendor/chematic` |
+| 17 | Centralize ForestMol cache + copy/edit behind ForestMol methods | **open** | TODO.md § After parity — private-to-find-strays; keep user-visible cache |
 | 18 | ``exclusive_partner`` bridging N/O: tests + corpus + Rust↔Py parity | **done** | C14 — Python ``test_exclusive_partner`` + Rust ``pair_edit`` refuse tests; corpus bridging N/O extras |
 | 19 | Shared methide alkyl partner (same CH2 bridge) | **open** | C14 deliberately leaves ``partner=="C"`` off; decide if chemistry needs its own Effect bit |
 | 20 | Pair-close / identical-partner corpus + meta-test green | **done** | ortho catechol/diamine/…; ``test_parity_fuzz_mols_cover_close_pair_ends`` green |

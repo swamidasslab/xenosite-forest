@@ -97,10 +97,7 @@ fn residual_pi_graph(
         let b = atom_usize(bond.atom2);
         if keep.contains(&a) && keep.contains(&b) {
             match bond.order {
-                BondOrder::Single
-                | BondOrder::Double
-                | BondOrder::Triple
-                | BondOrder::Aromatic => {
+                BondOrder::Single | BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic => {
                     bonds.insert(bond_key(a, b));
                 }
                 _ => {}
@@ -591,9 +588,7 @@ impl PairCandidate {
         for assignment in assignments {
             let mut product = rw.clone();
             for (&(left, right), &order) in &assignment {
-                if let Some((bond_idx, _)) =
-                    product.bond_between(atom_idx(left), atom_idx(right))
-                {
+                if let Some((bond_idx, _)) = product.bond_between(atom_idx(left), atom_idx(right)) {
                     product.set_bond_order(bond_idx, order);
                 }
             }
@@ -1080,8 +1075,14 @@ mod tests {
             c.hop.rule == "QuinoneFormation"
                 && c.hop.cleaves
                 && c.hop.products.len() >= 2
-                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_q)
-                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+                && c.hop
+                    .products
+                    .iter()
+                    .any(|p| canon_of(p).unwrap() == want_q)
+                && c.hop
+                    .products
+                    .iter()
+                    .any(|p| canon_of(p).unwrap() == want_me)
         });
         assert!(
             with_both,
@@ -1096,9 +1097,21 @@ mod tests {
     fn quinone_formation_dealkylates_phenyl_ncx_ahead_of_python() {
         let endpoints = qf_pair_endpoints();
         for (smi, leave, imines) in [
-            ("O=C=Nc1ccccc1", "C=O", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
-            ("S=C=Nc1ccccc1", "C=S", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
-            ("N=C=Nc1ccccc1", "C=N", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
+            (
+                "O=C=Nc1ccccc1",
+                "C=O",
+                ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"],
+            ),
+            (
+                "S=C=Nc1ccccc1",
+                "C=S",
+                ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"],
+            ),
+            (
+                "N=C=Nc1ccccc1",
+                "C=N",
+                ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"],
+            ),
         ] {
             let mol = parse_mol(smi).unwrap();
             let emissions = pair_metabolize(&mol, &endpoints).unwrap();
@@ -1145,7 +1158,9 @@ mod tests {
             "iminium",
             "dealkylate",
         ] {
-            let p = by_name.get(name).unwrap_or_else(|| panic!("missing {name}"));
+            let p = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("missing {name}"));
             assert!(
                 p.effect.exclusive_partner,
                 "{name} should set exclusive_partner"
@@ -1236,7 +1251,10 @@ mod tests {
                 ))
                 .collect::<Vec<_>>()
         );
-        assert!(!cands.is_empty(), "catechol should still emit pair candidates");
+        assert!(
+            !cands.is_empty(),
+            "catechol should still emit pair candidates"
+        );
     }
 
     #[test]
@@ -1249,7 +1267,10 @@ mod tests {
             for c in pair_candidates(&mol, &endpoints).unwrap() {
                 for p in c.materialize(&mol).unwrap() {
                     assert!(!p.contains("[C]"), "{smi}: radical carbon in {p}");
-                    assert!(!p.contains("[CH5]") && !p.contains("[CH6]"), "{smi}: bad methyl {p}");
+                    assert!(
+                        !p.contains("[CH5]") && !p.contains("[CH6]"),
+                        "{smi}: bad methyl {p}"
+                    );
                     assert!(!p.contains("[OH+]"), "{smi}: protonated carbonyl in {p}");
                 }
             }
@@ -1339,10 +1360,7 @@ mod tests {
             .iter()
             .flat_map(|c| c.materialize(&mol).unwrap_or_default())
             .collect();
-        let csmi: Vec<_> = products
-            .iter()
-            .map(|p| canon_of(p).unwrap())
-            .collect();
+        let csmi: Vec<_> = products.iter().map(|p| canon_of(p).unwrap()).collect();
         assert!(
             csmi.iter().any(|p| *p == want_13) && csmi.iter().any(|p| *p == want_14),
             "benzene H path_end should emit both cyclohexadienes; got {products:?}"
@@ -1493,7 +1511,8 @@ mod tests {
             "pyridine para H should emit neutral 1,4-dihydropyridine; got {got:?}"
         );
         assert!(
-            !got.iter().any(|p| p.contains("[NH+") || p.contains("[nH+]")),
+            !got.iter()
+                .any(|p| p.contains("[NH+") || p.contains("[nH+]")),
             "pyridine para H must not emit iminium; got {got:?}"
         );
     }
@@ -1550,6 +1569,3 @@ mod tests {
         );
     }
 }
-
-
-

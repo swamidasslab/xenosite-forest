@@ -11,18 +11,18 @@ use std::rc::Rc;
 use crate::atom_tracker::AtomTracker;
 use crate::forest::{Formula, Structure, molecule_formula};
 use crate::kekule::{KekuleCache, ensure_kekule_parents};
-use crate::labels::{self, Tag};
+use crate::labels::{self, Tag, set_mol_tag, tag_of_mol};
 use crate::mol::{
     ForestError, Molecule, atom_idx, canon_smiles, parse_mol, ranks, stable_csmi_key,
 };
 use crate::smarts::smarts_matches;
-use chematic::smiles::canonical_smiles_with_order;
+use chematic::smiles::canonical_smiles_with_atom_order;
 
-/// Write sidecar labels onto chematic `Atom.tag` so apply/fragments copy them.
+/// Write sidecar labels onto chematic molecule tags so apply/fragments copy them.
 fn sync_tags_to_mol(mol: &mut Molecule, labels: &[Option<Tag>]) {
     let n = mol.atom_count().min(labels.len());
     for (i, tag) in labels.iter().take(n).enumerate() {
-        mol.set_tag(atom_idx(i), tag.map(|t| t.0));
+        set_mol_tag(mol, atom_idx(i), *tag);
     }
 }
 
@@ -43,15 +43,15 @@ fn normalize_tagged_product(product: &Molecule) -> Result<Molecule, ForestError>
     if product.atom_count() == 0 {
         return Ok(product.clone());
     }
-    let (smi, order) = canonical_smiles_with_order(product);
+    let (smi, order) = canonical_smiles_with_atom_order(product);
     let mut fresh = parse_mol(&smi)?;
     if fresh.atom_count() != order.len() {
         // Fall back to plain canon_smiles round-trip without tags.
         return parse_mol(&canon_smiles(product));
     }
     for (new_i, &old_idx) in order.iter().enumerate() {
-        let tag = product.atom(old_idx).tag;
-        fresh.set_tag(atom_idx(new_i), tag);
+        let tag = tag_of_mol(product, old_idx);
+        set_mol_tag(&mut fresh, atom_idx(new_i), tag);
     }
     Ok(fresh)
 }
@@ -142,8 +142,8 @@ impl ForestMol {
     }
 
     /// Adopt a chematic product: re-parse via [`canon_smiles`] + [`parse_mol`]
-    /// (aromaticity parity with the old string walk) while remapping `Atom.tag`
-    /// by canonical visit order.
+    /// (aromaticity parity with the old string walk) while remapping molecule
+    /// tags by canonical visit order.
     pub fn adopt_product(&self, product: Molecule) -> Self {
         let normalized = normalize_tagged_product(&product).unwrap_or(product);
         let src_to_new = AtomTracker::src_to_new(self.mol(), &normalized);

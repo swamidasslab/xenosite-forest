@@ -23,7 +23,7 @@ use crate::pattern::Effect;
 /// One atom note in a [`Step`] site.
 ///
 /// Sites are keyed by stable forest [`Tag`] (label), **not** chematic atom
-/// index. Indexes shuffle across hops; labels survive `Atom.tag` remaps so
+/// index. Indexes shuffle across hops; labels survive molecule-tag remaps so
 /// multi-hop plans replay from the reactant.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PlanAtom {
@@ -162,7 +162,7 @@ impl Step {
 
     /// Run this elementary rule at the resolved site; return product mols.
     ///
-    /// Products keep `Atom.tag` labels from the edit (no SMILES round-trip) so
+    /// Products keep molecule-tag labels from the edit (no SMILES round-trip) so
     /// later steps' label notes still resolve.
     ///
     /// Unique-edit emits one orbit representative. When the plan names a
@@ -171,7 +171,7 @@ impl Step {
     /// otherwise later hops see the wrong carbon hydroxylated.
     /// Run this elementary rule at the resolved site; return product mols.
     ///
-    /// Products keep `Atom.tag` labels from the edit (no SMILES round-trip) so
+    /// Products keep molecule-tag labels from the edit (no SMILES round-trip) so
     /// later steps' label notes still resolve. Born atoms stay untagged here —
     /// callers that need forest label continuity use
     /// [`crate::ForestMol::adopt_product`] (same path as find_path / ApplyN emit).
@@ -314,13 +314,13 @@ fn pair_matches_wanted(
 /// Current chematic index of an atom carrying `tag`, if any.
 fn index_of_label(mol: &Molecule, tag: Tag) -> Result<usize, ForestError> {
     for i in 0..mol.atom_count() {
-        if mol.atom(atom_idx(i)).tag == Some(tag.0) {
+        if crate::labels::tag_at(mol, i) == Some(tag) {
             return Ok(i);
         }
     }
     // Untagged mol (bare `parse_mol`): stamp convention makes label id == index.
     let i = tag.0 as usize;
-    let untagged = (0..mol.atom_count()).all(|j| mol.atom(atom_idx(j)).tag.is_none());
+    let untagged = crate::labels::mol_untagged(mol);
     if untagged && i < mol.atom_count() {
         return Ok(i);
     }
@@ -336,11 +336,10 @@ fn index_of_label(mol: &Molecule, tag: Tag) -> Result<usize, ForestError> {
 /// Untagged mols (`parse_mol` without ForestMol stamp): treat index as label id
 /// (same convention as a fresh stamp).
 pub fn label_at(mol: &Molecule, idx: usize) -> Result<Tag, ForestError> {
-    if let Some(t) = mol.atom(atom_idx(idx)).tag {
-        return Ok(Tag(t));
+    if let Some(t) = crate::labels::tag_at(mol, idx) {
+        return Ok(t);
     }
-    let untagged = (0..mol.atom_count()).all(|j| mol.atom(atom_idx(j)).tag.is_none());
-    if untagged && idx < mol.atom_count() {
+    if crate::labels::mol_untagged(mol) && idx < mol.atom_count() {
         return Ok(Tag(idx as u32));
     }
     Err(ForestError::Plan(format!(
@@ -611,9 +610,7 @@ fn apply_combo_sorted(
                 .into_iter()
                 .filter_map(|i| cur.tag_of(i).map(|t| t.0 as usize))
                 .collect();
-            steps.push(
-                Step::new(rule, [PlanAtom::label(tag)]).with_orbit(orbit_labels),
-            );
+            steps.push(Step::new(rule, [PlanAtom::label(tag)]).with_orbit(orbit_labels));
             cur = cur.adopt_product(piece);
             applied = true;
             break;
@@ -1341,7 +1338,7 @@ pub fn identity_plan_with_orbit(
 
 /// Identity plan from chematic indexes on a **labeled** mol (ForestMol stamp).
 ///
-/// Maps each index → [`Tag`] via `Atom.tag`, then records label notes. Full
+/// Maps each index → [`Tag`] via molecule tags, then records label notes. Full
 /// `site_map` (both AtomPair ends) is the caller's responsibility.
 pub fn identity_plan_at_indexes(
     rule: impl Into<String>,
@@ -1357,11 +1354,9 @@ pub fn identity_plan_at_indexes(
         .into_iter()
         .map(|i| label_at(mol, i).map(|t| t.0 as usize))
         .collect::<Result<_, _>>()?;
-    Ok(vec![Step::new(
-        rule,
-        site_tags.into_iter().map(PlanAtom::label),
-    )
-    .with_orbit(orbit_tags)])
+    Ok(vec![
+        Step::new(rule, site_tags.into_iter().map(PlanAtom::label)).with_orbit(orbit_tags),
+    ])
 }
 
 /// Compat name.
@@ -2215,7 +2210,12 @@ mod tests {
         let (n_lin, n_prod) = plan.replay_stats("CC").unwrap();
         assert_eq!(n_lin, 2);
         assert_eq!(n_prod, plan.n_distinct_products("CC").unwrap());
-        assert_eq!(n_prod, 1, "both orders → same ethane diol: {:?}", plan.distinct_products("CC"));
+        assert_eq!(
+            n_prod,
+            1,
+            "both orders → same ethane diol: {:?}",
+            plan.distinct_products("CC")
+        );
     }
 
     #[test]
@@ -2242,7 +2242,10 @@ mod tests {
             );
         }
         assert_eq!(stats.n_covering_linearizations, 6);
-        assert_eq!(apply_n_n_distinct_products("c1ccccc1", &set, &pool).unwrap(), 3);
+        assert_eq!(
+            apply_n_n_distinct_products("c1ccccc1", &set, &pool).unwrap(),
+            3
+        );
     }
 
     #[test]
@@ -2252,7 +2255,12 @@ mod tests {
         let pool = ApplyN::new(["Hydroxylation"], 2);
         let (products, stats) = apply_n_emit_products("CC", &set, &pool).unwrap();
         assert_eq!(stats.n_combinations, 1);
-        assert_eq!(stats.n_products, 1, "{:?}", products.iter().map(|p| &p.smiles).collect::<Vec<_>>());
+        assert_eq!(
+            stats.n_products,
+            1,
+            "{:?}",
+            products.iter().map(|p| &p.smiles).collect::<Vec<_>>()
+        );
         assert_eq!(products[0].n_covering_linearizations(), 2);
         let (n_lin, n_prod) = products[0].plans[0].replay_stats("CC").unwrap();
         assert_eq!(n_lin, 2);
@@ -2353,10 +2361,7 @@ mod tests {
         let dh = crate::rules::dehydrogenation();
         let alcohol = dh
             .candidates(glycol.mol())
-            .find(|c| {
-                c.as_ref()
-                    .is_ok_and(|c| c.pattern_name() == "alcohol")
-            })
+            .find(|c| c.as_ref().is_ok_and(|c| c.pattern_name() == "alcohol"))
             .unwrap()
             .unwrap();
         let mut steps =
@@ -2370,10 +2375,7 @@ mod tests {
             "alcohol AtomPair identity names C+O: {:?}",
             deps.steps()[2]
         );
-        assert!(
-            deps.reaches("C=C", "OCC=O").unwrap(),
-            "plan={deps:?}"
-        );
+        assert!(deps.reaches("C=C", "OCC=O").unwrap(), "plan={deps:?}");
     }
 
     #[test]

@@ -22,7 +22,7 @@ python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
-chematic = { path = "../../vendor/chematic/crates/chematic", default-features = false, features = [
+chematic = { version = "1.0.27", default-features = false, features = [
     "smiles",
     "smarts",
     "rxn",

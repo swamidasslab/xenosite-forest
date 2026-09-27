@@ -1,4 +1,0 @@
-[submodule "vendor/chematic"]
-	path = vendor/chematic
-	url = https://github.com/kent-tokyo/chematic.git
-	ignore = dirty

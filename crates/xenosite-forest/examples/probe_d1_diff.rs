@@ -184,10 +184,7 @@ fn compare(name: &str, py_path: &str, rs_path: &str) {
     let show = |label: &str, keys: &[String], side: &BTreeMap<String, BTreeMap<String, String>>| {
         println!("\n--- {label} (up to 12) ---");
         for k in keys.iter().take(12) {
-            let rules: Vec<_> = side[k]
-                .iter()
-                .map(|(r, p)| format!("{r}/{p}"))
-                .collect();
+            let rules: Vec<_> = side[k].iter().map(|(r, p)| format!("{r}/{p}")).collect();
             println!("  {}  {}", rules.join(","), k);
         }
         if keys.len() > 12 {
@@ -205,9 +202,7 @@ fn compare(name: &str, py_path: &str, rs_path: &str) {
         if pr != rr {
             rule_mismatch += 1;
             if rule_mismatch <= 8 {
-                println!(
-                    "shared-key rule mismatch: py={pr:?} rs={rr:?} key={k}"
-                );
+                println!("shared-key rule mismatch: py={pr:?} rs={rr:?} key={k}");
             }
         }
     }

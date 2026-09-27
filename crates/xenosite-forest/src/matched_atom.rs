@@ -1342,7 +1342,10 @@ mod tests {
         assert!(c.effect().cleaves);
         assert_eq!(c.effect().leave_count, Some(1));
         let site: Vec<usize> = c.site_atoms();
-        let mapped: Vec<usize> = c.as_edit().map(|e| e.mapped.values().copied().collect()).unwrap_or_default();
+        let mapped: Vec<usize> = c
+            .as_edit()
+            .map(|e| e.mapped.values().copied().collect())
+            .unwrap_or_default();
         let atoms = site_atoms_with_leave(
             parent.mol(),
             &site,
@@ -1409,7 +1412,10 @@ mod tests {
         assert!(c.effect().cleaves);
         assert!(c.effect().leave_count.is_none());
         let site: Vec<usize> = c.site_atoms();
-        let mapped: Vec<usize> = c.as_edit().map(|e| e.mapped.values().copied().collect()).unwrap_or_default();
+        let mapped: Vec<usize> = c
+            .as_edit()
+            .map(|e| e.mapped.values().copied().collect())
+            .unwrap_or_default();
         let expanded =
             site_atoms_with_leave(parent.mol(), &site, None, &ad.cleavage_bonds, &mapped);
         assert_eq!(

@@ -480,8 +480,7 @@ fn cleave_oxygenate(
         RingOpenOxygenate::Hemiaminal => {
             // Map 3 is the reactant OH oxygen; promote O–C to O=C (no new atom).
             let oxygen = *mapped.get(&3)?;
-            let (oh_bond_idx, oh_bond) =
-                product.bond_between(atom_idx(oxygen), atom_idx(left))?;
+            let (oh_bond_idx, oh_bond) = product.bond_between(atom_idx(oxygen), atom_idx(left))?;
             match oh_bond.order {
                 BondOrder::Single | BondOrder::Aromatic => {}
                 _ => return None,
@@ -512,11 +511,7 @@ fn cleave_oxygenate(
     if frags.is_empty() && accept_product(&product) {
         frags.push(product);
     }
-    if frags.is_empty() {
-        None
-    } else {
-        Some(frags)
-    }
+    if frags.is_empty() { None } else { Some(frags) }
 }
 
 fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
@@ -579,8 +574,8 @@ pub(crate) fn apply_edit_mols(
     // Aromatic alkene/alkyne SMIRKS can rematerialize the reactant (pyrrole /
     // thiophene H). Refuse identity — same gate as pair path_end.
     let parent_csmi = canon_smiles(mol);
-    let o_leave = pattern.effect.cleaves
-        && pattern.effect.leave_formula == crate::pattern::leave_o();
+    let o_leave =
+        pattern.effect.cleaves && pattern.effect.leave_formula == crate::pattern::leave_o();
     Ok(products
         .into_iter()
         .filter(|p| canon_smiles(p) != parent_csmi)
@@ -636,8 +631,7 @@ fn apply_edit_mols_raw(
                 let prefer_graph = mapped_bond_in_ring(&work, mapped, mode)
                     || matches!(
                         mode,
-                        RingOpenOxygenate::HydrolysisAddWater
-                            | RingOpenOxygenate::HydrolysisCleave
+                        RingOpenOxygenate::HydrolysisAddWater | RingOpenOxygenate::HydrolysisCleave
                     );
                 if prefer_graph {
                     if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
@@ -676,10 +670,7 @@ fn apply_edit_mols_raw(
 ///
 /// Returns the aromatized heavy fragment plus a methane leave piece — matching
 /// Python's catechol + C split for benzodioxole reduction.
-fn remove_mapped_ch2_leave(
-    mol: &Molecule,
-    mapped: &BTreeMap<u16, usize>,
-) -> Option<Vec<Molecule>> {
+fn remove_mapped_ch2_leave(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Option<Vec<Molecule>> {
     use chematic::core::Element;
     let mut leave_idx: Option<usize> = None;
     for &idx in mapped.values() {
@@ -946,10 +937,8 @@ mod tests {
         }
         let mut restamped = bare;
         qf.stamp_pair_paths(&mut restamped);
-        let with_outer = RuleSet::with_outer_path(
-            restamped[0].rule_path.clone(),
-            [Some("PhaseOne".into())],
-        );
+        let with_outer =
+            RuleSet::with_outer_path(restamped[0].rule_path.clone(), [Some("PhaseOne".into())]);
         assert_eq!(
             with_outer,
             vec![Some("QuinoneFormation".into()), Some("PhaseOne".into())]
@@ -1061,7 +1050,12 @@ mod tests {
     #[test]
     fn dealkylation_ring_open_on_benzene_keeps_six_carbons() {
         use crate::rules::dealkylation;
-        let got = products_of(&dealkylation(), "c1ccccc1", accept_all_rules, accept_all_sites);
+        let got = products_of(
+            &dealkylation(),
+            "c1ccccc1",
+            accept_all_rules,
+            accept_all_sites,
+        );
         assert_eq!(
             got,
             canon_set(["C=CC=CC=CO", "C=CC=CC=C=O"]),
@@ -1074,7 +1068,12 @@ mod tests {
         // Ring σ cut that bifurcates (truncated O=CC=CS + junk) is refused;
         // connected ring-opens (C=CSC=C=O family) remain.
         use crate::rules::dealkylation;
-        let got = products_of(&dealkylation(), "c1ccsc1", accept_all_rules, accept_all_sites);
+        let got = products_of(
+            &dealkylation(),
+            "c1ccsc1",
+            accept_all_rules,
+            accept_all_sites,
+        );
         let truncated = canon_of("O=CC=CS").unwrap();
         assert!(
             !got.contains(&truncated),
@@ -1158,7 +1157,12 @@ mod tests {
     #[test]
     fn dealkylation_cleave_oxygenate_on_methyl_acetate() {
         use crate::rules::dealkylation;
-        let got = products_of(&dealkylation(), "CC(=O)OC", accept_all_rules, accept_all_sites);
+        let got = products_of(
+            &dealkylation(),
+            "CC(=O)OC",
+            accept_all_rules,
+            accept_all_sites,
+        );
         assert!(
             got.contains(&canon_of("C").unwrap()) && got.contains(&canon_of("COC(=O)O").unwrap()),
             "cc_quaternary graph cleave; got {got:?}"
@@ -1223,8 +1227,8 @@ mod tests {
 
 #[cfg(test)]
 mod hydrolysis_mode_tests {
-    use super::ring_open_oxygenate_mode;
     use super::RingOpenOxygenate;
+    use super::ring_open_oxygenate_mode;
 
     #[test]
     fn detects_hydrolysis_add_water() {

@@ -27,7 +27,7 @@ Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Ru
 - Owns a chematic `Molecule`.
 - Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Rc<RefCell<Structure>>`, filled on first read.
 - **Dedup key ≠ display CSMI.** Chematic docs: canonical SMILES is not always a safe identity key. [`stable_csmi_key`](../../crates/xenosite-forest/src/mol.rs) / `ForestMol::stable_csmi_key` wrap fail-closed `canonical_smiles_stable_key()` — **can return `None` / null** (coupled E/Z, non-idempotent spelling, …). That is not an error: do not unwrap or substitute `csmi`. `find_path` `seen` and metabolize `unique_csmi` index only `Some` keys; `None` products are still explored/yielded without CSMI collapse (`PathCounters::unstable_csmi_key`). Display / target compare still use `csmi` / `canon_of`.
-- Kekulé / π-system answers live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by **forest labels (`Tag` / `Atom.tag`)**, not atom indexes — system atom set + aromatic/bond shape fingerprint. Constraint-directed residual views are likewise tag-keyed (`ResidualKey`: parent system, removed tags, forced tag-pairs). Indexes are only for perception on the current mol; overlay resolves tags → indexes. Still maps, not baked mols.
+- Kekulé / π-system answers live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by **forest labels (`Tag` / molecule tags)**, not atom indexes — system atom set + aromatic/bond shape fingerprint. Constraint-directed residual views are likewise tag-keyed (`ResidualKey`: parent system, removed tags, forced tag-pairs). Indexes are only for perception on the current mol; overlay resolves tags → indexes. Still maps, not baked mols.
 - Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them when a correspondence is supplied. Chematic's public apply/write do not return that map (see [Atom identity](#atom-identity-chematic-has-no-public-correspondence)).
 - `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. Untouched systems keep hitting shared keys; an edit that changes a system’s fingerprint misses that key (new bag) but may still **derive** a residual/2-core entry from the parent system by set difference. Structure/CSMI/ranks never inherit across edits.
 - Structure bag also caches **atom+bond automorphism generators** (`atom_bond_generators`) for site / higher-order (plan) orbits. Same share/invalidate rules as `csmi` / ranks.
@@ -201,40 +201,35 @@ Estimate, not a promise:
 
 Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --release`.
 
-## Atom identity (vendored chematic patch)
+## Atom identity (chematic molecule tags)
 
-Chematic on crates.io historically lacked atom userdata and a public SMILES
-visit order. This repo still vendors `chematic` @ `v1.0.21` as a **sparse
-submodule** (`vendor/chematic`) and applies
-[`patches/chematic-v1.0.21-atom-tag-visit-order.patch`](../../patches/chematic-v1.0.21-atom-tag-visit-order.patch)
-via `./scripts/vendor-chematic.sh`.
+Chematic `1.0.27+` on crates.io provides caller-managed atom tags and a public
+SMILES visit order. Forest depends on that release (not a vendored patch).
 
-**Post-parity (do not start early):** Chematic upstream has landed atom
-tracking. After Rust↔Python leaf product parity is green
-([RUST_PYTHON_PARITY](RUST_PYTHON_PARITY.md) work order #16 / [TODO.md](../../TODO.md)):
-migrate to the released API, pass tracking tests, remove the vendored
-submodule and patch.
+API (see Chematic changelog):
 
-The patch adds:
+- `Molecule::set_tag` / `atom_tag` — non-chemical labels `1..=u16::MAX`;
+  preserved by clone / apply / fragments / aromaticity; ignored by SMILES
+  write and canon; not emitted as `:n`. `atom_map` is still cleared on apply.
+- `write_with_atom_order` / `canonical_smiles_with_atom_order` — string plus
+  DFS visit order (`order[k]` = mol index of the k-th atom in the string).
 
-- `Atom.tag: Option<u32>` — non-chemical; copied by clone / apply / fragments;
-  ignored by SMILES write and canon; not emitted as `:n`. `atom_map` is still
-  cleared on apply.
-- `write_with_order` / `canonical_smiles_with_order` — string plus DFS visit
-  order (`order[k]` = mol index of the k-th atom in the string).
+Forest [`Tag`](../../crates/xenosite-forest/src/labels.rs) stays **0-based** so
+a fresh stamp still makes `Tag(i)` coincide with atom index `i`. Sync to
+Chematic uses `tag.0 + 1` (and the inverse on read) via `set_mol_tag` /
+`tag_of_mol`.
 
 `ForestMol` still keeps a tag sidecar today (derisk continuity). Chematic
-`Atom.tag` is the path for production atom-trace: stamp before apply, read
-after. Visit order covers write/parse without isotope probes. POC:
+molecule tags are the path for production atom-trace: stamp before apply,
+read after. Visit order covers write/parse without isotope probes. POC:
 [`AtomTracker`](../../crates/xenosite-forest/src/atom_tracker.rs)
 (`stamp` / `src_to_new` / `adopt_born` / `write_parse`).
 
-Apply does not yet return `src_to_new`; with tags on the atom that map is
+Apply does not yet return `src_to_new`; with tags on the molecule that map is
 optional. `fragments` still drops its private `old_to_new`; tags survive the
 clone into each fragment.
 
-Do **not** call private chematic writers or `build_product` maps, and do not
-commit a patched submodule tree — only the pin SHA and the patch file.
+Do **not** call private chematic writers or `build_product` maps.
 
 ## Not in this crate
 
@@ -247,7 +242,7 @@ edge case). Archive `Deps` And/Or/JSON. Outcomes carry
 candidates via MCS + effect fields (`find_path_diff` / `use_atom_diff`).
 [`find_path`](../../crates/xenosite-forest/src/find_path.rs) walks carry tagged
 [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) (structure/`csmi`
-cache; `Atom.tag` synced from the sidecar through `adopt_product`). Outcomes
+cache; molecule tags synced from the sidecar through `adopt_product`). Outcomes
 emit elementary [`Step`](../../crates/xenosite-forest/src/canonical_plan.rs)
 plans as `Deps`; composite leaves attach a `canonical_plan` hook (Python) that
 returns elementary rule steps (e.g. QF → OH/DH). Eager closer can

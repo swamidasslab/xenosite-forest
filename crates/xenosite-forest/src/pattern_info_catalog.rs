@@ -246,12 +246,17 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
                 if !capable.contains(&c.pattern_name()) {
                     continue;
                 }
-                let site_aromatic = c.site_atoms().iter().any(|&i| mol.atom(atom_idx(i)).aromatic);
+                let site_aromatic = c
+                    .site_atoms()
+                    .iter()
+                    .any(|&i| mol.atom(atom_idx(i)).aromatic);
                 // Candidate carries resolved effect (context mol).
                 assert_eq!(
-                    c.effect().dearomatizes, site_aromatic,
+                    c.effect().dearomatizes,
+                    site_aromatic,
                     "{name}/{} on {smi}: resolved dearomatizes={} but site_aromatic={site_aromatic}",
-                    c.pattern_name(), c.effect().dearomatizes
+                    c.pattern_name(),
+                    c.effect().dearomatizes
                 );
             }
         }

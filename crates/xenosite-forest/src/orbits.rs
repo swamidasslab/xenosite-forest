@@ -250,11 +250,7 @@ pub fn unordered_site_combinations_with_gens(
     eligible: &[usize],
     k: usize,
 ) -> Vec<Vec<usize>> {
-    let mut eligible: Vec<usize> = eligible
-        .iter()
-        .copied()
-        .filter(|&i| i < n_atoms)
-        .collect();
+    let mut eligible: Vec<usize> = eligible.iter().copied().filter(|&i| i < n_atoms).collect();
     eligible.sort_unstable();
     eligible.dedup();
     if k == 0 {
@@ -352,12 +348,7 @@ pub fn unordered_site_combinations(
     eligible: &[usize],
     k: usize,
 ) -> Vec<Vec<usize>> {
-    unordered_site_combinations_with_gens(
-        &atom_bond_generators(mol),
-        mol.atom_count(),
-        eligible,
-        k,
-    )
+    unordered_site_combinations_with_gens(&atom_bond_generators(mol), mol.atom_count(), eligible, k)
 }
 
 #[cfg(test)]

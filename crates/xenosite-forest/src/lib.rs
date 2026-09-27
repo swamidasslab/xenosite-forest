@@ -91,7 +91,9 @@ pub use find_path::{
     find_path_with_filters, hop_match_add_score, hop_match_product_score, hop_match_score,
     log_close_term, log_improve_term, neg_log1p_score,
 };
-pub use find_path_ms1::{Ms1Config, find_path_ms1, find_path_ms1_default, predicted_mz_after_delta};
+pub use find_path_ms1::{
+    Ms1Config, find_path_ms1, find_path_ms1_default, predicted_mz_after_delta,
+};
 pub use forest::{
     Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
 };

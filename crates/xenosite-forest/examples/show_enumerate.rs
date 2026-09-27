@@ -50,14 +50,11 @@ fn main() {
     println!();
 
     println!("\n=== Anisole PhaseOne depth=2 (capped) ===");
-    let hits: Vec<_> = enumerate_metabolites(
-        "COc1ccccc1",
-        &set,
-        EnumConfig::bfs(2).with_max_nodes(40),
-    )
-    .unwrap()
-    .map(|h| h.unwrap())
-    .collect();
+    let hits: Vec<_> =
+        enumerate_metabolites("COc1ccccc1", &set, EnumConfig::bfs(2).with_max_nodes(40))
+            .unwrap()
+            .map(|h| h.unwrap())
+            .collect();
     println!("  yielded={} (max_nodes=40 incl. root)", hits.len());
     for hit in hits.iter().take(10) {
         println!(
@@ -77,7 +74,10 @@ fn main() {
         .unwrap()
         .map(|h| h.unwrap())
         .collect();
-    println!("  unique_csmi yields={dedup_n}  all_paths yields={}", all.len());
+    println!(
+        "  unique_csmi yields={dedup_n}  all_paths yields={}",
+        all.len()
+    );
     let mut by = std::collections::BTreeMap::<String, usize>::new();
     for h in &all {
         *by.entry(h.smiles()).or_default() += 1;

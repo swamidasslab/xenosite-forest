@@ -1,6 +1,6 @@
 //! Phase profile for the **tagged `ForestMol`** `find_path` door.
 //!
-//! Same walk as production: structure/`csmi` cache, `Atom.tag` through
+//! Same walk as production: structure/`csmi` cache, molecule tags through
 //! `adopt_product`, lazy cost closer on pop, eager tag-lift child MCS.
 //! Does **not** re-parse walk CSMI strings.
 //!

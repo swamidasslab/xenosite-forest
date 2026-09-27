@@ -2107,16 +2107,10 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         for c in &cands {
-            if c.effect().adds.as_deref() == Some("HH")
-                && !any_h_gain(&reactant, &target, &diff)
-            {
+            if c.effect().adds.as_deref() == Some("HH") && !any_h_gain(&reactant, &target, &diff) {
                 assert!(
-                    !pattern_could_help_on(
-                        &c.effect(),
-                        &diff,
-                        Some(&reactant),
-                        Some(&target)
-                    ) || c.effect().cleaves,
+                    !pattern_could_help_on(&c.effect(), &diff, Some(&reactant), Some(&target))
+                        || c.effect().cleaves,
                     "pattern {} should not help toward quinone",
                     c.pattern_name()
                 );

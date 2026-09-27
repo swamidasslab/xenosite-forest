@@ -298,22 +298,12 @@ fn bench_suite(title: &str, set: &RuleSet, cases: &[Case], repeats: usize) {
     let mut total_t = 0.0;
     for case in cases {
         let (n, secs) = run_one(set, case, repeats);
-        let us_per = if n > 0 {
-            secs * 1e6 / n as f64
-        } else {
-            0.0
-        };
-        println!(
-            "{:<28} {:>6} {:>12.6} {:>8.1}",
-            case.name, n, secs, us_per
-        );
+        let us_per = if n > 0 { secs * 1e6 / n as f64 } else { 0.0 };
+        println!("{:<28} {:>6} {:>12.6} {:>8.1}", case.name, n, secs, us_per);
         total_n += n;
         total_t += secs;
     }
-    println!(
-        "{:<28} {:>6} {:>12.6}",
-        "TOTAL", total_n, total_t
-    );
+    println!("{:<28} {:>6} {:>12.6}", "TOTAL", total_n, total_t);
 }
 
 fn main() {
@@ -324,7 +314,11 @@ fn main() {
     println!("Rust enumerate bfs/dfs  (unlimited nodes)");
 
     if drugs {
-        let cases = if drugs_all { DRUG_CASES_ALL } else { DRUG_CASES };
+        let cases = if drugs_all {
+            DRUG_CASES_ALL
+        } else {
+            DRUG_CASES
+        };
         let title = if drugs_all {
             "PhaseOne drugs d2 (all)"
         } else {

@@ -28,13 +28,12 @@ Parity gap progress gauge (open / in progress / done):
 Do **not** start these while work order #4–12 / parametric product parity is still
 red. Tracked also in `docs/forest/RUST_PYTHON_PARITY.md` work order #16–17.
 
-1. **Chematic atom tracking (upstream landed).** Migrate off the vendored
-   chematic patch (`vendor/chematic` +
-   `patches/chematic-v1.0.21-atom-tag-visit-order.patch` /
-   `./scripts/vendor-chematic.sh`) onto the released Chematic atom-tag /
-   visit-order API. Pass atom-tracking tests (`AtomTracker` /
-   `stamp` / `src_to_new` / `adopt_born` / `write_parse` and successors).
-   Remove the vendored submodule and patch once green. See
+1. **Chematic atom tracking (upstream landed).** ~~Migrate off the vendored
+   chematic patch onto the released Chematic atom-tag / visit-order API.~~
+   **Done:** depend on crates.io `chematic` 1.0.27 (`Molecule::set_tag` /
+   `atom_tag`, `write_with_atom_order` / `canonical_smiles_with_atom_order`);
+   forest `Tag` syncs via `set_mol_tag` / `tag_of_mol` (`tag.0 + 1`);
+   `AtomTracker` tests green; `vendor/chematic` + patch removed. See
    `docs/forest/RUST.md` § Atom identity.
 
 2. **Centralize ForestMol cache access and copy/edit.** Every read/write of

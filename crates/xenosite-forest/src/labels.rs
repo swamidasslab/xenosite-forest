@@ -1,28 +1,64 @@
 //! Atom identity beside the chematic graph.
 //!
-//! Chematic on crates.io has no userdata; `atom_map` is a SMIRKS match key
-//! (apply clears it; canonical write emits `:n`). This repo vendors chematic
-//! with `Atom.tag` and SMILES visit-order helpers — see
-//! [`crate::chematic_vendor`] and `patches/README.md`.
+//! Chematic `1.0.27+` exposes caller tags on [`Molecule`] (`atom_tag` /
+//! `set_tag`, range `1..=u16::MAX`) and SMILES visit-order helpers
+//! (`write_with_atom_order` / `canonical_smiles_with_atom_order`).
+//!
+//! Forest [`Tag`] stays **0-based** so a fresh stamp still makes `Tag(i)`
+//! coincide with atom index `i` (plan sites / tests). Sync to Chematic uses
+//! `tag.0 + 1` (and the inverse on read).
 //!
 //! [`ForestMol`] still keeps a tag sidecar for derisk continuity. Tags are
 //! remapped by a correspondence from each rewrite when one is supplied.
 //! Tests can also recover maps with public `set_isotope` plus write/parse.
 
+use chematic::core::{AtomIdx, Molecule};
+
 #[cfg(test)]
 use std::collections::HashSet;
 
 #[cfg(test)]
-use chematic::core::{BondIdx, Molecule};
+use chematic::core::BondIdx;
 
 #[cfg(test)]
 use crate::mol::{atom_idx, atom_usize};
 
 /// Stable atom id in one `ForestMol` copy tree. Not a SMIRKS map number.
+///
+/// Zero-based in forest. Chematic storage is `tag.0 + 1` (`1..=u16::MAX`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag(pub u32);
 
-/// Stamp a fresh tag on every atom, in current index order.
+/// Chematic `atom_tag` → forest [`Tag`] (`stored - 1`).
+pub fn tag_of_mol(mol: &Molecule, idx: AtomIdx) -> Option<Tag> {
+    mol.atom_tag(idx).map(|nz| Tag(u32::from(nz.get()) - 1))
+}
+
+/// Chematic `atom_tag` by atom index.
+pub fn tag_at(mol: &Molecule, idx: usize) -> Option<Tag> {
+    tag_of_mol(mol, AtomIdx(idx as u32))
+}
+
+/// Write a forest [`Tag`] onto Chematic storage (`tag.0 + 1`).
+///
+/// `None` clears. Panics if `tag.0 + 1` exceeds `u16::MAX`.
+pub fn set_mol_tag(mol: &mut Molecule, idx: AtomIdx, tag: Option<Tag>) {
+    let raw = match tag {
+        None => None,
+        Some(Tag(t)) => {
+            let v = t.checked_add(1).expect("Tag+1 overflow");
+            Some(u16::try_from(v).expect("Tag+1 exceeds chematic u16::MAX"))
+        }
+    };
+    mol.set_tag(idx, raw);
+}
+
+/// True when no atom carries a Chematic tag.
+pub fn mol_untagged(mol: &Molecule) -> bool {
+    (0..mol.atom_count()).all(|i| mol.atom_tag(AtomIdx(i as u32)).is_none())
+}
+
+/// Stamp a fresh tag on every atom, in current index order (`Tag(0)..`).
 pub fn stamp(n: usize) -> (Vec<Option<Tag>>, u32) {
     let labels: Vec<Option<Tag>> = (0..n).map(|i| Some(Tag(i as u32))).collect();
     (labels, n as u32)

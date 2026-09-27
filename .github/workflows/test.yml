@@ -48,10 +48,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.88.0"

@@ -305,9 +305,7 @@ mod tests {
         assert!(!accept_product(&parse_mol("CC[O-]").unwrap()));
         assert!(!accept_product(&parse_mol("[O-]C=C").unwrap()));
         assert!(!accept_product(&parse_mol("C[S-](C)[O-]").unwrap()));
-        assert!(accept_product(
-            &parse_mol("[O-][N+](=O)c1ccccc1").unwrap()
-        ));
+        assert!(accept_product(&parse_mol("[O-][N+](=O)c1ccccc1").unwrap()));
         assert!(accept_product(&parse_mol("[O-][s+]1cccc1").unwrap()));
         assert!(accept_product(&parse_mol("[O-]N(O)c1ccccc1").unwrap()));
     }
@@ -338,9 +336,7 @@ mod tests {
         let parent = parse_mol("CCO").unwrap();
         let mut edited = parent.clone();
         // Raise C–O to double (phenol/enol-style end edit).
-        let (bi, _) = edited
-            .bond_between(atom_idx(1), atom_idx(2))
-            .expect("C-O");
+        let (bi, _) = edited.bond_between(atom_idx(1), atom_idx(2)).expect("C-O");
         edited.set_bond_order(bi, BondOrder::Double);
         let settle = edited_valence_atoms(&parent, &edited);
         assert!(settle.contains(&1) && settle.contains(&2));

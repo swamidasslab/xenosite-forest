@@ -182,7 +182,11 @@ mod tests {
                 "OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O",
                 &[3, 4, 5, 8, 9, 10, 11, 12, 13, 18, 19, 20],
             ),
-            ("cinnoline", "c1ccc2nnccc2c1", &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            (
+                "cinnoline",
+                "c1ccc2nnccc2c1",
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ),
             (
                 "sulfamethoxazole",
                 "Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1",

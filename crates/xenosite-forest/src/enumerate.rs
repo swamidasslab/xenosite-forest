@@ -362,10 +362,7 @@ mod tests {
     #[test]
     fn bfs_ethane_depth1_yields_ethanol() {
         let set = hydroxylation();
-        let hits: Vec<_> = bfs("CC", &set, 1)
-            .unwrap()
-            .map(|h| h.unwrap())
-            .collect();
+        let hits: Vec<_> = bfs("CC", &set, 1).unwrap().map(|h| h.unwrap()).collect();
         assert!(!hits.is_empty());
         assert!(hits.iter().all(|h| h.depth() == 1));
         assert!(hits.iter().any(|h| {
@@ -398,10 +395,7 @@ mod tests {
     #[test]
     fn bfs_depth2_path_info_accumulates() {
         let set = hydroxylation();
-        let hits: Vec<_> = bfs("CC", &set, 2)
-            .unwrap()
-            .map(|h| h.unwrap())
-            .collect();
+        let hits: Vec<_> = bfs("CC", &set, 2).unwrap().map(|h| h.unwrap()).collect();
         let d1: Vec<_> = hits.iter().filter(|h| h.depth() == 1).collect();
         let d2: Vec<_> = hits.iter().filter(|h| h.depth() == 2).collect();
         assert!(!d1.is_empty());
@@ -428,10 +422,7 @@ mod tests {
     #[test]
     fn dfs_can_reach_depth2_before_finishing_depth1() {
         let set = hydroxylation();
-        let hits: Vec<_> = dfs("CCC", &set, 2)
-            .unwrap()
-            .map(|h| h.unwrap())
-            .collect();
+        let hits: Vec<_> = dfs("CCC", &set, 2).unwrap().map(|h| h.unwrap()).collect();
         assert!(hits.iter().any(|h| h.depth() == 2));
         // With a stack, a depth-2 hit may appear before every depth-1 is done.
         let first_d2 = hits.iter().position(|h| h.depth() == 2);
@@ -502,7 +493,10 @@ mod tests {
                 && last.cleaves
                 && last.products.len() >= 2
                 && last.products.iter().any(|p| canon_of(p).unwrap() == want_q)
-                && last.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+                && last
+                    .products
+                    .iter()
+                    .any(|p| canon_of(p).unwrap() == want_me)
         });
         assert!(
             cleave_hop,
@@ -513,14 +507,11 @@ mod tests {
     #[test]
     fn max_nodes_caps_enumeration() {
         let set = phase_one();
-        let hits: Vec<_> = enumerate_metabolites(
-            "COc1ccccc1",
-            &set,
-            EnumConfig::bfs(3).with_max_nodes(8),
-        )
-        .unwrap()
-        .map(|h| h.unwrap())
-        .collect();
+        let hits: Vec<_> =
+            enumerate_metabolites("COc1ccccc1", &set, EnumConfig::bfs(3).with_max_nodes(8))
+                .unwrap()
+                .map(|h| h.unwrap())
+                .collect();
         // Root counts as 1 → at most 7 yielded metabolites.
         assert!(hits.len() <= 7, "len={}", hits.len());
     }
@@ -534,11 +525,7 @@ mod tests {
             .collect();
         let mut seen = HashSet::new();
         for h in &hits {
-            assert!(
-                seen.insert(h.smiles()),
-                "duplicate {}",
-                h.smiles()
-            );
+            assert!(seen.insert(h.smiles()), "duplicate {}", h.smiles());
         }
     }
 

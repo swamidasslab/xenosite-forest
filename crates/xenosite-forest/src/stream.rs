@@ -78,7 +78,11 @@ impl<'a> Candidates<'a> {
 
     fn load_pairs(&mut self) -> Result<(), ForestError> {
         let pairs = self.set.pair_candidates_leaf(self.mol)?;
-        self.pending = pairs.into_iter().map(Candidate::from_pair).collect::<Vec<_>>().into_iter();
+        self.pending = pairs
+            .into_iter()
+            .map(Candidate::from_pair)
+            .collect::<Vec<_>>()
+            .into_iter();
         Ok(())
     }
 }
@@ -361,11 +365,10 @@ where
                                         Some(&ends),
                                     )
                                 }
-                                None => self.set.canonical_plan(
-                                    self.mol,
-                                    &emission.site_atoms,
-                                    None,
-                                ),
+                                None => {
+                                    self.set
+                                        .canonical_plan(self.mol, &emission.site_atoms, None)
+                                }
                             };
                         }
                         if let Some(e) = self.take_emission(emission, false) {
@@ -573,8 +576,10 @@ impl<'a> PairEmissions<'a> {
             .map(|frame| frame.set.name.clone())
             .collect();
         for pair in &mut pairs {
-            pair.rule_path =
-                RuleSet::with_outer_path(std::mem::take(&mut pair.rule_path), outers.iter().cloned());
+            pair.rule_path = RuleSet::with_outer_path(
+                std::mem::take(&mut pair.rule_path),
+                outers.iter().cloned(),
+            );
         }
         let pending: Vec<_> = pairs
             .into_iter()
