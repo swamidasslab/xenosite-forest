@@ -347,4 +347,14 @@ mod tests {
         fill_closed_shell_h(&mut edited, 2);
         assert_eq!(edited.atom(atom_idx(2)).charge, 0);
     }
+
+    #[test]
+    fn dimethylaniline_iminium_quinone_is_refused() {
+        // QF path-end single_to_double on NMe2 mints C[N+](C)=C1… — same
+        // quaternary iminium shape as dialkylaniline H junk (HEURISTICS C10).
+        // Python still emits these; Rust closed-shell prefer refuses.
+        let mol = parse_mol("C[N+](C)=C1C=CC(=O)C=C1").unwrap();
+        assert!(nitrogen_iminium(&mol));
+        assert!(!accept_product(&mol));
+    }
 }
