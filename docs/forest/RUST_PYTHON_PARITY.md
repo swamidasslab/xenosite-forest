@@ -282,8 +282,11 @@ aziridine-Ph, dihydroacridine, aspirin, chloramphenicol, …):
 
 **None** of the current leaf product-parity fails are marked arom-model.
 Switching engines / “turning on” RDKit compat cannot close them — compat is
-already the production path. Treat remaining gaps as edit / accept / form /
-site-bag issues (H cumulated paths, QF extras, Dealk ring-open, etc.).
+already the production path. Chematic SMARTS also exposes
+``RdkitParityConfig::use_rdkit_parity_aromaticity`` (default ``false``); forest
+does not need it because ``parse_mol`` / ``aromatize`` already stamp the
+parity flags before ``find_matches``. Treat remaining gaps as edit / accept /
+form / site-bag issues (H cumulated paths, QF extras, Dealk ring-open, etc.).
 Status: **approved**.
 
 ---
