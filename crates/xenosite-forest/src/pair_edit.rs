@@ -314,6 +314,19 @@ pub struct PairCandidate {
     system: HashSet<usize>,
 }
 
+/// Exocyclic hetero leaf double: edge has a heteroatom and at least one
+/// endpoint with heavy-degree 1 (quinone/amide C=O, =S, terminal =N).
+/// Ring-embedded C=N / N=N are not leaves — they rematch freely (HEURISTICS).
+fn is_exocyclic_hetero_leaf(mol: &Molecule, a: usize, b: usize) -> bool {
+    let z_a = mol.atom(atom_idx(a)).element.atomic_number();
+    let z_b = mol.atom(atom_idx(b)).element.atomic_number();
+    if z_a == 6 && z_b == 6 {
+        return false;
+    }
+    let heavy_deg = |i: usize| mol.neighbors(atom_idx(i)).count();
+    heavy_deg(a) == 1 || heavy_deg(b) == 1
+}
+
 impl PairCandidate {
     /// Emitting (leaf) rule name when discovered under a named set.
     pub fn leaf_rule(&self) -> Option<&str> {
@@ -480,22 +493,18 @@ impl PairCandidate {
                 // Edit-new leaves (add_carbonyl O, phenol C=O): exclusive-seed.
                 edit_forced.insert(edge);
             } else {
-                // Surviving parent double: exclusive-seed only when a heteroatom
-                // is on the edge (other quinone C=O, amide, imine). Pure C=C
-                // parent doubles rematch freely — locking them blocks
-                // benzoquinone→hydroquinone Kekulé (HEURISTICS).
-                let z_a = rw.atom(atom_idx(a)).element.atomic_number();
-                let z_b = rw.atom(atom_idx(b)).element.atomic_number();
-                if z_a != 6 || z_b != 6 {
+                // Surviving parent double: exclusive-seed only exocyclic hetero
+                // leaves (degree-1 O/S/N on the edge — quinone C=O, amide).
+                // Ring-embedded C=N / N=N rematch freely like C=C (HEURISTICS).
+                if is_exocyclic_hetero_leaf(&rw, a, b) {
                     edit_forced.insert(edge);
                 }
             }
         }
         let residual_match = residual.after_forced_doubles(&framework_forced);
-        // Blank surviving parent C=C in the residual so atom_must_be_matched
-        // does not treat those carbons as already-paired (else demoted carbonyl
-        // carbons are the only must-match — para on benzoquinone cannot pair).
-        // Skip edit-forced / hetero leaves; forced constraints re-assert them.
+        // Blank surviving parent doubles that are not exclusive-seeded (ring
+        // C=C / C=N / N=N) so atom_must_be_matched does not lock them. Skip
+        // edit-forced / exocyclic leaves; forced constraints re-assert them.
         for &(a, b) in &residual_match.bonds {
             let edge = bond_key(a, b);
             if edit_forced.contains(&edge) {
@@ -504,11 +513,7 @@ impl PairCandidate {
             if !parent_doubles.contains(&edge) {
                 continue;
             }
-            let z_a = rw.atom(atom_idx(a)).element.atomic_number();
-            let z_b = rw.atom(atom_idx(b)).element.atomic_number();
-            if z_a == 6 && z_b == 6 {
-                let _ = demote_pi(&mut rw, a, b);
-            }
+            let _ = demote_pi(&mut rw, a, b);
         }
         // Empty residual: one-edge path_end (shared π saturated) may emit.
         // Vacuous keep+keep, or two carbonyl carbons that only demoted
@@ -985,6 +990,33 @@ mod tests {
                 "missing {w}; got {emissions:?}"
             );
         }
+    }
+
+    #[test]
+    fn quinone_formation_pyridine_para_emits_pyridinedione() {
+        // Ring C=N must rematch freely (not exclusive-seed); else para
+        // add_carbonyl×2 on pyridine materializes empty (HEURISTICS).
+        let mol = parse_mol("c1ccncc1").unwrap();
+        let endpoints: Vec<_> = quinone_formation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let got: BTreeSet<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().map(|p| canon_of(p).unwrap()))
+            .collect();
+        let want = [
+            canon_of("O=C1C=CC(=O)N=C1").unwrap(),
+            canon_of("O=C1C=CC=NC1=O").unwrap(),
+            canon_of("O=C1C=CN=CC1=O").unwrap(),
+        ];
+        assert!(
+            want.iter().any(|w| got.contains(w)),
+            "pyridine QF should emit a pyridinedione; got {got:?}"
+        );
     }
 
     #[test]

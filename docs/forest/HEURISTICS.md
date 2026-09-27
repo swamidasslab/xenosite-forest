@@ -370,14 +370,16 @@ when needed; prefer perceiving them from the edited graph:
 Pre-existing **cumulated** doubles on the parent (N=C=O: an atom with two
 doubles) are **fixed framework**: drop those atoms from the residual before
 rematch — exclusive one-partner matching cannot express cumulated demand.
-Surviving non-cumulated doubles on the edited mol (other quinone C=O, etc.)
-**exclusive-seed** so rematch does not rewrite them into charge junk. Only
-**hetero** parent doubles (C=O / C=N / …) seed — pure C=C parent doubles
-rematch freely (locking them blocks benzoquinone→hydroquinone). Before
-rematch, **blank surviving parent C=C** in the residual (not edit-new /
-hetero leaves): otherwise `atom_must_be_matched` treats those carbons as
-already paired and demoted carbonyl carbons cannot complete a matching.
-Forced constraints re-assert edit-new / hetero leaves. Saturate demotes path
+Surviving non-cumulated doubles on the edited mol **exclusive-seed** only when
+they are **exocyclic hetero leaves** (edge has a heteroatom and at least one
+endpoint heavy-degree 1 — quinone/amide C=O, methide-style =X). Ring-embedded
+hetero doubles (pyridine C=N, azo/cinnoline N=N, indole) rematch freely like
+pure C=C — locking them empties pyridine/azo QF and related path rematches.
+Before rematch, **blank surviving parent doubles that are not exclusive-seeded**
+(ring C=C / C=N / N=N; not edit-new / exocyclic leaves): otherwise
+`atom_must_be_matched` treats those atoms as already paired and demoted
+carbonyl carbons cannot complete a matching. Forced constraints re-assert
+edit-new / exocyclic leaves. Saturate demotes path
 π first (styrene vinyl), so those edges are gone before perceive and rematch
 freely. After rematch, **refill closed-shell H on residual heteros** (N/O — not
 carbons, which use move_charge H-travel): early settle fill runs while aromatic
@@ -389,7 +391,8 @@ approved. Tests:
 `hydrogenation_benzoquinone_para_o_emits_hydroquinone` /
 `quinone_formation_dealkylates_phenyl_ncx_ahead_of_python` /
 `hydrogenation_phnco_saturates_one_cumulated_double` /
-`hydrogenation_pyridine_para_emits_neutral_dihydropyridine`.
+`hydrogenation_pyridine_para_emits_neutral_dihydropyridine` /
+`quinone_formation_pyridine_para_emits_pyridinedione`.
 
 **Saturate→residual π:** when a saturate site still has a double/triple into the
 residual (styrene vinyl CH2 end), demote that edge before rematch — same
