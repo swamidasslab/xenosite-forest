@@ -17,6 +17,10 @@ Artifact `parity_full_exocyclic.out` still lists 32 (stale on those three).
 **Plan adoption:** [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C18** — chemistry-first;
 not literal Python parity. Phase 1 / policy / defer listed there.
 
+Parametric product-parity gaps are ``xfail`` in
+``tests/forest/parity_xfail_cases.py`` until closed. Standardization =
+explicit Rust transforms (no sanitize black boxes).
+
 Columns: **sym** = harness symptom; **chem** = who looks more correct;
 **fix** = fixability.
 
@@ -282,7 +286,7 @@ Columns: **sym** = harness symptom; **chem** = who looks more correct;
 - **SMILES:** `C1=CC2OC2C=C1`
 - **Symptom:** `py_extra` · sites py/rs `2/2` · products py/rs `5/2` · `site_kind=atom_pair`
 - **Chem / fix:** unclear / hard
-- **Likely cause:** Py extra oxide/quinone + benzofuran; Rust thinner
+- **Likely cause:** Py extra oxide/quinone + aromatic oxide writing; Rust thinner
 - **only Python:** `O=C1C=CC2OC2=C1`, `O=C1C=CC=C2OC12`, `c1ccc2c(c1)O2`
 
 ### QuinoneFormation — PhNMe2

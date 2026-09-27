@@ -11,6 +11,10 @@ For each ``(rule, mol)``:
 3. Assert equal unique topological site→product bags.
 4. Assert equal product sets after **RDKit** CSMI.
 
+Known open gaps (C18 chemistry-first plan) are ``xfail`` via
+:mod:`parity_xfail_cases` — remove entries as Phase 1–3 closes them against
+**approved chemistry**, not literal Python match.
+
 Pairing / exceptions: :mod:`test_rule_parity_pairs` (attribute data on rules).
 Corpus coverage: :mod:`test_rule_parity_corpus` (every pattern / every when).
 """
@@ -29,6 +33,7 @@ from xenosite.forest.find_path_rust import native_available
 from xenosite.forest.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.forest.rules import ReactionRule
 
+from .parity_xfail_cases import PARITY_PRODUCT_XFAIL, parity_xfail_reason
 from .pattern_info_inventory import instantiate_rule
 from .rule_parity_corpus import parity_full_enabled, parity_param_cases
 from .rule_parity_pairs import paired_rule_names, python_leaf_classes
@@ -170,12 +175,33 @@ def _paired_names() -> list[str]:
     return paired_rule_names()
 
 
+def _parity_param_ids() -> list:
+    """Parametrize with C18 xfail marks on known open gaps."""
+
+    raw = (
+        parity_param_cases(_PAIRED)
+        if _PAIRED
+        else (("Hydroxylation", "CCO"),)
+    )
+    out = []
+    for rule_name, smiles in raw:
+        reason = parity_xfail_reason(rule_name, smiles)
+        if reason:
+            out.append(
+                pytest.param(
+                    rule_name,
+                    smiles,
+                    marks=pytest.mark.xfail(reason=reason, strict=False),
+                    id=f"{rule_name}-{smiles}",
+                )
+            )
+        else:
+            out.append(pytest.param(rule_name, smiles, id=f"{rule_name}-{smiles}"))
+    return out
+
+
 _PAIRED = _paired_names()
-_CASES = (
-    parity_param_cases(_PAIRED)
-    if _PAIRED
-    else (("Hydroxylation", "CCO"),)
-)
+_CASES = _parity_param_ids()
 
 
 @pytest.mark.parametrize("rule_name,smiles", _CASES)
@@ -196,6 +222,9 @@ def test_leaf_parity_on_example_substrate(rule_name: str) -> None:
     cls = python_leaf_classes()[rule_name]
     examples = getattr(cls, "_example_substrates", ()) or ()
     assert examples, f"{rule_name} lacks _example_substrates"
+    reason = parity_xfail_reason(rule_name, examples[0])
+    if reason:
+        pytest.xfail(reason)
     _assert_parity(rule_name, examples[0])
 
 
@@ -211,9 +240,48 @@ def test_parity_param_mode_defaults_to_full() -> None:
 
     focused = parity_rule_mol_cases(_PAIRED)
     full = parity_rule_mol_cases_full(_PAIRED)
+    # Count underlying (rule, smiles) pairs — marks wrap pytest.param.
+    n_cases = len(_CASES)
     if parity_full_enabled():
-        assert len(_CASES) == len(full)
+        assert n_cases == len(full)
         assert len(full) > len(focused)
     else:
-        assert len(_CASES) == len(focused)
+        assert n_cases == len(focused)
         assert len(focused) < len(full)
+
+
+def test_parity_product_xfail_table_covers_live_gaps_only() -> None:
+    """Xfail table keys are unique; no stale PASS entries (strict cleanup)."""
+
+    assert len(PARITY_PRODUCT_XFAIL) == len(set(PARITY_PRODUCT_XFAIL))
+    # Every xfail key must still fail; otherwise remove it (Phase close).
+    stale: list[str] = []
+    for (rule_name, smiles), reason in sorted(PARITY_PRODUCT_XFAIL.items()):
+        try:
+            _assert_parity(rule_name, smiles)
+        except AssertionError:
+            continue
+        stale.append(f"{rule_name} {smiles!r} ({reason})")
+    assert not stale, (
+        "parity xfail entries now PASS — remove from PARITY_PRODUCT_XFAIL:\n  "
+        + "\n  ".join(stale)
+    )
+
+
+def test_parity_product_xfail_marks_every_param_gap() -> None:
+    """No unmarked product-parity failure on the parametric grid."""
+
+    if not _PAIRED:
+        pytest.skip("no paired leaf rules")
+    unmarked: list[str] = []
+    for rule_name, smiles in parity_param_cases(_PAIRED):
+        if parity_xfail_reason(rule_name, smiles):
+            continue
+        try:
+            _assert_parity(rule_name, smiles)
+        except AssertionError as err:
+            unmarked.append(f"{rule_name} {smiles!r}: {str(err).splitlines()[0]}")
+    assert not unmarked, (
+        "product parity gaps missing from PARITY_PRODUCT_XFAIL "
+        "(add with C18 reason, or fix):\n  " + "\n  ".join(unmarked)
+    )

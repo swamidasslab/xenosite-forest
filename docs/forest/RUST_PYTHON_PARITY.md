@@ -354,6 +354,22 @@ template difference — do not normalize away.
 | Full product metadata schema in Phase 1 | **not decided** field-by-field; three counts are the goal |
 | Retire Python tests immediately | **not approved**; demote as oracle via Rust-ahead pins + approved chemistry |
 
+#### Parametric xfail + Rust standardization — **approved**
+
+Open ``(rule, smiles)`` product-parity gaps on the parametric grid are
+``pytest.mark.xfail`` via data in
+``tests/forest/parity_xfail_cases.py`` (``PARITY_PRODUCT_XFAIL``). Meta-tests
+refuse stale PASS entries and unmarked live gaps. Remove a row when Phase
+1–3 closes it against **approved chemistry**.
+
+**Product / charge / tautomer standardization** (nitro ``[N+](=O)[O-]``,
+isoxazole keto–enamine, etc.) must be implemented as **explicit Rust
+transforms** with named invariants and unit tests. **Not approved:** RDKit
+``SanitizeMol`` / charge-move black boxes, Chematic opaque reparse as the
+normalizer, or silent ``unique_csmi`` as chemistry. Display identity may
+still round-trip RDKit CSMI (C1); the chemical rewrite itself stays in
+forest Rust.
+
 #### Work order impact
 
 - Phase 1 → drive work #12 toward green on approved chemistry (not blind match).
