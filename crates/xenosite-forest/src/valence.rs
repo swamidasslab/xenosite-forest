@@ -89,18 +89,27 @@ fn oxygen_oxonium(mol: &Molecule) -> bool {
 /// Protonated iminium (`[NH+]=`) and quaternary iminium (`C[N+](C)=C`):
 /// path-end rematch junk from neutral amides / dialkylanilines
 /// (APAP H → `CC(=O)[NH+]=C1…`; `CN(C)c1ccc(O)cc1` → `C[N+](C)=C1…`).
-/// Nitro `N+` (doubles only to O) and pyridinium (no C=N+) stay.
-/// Closed-shell prefer (HEURISTICS C10).
+/// Nitro `N+` (doubles only to O), N-oxides (`[N+]([O-])=`), and pyridinium
+/// (no C=N+) stay. Closed-shell prefer (HEURISTICS C10).
 fn nitrogen_iminium(mol: &Molecule) -> bool {
     for (idx, atom) in mol.atoms() {
         if atom.element.atomic_number() != 7 || atom.charge <= 0 {
             continue;
         }
-        let double_to_carbon = mol.neighbors(idx).any(|(nbr, bidx)| {
-            matches!(mol.bond(bidx).order, BondOrder::Double)
-                && mol.atom(nbr).element.atomic_number() == 6
-        });
-        if double_to_carbon {
+        let mut double_to_carbon = false;
+        let mut oxide = false;
+        for (nbr, bidx) in mol.neighbors(idx) {
+            let nz = mol.atom(nbr).element.atomic_number();
+            let order = mol.bond(bidx).order;
+            if nz == 6 && matches!(order, BondOrder::Double) {
+                double_to_carbon = true;
+            }
+            if nz == 8 && mol.atom(nbr).charge < 0 {
+                oxide = true;
+            }
+        }
+        // N-oxide / nitro: O- on N+ is a real metabolite (PhNCO NOx).
+        if double_to_carbon && !oxide {
             return true;
         }
     }
