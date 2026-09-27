@@ -597,11 +597,25 @@ impl PairCandidate {
                     product = product.with_atom_aromatic(atom_idx(atom), false);
                 }
             }
+            // Saturate sites + residual π atoms: H from final bond orders.
+            // Early settle fill (pre-rematch, all aromatic→single) can leave H
+            // on a hetero that rematch then doubles — pyridine para H minted
+            // `C1C=CC[NH]=C1` instead of neutral `C1=CCN=CC1`.
             // Saturate sites: H from final bond orders (closed shell), not a
             // blind +1 on top of the pre-match settle — that minted [CH3] on
             // aromatic path_end hydrogenation (benzene → cyclohexadiene).
             for &atom in &saturate {
                 fill_closed_shell_h(&mut product, atom);
+            }
+            // Residual heteros only: early settle fill (pre-rematch, aromatic→
+            // single) can leave H on N/O that rematch then doubles — pyridine
+            // para H minted `C1C=CC[NH]=C1` instead of neutral `C1=CCN=CC1`.
+            // Carbons stay on move_charge H-travel (aromatic bond-sum delta).
+            for &atom in &residual.atoms {
+                let z = product.atom(atom_idx(atom)).element.atomic_number();
+                if z == 7 || z == 8 {
+                    fill_closed_shell_h(&mut product, atom);
+                }
             }
             move_charge_with_bonds(&mut product, &before, &was_aromatic);
             // Stamp surviving aromatic 2-core; leave the rest localized.
@@ -1420,6 +1434,35 @@ mod tests {
         assert!(
             got.contains(&amide) || got.contains(&iminol),
             "PhNCO H should saturate one cumulated double to amide/iminol; got {got:?}"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_pyridine_para_emits_neutral_dihydropyridine() {
+        // Para path_end (1,4) rematch must refill residual N H after assignment —
+        // early settle fill on all-single aromatic→single would leave H on N and
+        // mint [NH+]= iminium instead of neutral C1=CCN=CC1.
+        use crate::rules::hydrogenation;
+        let mol = parse_mol("c1ccncc1").unwrap();
+        let endpoints = hydrogenation()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of("C1=CCN=CC1").unwrap();
+        let got: BTreeSet<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().map(|p| canon_of(p).unwrap()))
+            .collect();
+        assert!(
+            got.contains(&want),
+            "pyridine para H should emit neutral 1,4-dihydropyridine; got {got:?}"
+        );
+        assert!(
+            !got.iter().any(|p| p.contains("[NH+") || p.contains("[nH+]")),
+            "pyridine para H must not emit iminium; got {got:?}"
         );
     }
 

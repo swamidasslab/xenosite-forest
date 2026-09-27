@@ -379,11 +379,16 @@ hetero leaves): otherwise `atom_must_be_matched` treats those carbons as
 already paired and demoted carbonyl carbons cannot complete a matching.
 Forced constraints re-assert edit-new / hetero leaves. Saturate demotes path
 π first (styrene vinyl), so those edges are gone before perceive and rematch
-freely. Status: approved. Tests:
+freely. After rematch, **refill closed-shell H on residual π atoms** (not only
+saturate sites): early settle fill runs while aromatic bonds are demoted to
+single and can leave H on a hetero that rematch then doubles (pyridine para H
+→ `[NH+]=` instead of neutral `C1=CCN=CC1`). Status: approved. Tests:
 `quinone_formation_add_carbonyl_on_phnco_keeps_nco` /
 `hydrogenation_styrene_vinyl_ring_path_emits_exocyclic` /
 `hydrogenation_benzoquinone_para_o_emits_hydroquinone` /
-`quinone_formation_dealkylates_phenyl_ncx_ahead_of_python`.
+`quinone_formation_dealkylates_phenyl_ncx_ahead_of_python` /
+`hydrogenation_phnco_saturates_one_cumulated_double` /
+`hydrogenation_pyridine_para_emits_neutral_dihydropyridine`.
 
 **Saturate→residual π:** when a saturate site still has a double/triple into the
 residual (styrene vinyl CH2 end), demote that edge before rematch — same
