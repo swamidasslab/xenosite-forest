@@ -171,8 +171,7 @@ Status: **approved** (supersedes C7’s undecided fork).
 ### C13 — Product-identical distinct sites; Dealk one-side polymorphism
 
 Two related gaps where ``unique_csmi`` quietly collapses (C11 soft failure)
-or where pattern data over-emits. **Not decided** — need a schema/data
-answer before code. Do not invent a silent branch.
+or where pattern data over-emits.
 
 #### A. Genuinely two sites → one product bag
 
@@ -209,42 +208,20 @@ bad case is both sides quaternary (ester) with one product bag.
 (DIVERGENCES / HEURISTICS). Undirected unique-edit for all Dealk is
 **not** a candidate.
 
-#### Options under consideration (pick later; do not ship a branch)
+#### Options under consideration (historical)
 
-1. **Canonical site + ``product_equiv`` on SiteInfo** (user sketch): after
-   apply, under ``(rule, pattern)``, group emissions with equal fragment
-   CSMI frozenset; emit once at lex-smallest site key; record the other
-   sites on a new field (name TBD: ``product_equiv`` / ``equiv_sites``).
-   Distinct from unique-edit ``orbit`` (automorphism class). Discovery
-   still uses product identity; yield is explicit one + data, not silent
-   ``unique_csmi`` drop. Epoxide / ester both fit if they land in this
-   class.
+1. Canonical site + broad ``product_equiv`` on same product bag alone.
+2. SMARTS / ``when`` partition (ester carbonyl-side only).
+3. PatternInfo flag folding directed embeddings that share map 2.
+4. Rely on ``unique_csmi`` — **not approved** (C11).
 
-2. **SMARTS / ``when`` partition** so only one side of a Y-linker matches
-   for product-symmetric cleavages (e.g. ester carbonyl-side only). Pure
-   sites/patterns/whens; no product-layer fold. Risk: missing a real
-   regioisomer when products would have differed; must be pattern-local.
+**Superseded by C18:** adopted criterion is **equivalent-embedding collapse**
+on shared undirected scissile bond + same linker-cleavage family + same
+normalized product bag — **not** broad same-product fold, **not** SMARTS
+partition as the primary design, **not** ``unique_csmi``. Status of this
+entry: **superseded**. Tracker remains work #15 until schema lands.
 
-3. **PatternInfo flag** that directed embeddings sharing map 2 (leave
-   partner) are product-folded when products match — data on the rule,
-   still needs apply or a proven identity. Close to (1) with a narrower
-   key.
-
-4. **Rely on ``unique_csmi``** for this class only. **Not approved** as the
-   design (C11); at most a temporary xfail until (1)–(3) lands.
-
-Related: ``cleave_side_group`` folds **across rules** at expand; it does
-not solve within-leaf directed double-emit. ``canonical_emitted_sites`` is
-automorphism lex remap, not product-class fold.
-
-Status: **not decided**. Tracker: work order #15. Soft-fail xfail for
-aspirin Dealkylation stays under C11 until this choice is approved and
-implemented.
-
-**Reproduce / live bags:** [PARITY_REMAINING.md](PARITY_REMAINING.md)
-(aspirin + full remaining-fail table with SMILES). Chemical note on aspirin:
-one ester hydrolysis → one product bag is right; Rust site count is closer
-but only via silent ``unique_csmi`` (not approved as the design).
+**Reproduce / live bags:** [PARITY_REMAINING.md](PARITY_REMAINING.md).
 
 ### C14 — ``exclusive_partner`` on Effect (bridging N/O)
 
@@ -294,6 +271,97 @@ parity flags before ``find_matches``. Treat remaining gaps as edit / accept /
 form / site-bag issues (H cumulated paths, QF extras, Dealk ring-open, etc.).
 Status: **approved**.
 
+### C18 — Chemistry-first parity plan (adopt / modify / defer)
+
+Decision on the 2026-09-27 chemistry-first resolution plan. Full fail table:
+[PARITY_REMAINING.md](PARITY_REMAINING.md). Does **not** target literal Python
+parity (C8). Python leaf bags are historical evidence; approved chemistry is
+the oracle. RDKit CSMI remains the **identity** key (C1) — that is spelling,
+not chemistry authority.
+
+#### Adopted posture — **approved**
+
+1. Preserve chemically plausible Rust-ahead products.
+2. Remove Rust products that violate transformation family or valence/redox.
+3. Port Python behavior only when it is real intended metabolism.
+4. Unresolved differences are explicit policy — not silent ``unique_csmi`` /
+   CSMI churn (C11).
+
+Conceptual split (implement with C13 schema, not all at once):
+``raw_match_count`` / ``event_count`` / ``product_count``. Do **not** invent
+the full product-metadata YAML surface until each field has a home on
+``PatternInfo`` / ``Emission`` / SiteInfo (data-not-branches).
+
+#### Phase 1 immediate fixes — **approved** (implement next)
+
+| # | Case | Decision |
+|---|------|----------|
+| 1 | Nitro charge form (Dealk/NDealk) | Keep Rust chemistry; normalize to ``[N+](=O)[O-]``. Not a new reaction. |
+| 2 | Cinnoline ring-open N=N | Keep Rust azo/imine; rematch must not add undeclared hetero H / charge. |
+| 3 | Generic S=O hydrogenation | Refuse: generic H may not select hypervalent S/P π edges unless a dedicated rule opts in (data gate, not molecule ``if``). |
+| 4 | SMx C–N cleavage | Rust-ahead accepted; pin or lift Python. |
+| 5 | Cumulated ``X=CN=C1…`` H | Keep Rust refuse; quarantine Python extras. |
+| 6 | Ph2NMe QF | Enumerate both carbon leaves (Me and Ph) when valence/accept pass. |
+| 7 | Dihydroacridine → acridine | Keep under **Dehydrogenation**; not QF (see family contract). |
+
+#### Policy layer — **approved** (write before patching)
+
+**C13 event equivalence (supersedes C13 options):** collapse directed
+embeddings only when they share the **same undirected scissile bond**, belong
+to the **same declared linker-cleavage family**, and emit the **same
+normalized product bag**. Emit one canonical event; retain equivalent
+embeddings on the record (name TBD — not a broad ``product_equiv`` keyed
+only on products). SMARTS partition is **not** the primary design.
+``unique_csmi`` is **not** the mechanism.
+
+Aspirin ``CC(=O)Oc1ccccc1C(=O)O``: one ester event, two directed embeddings
+``(1,3)`` / ``(4,3)``.
+
+Benzene-oxide DH ``C1=CC2OC2C=C1``: same architecture, but first compare
+atom/bond-change sets. Product ``c1ccc2c(c1)O2`` is **aromatic benzene-oxide
+framework writing**, not benzofuran (``c1ccc2occc2c1``). Fix naming in notes.
+
+**Nitro hydrogenation:** remove from generic Hydrogenation; dedicated
+NitrogenReduction (nitroso / hydroxylamine / amine). No radicals; no
+preferred endpoint ``[O-][NH+](O)Ar``. Applies to nitrobenzene and
+chloramphenicol.
+
+**QF vs DH:** DH = net H loss / aromatization; QF = quinonoid carbonyl (or
+explicitly permitted quinone-imine/methide patterns). Pure aromatization is
+not QF. Dihydroacridine→acridine = DH only.
+
+**Isoxazole N–O (SMx NitrogenReduction):** if atom-mapped tautomer
+equivalents, canonicalize to keto–enamine
+``CC(=O)C=C(N)NS(=O)(=O)c1ccc(N)cc1``; if connectivity differs, treat as
+template difference — do not normalize away.
+
+#### Deferred hard cases — **approved** (boundaries now; no local parity patch)
+
+| Case | SMILES | Boundary now |
+|------|--------|--------------|
+| Olsalazine H / QF / DH | ``OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O`` | No generic path across azo bridge; dedicated azo reduction later; quarantine Py multi-ring path extras |
+| Cinnoline H / QF multi-ring | ``c1ccc2nnccc2c1`` | Explicit center + H delta + bounded component before enabling; keep ring-open N=N fix (Phase 1) separate |
+| Benzene-oxide QF | ``C1=CC2OC2C=C1`` | Exclude mere re-aromatization / non-quinonoid mono-carbonyl until QF contract is code |
+
+#### Not approved / modified
+
+| Proposal | Status |
+|----------|--------|
+| Broad ``product_equiv`` = same product bag alone | **not approved** (too wide) |
+| SMARTS orientation as primary C13 fix | **not approved** as primary (ok as later pattern-local aid) |
+| ``unique_csmi`` as C13 design | **not approved** (C11) |
+| Literal Python parity as target | **not approved** (C8) |
+| Full product metadata schema in Phase 1 | **not decided** field-by-field; three counts are the goal |
+| Retire Python tests immediately | **not approved**; demote as oracle via Rust-ahead pins + approved chemistry |
+
+#### Work order impact
+
+- Phase 1 → drive work #12 toward green on approved chemistry (not blind match).
+- Work #15 → implement C18 C13 criterion (schema + aspirin/benzene-oxide tests).
+- Hard cases stay open with instrumentation, not conjugated-path rewrite.
+
+Status: **approved**.
+
 ---
 
 
@@ -322,10 +390,13 @@ when chematic saturates ``[SH+]``. Hydroxy S-ox product is organic ``O``
 | 9 | BenzodioxoleReduction: wrong products | **done** | CH2-leave atom-remove edit (chematic SMIRKS drops ring bonds) |
 | 10 | SulfurOxidation: form / set mismatch on ``CCS`` | **done** | hydroxy ``[O]``→``O``; enforce H0 on charged S-oxide |
 | 11 | Dehydration: site-count mismatch with matching products | **done** | beta_elim site_map=1 matches Python |
-| 12 | Drive parametric suite green; no silent skips | **blocked on 4–11** | only C6-style excuses |
+| 12 | Drive parametric suite green on **approved chemistry** (C18), not literal Py match | **in progress** | C8, C18 Phase 1 |
 | 13 | Reduce reliance on Python sanitize for product validity | **open** | C10 — soft failure; prefer emit-path fixes |
 | 14 | ``unique_csmi_compliant`` + CSMI-dup parametric test | **done** | C11 — only that test xfails non-compliant; hard-fail if compliant |
-| 15 | Product-identical distinct sites + Dealk other-side double-emit | **open** | C13 — not decided; options: ``product_equiv`` field vs SMARTS partition |
+| 15 | C13 equivalent-embedding (scissile bond + family + bag); aspirin / benzene-oxide | **open** | C18 supersedes C13 options; schema TBD |
+| 22 | C18 Phase 1: nitro form, cinnoline N=N, S=O H refuse, SMx C–N pin, cumulated H refuse, Ph2NMe both leaves, DH acridine | **open** | C18 |
+| 23 | C18 Phase 2: nitro≠generic H; QF↔DH contract; isoxazole tautomer canon | **open** | C18 |
+| 24 | C18 Phase 3: olsalazine/cinnoline/benzene-oxide QF — defer + instrument | **deferred** | C18 |
 | 16 | Chematic atom-tracking migrate; drop vendored patch | **blocked on parity** | TODO.md § After parity — pass tracking tests, remove `vendor/chematic` |
 | 17 | Centralize ForestMol cache + copy/edit behind ForestMol methods | **blocked on parity** | TODO.md § After parity — private-to-find-strays; keep user-visible cache |
 | 18 | ``exclusive_partner`` bridging N/O: tests + corpus + Rust↔Py parity | **done** | C14 — Python ``test_exclusive_partner`` + Rust ``pair_edit`` refuse tests; corpus bridging N/O extras |

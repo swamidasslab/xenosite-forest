@@ -224,13 +224,18 @@ Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`,
 
 ## Product-identical distinct sites / Dealk other-side double-emit
 
-Status: **not decided** (emission shape); tracking in [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C13**.
+Status: **approved** (criterion); schema implementation open — see
+[RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C18** (supersedes C13 options).
 
-Automorphism-equivalent sites already emit once with ``orbit`` / ``site_orbit``.
-Ester Dealkylation (two directed ``quaternary_alcohol`` sites on the bridging
-O, unequal ranks, one product bag) and similar cases are a different class.
-``unique_csmi_compliant=False`` on those leaves until data (``product_equiv`` /
-identity maps) folds them — only the CSMI-dup test xfails (C11).
+Collapse directed embeddings only when they share the same **undirected
+scissile bond**, the same declared **linker-cleavage family**, and the same
+**normalized product bag**. Emit one canonical event; retain equivalent
+embeddings on the record. Not broad same-product fold. Not ``unique_csmi``
+(C11). Not SMARTS partition as the primary design.
+
+Aspirin ester ``CC(=O)Oc1ccccc1C(=O)O``: embeddings ``(1,3)`` / ``(4,3)`` →
+one event. ``unique_csmi_compliant=False`` on Dealkylation remains until the
+schema lands — only the CSMI-dup test xfails (C11).
 
 ## ``unique_csmi_compliant`` (rule data)
 

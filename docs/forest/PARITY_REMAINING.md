@@ -14,6 +14,9 @@ Arom-model ruled out (C17). Chemical correctness over blind match (C8).
 Live recount 2026-09-27: **29 failing / 3 now PASS** (QF Ph-aziridine, PhNMe2, 4-OH-PhNMe2).
 Artifact `parity_full_exocyclic.out` still lists 32 (stale on those three).
 
+**Plan adoption:** [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) **C18** — chemistry-first;
+not literal Python parity. Phase 1 / policy / defer listed there.
+
 Columns: **sym** = harness symptom; **chem** = who looks more correct;
 **fix** = fixability.
 
