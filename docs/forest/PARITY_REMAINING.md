@@ -148,8 +148,8 @@ Columns: **sym** = harness symptom; **chem** = who looks more correct;
 - **SMILES:** `C1=CC2OC2C=C1`
 - **Symptom:** `site_count` · sites py/rs `3/2` · products py/rs `2/2` · `site_kind=atom_pair`
 - **Chem / fix:** unclear / needs_decision
-- **Likely cause:** C13-like: two alkyl sites → same benzofuran bag
-- **Bag:** both engines emit benzofuran `c1ccc2c(c1)O2`; Python counts that bag twice (two alkyl DH sites), Rust once. Same C13 shape as aspirin.
+- **Likely cause:** C13-like: two alkyl sites → same aromatic benzene-oxide bag `c1ccc2c(c1)O2` (not benzofuran `c1ccc2occc2c1`)
+- **Bag:** both engines emit aromatic benzene-oxide writing `c1ccc2c(c1)O2` (not benzofuran `c1ccc2occc2c1`); Python counts that bag twice (two alkyl DH sites), Rust once. Same C13 shape as aspirin — compare change-sets before collapsing.
 
 ### Dehydrogenation — dihydroacridine
 
@@ -326,22 +326,25 @@ Columns: **sym** = harness symptom; **chem** = who looks more correct;
 - **only Python:** `O=C1C=CC2=NN=CC(=O)C2=C1`, `O=C1C=NN=C2C(=O)C=CC=C12`
 - **only Rust:** `O=c1[nH][nH]c2ccccc2c1=O`, `O=c1cc2c(=O)cccc-2[nH][nH]1`, `O=c1cc2cc[nH][nH]c-2cc1=O`, `O=c1ccc(=O)c2[nH][nH]ccc1=2`, `O=c1ccc2[nH][nH]ccc=2c1=O`, `O=c1ccc2cc(=O)[nH][nH]c-2c1`, … +1 more
 
-## Adjudication queue (unclear / both_wrong / needs_decision)
+## Adjudication queue (policy under C18)
 
-Focus these when picking chemistry; SMILES in table above.
+Resolved as policy in C18 (implement Phase 2 / C13 schema — not local patches):
 
-- **Dealkylation / aspirin** `CC(=O)Oc1ccccc1C(=O)O` — C13: two quaternary_alcohol on ester O → one bag; Py keeps both (unique_csmi_compliant=False); Rust unique_csmi drops one
-- **Dehydrogenation / benzene-oxide** `C1=CC2OC2C=C1` — C13-like: two alkyl sites → same benzofuran bag
-- **Hydrogenation / olsalazine** `OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O` — azo-bridge path saturations Py-only
-- **Hydrogenation / nitrobenzene** `[O-][N+](=O)c1ccccc1` — Py radicals / N([O-])[O-] vs Rust [NH+](O)
-- **Hydrogenation / chloramphenicol** `O=C(NCC(O)c1ccc([N+](=O)[O-])cc1)C(Cl)Cl` — same nitro-H cluster as nitrobenzene
-- **Hydrogenation / cinnoline** `c1ccc2nnccc2c1` — Py keeps NN= dihydros; Rust also emits NN hydrazine paths
-- **NitrogenReduction / sulfamethoxazole** `Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1` — isoxazole N–O open: Py amide-amine vs Rust enol/imine
-- **QuinoneFormation / benzene-oxide** `C1=CC2OC2C=C1` — Py extra oxide/quinone + benzofuran; Rust thinner
-- **QuinoneFormation / dihydroacridine** `c1ccc2c(c1)Nc1ccccc1C2` — Rust also emits acridine under QF (same as DH)
-- **QuinoneFormation / cinnoline** `c1ccc2nnccc2c1` — Py azo-diones vs Rust hydrazine-diones [nH][nH]
+- **Dealkylation / aspirin** `CC(=O)Oc1ccccc1C(=O)O` — equivalent-embedding collapse (scissile bond + family + bag)
+- **Dehydrogenation / benzene-oxide** `C1=CC2OC2C=C1` — same architecture; product is aromatic oxide writing not benzofuran; compare change-sets
+- **Hydrogenation / nitrobenzene** `[O-][N+](=O)c1ccccc1` — out of generic H; dedicated NitrogenReduction
+- **Hydrogenation / chloramphenicol** `O=C(NCC(O)c1ccc([N+](=O)[O-])cc1)C(Cl)Cl` — same nitro policy
+- **QuinoneFormation / dihydroacridine** `c1ccc2c(c1)Nc1ccccc1C2` — acridine under DH only, not QF
+- **NitrogenReduction / sulfamethoxazole** `Cc1cc(NS(=O)(=O)c2ccc(N)cc2)no1` — tautomer canon to keto–enamine if mapped-equivalent
+
+Still deferred (Phase 3 — instrument, no parity chase):
+
+- **Hydrogenation / olsalazine** `OC(=O)c1cc(/N=N/c2ccc(c(c2)C(=O)O)O)ccc1O` — no generic path across azo
+- **Hydrogenation / cinnoline** `c1ccc2nnccc2c1` — multi-ring H; Phase 1 keeps ring-open N=N only
+- **QuinoneFormation / benzene-oxide** `C1=CC2OC2C=C1` — wait on QF contract
+- **QuinoneFormation / cinnoline** `c1ccc2nnccc2c1` — multi-ring QF; same deferral
 
 ## See also
 
-- [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) C8, C11, C13, C16, C17
-- [HEURISTICS.md](HEURISTICS.md) directed_bond, unique_csmi_compliant, product-identical sites
+- [RUST_PYTHON_PARITY.md](RUST_PYTHON_PARITY.md) C8, C11, C13→C18, C16, C17, **C18**
+- [HEURISTICS.md](HEURISTICS.md) directed_bond, unique_csmi_compliant, C13 equivalent-embedding
