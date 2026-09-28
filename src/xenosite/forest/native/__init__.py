@@ -36,9 +36,9 @@ from xenosite.forest.legacy.step_plan import (  # noqa: E402
     pathway_to_json,
 )
 
-from . import rules
-from .atom_tracker import AtomTracker
-from .find_path import (
+from . import rules  # noqa: E402
+from .atom_tracker import AtomTracker  # noqa: E402
+from .find_path import (  # noqa: E402
     CleavageSide,
     Maybe,
     PathCounters,
@@ -47,8 +47,8 @@ from .find_path import (
     dfs,
     find_path,
 )
-from .phaseone import PhaseOneQF, PhaseOneRS, metabolize, reaction_labels
-from .rulesets import PhaseOne, RuleSet
+from .phaseone import PhaseOneQF, PhaseOneRS, metabolize, reaction_labels  # noqa: E402
+from .rulesets import PhaseOne, RuleSet  # noqa: E402
 
 # Compatibility alias for callers that used the old counter name.
 PathSearchCounters = PathCounters

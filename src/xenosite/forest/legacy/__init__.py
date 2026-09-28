@@ -25,14 +25,14 @@ warnings.warn(
     stacklevel=2,
 )
 
-from .bfs import bfs, dfs
-from .guided_path import (
+from .bfs import bfs, dfs  # noqa: E402
+from .guided_path import (  # noqa: E402
     PathOutcome,
     PathSearchCounters,
     find_path,
     find_path_guided,
 )
-from .path_context import (
+from .path_context import (  # noqa: E402
     ADD_O,
     CLEAVE,
     CLEAVE_OR_ADD_O,
@@ -40,12 +40,12 @@ from .path_context import (
     REMOVE_O,
     FormulaHint,
 )
-from .phaseone import PhaseOneQF, PhaseOneRS
-from . import rules
-from .rulesets import RULESETS, RuleSet, load_ruleset
-from .step_plan import And, AtomRef, Deps, Linearization, Or, Step, StepPlan
-from .step_plan import pathway_from_json, pathway_to_json
-from .trace import AtomTrace
+from .phaseone import PhaseOneQF, PhaseOneRS  # noqa: E402
+from . import rules  # noqa: E402
+from .rulesets import RULESETS, RuleSet, load_ruleset  # noqa: E402
+from .step_plan import And, AtomRef, Deps, Linearization, Or, Step, StepPlan  # noqa: E402
+from .step_plan import pathway_from_json, pathway_to_json  # noqa: E402
+from .trace import AtomTrace  # noqa: E402
 
 __all__ = [
     "bfs",

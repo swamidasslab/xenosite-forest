@@ -18,8 +18,8 @@ use crate::forest_mol::ForestMol;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
 use crate::rules::{
-    dealkylation as dealkylation_rs, dehydrogenation as dehydrogenation_rs,
-    default_ruleset as default_ruleset_rs, epoxidation as epoxidation_rs,
+    dealkylation as dealkylation_rs, default_ruleset as default_ruleset_rs,
+    dehydrogenation as dehydrogenation_rs, epoxidation as epoxidation_rs,
     epoxide_opening as epoxide_opening_rs, hydrolysis as hydrolysis_rs,
     hydroxylation as hydroxylation_rs, n_dealkylation as n_dealkylation_rs,
     phase_one as phase_one_rs, quinone_formation as quinone_formation_rs,
