@@ -445,6 +445,7 @@ fn metabolize_with_python(
     drop_skeleton_twins=true,
     score="log-neg-pc",
 ))]
+#[allow(clippy::too_many_arguments)]
 fn find_path(
     py: Python<'_>,
     reactant: &str,
