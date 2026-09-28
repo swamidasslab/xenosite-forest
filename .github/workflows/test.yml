@@ -7,46 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  pytest-rust:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.88.0"
-      - name: Python headers
-        run: sudo apt-get update && sudo apt-get install -y python3-dev
-      - name: Install package (no RDKit) and build extension
-        run: |
-          uv sync --group dev
-          uv run maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
-      - name: Show package version
-        run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
-      - name: Rust product tests (no RDKit)
-        run: uv run pytest tests/forest/rust -n auto --tb=short
-      - name: Public stub must not import RDKit
-        run: |
-          uv run python - <<'PY'
-          import sys
-          assert "rdkit" not in sys.modules
-          import xenosite.forest
-          assert "rdkit" not in sys.modules
-          print("stub ok without rdkit")
-          PY
-
-  pytest-native-legacy:
+  # Job name must stay ``pytest`` — Protect main requires ``pytest (3.11)`` … ``(3.14)``.
+  pytest:
     runs-on: ubuntu-latest
     # pynauty sdist configures nauty with CFLAGS='-O4 -fPIC', which lets
     # nauty add -march=native. GHA runners differ; a uv-cached native wheel
@@ -63,10 +25,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache-suffix: portable-x86-64
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+      - name: Python headers
+        run: sudo apt-get update && sudo apt-get install -y python3-dev
       - name: Cache Hypothesis example database
         uses: actions/cache@v4
         with:
@@ -75,10 +45,14 @@ jobs:
           restore-keys: |
             hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-
             hypothesis-${{ runner.os }}-
-      - name: Install package with RDKit extras
-        run: uv sync --extra rdkit --extra network --group dev
-      - name: Native + legacy suites
-        run: uv run pytest tests/forest/native tests/forest/legacy src/xenosite/forest/native -n auto --cov=xenosite.forest --cov-report=term-missing
+      - name: Install package (RDKit extras) and build extension
+        run: |
+          uv sync --extra rdkit --extra network --group dev
+          uv run maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
+      - name: Show package version
+        run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
+      - name: Full forest suite (public stub + native + legacy)
+        run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
 
   rust:
     runs-on: ubuntu-latest
