@@ -38,8 +38,8 @@ constructor / reaction pieces return plain mols without a forest; re-enter with
 
 ```python
 from rdkit import Chem
-from xenosite.forest.rules import Hydroxylation
-from xenosite.forest.records import Smarts
+from xenosite.forest.native.rules import Hydroxylation
+from xenosite.forest.native.records import Smarts
 
 mol = Chem.MolFromSmiles("Oc1ccccc1")
 
@@ -86,7 +86,8 @@ which clears for you).
 
 | Member | Returns | Notes |
 | ------ | ------- | ----- |
-| `csmi` | `str` | Canonical SMILES (`isomericSmiles=False`). Identity for dedup / search. |
+| `csmi` | `str` | Canonical SMILES (display / target compare). **Not** always safe for dedup. |
+| `stable_csmi_key` (Rust) | `str \| None` | Chematic fail-closed identity. **Can be null/`None`** — then skip CSMI dedup; do not fall back to `csmi`. |
 | `formula` | `Formula` | Heavy-atom counts, total H, formal charge. |
 | `topol_equiv` | `dict[int, int]` | Atom index → topological equivalence class. |
 | `rings` | `dict[int, tuple[tuple[int, ...], ...]]` | Per-atom ring membership. |
@@ -96,7 +97,7 @@ which clears for you).
 | `smarts_matches` | `tuple[dict[int, int], ...]` | Cached substructure matches for a `Smarts`, keyed by atom map. |
 
 ```python
-from xenosite.forest.records import Smarts
+from xenosite.forest.native.records import Smarts
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
 assert mol.xf.csmi == "Oc1ccccc1"
@@ -105,10 +106,10 @@ hits = mol.xf.smarts_matches(Smarts("[#8:1]-[#6:2]"))
 # e.g. ({1: oxygen_idx, 2: carbon_idx}, ...)
 ```
 
-Emission identity in `metabolize` is `frozenset(p.xf.csmi for p in products)`
-(computed for unique-edit check / `unique_csmi` yield). There is no
-`info["csmi"]` — read each finished mol's `product.xf.csmi` (cached after
-first read).
+Emission identity in `metabolize` is the frozenset of **stable** product keys
+when Chematic admits them (`canonical_smiles_stable_key`); if any fragment is
+unstable, that emission is not CSMI-deduped (fail-closed). Display spelling
+remains `product.xf.csmi` / Rust `csmi`. There is no `info["csmi"]`.
 
 ## Atom tracing (`mol.xf.tracing`)
 
@@ -193,7 +194,7 @@ moves.
 
 ```python
 from rdkit import Chem
-from xenosite.forest.rules import Hydroxylation
+from xenosite.forest.native.rules import Hydroxylation
 
 reactant = Chem.MolFromSmiles("CCO")
 products, info = next(Hydroxylation().metabolize(reactant))
@@ -222,7 +223,7 @@ reactant trace and records each child transform.
 **Before (AtomTracker):**
 
 ```python
-from xenosite.forest import AtomTracker  # deprecated
+from xenosite.forest.native import AtomTracker  # deprecated
 
 te = AtomTracker.topol_equiv(mol)
 # archive sites often looked like ("Hydroxylation_…", (0, 2))
@@ -325,10 +326,10 @@ Ethanol → primary alcohol hydroxylation, asking “which atoms are new?”:
 
 ```python
 from rdkit import Chem
-from xenosite.forest.rules import Hydroxylation
+from xenosite.forest.native.rules import Hydroxylation
 
 # --- Before (deprecated facade; still works, warns) ---
-from xenosite.forest import AtomTracker
+from xenosite.forest.native import AtomTracker
 import warnings
 
 parent = Chem.MolFromSmiles("CCO")
@@ -383,7 +384,7 @@ around tagging kwargs, see [`MIGRATING_0.7.md`](MIGRATING_0.7.md).
 
 Maintainers: the TypedDict layout of `_forest` (`Forest`, nested `Structure` /
 `AtomTrace`, …) is declared in
-[`src/xenosite/forest/records.py`](../../src/xenosite/forest/records.py). Exact
+[`src/xenosite/forest/native/records.py`](../../src/xenosite/forest/native/records.py). Exact
 field names and nesting are an unstable cache layout; prefer the `xf` surface
 above when writing application code.
 
@@ -408,4 +409,4 @@ callers should not. Pair orbits require **pynauty** (always nauty):
 | [`MIGRATING_0.7.md`](MIGRATING_0.7.md) | 0.6 → 0.7 caller changes |
 | [`PAIR_ORBITS.md`](PAIR_ORBITS.md) | Pair-orbit unique-edit |
 | [`HEURISTICS.md`](HEURISTICS.md) | Find-path / filter policy |
-| [`records.py`](../../src/xenosite/forest/records.py) | `_forest` TypedDicts — unstable cache layout |
+| [`records.py`](../../src/xenosite/forest/native/records.py) | `_forest` TypedDicts — unstable cache layout |

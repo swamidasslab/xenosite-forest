@@ -1,0 +1,16 @@
+# Native door wheel (chematic + canonaut). Not the PyPI RDKit package.
+[build-system]
+requires = ["maturin>=1.3,<2"]
+build-backend = "maturin"
+
+[project]
+name = "xenosite-forest-native"
+version = "0.1.0"
+description = "Derisk native chemistry door (chematic + canonaut)"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "xenosite_forest"
+features = ["python", "extension-module"]

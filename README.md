@@ -18,6 +18,13 @@ or
 pip install xenosite-forest
 ```
 
+The default install is the **Rust** chematic door (no RDKit). For the RDKit
+reference engine and the frozen 0.6.x archive:
+
+```bash
+uv add "xenosite-forest[rdkit]"
+```
+
 Optional NetworkX helpers for building a metabolite graph:
 
 ```bash
@@ -30,30 +37,37 @@ Optional [xenosite-predict](https://github.com/swamidasslab/xenosite-predict) (s
 uv add "xenosite-forest[predict]"
 ```
 
-Requires **Python 3.11–3.14** and **RDKit 2022.03+**.
+Requires **Python 3.11–3.14**. RDKit 2022.03+ only with the ``[rdkit]`` extra.
+
+A WASM-clean Rust crate (chematic + canonaut) lives in [`crates/xenosite-forest`](crates/xenosite-forest). See [`docs/forest/RUST.md`](docs/forest/RUST.md) and [`docs/forest/MIGRATING_0.8.md`](docs/forest/MIGRATING_0.8.md).
 
 ## Quick start
 
 ```python
+from xenosite.forest import find_path, PhaseOne, Epoxidation
+
+hits, counters = find_path("CC", "CCO", max_paths=1)
+print(hits[0]["steps"], counters["billed"])
+```
+
+RDKit reference engine (requires ``[rdkit]``):
+
+```python
 from rdkit import Chem
-from xenosite.forest import bfs, rules, PhaseOneRS
+from xenosite.forest.native import bfs, rules, PhaseOneRS
 
-# Pathway from ethanol to acetaldehyde
 smiles, steps, mols = next(bfs(["CCO", "CC=O"], ruleset="PhaseOneRS"))
-print(smiles)
-print(steps)
+print(smiles, steps)
 
-# Enumerate hydroxylation products of propane
 for products, info in rules.Hydroxylation().metabolize(Chem.MolFromSmiles("CCC")):
     print(info["site"], [p.xf.csmi for p in products])
-
-# Named Phase I ruleset
-print(sorted({rule.name for rule in PhaseOneRS}))
 ```
 
 A longer walkthrough is in [`examples/tutorial.ipynb`](https://github.com/swamidasslab/xenosite-forest/blob/main/examples/tutorial.ipynb). API notes are in [`docs/usage.md`](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/usage.md). Rulesets and their papers are in [`docs/rulesets.md`](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/rulesets.md).
 
 ### Command line
+
+Requires the ``[rdkit]`` extra (temporary native bridge until a Rust CLI ships):
 
 ```bash
 xenosite-forest CCO CC=O --ruleset PhaseOneRS --depth 1
@@ -82,6 +96,8 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[Rulesets and papers](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/rulesets.md)** — every built-in ruleset, Rainbow colors, and publication BibTeX
 - **[Usage](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/usage.md)** — public API and pathway search
 - **[Migrating to 0.7.0](docs/forest/MIGRATING_0.7.md)** — `metabolize` yield shape and other breaking changes
+- **[Migrating to 0.8.0](docs/forest/MIGRATING_0.8.md)** — rust / native / legacy layout, optional RDKit
+- **[Legacy freeze](docs/forest/LEGACY.md)** — frozen 0.6.x archive notes
 - **[xenosite-predict notes](docs/xenosite-predict.md)** — RDKit 2026 valence caches and DNA/CN conjugation vs GSH (downstream adapters)
 - **[Path-search performance](docs/forest/PERFORMANCE.md)** — archive BFS/DFS vs live `find_path` head-to-head
 - **[Heuristics / divergences / dropped](docs/forest/)** — design notes (`HEURISTICS`, `DIVERGENCES`, `DROPPED`, `PAIR_ORBITS`)
@@ -89,12 +105,11 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[xenosite.org](https://xenosite.org)** — XenoSite models for sites of metabolism and reactivity
 - **[Source repository](https://github.com/swamidasslab/xenosite-forest)** — code, issues, and releases
 
-Import the package as `xenosite.forest`. The previous forest implementation
-is the archive directory [`src/xenosite/_archive_forest/`](src/xenosite/_archive_forest/)
-on GitHub (not exercised by CI). See
-[`docs/forest/MIGRATING_0.7.md`](docs/forest/MIGRATING_0.7.md) for 0.7 API
-changes. `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can
-be installed alongside this one.
+Import the package as `xenosite.forest` (Rust public stub). The RDKit reference
+engine is `xenosite.forest.native`; the frozen 0.6.x archive is
+`xenosite.forest.legacy` (see [`docs/forest/LEGACY.md`](docs/forest/LEGACY.md)).
+`xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be
+installed alongside this one.
 
 ## Citation
 

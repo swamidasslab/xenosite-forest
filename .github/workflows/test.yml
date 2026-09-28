@@ -7,6 +7,7 @@ on:
     branches: [main]
 
 jobs:
+  # Job name must stay ``pytest`` — Protect main requires ``pytest (3.11)`` … ``(3.14)``.
   pytest:
     runs-on: ubuntu-latest
     # pynauty sdist configures nauty with CFLAGS='-O4 -fPIC', which lets
@@ -23,26 +24,66 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history + tags so hatch-vcs can derive the package version
           fetch-depth: 0
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache-suffix: portable-x86-64
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+      - name: Python headers
+        run: sudo apt-get update && sudo apt-get install -y python3-dev
       - name: Cache Hypothesis example database
         uses: actions/cache@v4
         with:
           path: .hypothesis
-          key: hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('tests/forest/test_bfs_fuzz.py', 'uv.lock') }}
+          key: hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('tests/forest/native/test_bfs_fuzz.py', 'uv.lock') }}
           restore-keys: |
             hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-
             hypothesis-${{ runner.os }}-
-      - name: Install package and test extras
-        run: uv sync --extra network --group dev
+      - name: Install package (RDKit extras) and build extension
+        run: |
+          uv sync --extra rdkit --extra network --group dev
+          uv run maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
       - name: Show package version
-        run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
-      - name: Run tests in parallel
-        run: uv run pytest tests/forest src/xenosite/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+        run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
+      - name: Full forest suite (public stub + native + legacy)
+        run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python headers
+        run: sudo apt-get update && sudo apt-get install -y python3-dev
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
+      - name: Test
+        run: cargo test -p xenosite-forest
+      - name: PyO3
+        run: |
+          cargo clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
+          cargo test -p xenosite-forest --features python
+      - name: WASM
+        run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
 
   lint:
     runs-on: ubuntu-latest
@@ -53,10 +94,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
+          cache-suffix: portable-x86-64
       - name: Install package and dev extras
-        run: uv sync --extra network --group dev
-      - name: Ruff (live forest only)
+        run: uv sync --extra rdkit --extra network --group dev
+      - name: Ruff (forest package + tests)
         run: uv run ruff check src/xenosite/forest tests/forest
-      - name: Pyright (live forest src only)
-        # Paths match [tool.pyright] include; tests stay out until typed clean.
+      - name: Pyright (forest src; legacy excluded in pyproject)
         run: uv run pyright src/xenosite/forest

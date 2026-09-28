@@ -1,0 +1,4 @@
+# Browser WASM (wasm32-unknown-unknown) needs a JS crypto backend for
+# getrandom, which canonaut pulls in via rand. Chematic itself is pure Rust.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]

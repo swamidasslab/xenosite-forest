@@ -18,6 +18,7 @@ __pycache__/
 # Build artifacts
 build/
 dist/
+target/
 src/xenosite/forest/_version.py
 
 # Editors and OS
@@ -39,3 +40,9 @@ data/
 _api
 .cenv
 .devcontainer
+
+# Local run artifacts and logs (never ship)
+artifacts/
+*.live.log
+*.err
+*.out

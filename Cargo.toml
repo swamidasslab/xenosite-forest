@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    "crates/xenosite-forest",
+    "vendor/chematic/crates/chematic-core",
+    "vendor/chematic/crates/chematic-smiles",
+    "vendor/chematic/crates/chematic-perception",
+    "vendor/chematic/crates/chematic-smarts",
+    "vendor/chematic/crates/chematic-rxn",
+    "vendor/chematic/crates/chematic",
+]
+resolver = "2"
+
+# Inherited by vendored chematic crates (`*.workspace = true`).
+# xenosite-forest sets its own package version/license explicitly.
+[workspace.package]
+version = "1.0.21"
+edition = "2024"
+rust-version = "1.88"
+authors = ["Kentaro Tanabe (kent-tokyo) <kent-tokyo@users.noreply.github.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/kent-tokyo/chematic"
+homepage = "https://kent-tokyo.github.io/chematic/"
+
+# Size-tuned WASM (does not change native `cargo test`).
+[profile.wasm-size]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
