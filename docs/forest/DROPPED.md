@@ -1,5 +1,5 @@
 This file lists what live ``xenosite.forest`` left out relative to the
-previous forest in the archive directory (``src/xenosite/_archive_forest/``).
+previous forest in the archive directory (``src/xenosite/forest/legacy/``).
 A listing is not approval.
 Each entry has `Status: approved`, `not approved`, or `not decided`.
 `approved` means the cut is accepted for the long term.
@@ -71,7 +71,7 @@ have to be a `phase1_steps` method on every rule, and the name need not
 stay "phase I". See the phase-one entry.
 
 `AtomTracker` in `base.py`, and `phase1_steps` on each rule in
-`forest/rules.py`. Live forest rules do not subclass `AtomTracker`.
+`forest/native/rules.py`. Live forest rules do not subclass `AtomTracker`.
 
 Old tests: `tests/test_phase1_steps_fuzz.py`, `tests/test_atom_trace_char.py`.
 
@@ -155,7 +155,7 @@ network API / `find_network_paths` scaffolding is not in live forest.
 MS1 / MS2 path finding (if pursued) stays on `find_path`-style
 APIs, not a revived `xenosite.net` package.
 
-Old code: `src/xenosite/_archive_forest/net.py`.
+Old code: `src/xenosite/forest/legacy/net.py`.
 
 ## find_path `cleavage_first` expand gate
 

@@ -23,13 +23,25 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Chemistry",
     "Intended Audience :: Science/Research",
 ]
-dependencies = [
-    "rdkit>=2022.3.3",
-    "pynauty",
-]
+dependencies = []
 keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
 
 [project.optional-dependencies]
+# RDKit Python engines (native reference + legacy archive). Not required for
+# the recommended Rust public API.
+rdkit = [
+    "rdkit>=2022.3.3",
+    "pynauty",
+]
+# Alias extras so callers can ask for the engine they need.
+native = [
+    "rdkit>=2022.3.3",
+    "pynauty",
+]
+legacy = [
+    "rdkit>=2022.3.3",
+    "pynauty",
+]
 network = [
     "networkx>=3.2.1",
     "tqdm>=4.66.0",
@@ -47,7 +59,9 @@ Issues = "https://github.com/swamidasslab/xenosite-forest/issues"
 Paper = "https://doi.org/10.1021/acs.jcim.0c00360"
 
 [project.scripts]
-xenosite-forest = "xenosite.forest.bfs:main"
+# Temporary native CLI bridge; requires the ``rdkit`` extra. Prefer the Rust
+# door once a rust CLI ships.
+xenosite-forest = "xenosite.forest.native.cli:main"
 
 [dependency-groups]
 dev = [
@@ -62,6 +76,7 @@ dev = [
     "pyright>=1.1.414",
     "ruff>=0.16.8",
     "xenopict>=0.3",
+    "maturin>=1.7",
 ]
 
 [tool.towncrier]
@@ -117,7 +132,7 @@ version-file = "src/xenosite/forest/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/xenosite"]
-# Archive ships for StepPlan/parity imports but is not supported API.
+# Legacy ships for StepPlan/parity imports but is not supported API.
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -135,29 +150,33 @@ addopts = "--doctest-modules -n auto --timeout=120 --import-mode=importlib"
 # Collect from src so importlib resolves xenosite.forest.* and xenosite stays
 # a PEP 420 namespace package (no xenosite/__init__.py).
 testpaths = ["tests/forest", "src/xenosite/forest"]
-pythonpath = ["src", "tests", "tests/_archive_forest"]
-# tests/_archive_forest is on path only so live ports can import example SMILES
-# modules (test_rules, …). Those tests are NOT collected (norecursedirs).
+pythonpath = ["src", "tests", "tests/forest/legacy"]
+# tests/forest/legacy is on path so native ports can import example SMILES
+# modules (test_rules, …). Legacy tests are collected under tests/forest/legacy.
 consider_namespace_packages = true
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
-# Archived pre-swap forest + its tests stay out of the default gate.
 norecursedirs = [
     ".git",
     ".venv",
     "build",
     "dist",
     ".hypothesis",
-    "_archive_forest",
 ]
 filterwarnings = [
     "error",
+    # Native / legacy package announcements on import. Register before any
+    # filter that imports those packages (category resolution under WAE).
+    "ignore:xenosite.forest.native is the RDKit reference:UserWarning",
+    "ignore:xenosite.forest.legacy is a frozen:DeprecationWarning",
     # Intentional archive chemotype noise; not a live-forest contract.
-    "ignore::xenosite._archive_forest.unstable.UnstableWarning",
+    "ignore::xenosite.forest.legacy.unstable.UnstableWarning",
     # Formula-delta check is soft (never drops). Suite asserts the shared
     # mismatch *collector* is empty (see tests/conftest.py); intentional
     # mismatch tests use @pytest.mark.allow_formula_delta_mismatch. Warnings
     # stay ignored so WAE does not double-fail beside the counter gate.
-    "ignore::xenosite.forest.rules.FormulaDeltaMismatchWarning",
+    # Message filter avoids importing the custom warning class at bootstrap
+    # (which would load native/__init__). SiteDeduplicationWarning stays error.
+    "ignore:Formula delta mismatch for pattern:UserWarning",
     # Deprecated AtomTracker facade: tests that call it use pytest.warns /
     # catch_warnings(ignore). Do not blanket-ignore DeprecationWarning.
     # Cross-rule overlaps log INFO only (no RedundantRulesWarning); SiteDeduplicationWarning
@@ -172,7 +191,7 @@ markers = [
 
 [tool.coverage.run]
 source_pkgs = ["xenosite.forest"]
-omit = ["*/_version.py", "*/_archive_forest/*"]
+omit = ["*/_version.py", "*/forest/legacy/*"]
 
 [tool.coverage.report]
 skip_empty = true
@@ -183,7 +202,7 @@ include = [
     "src/xenosite/forest",
 ]
 exclude = [
-    "src/xenosite/_archive_forest",
+    "src/xenosite/forest/legacy",
     "src/xenosite/refactor_poc/test.ipynb",
 ]
 # Match requires-python (>=3.11). Do not assume 3.14-only PEP 649 defaults.
@@ -204,8 +223,8 @@ target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 extend-exclude = [
-    "src/xenosite/_archive_forest",
-    "tests/_archive_forest",
+    "src/xenosite/forest/legacy",
+    "tests/forest/legacy",
     "examples",
     "src/xenosite/refactor_poc/test.ipynb",
     "tests/conftest.py",

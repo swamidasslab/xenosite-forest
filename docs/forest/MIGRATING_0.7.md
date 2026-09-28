@@ -2,7 +2,7 @@
 
 For callers of **0.6.x** moving to `xenosite.forest` **0.7**. The previous
 forest implementation lives in the archive directory
-`[src/xenosite/_archive_forest/](../../src/xenosite/_archive_forest/)` on
+`[src/xenosite/forest/legacy/](../../src/xenosite/forest/legacy/)` on
 GitHub. Short examples only; design detail is in sibling notes under
 `docs/forest/`.
 
@@ -12,11 +12,11 @@ GitHub. Short examples only; design detail is in sibling notes under
 
 Archive `ReactionRule.metabolize` yields `(site, metabolites)` where
 `metabolites` is always a `list[Mol]` — never a bare mol
-(`src/xenosite/_archive_forest/base.py` ~2384). Non-cleavage edits are still
+(`src/xenosite/forest/legacy/base.py` ~2384). Non-cleavage edits are still
 a one-element list. Cleavage (e.g. azo) packs sibling fragments in the same
 list. `__call__` matches (`base.py` ~2185–2187). Doctests unpack
 `site, metabolites = next(...metabolize(mol))`
-(`_archive_forest/rules.py`).
+(`legacy/rules.py`).
 
 ```python
 for site, products in rule.metabolize(mol):
@@ -35,7 +35,7 @@ Common kwargs gone on live `metabolize`:
 
 Live `ReactionRule.metabolize` /
 `RuleSet.metabolize` yield `(products, info)` — always a `list[Mol]`
-per emission (`src/xenosite/forest/rules.py` metabolize;
+per emission (`src/xenosite/forest/native/rules.py` metabolize;
 `rulesets.py`). Non-cleavage: one-element list. Cleavage: all sibling
 fragments in that list. `info` is `ProductInfo` (= `SiteInfo`: `site`, `rule`,
 `options`, …). Product SMILES are **not** on `info` — use `product.xf.csmi`,
@@ -47,7 +47,7 @@ one cleavage list are kept.
 
 ```python
 from rdkit import Chem
-from xenosite.forest.rules import Hydroxylation
+from xenosite.forest.native.rules import Hydroxylation
 
 mol = Chem.MolFromSmiles("Oc1ccccc1")
 for products, info in Hydroxylation().metabolize(mol):
@@ -145,7 +145,7 @@ Pair-orbit unique-edit requires **pynauty** (always nauty). See
 [`PAIR_ORBITS.md`](PAIR_ORBITS.md).
 
 Cache layout TypedDicts (`Forest` / `Structure` / `AtomTrace`) live in
-[`records.py`](../../src/xenosite/forest/records.py); exact `_forest`
+[`records.py`](../../src/xenosite/forest/native/records.py); exact `_forest`
 details are unstable — use `xf`, do not poke `_forest`.
 
 Methide is always on Dehydrogenation / QuinoneFormation data. There is no
@@ -211,7 +211,7 @@ not the live API; see `DROPPED.md`.
 ## Package layout
 
 - Import `xenosite.forest`.
-- Previous forest: `[src/xenosite/_archive_forest/](../../src/xenosite/_archive_forest/)`
+- Previous forest: `[src/xenosite/forest/legacy/](../../src/xenosite/forest/legacy/)`
 on GitHub (not exercised by CI).
 - Design notes: `docs/forest/` (`XF`, `HEURISTICS`, `DIVERGENCES`, `DROPPED`,
 `PAIR_ORBITS`, `PERFORMANCE`, `REDUNDANT_RULES`).

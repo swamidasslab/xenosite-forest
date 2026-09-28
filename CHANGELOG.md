@@ -59,7 +59,7 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 ### Changed
 
 - Metabolic Forest rewrite in ``xenosite.forest``. Previous forest (0.6.x API)
-  is the archive directory ``src/xenosite/_archive_forest/`` on GitHub.
+  is the archive directory ``src/xenosite/forest/legacy/`` on GitHub.
   ``metabolize`` yields ``(list[Mol], info)`` — see ``docs/forest/MIGRATING_0.7.md``. ([#15](https://github.com/swamidasslab/xenosite-forest/issues/15))
 - **Dependencies:** ``pynauty`` is now required (no longer optional). Needed
   for the correct unique-edit / pair-orbit nauty backend (forest unique-edit
@@ -71,7 +71,7 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 Migration details: [`docs/forest/MIGRATING_0.7.md`](docs/forest/MIGRATING_0.7.md).
 Previous forest (0.6.x API): archive directory
-[`src/xenosite/_archive_forest/`](src/xenosite/_archive_forest/) on GitHub.
+[`src/xenosite/forest/legacy/`](src/xenosite/forest/legacy/) on GitHub.
 
 ### Changed
 

@@ -2,7 +2,7 @@
 
 Canonical-SMILES disagreements between live ``xenosite.forest`` and the
 previous forest in the archive directory
-(``src/xenosite/_archive_forest/``). A listing is the record. It is not permission to drop a real
+(``src/xenosite/forest/legacy/``). A listing is the record. It is not permission to drop a real
 metabolite the old code emits, and it is not permission to hide a product
 only the new code emits. Sites may differ when `topol_equiv` puts them in
 the same atom class. Order does not matter.
