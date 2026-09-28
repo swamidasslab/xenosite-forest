@@ -40,3 +40,9 @@ data/
 _api
 .cenv
 .devcontainer
+
+# Local run artifacts and logs (never ship)
+artifacts/
+*.live.log
+*.err
+*.out

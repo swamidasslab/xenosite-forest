@@ -6,7 +6,7 @@ resolve quickly as long plans.
 
 | Side | Package | Ruleset | Search |
 | --- | --- | --- | --- |
-| archive BFS | `xenosite._archive_forest` | PhaseOneQF | classic `bfs` metabolite enum |
+| archive BFS | `xenosite.forest.legacy` | PhaseOneQF | classic `bfs` metabolite enum |
 | archive DFS | same | PhaseOneQF | classic `dfs` metabolite enum |
 | live `find_path` | `xenosite.forest` | PhaseOne | plan-guided `find_path` |
 
@@ -20,8 +20,8 @@ tree (2026-09-20). Raw:
 `align_to`.
 
 ```bash
-uv run python tests/forest/bench_find_path_h2h.py
-uv run python tests/forest/bench_find_path_h2h.py --larger  # HA≈17–26; see Larger mols
+uv run python tests/forest/native/bench_find_path_h2h.py
+uv run python tests/forest/native/bench_find_path_h2h.py --larger  # HA≈17–26; see Larger mols
 uv run python tools/som_depict.py --preset performance --out-dir docs/forest/performance_assets
 uv run python tools/som_depict.py --preset larger --out-dir docs/forest/performance_assets
 ```
@@ -61,7 +61,7 @@ cost rises with frontier size while live stays plan-cheap. Live **bills stay
 small** (short plans) — bill spread is still a MeOPhOH story, not a size
 story.
 
-Command: `uv run python tests/forest/bench_find_path_h2h.py --larger`.
+Command: `uv run python tests/forest/native/bench_find_path_h2h.py --larger`.
 Raw: `artifacts/bench_find_path_h2h_larger_post_filter.{out,live.log,tee.log}`
 (@ `fec1594` + dirty).
 
@@ -257,7 +257,7 @@ Demethylation → 2-naphthol; PhaseOne cannot strip that C2 aryl oxygen to make
 
 ### What `bill` counts
 
-`PathCounters.billed` = **`mol_edits + nodes`** (`src/xenosite/forest/find_path.py`).
+`PathCounters.billed` = **`mol_edits + nodes`** (`src/xenosite/forest/native/find_path.py`).
 
 | Counter | Increments when |
 | --- | --- |

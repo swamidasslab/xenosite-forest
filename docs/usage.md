@@ -4,15 +4,33 @@ This library enumerates metabolite *structures* with the Metabolic Forest reacti
 
 Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI [10.1021/acs.jcim.0c00360](https://doi.org/10.1021/acs.jcim.0c00360). BibTeX is in the [README](../README.md#citation).
 
-**0.7 migration:** [`forest/MIGRATING_0.7.md`](forest/MIGRATING_0.7.md). Previous forest API: archive directory [`src/xenosite/_archive_forest/`](../src/xenosite/_archive_forest/) on GitHub.
+**0.7 migration:** [`forest/MIGRATING_0.7.md`](forest/MIGRATING_0.7.md).
+**0.8 package layout:** [`forest/MIGRATING_0.8.md`](forest/MIGRATING_0.8.md).
+Frozen 0.6.x archive: [`xenosite.forest.legacy`](../src/xenosite/forest/legacy/).
 
-## Public API
+## Public API (Rust stub)
 
 ```python
 from xenosite.forest import (
+    find_path,
+    available,
+    PhaseOne,
+    Epoxidation,
+    QuinoneFormation,
+    EpoxideOpening,
+    NDealkylation,
+)
+```
+
+## RDKit reference API (`[rdkit]` extra)
+
+```python
+from xenosite.forest.native import (
     bfs, dfs, find_path, rules, RuleSet, PhaseOneRS, PhaseOneQF,
-    load_ruleset, RULESETS, AtomTrace, AtomRef, Linearization, Step,
-    StepPlan, And, Or, Deps, PathOutcome, PathSearchCounters, FormulaHint,
+    load_ruleset, PathOutcome, PathSearchCounters,
+)
+from xenosite.forest.legacy.step_plan import (
+    AtomRef, Linearization, Step, StepPlan, And, Or, Deps,
 )
 ```
 
@@ -22,13 +40,12 @@ from xenosite.forest import (
 | `find_path(R, T, …)` | MCS-guided search; yields `PathOutcome` (unstable API) |
 | `PathOutcome` | Required `plan` + cleavage-side `maybe`; unpacks as `(smiles, steps, mols, plan, maybe)` |
 | `PathSearchCounters` | Shared guided/classic instrumentation (`billed`, `sanitize_dropped`, …) |
-| `rules` / `RuleSet` / `load_ruleset` / `RULESETS` | Reaction rules and named rulesets |
+| `rules` / `RuleSet` / `load_ruleset` | Reaction rules and named rulesets |
 | `PhaseOneRS` / `PhaseOneQF` | Phase I; Phase I + `QuinoneFormation` (guided default) |
-| `AtomTrace` | 1-based atom-mapping history on a tagged metabolite |
-| `AtomRef` / `Step` / `StepPlan` / `And` / `Or` / `Deps` / `Linearization` | Pathway plans and self-apply linearizations |
-| `FormulaHint` / `ADD_O` / `CLEAVE` / … | Per-SMARTS formula effects toward a target |
+| `AtomRef` / `Step` / `StepPlan` / `And` / `Or` / `Deps` / `Linearization` | Pathway plans (legacy `step_plan`) |
+| `FormulaHint` / `ADD_O` / `CLEAVE` / … | Per-SMARTS formula effects toward a target (legacy) |
 
-`xenosite.forest.net.MetaboliteNetwork` is optional (`pip install 'xenosite-forest[network]'`).
+`xenosite.forest.legacy.net.MetaboliteNetwork` is optional (`pip install 'xenosite-forest[network]'` plus `[rdkit]`).
 Site-of-metabolism models are optional via `pip install 'xenosite-forest[predict]'` (not used in Forest CI).
 
 ## Phase1-equivalent steps
@@ -53,7 +70,7 @@ no depth-0 entry). Ints coerce to `AtomRef(origin=…)`.
 
 ```python
 from rdkit import Chem
-from xenosite.forest import rules
+from xenosite.forest.native import rules
 
 mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
 plan = rules.QuinoneFormation().phase1_steps(mol, frozenset({4, 7}))
@@ -69,8 +86,8 @@ rules.Epoxidation().phase1_steps(Chem.MolFromSmiles("C=C"), frozenset({0, 1}))
 
 ```python
 from rdkit import Chem
-from xenosite.forest import rules
-from xenosite.forest.rulesets import PhaseOne
+from xenosite.forest.native import rules
+from xenosite.forest.native.rulesets import PhaseOne
 
 mol = Chem.MolFromSmiles("CC(=O)Nc1ccc(O)cc1")
 
@@ -94,7 +111,8 @@ runs Forest rules in order, and records created atoms on
 
 ```python
 from rdkit import Chem
-from xenosite.forest import AtomRef, Linearization, StepPlan, rules
+from xenosite.forest.legacy.step_plan import AtomRef, Linearization, StepPlan
+from xenosite.forest.native import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1")
 plan = rules.QuinoneFormation().phase1_steps(mol, frozenset({0, 3}))
@@ -121,7 +139,7 @@ Prefer ``metabolize`` (see [`MIGRATING_0.7.md`](forest/MIGRATING_0.7.md)).
 
 ```python
 from rdkit import Chem
-from xenosite.forest import rules
+from xenosite.forest.native import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
 for products, info in rules.QuinoneFormation().metabolize(mol):
@@ -138,7 +156,7 @@ identity is the frozenset of those).
 
 ```python
 from rdkit import Chem
-from xenosite.forest import rules
+from xenosite.forest.native import rules
 
 mol = Chem.MolFromSmiles("c1ccccc1O")
 
@@ -195,7 +213,7 @@ Each `metabolize` product carries forest tracing on `mol.xf` /
 
 ```python
 from rdkit import Chem
-from xenosite.forest import rules
+from xenosite.forest.native import rules
 
 mol = Chem.MolFromSmiles("CCO")
 products, info = next(rules.Hydroxylation().metabolize(mol))
@@ -210,7 +228,7 @@ Prefer `mol.xf` for maps, formula, and atom_trace. See
 ## Search a pathway
 
 ```python
-from xenosite.forest import bfs
+from xenosite.forest.native import bfs
 
 smiles, steps, mols = next(
     bfs(["CCO", "C=CO"], ruleset="PhaseOneRS", depth=1, phase1=True)
@@ -233,7 +251,7 @@ Package-level `find_path` is an MCS-guided search (distinct from classic
 `RuleSet.find_path`). The API is **unstable**. Default ruleset is `PhaseOneQF`.
 
 ```python
-from xenosite.forest import find_path, PathSearchCounters
+from xenosite.forest.native import find_path, PathSearchCounters
 
 counters = PathSearchCounters()
 for outcome in find_path(
@@ -264,7 +282,7 @@ Use classic `bfs` / `RuleSet.find_path` for exhaustive mol-BFS; use package
 ## Custom rulesets
 
 ```python
-from xenosite.forest import rules, RuleSet
+from xenosite.forest.native import rules, RuleSet
 
 rs = RuleSet([rules.Epoxidation(), rules.EpoxideOpening()], name="epoxide")
 path = next(rs.find_path(reactant, product, depth=2))

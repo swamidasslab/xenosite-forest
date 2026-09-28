@@ -19,9 +19,9 @@
 //!
 //! Pair with:
 //! ```text
-//! uv run python tests/forest/bench_find_path_rust_h2h.py
-//! uv run python tests/forest/bench_find_path_rust_h2h.py --larger
-//! uv run python tests/forest/bench_find_path_rust_h2h.py --hard
+//! uv run python tests/forest/rust/bench_find_path_h2h.py
+//! uv run python tests/forest/rust/bench_find_path_h2h.py --larger
+//! uv run python tests/forest/rust/bench_find_path_h2h.py --hard
 //! ```
 
 use std::time::{Duration, Instant};

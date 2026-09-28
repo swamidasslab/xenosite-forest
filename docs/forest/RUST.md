@@ -48,9 +48,9 @@ maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension
 ```
 
 Exposes `ForestMol` / `RuleSet` / `metabolize`, plus **`xenosite_forest.find_path`**
-(PhaseOne chematic search). Python package re-exports that as
-``xenosite.forest.find_path_rust`` (optional; raises if the wheel is missing).
-Live RDKit ``xenosite.forest.find_path`` is unchanged.
+(PhaseOne chematic search). The recommended Python door is
+``xenosite.forest.find_path``. The RDKit walk lives at
+``xenosite.forest.native.find_path``.
 
 ```rust
 #[pyclass(name = "ForestMol", unsendable)]
@@ -249,7 +249,7 @@ Python search.
 ## find_path H2H (Rust vs Python live)
 
 Same PhaseOne cases / `max_nodes=800` / `max_paths=1` / best-of-5 as
-[`bench_find_path_h2h.py`](../../tests/forest/bench_find_path_h2h.py).
+[`bench_find_path_h2h.py`](../../tests/forest/native/bench_find_path_h2h.py).
 
 ```bash
 cargo run -p xenosite-forest --example find_path_bench --release
@@ -258,9 +258,9 @@ cargo run -p xenosite-forest --example find_path_bench --release -- --hard
 # unfiltered (slow) is opt-in:
 cargo run -p xenosite-forest --example find_path_bench --release -- --hard --nofilter
 cargo run -p xenosite-forest --example find_path_profile --release
-uv run python tests/forest/bench_find_path_rust_h2h.py
-uv run python tests/forest/bench_find_path_rust_h2h.py --larger
-uv run python tests/forest/bench_find_path_rust_h2h.py --hard
+uv run python tests/forest/rust/bench_find_path_h2h.py
+uv run python tests/forest/rust/bench_find_path_h2h.py --larger
+uv run python tests/forest/rust/bench_find_path_h2h.py --hard
 ```
 
 Default bench is **filter-only** (atom_diff on). `--budget-secs N` stops remaining

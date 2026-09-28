@@ -198,7 +198,7 @@ Rainbow Phase I does not include conjugations.
 `TautomerizationRS` (`TT`) has a single `Tautomerization` rule. Metabolic Forest includes it because tautomers appear in known pathways even though tautomerization is not usually labeled as metabolism. Rainbow excluded tautomerization from the five colors (it was part of the ~7.7% of Phase I records left out of the Rainbow dataset).
 
 ```python
-from xenosite.forest import rules, RuleSet
+from xenosite.forest.native import rules, RuleSet
 
 tt = RuleSet([rules.Tautomerization()], name="tautomerization")
 ```
@@ -208,7 +208,7 @@ tt = RuleSet([rules.Tautomerization()], name="tautomerization")
 Rule: `ThiopheneSulfurOxidation`. Also registered as `TSO` / `ThiopheneSulfurOxidationRS`, and included in `Bioactivation`. Matched to the bioactivation paper (above).
 
 ```python
-from xenosite.forest import rules, RuleSet, load_ruleset
+from xenosite.forest.native import rules, RuleSet, load_ruleset
 
 tso = RuleSet([rules.ThiopheneSulfurOxidation()], name="thiophene_s_oxidation")
 # or: load_ruleset("TSO")
@@ -224,7 +224,7 @@ Modeling Epoxidation of Drug-like Molecules with a Deep Machine Learning Network
 **DOI:** [10.1021/acscentsci.5b00131](https://doi.org/10.1021/acscentsci.5b00131)
 
 ```python
-from xenosite.forest import rules, RuleSet
+from xenosite.forest.native import rules, RuleSet
 
 epoxidation = RuleSet([rules.Epoxidation()], name="epoxidation")
 ```
@@ -255,7 +255,7 @@ Computationally Assessing the Bioactivation of Drugs by N-Dealkylation.
 **DOI:** [10.1021/acs.chemrestox.7b00191](https://doi.org/10.1021/acs.chemrestox.7b00191)
 
 ```python
-from xenosite.forest import load_ruleset, rules
+from xenosite.forest.native import load_ruleset, rules
 
 ndealk = load_ruleset("ND")  # or RuleSet([rules.NDealkylation()], name="ND")
 ```
@@ -286,7 +286,7 @@ A Simple Model Predicts UGT-Mediated Metabolism.
 **DOI:** [10.1093/bioinformatics/btw350](https://doi.org/10.1093/bioinformatics/btw350)
 
 ```python
-from xenosite.forest import rules, RuleSet
+from xenosite.forest.native import rules, RuleSet
 
 ugt = RuleSet([rules.Glucuronidation(star_label="GlcA")], name="ugt")
 # Full sugar: rules.Glucuronidation(as_star=False)
@@ -318,7 +318,7 @@ Site of Reactivity Models Predict Molecular Reactivity of Diverse Chemicals with
 **DOI:** [10.1021/acs.chemrestox.5b00017](https://doi.org/10.1021/acs.chemrestox.5b00017)
 
 ```python
-from xenosite.forest import rules, RuleSet, load_ruleset
+from xenosite.forest.native import rules, RuleSet, load_ruleset
 
 gsh = RuleSet([rules.Glutathionation(star_label="GSH")], name="glutathionation")
 protein = RuleSet([rules.Glutathionation(star_label="Protein")], name="protein")
@@ -362,7 +362,7 @@ XenoNet: Inference and Likelihood of Intermediate Metabolite Formation.
 ## Example
 
 ```python
-from xenosite.forest import bfs, load_ruleset
+from xenosite.forest.native import bfs, load_ruleset
 
 # Rainbow-aligned Phase I structure search
 load_ruleset("PhaseOneRS")

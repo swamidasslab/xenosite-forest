@@ -17,7 +17,13 @@ use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
-use crate::rules::phase_one;
+use crate::rules::{
+    dealkylation as dealkylation_rs, dehydrogenation as dehydrogenation_rs,
+    default_ruleset as default_ruleset_rs, epoxidation as epoxidation_rs,
+    epoxide_opening as epoxide_opening_rs, hydrolysis as hydrolysis_rs,
+    hydroxylation as hydroxylation_rs, n_dealkylation as n_dealkylation_rs,
+    phase_one as phase_one_rs, quinone_formation as quinone_formation_rs,
+};
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
 fn py_err(err: impl std::fmt::Display) -> PyErr {
@@ -465,7 +471,7 @@ fn find_path(
         drop_skeleton_twins,
         diversity,
     };
-    let rules = phase_one();
+    let rules = phase_one_rs();
     let mut counters = PathCounters::default();
     let hits = find_path_with(reactant, target, &rules, &mut counters, config, |_| true)
         .map_err(py_err)?
@@ -511,6 +517,60 @@ fn find_path(
     Ok((out, c.unbind().into_any()))
 }
 
+fn wrap_ruleset(inner: RuleSet) -> PyRuleSet {
+    PyRuleSet { inner }
+}
+
+#[pyfunction]
+fn phase_one() -> PyRuleSet {
+    wrap_ruleset(phase_one_rs())
+}
+
+#[pyfunction]
+fn epoxidation() -> PyRuleSet {
+    wrap_ruleset(epoxidation_rs())
+}
+
+#[pyfunction]
+fn quinone_formation() -> PyRuleSet {
+    wrap_ruleset(quinone_formation_rs())
+}
+
+#[pyfunction]
+fn epoxide_opening() -> PyRuleSet {
+    wrap_ruleset(epoxide_opening_rs())
+}
+
+#[pyfunction]
+fn n_dealkylation() -> PyRuleSet {
+    wrap_ruleset(n_dealkylation_rs())
+}
+
+#[pyfunction]
+fn hydroxylation() -> PyRuleSet {
+    wrap_ruleset(hydroxylation_rs())
+}
+
+#[pyfunction]
+fn dehydrogenation() -> PyRuleSet {
+    wrap_ruleset(dehydrogenation_rs())
+}
+
+#[pyfunction]
+fn dealkylation() -> PyRuleSet {
+    wrap_ruleset(dealkylation_rs())
+}
+
+#[pyfunction]
+fn hydrolysis() -> PyRuleSet {
+    wrap_ruleset(hydrolysis_rs())
+}
+
+#[pyfunction]
+fn default_ruleset() -> PyRuleSet {
+    wrap_ruleset(default_ruleset_rs())
+}
+
 #[pymodule]
 fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyForestMol>()?;
@@ -518,6 +578,16 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPatternInfo>()?;
     m.add_class::<PyRuleSet>()?;
     m.add_function(wrap_pyfunction!(find_path, m)?)?;
+    m.add_function(wrap_pyfunction!(phase_one, m)?)?;
+    m.add_function(wrap_pyfunction!(epoxidation, m)?)?;
+    m.add_function(wrap_pyfunction!(quinone_formation, m)?)?;
+    m.add_function(wrap_pyfunction!(epoxide_opening, m)?)?;
+    m.add_function(wrap_pyfunction!(n_dealkylation, m)?)?;
+    m.add_function(wrap_pyfunction!(hydroxylation, m)?)?;
+    m.add_function(wrap_pyfunction!(dehydrogenation, m)?)?;
+    m.add_function(wrap_pyfunction!(dealkylation, m)?)?;
+    m.add_function(wrap_pyfunction!(hydrolysis, m)?)?;
+    m.add_function(wrap_pyfunction!(default_ruleset, m)?)?;
     Ok(())
 }
 

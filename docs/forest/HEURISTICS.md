@@ -13,7 +13,7 @@ A rule may later carry data that it is less likely, and a filter may read that. 
 
 ## Migration
 
-Status: done. Previous forest: `src/xenosite/_archive_forest/` (archive
+Status: done. Previous forest: `src/xenosite/forest/legacy/` (archive
 directory on GitHub). Live public API is `xenosite.forest`. Prefer `mol.xf`
 over `AtomTracker` — accessor API in `docs/forest/XF.md` (caches into
 `_forest`; TypedDicts in `records.py` are unstable layout, not the public
@@ -186,7 +186,7 @@ record. Cleaving quinone ends that need a Dealkylation prep are still a gap
 
 ## Schema proposals (not yet in PatternInfo)
 
-- **when → name.** Optional: a resolved `When` refines the pattern label so a globbed SMARTS OR (e.g. `[#6h2,#6h3]`) can still report `h2` vs `h3` without a second overlapping pattern. Candidates: `When` grows optional `name=`; or `PatternInfo.name` is a base and the chosen branch supplies a suffix. `_unique_csmi_key` / trace `pattern` would need a defined resolved token (static `PatternInfo.name` vs effect-time name). Prefer data on `When` / `Effect`, not a code branch in metabolize. Status: not decided — do not invent the field until a caller needs branch-specific names after partition. Test hook ready: `emitable_pattern_names` / `optional_when_name` in `tests/forest/pattern_info_inventory.py` already fold an optional `When["name"]` into per-rule uniqueness (`test_emitable_names_unique_within_each_reaction_rule`).
+- **when → name.** Optional: a resolved `When` refines the pattern label so a globbed SMARTS OR (e.g. `[#6h2,#6h3]`) can still report `h2` vs `h3` without a second overlapping pattern. Candidates: `When` grows optional `name=`; or `PatternInfo.name` is a base and the chosen branch supplies a suffix. `_unique_csmi_key` / trace `pattern` would need a defined resolved token (static `PatternInfo.name` vs effect-time name). Prefer data on `When` / `Effect`, not a code branch in metabolize. Status: not decided — do not invent the field until a caller needs branch-specific names after partition. Test hook ready: `emitable_pattern_names` / `optional_when_name` in `tests/forest/native/pattern_info_inventory.py` already fold an optional `When["name"]` into per-rule uniqueness (`test_emitable_names_unique_within_each_reaction_rule`).
 
 ## Dedup check vs yield (approved)
 
