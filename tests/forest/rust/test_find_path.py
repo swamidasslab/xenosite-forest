@@ -21,6 +21,7 @@ def test_find_path_ethane_to_ethanol():
     assert hits[0]["steps"][0]["rule"] == "Hydroxylation"
     assert counters["billed"] >= 1
     assert counters["diversity_repush"] == 0
+    assert counters["timed_out"] is False
 
 
 def test_find_path_diversity_opt_in():
@@ -33,6 +34,12 @@ def test_find_path_diversity_opt_in():
     assert len(hits) == 1
     assert "O" in hits[0]["smiles"] or "c" in hits[0]["smiles"]
     assert "diversity_repush" in counters
+
+
+def test_find_path_timeout_zero():
+    hits, counters = find_path("CC", "CCO", timeout=0.0)
+    assert counters["timed_out"] is True
+    assert hits == []
 
 
 def test_phase_one_factory_from_stub():

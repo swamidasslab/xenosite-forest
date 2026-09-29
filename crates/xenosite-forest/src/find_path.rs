@@ -16,6 +16,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use crate::ForestError;
 use crate::candidate::Candidate;
@@ -67,6 +68,8 @@ pub struct PathCounters {
     pub mcs_lift_rematch: usize,
     /// Match diversity: heap item re-pushed because `−log(n+1)` went stale.
     pub diversity_repush: usize,
+    /// Search stopped because [`FindPathConfig::timeout`] elapsed.
+    pub timed_out: bool,
     /// When true, [`Drop`] does not assert zero mismatches (intentional tests).
     #[cfg(test)]
     pub allow_formula_delta_mismatch: bool,
@@ -1065,6 +1068,9 @@ pub struct FindPathConfig {
     /// fixed-point `−n` into the heap primary (`score + diversity`). On pop,
     /// refresh or accept. SoftStack ignores. Default **false** (opt-in).
     pub diversity: bool,
+    /// Wall-clock budget for the whole search. `None` = unlimited.
+    /// When elapsed, the iterator stops and sets [`PathCounters::timed_out`].
+    pub timeout: Option<Duration>,
 }
 
 impl Default for FindPathConfig {
@@ -1078,8 +1084,18 @@ impl Default for FindPathConfig {
             heap_score: HeapScoreMode::match_log_neg_pc(),
             drop_skeleton_twins: true,
             diversity: false,
+            timeout: None,
         }
     }
+}
+
+fn deadline_from(timeout: Option<Duration>) -> Option<Instant> {
+    timeout.map(|d| Instant::now() + d)
+}
+
+#[inline]
+fn past_deadline(deadline: Option<Instant>) -> bool {
+    deadline.is_some_and(|d| Instant::now() >= d)
 }
 
 fn accept_all_candidates(_c: &Candidate) -> bool {
@@ -1322,6 +1338,7 @@ where
         counters,
         keep,
         config,
+        deadline: deadline_from(config.timeout),
         target_csmi,
         target_mol,
         target_formula,
@@ -1344,6 +1361,7 @@ pub struct FindPath<'a, 'b, K> {
     counters: &'b mut PathCounters,
     keep: K,
     config: FindPathConfig,
+    deadline: Option<Instant>,
     target_csmi: String,
     target_mol: crate::Molecule,
     target_formula: crate::forest::Formula,
@@ -1386,9 +1404,14 @@ where
             heap_score,
             drop_skeleton_twins,
             diversity,
+            ..
         } = self.config;
 
         while let Some(mut item) = self.heap.pop() {
+            if past_deadline(self.deadline) {
+                self.counters.timed_out = true;
+                break;
+            }
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
@@ -2178,6 +2201,7 @@ where
         filter_rules,
         filter_sites,
         config,
+        deadline: deadline_from(config.timeout),
         target_csmi,
         target_ha,
         heap,
@@ -2195,6 +2219,7 @@ pub struct FindPathFilters<'a, 'b, R, S> {
     filter_rules: R,
     filter_sites: S,
     config: FindPathConfig,
+    deadline: Option<Instant>,
     target_csmi: String,
     target_ha: usize,
     heap: BinaryHeap<HeapItem>,
@@ -2223,6 +2248,10 @@ where
         } = self.config;
 
         while let Some(item) = self.heap.pop() {
+            if past_deadline(self.deadline) {
+                self.counters.timed_out = true;
+                break;
+            }
             if self.yielded.len() >= max_paths || self.counters.nodes >= max_nodes {
                 break;
             }
@@ -3497,6 +3526,46 @@ mod tests {
         demethyl.insert(formation.iter().next().unwrap() + 1000);
         assert!(outcome.allows(Some(&demethyl), None));
         assert!(outcome.allows(None, Some(outcome.maybe().entries[0].side.as_str())));
+    }
+
+    #[test]
+    fn zero_timeout_sets_timed_out() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "CC",
+            "CCO",
+            &crate::rules::phase_one(),
+            &mut counters,
+            FindPathConfig {
+                timeout: Some(Duration::ZERO),
+                max_nodes: 800,
+                ..FindPathConfig::default()
+            },
+            |_| true,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert!(counters.timed_out);
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn no_timeout_leaves_timed_out_false() {
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "CC",
+            "CCO",
+            &crate::rules::phase_one(),
+            &mut counters,
+            FindPathConfig::default(),
+            |_| true,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert!(!counters.timed_out);
+        assert_eq!(hits.len(), 1);
     }
 
     /// Ethane → ethanol → ethene with **only** Hydroxylation + Dehydration.

@@ -47,10 +47,13 @@ def find_path(
     diversity: bool = False,
     drop_skeleton_twins: bool = True,
     score: str = "log-neg-pc",
+    timeout: float | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Run PhaseOne chematic ``find_path``; return ``(hits, counters)``.
 
     Each hit is ``{"smiles": str, "steps": [{"rule": str, "site": list[str]}]}``.
+    ``timeout`` is an optional wall-clock budget in seconds; counters include
+    ``timed_out``.
 
     This is the Rust product door. New search features belong in the Rust crate
     and this wrapper — not in :mod:`xenosite.forest.native`.
@@ -66,6 +69,7 @@ def find_path(
         diversity=diversity,
         drop_skeleton_twins=drop_skeleton_twins,
         score=score,
+        timeout=timeout,
     )
 
 

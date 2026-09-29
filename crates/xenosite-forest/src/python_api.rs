@@ -448,6 +448,7 @@ fn metabolize_with_python(
     diversity=false,
     drop_skeleton_twins=true,
     score="log-neg-pc",
+    timeout=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn find_path(
@@ -461,12 +462,24 @@ fn find_path(
     diversity: bool,
     drop_skeleton_twins: bool,
     score: &str,
+    timeout: Option<f64>,
 ) -> PyResult<(Vec<Py<PyAny>>, Py<PyAny>)> {
     let heap_score = HeapScoreMode::from_label(score).ok_or_else(|| {
         PyValueError::new_err(format!(
             "unknown score {score:?}; try log-neg-pc, soft, add-both, …"
         ))
     })?;
+    let timeout = match timeout {
+        None => None,
+        Some(secs) if secs.is_finite() && secs >= 0.0 => {
+            Some(std::time::Duration::from_secs_f64(secs))
+        }
+        Some(secs) => {
+            return Err(PyValueError::new_err(format!(
+                "timeout must be a non-negative finite number of seconds; got {secs}"
+            )));
+        }
+    };
     let config = FindPathConfig {
         max_paths,
         max_nodes,
@@ -475,6 +488,7 @@ fn find_path(
         heap_score,
         drop_skeleton_twins,
         diversity,
+        timeout,
     };
     let rules = phase_one_rs();
     let mut counters = PathCounters::default();
@@ -519,6 +533,7 @@ fn find_path(
     c.set_item("dropped_skeleton_twin", counters.dropped_skeleton_twin)?;
     c.set_item("diversity_repush", counters.diversity_repush)?;
     c.set_item("unstable_csmi_key", counters.unstable_csmi_key)?;
+    c.set_item("timed_out", counters.timed_out)?;
     Ok((out, c.unbind().into_any()))
 }
 
