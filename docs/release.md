@@ -32,8 +32,8 @@ uv sync --extra rdkit --extra network --group dev
 3. Tag and push:
 
 ```bash
-git tag -a v0.9.0 -m "0.9.0"
-git push origin v0.9.0
+git tag -a v0.8.1 -m "0.8.1"
+git push origin v0.8.1
 ```
 
 Pushing `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml):

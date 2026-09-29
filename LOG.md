@@ -2,7 +2,7 @@
 
 ## 2026-09-28
 
-- **0.9.0 packaging.** One PyPI package via maturin (Python `src/xenosite` + `xenosite.forest._rust` extension). Version from Cargo.toml. Release CI builds manylinux/musllinux/macOS/Windows wheels (x86_64 + aarch64) + sdist. Dropped separate `xenosite-forest-native` crate pyproject.
+- **0.8.1 packaging.** One PyPI package via maturin (Python `src/xenosite` + `xenosite.forest._rust` extension). Version from Cargo.toml. Release CI builds manylinux/musllinux/macOS/Windows wheels (x86_64 + aarch64) + sdist. Dropped separate `xenosite-forest-native` crate pyproject.
 
 - **0.8.0 release.** Tag `v0.8.0`. Rust stub public API, optional `[rdkit]`, no nested `forest.rust`. Release CI builds the maturin extension before the forest suite. CHANGELOG compiled by the tag workflow.
 
