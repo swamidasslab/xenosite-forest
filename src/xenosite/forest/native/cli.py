@@ -1,5 +1,8 @@
 """``xenosite-forest`` CLI entry (requires the ``[rdkit]`` extra).
 
+Temporary RDKit bridge until a Rust CLI ships. **Do not** grow product CLI
+features here — see ``docs/forest/NATIVE.md``.
+
 ``bfs`` / ``dfs`` come from :mod:`xenosite.forest.native.find_path`.
 """
 

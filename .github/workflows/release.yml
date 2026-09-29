@@ -217,6 +217,68 @@ jobs:
           name: wheels-sdist
           path: dist
 
+  js:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack >/dev/null 2>&1; then
+            curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@swamidasslab"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - name: Build wasm + Node smokes
+        run: |
+          ./scripts/build_wasm.sh
+          cd js
+          npm ci
+          npm test
+          npm run build:ts
+          npm run build:copy-wasm
+      - name: Version from tag
+        working-directory: js
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          echo "Publishing JS version $VER"
+          npm version "$VER" --no-git-tag-version --allow-same-version
+      - name: Retarget package name for GitHub Packages
+        working-directory: js
+        run: |
+          npm pkg set name=@swamidasslab/forest
+          npm pkg set publishConfig.registry=https://npm.pkg.github.com
+          npm pkg set publishConfig.access=public
+          node -p "require('./package.json').name + '@' + require('./package.json').version"
+      - name: Publish to GitHub Packages
+        working-directory: js
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload npm pack artifact
+        working-directory: js
+        run: |
+          npm pack
+          mkdir -p ../dist-js
+          mv swamidasslab-forest-*.tgz ../dist-js/ 2>/dev/null || mv xenosite-forest-*.tgz ../dist-js/ 2>/dev/null || mv *.tgz ../dist-js/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-forest
+          path: dist-js/
+
   changelog:
     needs: test
     runs-on: ubuntu-latest

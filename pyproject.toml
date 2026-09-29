@@ -32,8 +32,8 @@ dependencies = []
 keywords = ["metabolite", "metabolism", "rdkit", "xenosite", "metabolic-forest"]
 
 [project.optional-dependencies]
-# RDKit Python engines (native reference + legacy archive). Not required for
-# the recommended Rust public API.
+# RDKit Python engines (native reference + legacy archive). Feature-frozen;
+# not required for the recommended Rust public API. See docs/forest/NATIVE.md.
 rdkit = [
     "rdkit>=2022.3.3",
     "pynauty",
@@ -64,8 +64,8 @@ Issues = "https://github.com/swamidasslab/xenosite-forest/issues"
 Paper = "https://doi.org/10.1021/acs.jcim.0c00360"
 
 [project.scripts]
-# Temporary native CLI bridge; requires the ``rdkit`` extra. Prefer the Rust
-# door once a rust CLI ships.
+# Temporary native CLI bridge; requires the ``rdkit`` extra. Do not grow
+# product CLI features here — prefer a Rust CLI (see docs/forest/NATIVE.md).
 xenosite-forest = "xenosite.forest.native.cli:main"
 
 [dependency-groups]
@@ -183,7 +183,7 @@ filterwarnings = [
     "error",
     # Native / legacy package announcements on import. Register before any
     # filter that imports those packages (category resolution under WAE).
-    "ignore:xenosite.forest.native is the RDKit reference:UserWarning",
+    "ignore:xenosite.forest.native is a frozen RDKit:UserWarning",
     "ignore:xenosite.forest.legacy is a frozen:DeprecationWarning",
     # Intentional archive chemotype noise; not a live-forest contract.
     "ignore::xenosite.forest.legacy.unstable.UnstableWarning",

@@ -50,3 +50,9 @@ artifacts/
 *.so
 *.pyd
 *.dylib
+
+# JS / WASM package
+node_modules/
+js/node_modules/
+js/dist/
+js/src/wasm/

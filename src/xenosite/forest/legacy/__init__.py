@@ -1,8 +1,9 @@
 """Frozen 0.6.x Metabolic Forest archive (not the public API).
 
 Import modules explicitly, e.g. ``xenosite.forest.legacy.rules``.
-Public callers should use ``xenosite.forest`` (Rust). See README.md and
-``docs/forest/LEGACY.md`` in this tree.
+Public callers should use ``xenosite.forest`` (Rust). Do **not** add new
+product features here or in :mod:`xenosite.forest.native` — see
+``docs/forest/NATIVE.md`` and ``docs/forest/LEGACY.md``.
 """
 
 from __future__ import annotations

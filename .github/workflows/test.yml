@@ -76,6 +76,32 @@ jobs:
       - name: WASM
         run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
 
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack >/dev/null 2>&1; then
+            curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - name: Build wasm + Node smokes
+        run: |
+          ./scripts/build_wasm.sh
+          cd js
+          npm ci
+          npm test
+
   lint:
     runs-on: ubuntu-latest
     steps:

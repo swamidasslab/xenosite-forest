@@ -2,6 +2,16 @@
 
 ## 2026-09-28
 
+- **JS/WASM door + GitHub Packages.** Expanded `wasm_api` to match the Python public surface (`find_path` + timeout/`timed_out`, `random_path`, factories, structured `metabolize`). Package `js/` (`@xenosite/forest` → publish `@swamidasslab/forest`). Node smokes via `tsx`. Same `v*` tag publishes npm to GH Packages alongside PyPI wheels. Build: `./scripts/build_wasm.sh` (put `--target web` before `--features` — wasm-pack 0.15 quirk). serde-wasm-bindgen uses `json_compatible()` so Maps are not empty `{}` under JSON.stringify.
+
+- **`find_path` timeout.** `timeout=` (seconds, optional) on Rust Python door / `xenosite.forest.find_path`; counters expose `timed_out`. Not on native.
+
+- **`PathwayOptions`.** Skip multicomponent / skip-seen are opt-in only (`default` off). Shared by `random_path` / `random_path_with`; same knobs for StepSequence/`PathOutcome` `apply`. Preset: `PathwayOptions::no_loops_or_fragments()`.
+
+- **`random_path`.** Seeded walk over a RuleSet (candidates + ResonancePairs); returns steps, final SMILES, PatternInfos. Rust `crates/xenosite-forest/src/random_path.rs`; public `xenosite.forest.random_path`. No `rand` dep (XorShift). Tests: cargo `random_path::*`, `tests/forest/rust/test_random_path.py`. PathOutcome / richer StepSequence.apply still TODO.
+
+- **Pathway API naming.** Settled on **`apply`**. Type is **`StepSequence`** (ordered steps that act like a step); `Linearization` remains a type alias. StepPlan/`Deps` methods stay `linearizations` / `same_linearizations`. Atom tags: ensure missing, never overwrite (shared wrapper).
+
 - **Chematic from crates.io.** Dropped `vendor/chematic` submodule + local Atom.tag patch; depend on `chematic ^1.0.27` (caller tags + `*_with_atom_order`). Forest [`Tag`] is `NonZeroU16` (chematic `1..=u16::MAX`; `None`/0 clear).
 
 - **0.8.1 packaging.** One PyPI package via maturin (Python `src/xenosite` + `xenosite.forest._rust` extension). Version from Cargo.toml. Release CI builds manylinux/musllinux/macOS/Windows wheels (x86_64 + aarch64) + sdist. Dropped separate `xenosite-forest-native` crate pyproject.

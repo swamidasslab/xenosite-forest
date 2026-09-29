@@ -20,4 +20,7 @@ Dropped behavior is recorded in `docs/forest/DROPPED.md` with the same status wo
 
 Data may also say a rule is less likely. The schema for that is not decided. Do not invent the field. A later filter may read it. That is not an opt-in and not a branch.
 
-This governs new work in this repo, especially `src/xenosite/forest/`. Do not retrofit `src/xenosite/_archive_forest/` unless asked.
+This governs new work in the **Rust** forest door (`crates/xenosite-forest/` and
+the thin `xenosite.forest` wrapper). Do not retrofit `src/xenosite/forest/native/`
+or `src/xenosite/forest/legacy/` for new features unless asked — see
+`docs/forest/NATIVE.md` and the `rust-product-not-native` rule.

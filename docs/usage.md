@@ -4,11 +4,15 @@ This library enumerates metabolite *structures* with the Metabolic Forest reacti
 
 Please cite Hughes et al., *Metabolic Forest*, *J. Chem. Inf. Model.* 2020, DOI [10.1021/acs.jcim.0c00360](https://doi.org/10.1021/acs.jcim.0c00360). BibTeX is in the [README](../README.md#citation).
 
+**Product API:** `xenosite.forest` (Rust). **New features go there** — not in
+`xenosite.forest.native` (frozen RDKit reference) or `legacy`. See
+[`forest/NATIVE.md`](forest/NATIVE.md).
+
 **0.7 migration:** [`forest/MIGRATING_0.7.md`](forest/MIGRATING_0.7.md).
 **0.8 package layout:** [`forest/MIGRATING_0.8.md`](forest/MIGRATING_0.8.md).
 Frozen 0.6.x archive: [`xenosite.forest.legacy`](../src/xenosite/forest/legacy/).
 
-## Public API (Rust stub)
+## Public API (Rust)
 
 ```python
 from xenosite.forest import (
@@ -22,7 +26,10 @@ from xenosite.forest import (
 )
 ```
 
-## RDKit reference API (`[rdkit]` extra)
+## RDKit reference API (`[rdkit]` extra; feature-frozen)
+
+Use only for parity / historical RDKit workflows. Do not treat this as the
+surface for new product features.
 
 ```python
 from xenosite.forest.native import (

@@ -1,8 +1,9 @@
-//! Metabolic Forest chemistry door on chematic + canonaut.
+//! Metabolic Forest **product** chemistry door on chematic + canonaut.
 //!
-//! Derisk crate for a full Rust port. The algorithm lives in the Python
-//! package; this crate proves the chemistry seams compile and behave on
-//! chematic, including `wasm32-unknown-unknown`.
+//! New features land in this crate (and the thin `xenosite.forest` PyO3
+//! wrapper). Do **not** back-port them to `xenosite.forest.native` (frozen
+//! RDKit reference) or `legacy`. See `docs/forest/NATIVE.md` /
+//! `docs/forest/RUST.md`. WASM-clean (`wasm32-unknown-unknown`).
 
 #[cfg(all(feature = "python", feature = "wasm"))]
 compile_error!(
@@ -27,8 +28,10 @@ pub mod matched_atom;
 pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
+pub mod pathway;
 pub mod pattern;
 pub mod product_graph;
+pub mod random_path;
 pub mod rules;
 pub mod ruleset;
 pub mod smarts;
@@ -66,7 +69,7 @@ pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
     CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
-    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
+    StepSequence, align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
     epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
     identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
     transitive_closure_masks,
@@ -109,6 +112,7 @@ pub use orbits::{
     unordered_atom_pair_orbit_sizes,
 };
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
+pub use pathway::PathwayOptions;
 pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
     bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o, leave_oo,
@@ -118,6 +122,7 @@ pub use product_graph::{
     ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
     product_graph, product_graph_stats, product_layer,
 };
+pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
     all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
 };
