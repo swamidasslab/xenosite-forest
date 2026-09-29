@@ -212,7 +212,7 @@ stays cached after first read. Emission identity for check/yield is
 - **``atom``** — singleton Site; unique-edit uses directed `MapRankKey` `((mapno, rank), …)`.
 - **``bond``** — undirected bond frozenset (two adjacent atoms). Unique-edit first field is sorted site ranks (`bond_rank_key`). Epoxidation, AzoSplitting. ResonancePair **SMARTS** (Hydrogenation alkene/alkyne, Dehydrogenation one-bond) also use `bond_rank_key` via `site_signature` when `site_kind="atom_pair"` — pair-path emissions still use `pair_site_signature`.
 - **``directed_bond``** — unique-edit uses ordered map ranks (`MapRankKey` / ``site_map`` order) because map 1 is chemically distinct (Dealkylation / NDealkylation / Benzodioxole / Nitroaromatic). **Public API:** ``info["site"]`` is always a frozenset; orientation is on ``info["discovered_site"]`` as the ordered map-order tuple (same ``Site`` union — no extra field). With ``canonical_emitted_sites``, ``site`` is the frozenset of the lex representative and ``discovered_site`` remains the directed discovery tuple. Coercion is yield-only — unique-edit `seen` never keys on the frozenset.
-- **``atom_pair``** — ResonancePair ends only (DH / QF / Hydrogenation / TautomerRule stub). Never on plain SMARTS. Pair unique-edit stays `pair_site_signature` + `swap_group`. One-bond SMARTS on these rules share undirected bond ranks with ``bond`` (see above).
+- **``atom_pair``** — ResonancePair ends only (DH / QF / Hydrogenation / Tautomerization). Never on plain SMARTS. Pair unique-edit stays `pair_site_signature` + `swap_group`. One-bond SMARTS on these rules share undirected bond ranks with ``bond`` (see above).
 
 Status: approved. Tests: `test_epoxidation_unique_edit.py`, `test_site_kind.py`, `test_parity.py` (anisole dealk).
 
@@ -224,16 +224,27 @@ Status: **not approved**. Materializing every Kekulé form inside plain `SmirksR
 
 Status: **not approved** as a replacement for ``swap_group`` / name-default groups. Hydroxylation-style H-count partitions fix *nested same-atom* SMARTS that double-emit under ``unique_csmi``. Pair same-role couples are different: two path ends that both match the same edit (hydroquinone ``phenol_end``×2, benzene ``add_carbonyl_o``×2, diene ``path_end``×2, QF ``dealkylate``×2, …) are real chemistry and stay unordered via resolved group (= ``name``). Narrowing SMARTS so those couples never co-apply would drop pathways. Keep resolved groups + nauty ordered/unordered. Residual: map ranks still distinguish dealkylate embeddings.
 
-## TautomerRule (stub only)
+## Tautomerization (ResonancePair)
 
-Status: not decided for chemistry / unique-edit; stub lands first.
+Status: approved for path-swap + H-donor extension (legacy `Tautomerization`).
 
-Archived ``Tautomerization`` extended alternating paths by one H-bearing
-neighbor and flipped bonds (net heavy-atom formula and H count unchanged;
-path swap, not ``RunReactants``). Live ``TautomerRule`` subclasses
-``ResonancePairRule``, is patternless, raises ``NotImplementedError`` from
-``metabolites``, and is not in PhaseOne. Orthogonal deferred work: tautomer
-*SMARTS matching* via RDKit ``TautomerQuery`` (preferred direction only;
-Status: not decided). When the rule is implemented, put ends/effects on
-``PatternInfo`` rather than a silent search branch. Docstring on the class
-and TODO.md carry the same split. Test: `test_tautomer_rule_stub.py`.
+Endpoints on `PatternInfo`: `tautomer_extend` (H-donor map 2 off conjugated
+anchor map 1) + `tautomer_far` (far path end). Materialize requires that edit
+pair, extends the alternating path by map 2, reuses `flip_path`. Odd
+conjugated path lengths allowed when those edits are present. At most one
+double bond per atom after the flip (drops allenes).
+
+`PatternInfo.chain_conjugate`: when set, pair composition walks aliphatic
+π–π C–C singles into the conjugated system (polyene). Default false keeps
+biaryl rings split. Tautomerization endpoints set it; other ResonancePair
+rules do not.
+
+Orthogonal deferred work: tautomer *SMARTS matching* via RDKit
+`TautomerQuery` (preferred direction only; Status: not decided). That
+matching helper is not this rule.
+
+Tests: `pair_edit::tests::tautomerization_*` (cyclohexanone, long-range
+polyene, tacrine amine→imine, find_path tacrine→7-OH).
+
+Native `TautomerRule` stub remains patternless / not in native PhaseOne
+(feature-frozen reference).

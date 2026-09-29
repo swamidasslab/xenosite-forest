@@ -27,6 +27,7 @@ fn smirks_row(
         effect: effect.sealed(),
         possibilities: Vec::new(),
         skip_same_rings: false,
+        chain_conjugate: false,
         cleave_side_group: None,
         search_bias: 0,
     }
@@ -49,6 +50,7 @@ fn endpoint_row(
         effect: effect.sealed(),
         possibilities: Vec::new(),
         skip_same_rings,
+        chain_conjugate: false,
         cleave_side_group: None,
         search_bias: 0,
     }
@@ -1105,6 +1107,43 @@ pub fn nitrogen_reduction() -> RuleSet {
     )
 }
 
+/// `Tautomerization` — ResonancePair path flip with one H-donor extension.
+///
+/// Archived forest walked resonate pair paths, extended by one H-bearing
+/// neighbor, and flipped bonds (net formula unchanged). Here that is data on
+/// [`PatternInfo`]: `tautomer_extend` marks the H-donor (map 2) off a
+/// conjugated anchor (map 1); `tautomer_far` is the far path end. Materialize
+/// joins those edits, extends the alternating path by map 2, and reuses
+/// `flip_path`.
+pub fn tautomerization() -> RuleSet {
+    let mut tautomer_h = endpoint_row(
+        "tautomer_h",
+        // :1 conjugated-system anchor; :2 H-donor (legacy Tautomerization query).
+        // `-,:` so aromatic [nH] / phenol ends match (imine↔amine on tacrine).
+        "[#6,#7,#8:1]-,:[#6h3,#6h2,#6h1,#7h2,#7h1,#8H:2]",
+        vec![2],
+        Effect {
+            ..Default::default()
+        },
+        "tautomer_extend",
+    );
+    tautomer_h.chain_conjugate = true;
+    let mut path_partner = endpoint_row(
+        "path_partner",
+        "[*:1]",
+        vec![1],
+        Effect {
+            ..Default::default()
+        },
+        "tautomer_far",
+    );
+    path_partner.chain_conjugate = true;
+    RuleSet::new(
+        Some("Tautomerization".into()),
+        [tautomer_h, path_partner],
+    )
+}
+
 /// Soft-demote reductive / counter-oxidative patterns on the find_path heap.
 /// Same rationale as Hydrogenation: real but less common toward typical Phase I
 /// oxidative targets; prone to undo prior edits (HEURISTICS: not decided).
@@ -1804,42 +1843,54 @@ pub fn glutathionation() -> RuleSet {
     )
 }
 
-/// Phase I catalog (Python `PhaseOne`).
-pub fn phase_one() -> RuleSet {
-    RuleSet::compose(
-        Some("PhaseOne".into()),
-        [
-            hydroxylation(),
-            epoxidation(),
-            epoxide_hydration(),
-            sulfur_oxidation(),
-            nitrogen_oxidation(),
-            dehydrogenation(),
-            quinone_formation(),
-            dephosphorylation(),
-            epoxide_opening(),
-            hydrolysis(),
-            dehydration(),
-            hydrogenation(),
-            nitrogen_reduction(),
-            oxygen_reduction(),
-            reductive_dehalogenation(),
-            sulfur_reduction(),
-            dealkylation(),
-            oxidative_dehalogenation(),
-        ],
-    )
+/// Phase I leaf sets without QuinoneFormation, EpoxideHydration, or
+/// Tautomerization. Nested as the PhaseOne bundle inside [`default_ruleset`];
+/// [`phase_one`] prepends QF + EH for the public PhaseOne catalog.
+fn phase_one_core_leaves() -> [RuleSet; 16] {
+    [
+        hydroxylation(),
+        epoxidation(),
+        sulfur_oxidation(),
+        nitrogen_oxidation(),
+        dehydrogenation(),
+        dephosphorylation(),
+        epoxide_opening(),
+        hydrolysis(),
+        dehydration(),
+        hydrogenation(),
+        nitrogen_reduction(),
+        oxygen_reduction(),
+        reductive_dehalogenation(),
+        sulfur_reduction(),
+        dealkylation(),
+        oxidative_dehalogenation(),
+    ]
 }
 
-/// Default search ruleset (Python `find_path.default_ruleset`).
+fn phase_one_core() -> RuleSet {
+    RuleSet::compose(Some("PhaseOne".into()), phase_one_core_leaves())
+}
+
+/// Phase I catalog (Python `PhaseOne`): QF + EpoxideHydration + Phase I leaves.
+/// Tautomerization is not included; use [`default_ruleset`] for find_path.
+pub fn phase_one() -> RuleSet {
+    let mut members = Vec::with_capacity(18);
+    members.push(quinone_formation());
+    members.push(epoxide_hydration());
+    members.extend(phase_one_core_leaves());
+    RuleSet::compose(Some("PhaseOne".into()), members)
+}
+
+/// Default `find_path` ruleset: QuinoneFormation, EpoxideHydration,
+/// Tautomerization, and the PhaseOne core bundle (no leaf duplicates).
 pub fn default_ruleset() -> RuleSet {
     RuleSet::compose(
         Some("Default".into()),
         [
-            dealkylation(),
             quinone_formation(),
-            hydroxylation(),
-            dehydrogenation(),
+            epoxide_hydration(),
+            tautomerization(),
+            phase_one_core(),
         ],
     )
 }
@@ -1861,6 +1912,7 @@ pub fn all_rules() -> RuleSet {
             hydrolysis(),
             dehydration(),
             hydrogenation(),
+            tautomerization(),
             nitrogen_reduction(),
             oxygen_reduction(),
             reductive_dehalogenation(),
@@ -1880,9 +1932,97 @@ pub fn all_rules() -> RuleSet {
     )
 }
 
+/// Rainbow / Forest SO catalog: hydroxylation, epoxidation, N-/S-oxidation.
+pub fn stable_oxygenation() -> RuleSet {
+    RuleSet::compose(
+        Some("StableOxygenation".into()),
+        [
+            hydroxylation(),
+            epoxidation(),
+            nitrogen_oxidation(),
+            sulfur_oxidation(),
+        ],
+    )
+}
+
+/// Rainbow / Forest UO catalog: dealkylation + oxidative dehalogenation.
+pub fn unstable_oxygenation() -> RuleSet {
+    RuleSet::compose(
+        Some("UnstableOxygenation".into()),
+        [dealkylation(), oxidative_dehalogenation()],
+    )
+}
+
+/// PhaseOne-shaped reduction catalog (no benzodioxole; that leaf stays on All).
+pub fn reduction() -> RuleSet {
+    RuleSet::compose(
+        Some("Reduction".into()),
+        [
+            hydrogenation(),
+            dehydration(),
+            nitrogen_reduction(),
+            sulfur_reduction(),
+            oxygen_reduction(),
+            reductive_dehalogenation(),
+        ],
+    )
+}
+
+/// Single SoT for leaf name ↔ constructor (replaces parallel match + name list).
+pub const LEAF_CTORS: &[(&str, fn() -> RuleSet)] = &[
+    ("Hydroxylation", hydroxylation),
+    ("Dehydrogenation", dehydrogenation),
+    ("QuinoneFormation", quinone_formation),
+    ("Dealkylation", dealkylation),
+    ("NDealkylation", n_dealkylation),
+    ("AzoSplitting", azo_splitting),
+    ("BenzodioxoleReduction", benzodioxole_reduction),
+    ("NitroaromaticReduction", nitroaromatic_reduction),
+    ("ThiopheneSulfurOxidation", thiophene_sulfur_oxidation),
+    ("Dephosphorylation", dephosphorylation),
+    ("EpoxideOpening", epoxide_opening),
+    ("Hydrolysis", hydrolysis),
+    ("Dehydration", dehydration),
+    ("Hydrogenation", hydrogenation),
+    ("Tautomerization", tautomerization),
+    ("NitrogenReduction", nitrogen_reduction),
+    ("OxygenReduction", oxygen_reduction),
+    ("ReductiveDehalogenation", reductive_dehalogenation),
+    ("SulfurReduction", sulfur_reduction),
+    ("Epoxidation", epoxidation),
+    ("EpoxideHydration", epoxide_hydration),
+    ("SulfurOxidation", sulfur_oxidation),
+    ("NitrogenOxidation", nitrogen_oxidation),
+    ("OxidativeDehalogenation", oxidative_dehalogenation),
+    ("Acetylation", acetylation),
+    ("Sulfation", sulfation),
+    ("Glucuronidation", glucuronidation),
+    ("Glutathionation", glutathionation),
+];
+
+/// Top-level catalogs that appear as SSSOM first segments (not leaves).
+pub const ROOT_CATALOGS: &[(&str, fn() -> RuleSet)] = &[
+    ("PhaseOne", phase_one),
+    ("Default", default_ruleset),
+    ("All", all_rules),
+    ("StableOxygenation", stable_oxygenation),
+    ("UnstableOxygenation", unstable_oxygenation),
+    ("Reduction", reduction),
+];
+
+/// Resolve a top-level SSSOM / IRI first segment to a Rust [`RuleSet`].
+pub fn resolve_root(name: &str) -> Option<RuleSet> {
+    ROOT_CATALOGS
+        .iter()
+        .chain(LEAF_CTORS.iter())
+        .find(|(n, _)| *n == name)
+        .map(|(_, ctor)| ctor())
+}
+
 /// Leaf names in catalog order.
 pub fn catalog_names() -> &'static [&'static str] {
-    &[
+    // Stable static slice derived from LEAF_CTORS.
+    const NAMES: &[&str] = &[
         "Hydroxylation",
         "Dehydrogenation",
         "QuinoneFormation",
@@ -1897,6 +2037,7 @@ pub fn catalog_names() -> &'static [&'static str] {
         "Hydrolysis",
         "Dehydration",
         "Hydrogenation",
+        "Tautomerization",
         "NitrogenReduction",
         "OxygenReduction",
         "ReductiveDehalogenation",
@@ -1910,41 +2051,17 @@ pub fn catalog_names() -> &'static [&'static str] {
         "Sulfation",
         "Glucuronidation",
         "Glutathionation",
-    ]
+    ];
+    debug_assert_eq!(NAMES.len(), LEAF_CTORS.len());
+    NAMES
 }
 
 /// Named leaf [`RuleSet`] for plan replay (elementary apply).
 pub fn leaf_rule(name: &str) -> Option<RuleSet> {
-    Some(match name {
-        "Hydroxylation" => hydroxylation(),
-        "Dehydrogenation" => dehydrogenation(),
-        "QuinoneFormation" => quinone_formation(),
-        "Dealkylation" => dealkylation(),
-        "NDealkylation" => n_dealkylation(),
-        "AzoSplitting" => azo_splitting(),
-        "BenzodioxoleReduction" => benzodioxole_reduction(),
-        "NitroaromaticReduction" => nitroaromatic_reduction(),
-        "ThiopheneSulfurOxidation" => thiophene_sulfur_oxidation(),
-        "Dephosphorylation" => dephosphorylation(),
-        "EpoxideOpening" => epoxide_opening(),
-        "Hydrolysis" => hydrolysis(),
-        "Dehydration" => dehydration(),
-        "Hydrogenation" => hydrogenation(),
-        "NitrogenReduction" => nitrogen_reduction(),
-        "OxygenReduction" => oxygen_reduction(),
-        "ReductiveDehalogenation" => reductive_dehalogenation(),
-        "SulfurReduction" => sulfur_reduction(),
-        "Epoxidation" => epoxidation(),
-        "EpoxideHydration" => epoxide_hydration(),
-        "SulfurOxidation" => sulfur_oxidation(),
-        "NitrogenOxidation" => nitrogen_oxidation(),
-        "OxidativeDehalogenation" => oxidative_dehalogenation(),
-        "Acetylation" => acetylation(),
-        "Sulfation" => sulfation(),
-        "Glucuronidation" => glucuronidation(),
-        "Glutathionation" => glutathionation(),
-        _ => return None,
-    })
+    LEAF_CTORS
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, ctor)| ctor())
 }
 
 #[cfg(test)]
@@ -1958,12 +2075,45 @@ mod tests {
         let set = phase_one();
         assert_eq!(set.members().len(), 18);
         assert_eq!(set.name.as_deref(), Some("PhaseOne"));
+        assert!(
+            set.members().iter().all(|m| matches!(m, crate::ruleset::RuleMember::Set(s) if s.name.as_deref() != Some("Tautomerization"))),
+            "Tautomerization must not be in PhaseOne"
+        );
+    }
+
+    #[test]
+    fn default_ruleset_nests_qf_eh_tautomer_phase_one() {
+        let set = default_ruleset();
+        assert_eq!(set.members().len(), 4);
+        assert_eq!(set.name.as_deref(), Some("Default"));
+        let names: Vec<_> = set
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.clone(),
+                crate::ruleset::RuleMember::Pattern(_) => None,
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                Some("QuinoneFormation".into()),
+                Some("EpoxideHydration".into()),
+                Some("Tautomerization".into()),
+                Some("PhaseOne".into()),
+            ]
+        );
+        let phase = match &set.members()[3] {
+            crate::ruleset::RuleMember::Set(s) => s,
+            crate::ruleset::RuleMember::Pattern(_) => panic!("expected PhaseOne nest"),
+        };
+        assert_eq!(phase.members().len(), 16);
     }
 
     #[test]
     fn all_rules_registers_every_leaf() {
-        assert_eq!(all_rules().members().len(), 27);
-        assert_eq!(catalog_names().len(), 27);
+        assert_eq!(all_rules().members().len(), 28);
+        assert_eq!(catalog_names().len(), 28);
     }
 
     #[test]

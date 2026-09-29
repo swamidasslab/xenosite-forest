@@ -158,6 +158,90 @@ impl RuleSet {
         &self.members
     }
 
+    /// `true` when this set has nested [`RuleMember::Set`] children (a catalog).
+    pub fn is_catalog(&self) -> bool {
+        self.members
+            .iter()
+            .any(|m| matches!(m, RuleMember::Set(_)))
+    }
+
+    /// Direct member count (nested sets count as one each; leaf patterns as one each).
+    pub fn len(&self) -> usize {
+        self.members.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.members.is_empty()
+    }
+
+    /// Index into direct members: nested set → that [`RuleSet`]; pattern → error via Option on BoundPattern APIs.
+    ///
+    /// For catalogs, returns the child rule set. For leaves, use [`Self::bound_pattern_at`].
+    pub fn get_member_set(&self, index: usize) -> Option<RuleSet> {
+        match self.members.get(index)? {
+            RuleMember::Set(set) => Some(set.clone()),
+            RuleMember::Pattern(_) => None,
+        }
+    }
+
+    /// Bound pattern at direct pattern-member index (leaf rules).
+    pub fn bound_pattern_at(&self, index: usize) -> Option<crate::bound_pattern::BoundPattern> {
+        match self.members.get(index)? {
+            RuleMember::Pattern(pattern) => Some(crate::bound_pattern::BoundPattern::new(
+                self.clone(),
+                pattern.clone(),
+            )),
+            RuleMember::Set(_) => None,
+        }
+    }
+
+    /// Child rule by name (catalog) or bound pattern by name (leaf).
+    pub fn get_str(&self, name: &str) -> Option<RuleSet> {
+        for member in &self.members {
+            if let RuleMember::Set(set) = member {
+                if set.name.as_deref() == Some(name) {
+                    return Some(set.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// [`BoundPattern`] for a named pattern on this leaf (direct members only).
+    pub fn bound_pattern(&self, name: &str) -> Option<crate::bound_pattern::BoundPattern> {
+        for member in &self.members {
+            if let RuleMember::Pattern(pattern) = member {
+                if pattern.name == name {
+                    return Some(crate::bound_pattern::BoundPattern::new(
+                        self.clone(),
+                        pattern.clone(),
+                    ));
+                }
+            }
+        }
+        // Also search flat patterns under nested sets? Plan says leaf patterns
+        // are direct; catalogs use get_str for child rules. Flat search helps
+        // composed leaves that only store patterns.
+        for pattern in self.patterns() {
+            if pattern.name == name {
+                return Some(crate::bound_pattern::BoundPattern::new(
+                    self.clone(),
+                    pattern.clone(),
+                ));
+            }
+        }
+        None
+    }
+
+    /// Unified index: catalog → child [`RuleSet`]; leaf → not used (see bound_pattern_at).
+    pub fn get(&self, index: usize) -> Option<RuleSet> {
+        self.get_member_set(index)
+    }
+
+    pub fn contains_name(&self, name: &str) -> bool {
+        self.get_str(name).is_some() || self.bound_pattern(name).is_some()
+    }
+
     /// Flat walk of every leaf [`PatternInfo`] under this set (including nested).
     pub fn patterns(&self) -> Vec<&PatternInfo> {
         let mut out = Vec::new();

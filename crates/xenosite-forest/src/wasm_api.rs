@@ -323,6 +323,70 @@ impl JsPatternInfo {
     }
 }
 
+/// JS wrap of [`crate::BoundPattern`].
+#[wasm_bindgen(js_name = BoundPattern)]
+#[derive(Clone)]
+pub struct JsBoundPattern {
+    inner: crate::BoundPattern,
+}
+
+#[wasm_bindgen(js_class = BoundPattern)]
+impl JsBoundPattern {
+    #[wasm_bindgen(getter)]
+    pub fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
+
+    #[wasm_bindgen(getter, js_name = ruleName)]
+    pub fn rule_name(&self) -> Option<String> {
+        self.inner.rule_name().map(str::to_string)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn curie(&self) -> String {
+        self.inner.curie()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn iri(&self) -> String {
+        self.inner.iri()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    #[wasm_bindgen(js_name = asRuleSet)]
+    pub fn as_ruleset(&self) -> JsRuleSet {
+        JsRuleSet {
+            inner: self.inner.as_ruleset(),
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn metabolize(&self, mol: &JsForestMol) -> Result<JsValue, JsValue> {
+        let forest = mol.inner.copy_mol();
+        let emissions = self
+            .inner
+            .metabolize_default(&forest, true)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(js_err)?;
+        let rows: Vec<Value> = emissions
+            .into_iter()
+            .map(|e| {
+                json!({
+                    "pattern_name": e.pattern_name,
+                    "site": e.site,
+                    "products": e.product_csmis(),
+                    "rule_path": e.rule_path,
+                })
+            })
+            .collect();
+        to_js(&json!(rows))
+    }
+}
+
 /// JS wrap of [`RuleSet`].
 #[wasm_bindgen(js_name = RuleSet)]
 #[derive(Clone)]
@@ -416,6 +480,47 @@ impl JsRuleSet {
             .collect();
         to_js(&json!(rows))
     }
+
+    /// Catalog → child `RuleSet`; leaf → `BoundPattern`. Name or index (as string int).
+    #[wasm_bindgen(js_name = get)]
+    pub fn get(&self, key: &str) -> Result<JsValue, JsValue> {
+        if let Ok(mut index) = key.parse::<isize>() {
+            let len = self.inner.len() as isize;
+            if index < 0 {
+                index += len;
+            }
+            if index < 0 || index >= len {
+                return Err(js_err("RuleSet index out of range"));
+            }
+            let index = index as usize;
+            if self.inner.is_catalog() {
+                let child = self
+                    .inner
+                    .get(index)
+                    .ok_or_else(|| js_err("RuleSet index out of range"))?;
+                return Ok(JsValue::from(JsRuleSet { inner: child }));
+            }
+            let bp = self
+                .inner
+                .bound_pattern_at(index)
+                .ok_or_else(|| js_err("RuleSet index out of range"))?;
+            return Ok(JsValue::from(JsBoundPattern { inner: bp }));
+        }
+        if self.inner.is_catalog() {
+            if let Some(child) = self.inner.get_str(key) {
+                return Ok(JsValue::from(JsRuleSet { inner: child }));
+            }
+        }
+        if let Some(bp) = self.inner.bound_pattern(key) {
+            return Ok(JsValue::from(JsBoundPattern { inner: bp }));
+        }
+        Err(js_err(format!("unknown RuleSet member: {key}")))
+    }
+
+    #[wasm_bindgen(js_name = contains)]
+    pub fn contains(&self, name: &str) -> bool {
+        self.inner.contains_name(name)
+    }
 }
 
 impl Default for JsRuleSet {
@@ -478,6 +583,31 @@ pub fn default_ruleset() -> JsRuleSet {
     wrap_ruleset(default_ruleset_rs())
 }
 
+/// Decompressed Forest↔XMET SSSOM TSV text.
+#[wasm_bindgen(js_name = forest_xmet_sssom)]
+pub fn forest_xmet_sssom_js() -> String {
+    crate::mapping::forest_xmet_sssom().to_string()
+}
+
+/// Resolve an `xf:` CURIE / Forest IRI to a `RuleSet` or `BoundPattern`.
+#[wasm_bindgen(js_name = resolve)]
+pub fn resolve_js(id: &str) -> Result<JsValue, JsValue> {
+    match crate::mapping::resolve(id).map_err(js_err)? {
+        crate::mapping::Resolved::Rule(inner) => Ok(JsValue::from(JsRuleSet { inner })),
+        crate::mapping::Resolved::Pattern(inner) => Ok(JsValue::from(JsBoundPattern { inner })),
+    }
+}
+
+#[wasm_bindgen(js_name = expand_iri)]
+pub fn expand_iri_js(curie_or_iri: &str) -> String {
+    crate::mapping::expand_iri(curie_or_iri)
+}
+
+#[wasm_bindgen(js_name = to_curie)]
+pub fn to_curie_js(iri: &str) -> String {
+    crate::mapping::to_curie(iri)
+}
+
 fn run_find_path(
     reactant: &str,
     target: &str,
@@ -514,8 +644,9 @@ fn run_find_path(
         drop_skeleton_twins: drop_skeleton_twins.unwrap_or(true),
         diversity: diversity.unwrap_or(false),
         timeout,
+        ..FindPathConfig::default()
     };
-    let rules = phase_one_rs();
+    let rules = default_ruleset_rs();
     let mut counters = PathCounters::default();
     let hits = find_path_with(reactant, target, &rules, &mut counters, config, |_| true)
         .map_err(js_err)?

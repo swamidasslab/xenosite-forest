@@ -1,6 +1,70 @@
 # Lab log
 
+## 2026-09-29
+
+- **Forest↔XMET SSSOM embed + resolve.** Living SoT
+  `mappings/xmet-forest.sssom.tsv` (uncompressed only; `.gitignore` blocks
+  `mappings/**/*.gz`). `build.rs` gzips to `OUT_DIR`; `forest_xmet_sssom()` /
+  `resolve` / `BoundPattern` in Rust with Python + WASM wraps. Coverage:
+  `tests/sssom_coverage.rs` (resolve-all, inventory, nest — no short-code
+  allowlist). Docs: `docs/forest/MAPPING.md` + release snapshot checklist.
+- **Short-code SSSOM cleanup.** Dropped `xf:CJ` rows (conjugation not ready).
+  Remapped `SO`/`UO`/`RD` → `StableOxygenation` / `UnstableOxygenation` /
+  `Reduction` catalogs (new `ROOT_CATALOGS`); `DH`/`HD` → existing
+  `Dehydrogenation` / `Hydrolysis` leaves. Removed `SSSOM_ROOT_ALLOWLIST`.
+- **XMET chemist-def audit (suggestions only, no SSSOM remaps).** Tautomerization
+  home `xmet:4000186` prose is Forest-free and fits leaf semantics; both new
+  pattern rows currently share that home (mint `keto–enol` /
+  `imine–enamine` children `4000187`/`4000188` or always_with later). **29**
+  mapped `4000xxx` concepts still mention Forest/Rainbow identity in
+  def/synonyms (QF endpoints, GSH patterns, demethylation alwaysWith notes,
+  …) — allowlisted in `test_xmet_definition_lint.py` until tagger
+  `xmet.yaml` patches strip engine language. Hydrolysis chemist text is
+  Rainbow-framed and Forest-free; scope vs Forest `Hydrolysis` leaf still a
+  soft semantic note (epoxide opening is separate under isoredox).
+
+- **Tacrine imine→amine fixed.** Root cause: after tautomer `flip_path`,
+  bracket H on `[nH]` stayed set, so the flipped amine failed
+  `accept_product` (valence) and only quinoids survived; find_path then
+  repaired via DH `amine` (3 steps, bill ~1593). Clear
+  `hydrogen_count` on flipped path atoms for tautomer (RDKit SanitizeMol
+  analogue). Now imine↔amine both emit; find_path is tautomer+`h` (2
+  steps, bill ~740). Dropped tautomer `search_bias=-1` (demote did not
+  help). Still open: cut remaining fanout bill.
+
+- **Default find_path ruleset.** Tautomerization moved out of PhaseOne.
+  `default_ruleset` / Python `Default()` is QuinoneFormation +
+  EpoxideHydration + Tautomerization + PhaseOne core (16 leaves; QF/EH not
+  duplicated). Public `PhaseOne()` stays QF + EH + those 16. Rust/Python/WASM
+  `find_path` / `find_path_partial` use Default; `random_path` still defaults
+  to PhaseOne.
+
+- **Tautomerization ported to Rust.** ResonancePair endpoints:
+  `tautomer_extend` + `tautomer_far`; materialize extends path by H-donor
+  (map 2) and reuses `flip_path`. `PatternInfo.chain_conjugate` widens
+  conjugated systems across aliphatic polyene C–C (biaryl still split).
+  Unit: cyclohexanone↔enol, long-range `ClCC=CC=CC=CC=CO`↔ketone, tacrine
+  amine↔imine. Formula-check: non-cleaving multi-product alternatives
+  checked per piece (`formula_check`).
+
+- **MetX miss diagnosis (sample):** (1) **DB garbage targets** — BIOTID00198/00138 labeled aliphatic OH / S-ox but products are fully saturated (+10 H) while only +O in heavy formula; search thrashs (bill ~1600/840) because `could_help` stays true on aromatics. (2) **Tautomer** — tacrine→7-OH MetX amino form misses (bill 177); same OH on imine tautomer hits in 1 step (bill 3). (3) **Wrong atom class** — N-OH-IQ: `hydroxylamine` fires on exocyclic `=N` → `=NO` (diff cost→0 vs target!) but CSMI ≠ ring `N–OH` target; search stops cold (bill 3). (4) **Rule gap** — leflunomide isoxazole N–O open has no PhaseOne cleavage; bill 149 on unrelated edits. (5) **Purine demethyl** — real caffeine→theobromine still misses (bill 16); demethyl hops only cut cost 16→11 (MCS/tautomer on xanthine). MetX caffeine product itself is wrong (loses N, not Me).
+
+- **MetXBioDB Phase I hard-case scan** (`metx_hard_cases` @200 nodes / 1.5s). TSV: `artifacts/metx_phase1_pairs.tsv` (1446 InChI→SMILES). Runnable **1443**; **873 hits / 570 misses / 48 timed_out**; wall **792s**. Artifact: `artifacts/metx_hard_scan200.out`, misses `artifacts/metx_hard_misses.tsv`. Highest-bill misses: butoxy-chromenone OH isomers **~1580–1624** (`extra_target_heavies`+`needs_oxygen`); 2-acetylbenzothiophene S-ox **842**; methoxy-amphetamine ArOH **263**. Timeout cluster = large peptides/macrocycles (cyclosporine, taxol, docetaxel, valspodar) — root often still cost 4–6 but expand explodes. Good fail-fast / bag-history cases: chromenone OH thrash (small residual, huge bill); S-ox / arene-epoxide with cleavage leftover; caffeine→theobromine multipath-ish miss.
+
+- **Hard constraint idea (not tuning):** distinguish *thought resolvable* (`could_help_on` / any-slice gate) from *actually resolved* (which residual bags shrank on the hop). Walk history can mark **invariant leftovers** — bags present at an ancestor, never reduced along the walk, still present at seal (e.g. GSH `n_extra` from root on +GSH). Soft early-stop on sealed-basin count hurt closest (cost 92 vs 80); anti-retread on full cost class only cut tetraMeO **438→353**. Next validate on real cases before coding: (1) +GSH — invariant `n_extra`/`conjugation_sized_o` from root, closest = pre-conjugate shell; (2) reachable CTRLs — no invariant leftover, no spurious seal; (3) dual-endpoint / multipath — two different residual classes must not collapse into one seal; (4) false-promise hops — `could_help` true but bag never shrinks. Search guide: rework near last ancestor where addressable cost still dropped; do not retread the long prefix that only fixed addressable bags while invariant leftover sat untouched. Ruleset-level: if no rule formula delta can cover a bag, exact is impossible (schema fact, not GSH special case).
+
+- **Seal + hard anti-retread (no early-stop by default).** Zero-enqueue expand seals residual class; refuse re-enqueue of that class. `stop_after_sealed_basins` opt-in (auto-`max_paths` hurt closest: tetraMeO stopped at cost 92). Anti-retread @800: tetraMeO+GSH **438→353**; MeOPhOH+GSH **710→697**; eugenol+GSH flat **365**. Partials still flush cost=80 conjugation leftover. Artifact: `artifacts/unreachable_partial_gsh_800_antiretread.out`. Boost unhelped-residual candidates still open.
+
+- **+GSH partial measure** (`unreachable_conjugate_probe` @800 release, `artifacts/unreachable_partial_gsh_800.out`). Exact-only bills unchanged (tetraMeO+GSH **438 / 12.6s**, eugenol+GSH **365**, MeOPhOH+GSH **710**). `find_path_partial` same bills (no seal yet) but flushes **2 closest** with `cost=80` and cats `extra_target_heavies` / `conjugation_sized_o` / `large_formula_gap` — pre-GSH improved shells, not the conjugate. CTRL reachable still exact-only (partials=0 when exact fills).
+
+- Scrubbed pair-specific `could_help` / H-progress branches: `residual_resolvable`, Expand filter, and emit progress all go through `candidate_could_help_on` / `candidate_site_h_progress`; `pair_could_help` / `pair_site_h_progress` are thin aliases.
+- Peeled child enqueue into `PathSearch` (shared heap/seen/network). `find_path_with_network` + `find_path_partial` (end-of-search closest flush). `MetabolicNetwork` records hops; `AtomDiffResidual` shared with `missed`. Python: `find_path_partial`, `MetabolicNetwork`, `network=` on both doors.
+
 ## 2026-09-28
+
+- **Unreachable = many improving PhaseOne edits + leftover conjugate.** Not OH-specific. Controls cheap; same reactant→product+GSH thrashs under atom_diff until the frontier dies (often before `max_nodes`). Release probe `unreachable_conjugate_probe` @800: tetraMeO-BP→tetraOH **bill 27 / 0.06s** vs +GSH **438 / 12.6s**; MeOPhOH→hydroxyQ **71 / 0.03s** vs +GSH **710 / 1.2s**; eugenol **32** vs +GSH **365**. Artifact: `artifacts/unreachable_improve_plus_gsh_800.out`. Partial must report closest (pre-GSH) and later fail-fast — today it pays the full improving fanout then stalls.
+
+- **find_path_bench after DeferredSite/ForestMol (`eb5ccdb`) vs `artifacts/bench_find_path_rust_{mid,larger}.out` (same day ~17:41, pre-unify).** Release, filter-only, `log-neg-pc`, best-of-5. Mid atom_diff: total wall **0.666→0.141s** (~4.7×); billed **~1067→134** (~8×). MeOPhOH **899→71** bill, **0.450→0.033s**. Eugenol **89→32**, 2-MeO-naph **62→17**. Larger: wall **0.242→0.162s**; bill **~113→40**. Lazy vs eager identical on these sets. Artifacts: `artifacts/bench_find_path_rust_{mid,larger}_post_deferred.out`, `*_eager_post_deferred.out`. Verdict: refactor **helped** — fewer edits/nodes (tagged ForestMol path, no CSMI rematerialize in expand) not just clock noise. Still measure conjugation/timeout hard set before plateau work.
 
 - **Expand unified on DeferredSite.** `find_path::Expand` no longer walks a separate pair DFS (`PairFrame` / `emit_pair` / `load_leaf_pairs`). One filter+sort over `RuleSet::candidates`, one `emit_site` that calls `site_atoms` / `elementary_plan` / `cleave_side_sig` (pair ends into plan hooks). ~260 lines out of `find_path.rs`. Metabolize dropped its plan overlay — `DeferredSite::apply` already sets `elementary_plan`. Next lever for `find_path_partial`: keep search loop thin; put more of the child-enqueue branching into objects beside Expand.
 

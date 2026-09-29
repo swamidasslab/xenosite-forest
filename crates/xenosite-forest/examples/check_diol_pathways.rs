@@ -3,38 +3,34 @@ use std::collections::BTreeSet;
 
 use xenosite_forest::rules::{epoxidation, epoxide_opening, hydroxylation};
 use xenosite_forest::{
-    FindPathConfig, HeapScoreMode, MatchScoreSpec, PathCounters, RuleSet, accept_all_rules,
-    accept_all_sites, canon_of, epoxide_hydration, find_path_with, parse_mol, phase_one,
+    FindPathConfig, ForestMol, HeapScoreMode, MatchScoreSpec, PathCounters, RuleSet,
+    accept_all_rules, accept_all_sites, epoxide_hydration, find_path_with, phase_one,
 };
 
 fn emit_products(set: &RuleSet, smi: &str) -> BTreeSet<String> {
-    let mol = parse_mol(smi).unwrap();
+    let mol = ForestMol::parse(smi).unwrap();
     set.metabolize(&mol, accept_all_rules, accept_all_sites, true)
         .filter_map(|r| r.ok())
-        .flat_map(|e| e.products.into_iter())
-        .filter_map(|p| canon_of(&p).ok())
+        .flat_map(|e| e.product_csmis().into_iter())
         .collect()
 }
 
 fn two_hop_oh(smi: &str) -> BTreeSet<String> {
     let oh = hydroxylation();
-    let mol = parse_mol(smi).unwrap();
+    let mol = ForestMol::parse(smi).unwrap();
     let mut out = BTreeSet::new();
     let first: Vec<_> = oh
         .metabolize(&mol, accept_all_rules, accept_all_sites, true)
         .filter_map(|r| r.ok())
         .collect();
     for e in first {
-        for p in &e.products {
-            let mid = parse_mol(p).unwrap();
+        for mid in &e.products {
             for e2 in oh
-                .metabolize(&mid, accept_all_rules, accept_all_sites, true)
+                .metabolize(mid, accept_all_rules, accept_all_sites, true)
                 .filter_map(|r| r.ok())
             {
                 for p2 in e2.products {
-                    if let Ok(c) = canon_of(&p2) {
-                        out.insert(c);
-                    }
+                    out.insert(p2.csmi().as_ref().to_string());
                 }
             }
         }
@@ -45,22 +41,19 @@ fn two_hop_oh(smi: &str) -> BTreeSet<String> {
 fn epox_then_open(smi: &str) -> BTreeSet<String> {
     let epox = epoxidation();
     let open = epoxide_opening();
-    let mol = parse_mol(smi).unwrap();
+    let mol = ForestMol::parse(smi).unwrap();
     let mut out = BTreeSet::new();
     for e in epox
         .metabolize(&mol, accept_all_rules, accept_all_sites, true)
         .filter_map(|r| r.ok())
     {
-        for p in &e.products {
-            let mid = parse_mol(p).unwrap();
+        for mid in &e.products {
             for e2 in open
-                .metabolize(&mid, accept_all_rules, accept_all_sites, true)
+                .metabolize(mid, accept_all_rules, accept_all_sites, true)
                 .filter_map(|r| r.ok())
             {
                 for p2 in e2.products {
-                    if let Ok(c) = canon_of(&p2) {
-                        out.insert(c);
-                    }
+                    out.insert(p2.csmi().as_ref().to_string());
                 }
             }
         }

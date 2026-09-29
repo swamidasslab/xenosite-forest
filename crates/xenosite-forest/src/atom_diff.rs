@@ -86,6 +86,11 @@ impl AtomDiff {
         self.field_cost()
     }
 
+    /// Structured “what / where still disagrees” for partial search yields.
+    pub fn residual(&self, reactant: Option<&Molecule>, target: Option<&Molecule>) -> AtomDiffResidual {
+        residual_from_diff(self, reactant, target)
+    }
+
     fn field_cost(&self) -> usize {
         // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a cost
         // term: `formula_l1` counts it like any element; H at atoms is via
@@ -1429,11 +1434,6 @@ pub fn dh_product_ends_match(
     false
 }
 
-/// Site-level gate (Python `_site_could_help`) for a deferred candidate.
-pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
-    candidate_could_help_on(candidate, diff, None, None)
-}
-
 fn scope_could_help(
     effect: &Effect,
     atoms: &[usize],
@@ -1501,64 +1501,92 @@ fn extend_h_edit_partners(mol: &Molecule, scope: &mut HashSet<usize>) {
     }
 }
 
-/// Full site gate with live mol (leave_count / methide partner).
-///
-/// Non-cleavage: the whole site must help under **one** MCS placement (same
-/// rule for atom / bond / pair). Merged top-rank unions across placements are
-/// optimistic when the site has more than one atom. Pair ends also check
-/// per-end oxygen / ``partner == "C"`` on each endpoint effect.
-pub fn candidate_could_help_on(
-    candidate: &Candidate,
-    diff: &AtomDiff,
-    mol: Option<&Molecule>,
-    target: Option<&Molecule>,
-) -> bool {
-    let effect = &candidate.effect;
-    let ok = match (mol, target) {
-        (Some(m), Some(t)) => pattern_could_help_mol(effect, diff, m, t),
-        _ => pattern_could_help_on(effect, diff, mol, target),
-    };
-    if !ok {
-        return false;
-    }
-    let atoms = site_atoms(candidate);
-    if effect.cleaves {
-        if !diff.site_is_cleavage(&atoms) {
-            return false;
-        }
-        if let (Some(n), Some(m)) = (effect.leave_count, mol) {
-            if let Some((a, b)) = leaving_heavy_counts(m, &atoms) {
-                if a.min(b) != n as usize {
-                    return false;
-                }
-            }
-        }
-        return true;
+/// Site-level help gates on a deferred candidate (uses [`Candidate::mol`]).
+impl Candidate {
+    /// Pattern-level site gate (no live target).
+    pub fn could_help(&self, diff: &AtomDiff) -> bool {
+        self.could_help_on(diff, None)
     }
 
-    match (mol, target) {
-        (Some(m), Some(t)) => {
-            for mapping in diff.mappings_slice() {
-                let view = diff_for(m, t, mapping);
-                if candidate.is_pair() {
-                    let Some((end_a, end_b)) = candidate.end_atoms() else {
+    /// Full site gate toward `target` (leave_count / methide / per-placement).
+    ///
+    /// Non-cleavage: the whole site must help under **one** MCS placement (same
+    /// rule for atom / bond / pair). Pair ends also check per-end oxygen /
+    /// ``partner == "C"`` on each endpoint effect.
+    pub fn could_help_on(&self, diff: &AtomDiff, target: Option<&Molecule>) -> bool {
+        let mol = self.mol();
+        let effect = &self.effect;
+        let ok = match target {
+            Some(t) => pattern_could_help_mol(effect, diff, mol, t),
+            None => pattern_could_help_on(effect, diff, Some(mol), None),
+        };
+        if !ok {
+            return false;
+        }
+        let atoms = self.site_atoms();
+        if effect.cleaves {
+            if !diff.site_is_cleavage(&atoms) {
+                return false;
+            }
+            if let Some(n) = effect.leave_count {
+                if let Some((a, b)) = leaving_heavy_counts(mol, &atoms) {
+                    if a.min(b) != n as usize {
                         return false;
-                    };
-                    if !pair_ends_match_view(candidate, end_a, end_b, &view, m, t) {
-                        continue;
                     }
-                    let (p0, p1) = candidate.path_ends();
-                    if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(m), Some(t)) {
-                        return true;
-                    }
-                } else if candidate_could_help_on_view(candidate, &atoms, &view, Some(m), Some(t))
-                {
-                    return true;
                 }
             }
-            false
+            return true;
         }
-        _ => candidate_could_help_on_view(candidate, &atoms, diff, mol, target),
+
+        match target {
+            Some(t) => {
+                for mapping in diff.mappings_slice() {
+                    let view = diff_for(mol, t, mapping);
+                    if self.is_pair() {
+                        let Some((end_a, end_b)) = self.end_atoms() else {
+                            return false;
+                        };
+                        if !pair_ends_match_view(self, end_a, end_b, &view, mol, t) {
+                            continue;
+                        }
+                        let (p0, p1) = self.path_ends();
+                        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol), Some(t))
+                        {
+                            return true;
+                        }
+                    } else if candidate_could_help_on_view(
+                        self,
+                        &atoms,
+                        &view,
+                        Some(mol),
+                        Some(t),
+                    ) {
+                        return true;
+                    }
+                }
+                false
+            }
+            None => candidate_could_help_on_view(self, &atoms, diff, Some(mol), None),
+        }
+    }
+
+    /// H-progress under the best MCS placement (pairs include path ends).
+    pub fn site_h_progress_on(&self, diff: &AtomDiff, target: &Molecule) -> i32 {
+        let atoms = self.site_atoms();
+        let path_ends: Vec<usize> = if self.is_pair() {
+            let (p0, p1) = self.path_ends();
+            vec![p0, p1]
+        } else {
+            Vec::new()
+        };
+        site_h_progress_best_placement(
+            &self.effect,
+            &atoms,
+            &path_ends,
+            diff,
+            self.mol(),
+            target,
+        )
     }
 }
 
@@ -1601,55 +1629,31 @@ fn candidate_could_help_on_view(
     scope_could_help(effect, atoms, &[], view, mol, target)
 }
 
-/// Pair-site gate (Python `_site_could_help` when ``"ends"`` is on the info).
-///
-/// Same one-placement rule as [`candidate_could_help_on`]. Per-end oxygen /
-/// ``partner == "C"`` read each end's effect (pair data), not the merged span.
+/// Thin alias of [`Candidate::could_help`].
+pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
+    candidate.could_help(diff)
+}
+
+/// Thin alias of [`Candidate::could_help_on`] (ignores redundant `mol`).
+pub fn candidate_could_help_on(
+    candidate: &Candidate,
+    diff: &AtomDiff,
+    _mol: Option<&Molecule>,
+    target: Option<&Molecule>,
+) -> bool {
+    candidate.could_help_on(diff, target)
+}
+
+/// Thin alias of [`Candidate::could_help_on`].
 pub fn pair_could_help(
     pair: &crate::candidate::DeferredSite,
     diff: &AtomDiff,
-    mol: &Molecule,
+    _mol: &Molecule,
     target: &Molecule,
 ) -> bool {
-    let effect = &pair.effect;
-    if !pattern_could_help_mol(effect, diff, mol, target) {
-        return false;
-    }
-    let Some((end_a, end_b)) = pair.end_atoms() else {
-        return false;
-    };
-    let atoms = [end_a, end_b];
-    if effect.cleaves {
-        if !diff.site_is_cleavage(&atoms) {
-            return false;
-        }
-        if let Some(n) = effect.leave_count {
-            if let Some((a, b)) = leaving_heavy_counts(mol, &atoms) {
-                if a.min(b) != n as usize {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    let (p0, p1) = pair.path_ends();
-    let mappings = if diff.mappings.is_empty() {
-        std::slice::from_ref(&diff.mapping)
-    } else {
-        diff.mappings.as_slice()
-    };
-    for mapping in mappings {
-        let view = diff_for(mol, target, mapping);
-        if !pair_ends_match_view(pair, end_a, end_b, &view, mol, target) {
-            continue;
-        }
-        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol), Some(target)) {
-            return true;
-        }
-    }
-    false
+    pair.could_help_on(diff, Some(target))
 }
+
 
 fn pair_ends_match_view(
     pair: &crate::candidate::DeferredSite,
@@ -1678,15 +1682,14 @@ fn pair_ends_match_view(
 /// reduction partners are included when `mol` is given so OxygenReduction's
 /// O-only site still scores the carbon that gains H.
 pub fn candidate_order_key(candidate: &Candidate, diff: &AtomDiff) -> (u8, u8, u8, String) {
-    let (a, b, c, _progress, name) = candidate_order_key_on(candidate, diff, None, None);
+    let (a, b, c, _progress, name) = candidate_order_key_on(candidate, diff, None);
     (a, b, c, name)
 }
 
-/// Same as [`candidate_order_key`], with live mol / target for H-progress and O preference.
+/// Same as [`candidate_order_key`], with live target for H-progress and O preference.
 pub fn candidate_order_key_on(
     candidate: &Candidate,
     diff: &AtomDiff,
-    mol: Option<&Molecule>,
     target: Option<&Molecule>,
 ) -> (u8, u8, u8, i32, String) {
     let effect = &candidate.pattern.effect;
@@ -1699,8 +1702,11 @@ pub fn candidate_order_key_on(
     let primary = if want_cleave { cleave } else { 0 };
     let secondary = if want_dear { dear } else { 0 };
     let tertiary = if want_oxy { oxy } else { 0 };
-    let atoms = site_atoms(candidate);
-    let progress = site_h_progress(effect, &atoms, &[], diff, mol, target);
+    let atoms = candidate.site_atoms();
+    let progress = match target {
+        Some(t) => candidate.site_h_progress_on(diff, t),
+        None => site_h_progress(effect, &atoms, &[], diff, Some(candidate.mol()), None),
+    };
     // Negate so ascending sort prefers higher progress (apply helps more).
     (
         primary,
@@ -1774,24 +1780,127 @@ pub fn site_h_progress_best_placement(
         .unwrap_or(0)
 }
 
-/// Pair emit: H-progress for both ends under the best consistent placement.
+/// Thin alias of [`Candidate::site_h_progress_on`].
+pub fn candidate_site_h_progress(
+    candidate: &Candidate,
+    diff: &AtomDiff,
+    _mol: &Molecule,
+    target: &Molecule,
+) -> i32 {
+    candidate.site_h_progress_on(diff, target)
+}
+
+/// Thin alias of [`Candidate::site_h_progress_on`].
 pub fn pair_site_h_progress(
     pair: &crate::candidate::DeferredSite,
     diff: &AtomDiff,
-    mol: &Molecule,
+    _mol: &Molecule,
     target: &Molecule,
 ) -> i32 {
-    let atoms = pair
-        .end_atoms()
-        .map(|(a, b)| [a, b])
-        .unwrap_or([pair.site, pair.site]);
-    let (p0, p1) = pair.path_ends();
-    site_h_progress_best_placement(&pair.effect, &atoms, &[p0, p1], diff, mol, target)
+    pair.site_h_progress_on(diff, target)
 }
 
 /// Keep predicate for [`crate::find_path::find_path_with`] from an [`AtomDiff`].
 pub fn keep_against_diff(diff: &AtomDiff) -> impl Fn(&Candidate) -> bool + '_ {
-    move |c: &Candidate| candidate_could_help(c, diff)
+    move |c: &Candidate| c.could_help(diff)
+}
+
+/// Structured leftover disagreement for partial search / [`crate::MetabolicNetwork::missed`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AtomDiffResidual {
+    pub cost: usize,
+    pub cleaved: BTreeSet<usize>,
+    pub cleavage_bonds: BTreeSet<(usize, usize)>,
+    pub loses_aromaticity: BTreeSet<usize>,
+    pub aromatic_delta: BTreeSet<usize>,
+    pub bond_raises: BTreeSet<(usize, usize)>,
+    pub n_extra: usize,
+    pub reactant_heavy: usize,
+    pub target_heavy: usize,
+    /// Soft category hints for callers (conjugation-sized add, needs oxygen, …).
+    pub categories: Vec<String>,
+    /// True when a full candidate scan found no helper for this residual.
+    pub unresolvable: bool,
+}
+
+impl AtomDiffResidual {
+    /// Stable class key for basin sealing (cost + structural bags).
+    pub fn class_key(&self) -> String {
+        format!(
+            "c{}_x{}_cl{}_ar{}_br{}",
+            self.cost,
+            self.n_extra,
+            self.cleavage_bonds.len(),
+            self.aromatic_delta.len(),
+            self.bond_raises.len()
+        )
+    }
+}
+
+/// Build a residual summary from an [`AtomDiff`].
+pub fn residual_from_diff(
+    diff: &AtomDiff,
+    reactant: Option<&Molecule>,
+    target: Option<&Molecule>,
+) -> AtomDiffResidual {
+    let mut categories = Vec::new();
+    if diff.n_extra > 0 {
+        categories.push("extra_target_heavies".into());
+    }
+    if diff.has_cleavage() {
+        categories.push("cleavage".into());
+    }
+    if !diff.loses_aromaticity.is_empty() {
+        categories.push("dearomatize".into());
+    }
+    if let (Some(r), Some(t)) = (reactant, target) {
+        if any_needs_oxygen(t, diff) {
+            categories.push("needs_oxygen".into());
+        }
+        if formula_oxygen(t) > formula_oxygen(r) + 2 {
+            categories.push("conjugation_sized_o".into());
+        }
+        let rf = crate::forest::molecule_formula(r);
+        let tf = crate::forest::molecule_formula(t);
+        if crate::forest::formula_heavy_l1(&rf, &tf) >= 6 {
+            categories.push("large_formula_gap".into());
+        }
+    }
+    AtomDiffResidual {
+        cost: diff.cost(),
+        cleaved: diff.cleaved.clone(),
+        cleavage_bonds: diff.cleavage_bonds.clone(),
+        loses_aromaticity: diff.loses_aromaticity.clone(),
+        aromatic_delta: diff.aromatic_delta.clone(),
+        bond_raises: diff.bond_raises.clone(),
+        n_extra: diff.n_extra,
+        reactant_heavy: diff.reactant_heavy,
+        target_heavy: diff.target_heavy,
+        categories,
+        unresolvable: false,
+    }
+}
+
+/// True when some deferred site on `mol` can help `diff` toward `target`.
+///
+/// Scans the **full** candidate list (discovery only — no materialize).
+pub fn residual_resolvable(
+    mol: &crate::ForestMol,
+    target: &Molecule,
+    diff: &AtomDiff,
+    ruleset: &crate::ruleset::RuleSet,
+) -> Result<bool, crate::ForestError> {
+    if diff.cost() == 0 {
+        return Ok(true);
+    }
+    let parent = mol;
+    for site in ruleset.candidates(parent) {
+        let site = site?;
+        if site.could_help_on(diff, Some(target)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -1815,12 +1924,7 @@ mod tests {
             .candidates(&reactant)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        assert!(cands.iter().any(|c| candidate_could_help_on(
-            c,
-            &diff,
-            Some(reactant.mol()),
-            Some(target.mol())
-        )));
+        assert!(cands.iter().any(|c| c.could_help_on(&diff, Some(target.mol()))));
     }
 
     #[test]
@@ -1836,7 +1940,7 @@ mod tests {
             .unwrap();
         assert!(
             cands.iter().any(|c| c.pattern.effect.cleaves
-                && candidate_could_help_on(c, &diff, Some(reactant.mol()), Some(target.mol()))),
+                && c.could_help_on(&diff, Some(target.mol()))),
             "dealkylation should survive filter; diff={diff:?}"
         );
     }
@@ -1979,7 +2083,7 @@ mod tests {
             .unwrap();
         let kept: Vec<_> = pairs
             .iter()
-            .filter(|p| pair_could_help(p, &diff, reactant.mol(), target.mol()))
+            .filter(|p| p.could_help_on(&diff, Some(target.mol())))
             .collect();
         // Python QuinoneFormation filter_sites keeps 3 pair sites here.
         assert_eq!(
@@ -2012,7 +2116,7 @@ mod tests {
             .unwrap();
         let kept: Vec<_> = cands
             .iter()
-            .filter(|c| candidate_could_help_on(c, &diff, Some(reactant.mol()), Some(target.mol())))
+            .filter(|c| c.could_help_on(&diff, Some(target.mol())))
             .collect();
         assert!(
             !kept.is_empty(),
@@ -2173,12 +2277,7 @@ mod tests {
             .collect();
         assert!(!carbonyl.is_empty(), "expected carbonyl OR candidates");
         assert!(
-            carbonyl.iter().any(|c| candidate_could_help_on(
-                c,
-                &diff,
-                Some(reactant.mol()),
-                Some(target.mol())
-            )),
+            carbonyl.iter().any(|c| c.could_help_on(&diff, Some(target.mol()))),
             "OR carbonyl should help CC=O→CCO when partners expand scope"
         );
     }
@@ -2210,7 +2309,7 @@ mod tests {
         );
         for c in &carbonyl {
             assert!(
-                !candidate_could_help_on(c, &diff, Some(reactant.mol()), Some(target.mol())),
+                !c.could_help_on(&diff, Some(target.mol())),
                 "OR toward acid (H loss at carbonyl C) must not help"
             );
         }
@@ -2231,9 +2330,9 @@ mod tests {
             .iter()
             .find(|c| c.pattern.name == "carbonyl")
             .expect("carbonyl");
-        let (_a, _b, _c, prog_no_mol, _) = candidate_order_key_on(c, &diff, None, None);
+        let (_a, _b, _c, prog_no_mol, _) = candidate_order_key_on(c, &diff, None);
         let (_a, _b, _c, prog_with, _) =
-            candidate_order_key_on(c, &diff, Some(reactant.mol()), Some(target.mol()));
+            candidate_order_key_on(c, &diff, Some(target.mol()));
         // Negated progress: with partners, progress > 0 ⇒ key more negative.
         assert!(
             prog_with < prog_no_mol,

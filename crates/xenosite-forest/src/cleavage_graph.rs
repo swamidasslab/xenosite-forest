@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use crate::ForestError;
 use crate::ForestMol;
-use crate::atom_diff::{AtomDiff, atom_diff, candidate_could_help, pair_could_help};
+use crate::atom_diff::{AtomDiff, atom_diff};
 use crate::canonical_plan::{CleavageSide, Maybe};
 use crate::mol::{Molecule, canon_of};
 use crate::pattern::{CleaveFoldKey, CleaveSideSig};
@@ -308,7 +308,7 @@ pub fn cleavage_layer(
             continue;
         }
         if let Some(diff) = &parent_diff {
-            if !candidate_could_help(&c, diff) {
+            if !c.could_help(diff) {
                 continue;
             }
         }
@@ -349,7 +349,7 @@ pub fn cleavage_layer(
             continue;
         }
         if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair_could_help(&pair, diff, mol.mol(), t) {
+            if !pair.could_help_on(diff, Some(t)) {
                 continue;
             }
         }
@@ -606,7 +606,7 @@ pub fn cleavage_first_seeds(
             if !c.pattern.effect.cleaves {
                 continue;
             }
-            if !candidate_could_help(&c, &parent.diff) {
+            if !c.could_help(&parent.diff) {
                 continue;
             }
             let pieces = c.materialize_mols()?;
@@ -673,7 +673,7 @@ pub fn cleavage_first_seeds(
             if !pair.effect.cleaves {
                 continue;
             }
-            if !pair_could_help(&pair, &parent.diff, parent.mol.mol(), target_mol) {
+            if !pair.could_help_on(&parent.diff, Some(target_mol)) {
                 continue;
             }
             let pieces = pair.materialize_mols()?;

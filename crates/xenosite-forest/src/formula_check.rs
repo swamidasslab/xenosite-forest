@@ -87,8 +87,13 @@ fn format_map(map: &BTreeMap<String, i32>) -> String {
 /// Returns ``None`` when they match (or the check was skipped). On mismatch
 /// logs a warning and returns the structured record.
 ///
-/// Single product: heavy ``product − parent`` vs heavy ``delta_formula``.
-/// Cleavage (2+ products): heavy ``sum(products) − parent`` vs ``adds − removes``.
+/// Check declared [`Effect::delta_formula`] against observed product formulas.
+///
+/// - One product, or several **non-cleaving** alternatives (e.g. ResonancePair
+///   kekulé / path variants): each product is a full molecule; compare
+///   ``product − parent`` to heavy ``delta_formula`` per piece.
+/// - Cleavage (`effect.cleaves` with 2+ products): ``sum(products) − parent``
+///   vs junction ``adds − removes``.
 pub fn check_effect_delta_formula(
     parent: &Molecule,
     effect: &Effect,
@@ -99,6 +104,18 @@ pub fn check_effect_delta_formula(
         return None;
     }
     let parent_f = molecule_formula(parent);
+
+    // Multiple non-cleaving products are alternative full outcomes, not fragments.
+    if !effect.cleaves {
+        for product in products {
+            if let Some(detail) =
+                check_single_delta(&parent_f, effect, product, pattern_name)
+            {
+                return Some(detail);
+            }
+        }
+        return None;
+    }
 
     let (expected, actual) = if products.len() == 1 {
         (
@@ -112,6 +129,27 @@ pub fn check_effect_delta_formula(
         )
     };
 
+    finish_mismatch(effect, pattern_name, expected, actual, products.len())
+}
+
+fn check_single_delta(
+    parent_f: &crate::forest::Formula,
+    effect: &Effect,
+    product: &Molecule,
+    pattern_name: &str,
+) -> Option<FormulaDeltaMismatch> {
+    let expected = single_expected(effect);
+    let actual = single_actual(parent_f, product);
+    finish_mismatch(effect, pattern_name, expected, actual, 1)
+}
+
+fn finish_mismatch(
+    effect: &Effect,
+    pattern_name: &str,
+    expected: BTreeMap<String, i32>,
+    actual: BTreeMap<String, i32>,
+    n_products: usize,
+) -> Option<FormulaDeltaMismatch> {
     // Star conjugates use dummy ``*`` atoms — bag stoichiometry ≠ mol formula.
     if expected.contains_key("*") || actual.contains_key("*") {
         return None;
@@ -129,7 +167,7 @@ pub fn check_effect_delta_formula(
     // isoxazole N–O open). Incomplete leave vs fragment split — skip.
     if effect.cleaves
         && !effect.leave_formula.is_empty()
-        && products.len() == 1
+        && n_products == 1
         && actual.is_empty()
     {
         let leave_as_delta: BTreeMap<String, i32> = effect
@@ -218,6 +256,26 @@ mod tests {
         assert!(
             check_effect_delta_formula(&parent, &effect, &[phenol, formic], "methyl_carboxylic")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn noncleaving_multi_product_alternatives_checked_each() {
+        // ResonancePair-style: several full-molecule alternatives, not fragments.
+        let parent = parse_mol("O=C1CCCCC1").unwrap();
+        let enol_a = parse_mol("OC1=CCCCC1").unwrap();
+        let enol_b = parse_mol("OC1=CCCCC1").unwrap();
+        let effect = Effect::default().sealed();
+        assert!(
+            check_effect_delta_formula(&parent, &effect, &[enol_a, enol_b], "tautomer")
+                .is_none(),
+            "summing alternatives as cleavage would false-positive"
+        );
+        // One bad alternative still reports mismatch.
+        let bad = parse_mol("CCO").unwrap();
+        let enol = parse_mol("OC1=CCCCC1").unwrap();
+        assert!(
+            check_effect_delta_formula(&parent, &effect, &[enol, bad], "tautomer").is_some()
         );
     }
 }

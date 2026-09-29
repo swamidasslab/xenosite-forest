@@ -42,3 +42,17 @@ aarch64), sdist, GitHub Release, PyPI upload, and towncrier compiling
 
 Wheels are built **only** on that tag workflow — not on PR or push to
 `main` (`test.yml` runs pytest / rust / lint only).
+
+## Forest ↔ XMET SSSOM snapshot
+
+Living SoT: [`mappings/xmet-forest.sssom.tsv`](../mappings/xmet-forest.sssom.tsv)
+(uncompressed only — never commit `.gz`). See
+[`docs/forest/MAPPING.md`](forest/MAPPING.md).
+
+On each `vX.Y.Z` cut, after the tag is green:
+
+1. Copy the TSV into `xenosite-xmet` as
+   `data/mappings/forest/xmet-forest.sssom.vX.Y.Z.tsv`.
+2. Point that repo’s living `data/mappings/xmet-forest.sssom.tsv` at the same
+   content.
+3. Confirm xmet forest-pattern coverage still passes on the snapshot.

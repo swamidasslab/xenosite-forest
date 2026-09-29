@@ -251,6 +251,10 @@ pub struct PatternInfo {
     pub possibilities: Vec<Effect>,
     /// Refuse single-to-double when maps 1 and 2 share the same ring set.
     pub skip_same_rings: bool,
+    /// Pair composition: walk aliphatic π–π C–C singles into the conjugated
+    /// system (polyene chains). Default false keeps biaryl rings split.
+    /// Tautomerization endpoints set this; other ResonancePair rules do not.
+    pub chain_conjugate: bool,
     /// Cleavage side groups `(leave, keep)` aligned to [`Self::site_map`] order.
     ///
     /// Cleavage analogue of pair ``swap_group``, but pooled **across rules** at
@@ -282,6 +286,7 @@ impl PatternInfo {
             effect: effect.sealed(),
             possibilities: Vec::new(),
             skip_same_rings: false,
+            chain_conjugate: false,
             cleave_side_group: None,
             search_bias: 0,
         }

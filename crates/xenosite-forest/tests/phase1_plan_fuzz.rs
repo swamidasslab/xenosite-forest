@@ -17,8 +17,8 @@ use xenosite_forest::rules::{
     quinone_formation,
 };
 use xenosite_forest::{
-    FindPathConfig, PathCounters, PathOutcome, accept_all_rules, accept_all_sites, canon_of,
-    find_path_with, parse_mol,
+    FindPathConfig, ForestMol, PathCounters, PathOutcome, accept_all_rules, accept_all_sites,
+    canon_of, find_path_with,
 };
 
 fn fuzz_config(default_cases: u32) -> ProptestConfig {
@@ -83,10 +83,8 @@ fn multipath_pairs() -> impl Strategy<Value = (&'static str, &'static str)> {
     ]
 }
 
-fn heavy_atom_count(mol: &xenosite_forest::Molecule) -> usize {
-    mol.atoms()
-        .filter(|(_, atom)| atom.element.atomic_number() > 1)
-        .count()
+fn heavy_atom_count(mol: &ForestMol) -> usize {
+    mol.heavy_atom_count()
 }
 
 fn assert_plan_elementary(outcome: &PathOutcome, target: &str) {
@@ -130,7 +128,7 @@ proptest! {
     fn benzene_quinone_plan_ends_in_dehydrogenation(
         _canonical_emitted_sites in any::<bool>(),
     ) {
-        let mol = parse_mol("c1ccccc1").unwrap();
+        let mol = ForestMol::parse("c1ccccc1").unwrap();
         let rule = quinone_formation();
         let mut plans = Vec::new();
         for emission in rule
@@ -159,7 +157,7 @@ proptest! {
     /// Python `test_epoxidation_plan_is_one_step`.
     #[test]
     fn epoxidation_plan_is_one_step(_canonical_emitted_sites in any::<bool>()) {
-        let mol = parse_mol("C=C").unwrap();
+        let mol = ForestMol::parse("C=C").unwrap();
         let rule = epoxidation();
         let emissions = rule
             .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
@@ -167,13 +165,13 @@ proptest! {
         let emission = &emissions[0];
         let names: Vec<_> = emission.plan.iter().map(|s| s.rule.as_str()).collect();
         prop_assert_eq!(names, vec!["Epoxidation"]);
-        prop_assert!(emission.products.iter().all(|p| !p.contains('.')));
+        prop_assert!(emission.products.iter().all(|p| !p.csmi().contains('.')));
     }
 
     /// Python `test_ndealkylation_plan_is_one_step`.
     #[test]
     fn ndealkylation_plan_is_one_step(_canonical_emitted_sites in any::<bool>()) {
-        let mol = parse_mol("CCN").unwrap();
+        let mol = ForestMol::parse("CCN").unwrap();
         let rule = n_dealkylation();
         let emissions = rule
             .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap();
@@ -181,7 +179,7 @@ proptest! {
         let emission = &emissions[0];
         let names: Vec<_> = emission.plan.iter().map(|s| s.rule.as_str()).collect();
         prop_assert_eq!(names, vec!["NDealkylation"]);
-        prop_assert!(emission.products.iter().all(|p| !p.contains('.')));
+        prop_assert!(emission.products.iter().all(|p| !p.csmi().contains('.')));
     }
 
     /// Python `test_fuzz_quinone_plans_end_in_dehydrogenation`.
@@ -190,7 +188,7 @@ proptest! {
         smiles in corpus_smiles(),
         _canonical_emitted_sites in any::<bool>(),
     ) {
-        let mol = parse_mol(smiles).unwrap();
+        let mol = ForestMol::parse(smiles).unwrap();
         let rule = quinone_formation();
         let mut seen = 0usize;
         for emission in rule
@@ -204,7 +202,7 @@ proptest! {
                 emission.plan.last().map(|s| s.rule.as_str()),
                 Some("Dehydrogenation")
             );
-            prop_assert!(emission.products.iter().all(|p| !p.contains('.')));
+            prop_assert!(emission.products.iter().all(|p| !p.csmi().contains('.')));
             if seen >= 4 {
                 break;
             }
@@ -258,7 +256,7 @@ proptest! {
         _canonical_emitted_sites in any::<bool>(),
         index in any::<prop::sample::Index>(),
     ) {
-        let mol = parse_mol(start).unwrap();
+        let mol = ForestMol::parse(start).unwrap();
         let start_csmi = canon_of(start).unwrap();
         let mut seen = std::collections::HashSet::new();
         seen.insert(start_csmi);
@@ -270,16 +268,16 @@ proptest! {
                 .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
             {
                 for product in &emission.products {
-                    if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
+                    let csmi = product.csmi().as_ref().to_string();
+                    if csmi.is_empty() || csmi.contains('.') || !seen.insert(csmi.clone())
                     {
                         continue;
                     }
-                    let product_mol = parse_mol(product).unwrap();
                     let min_ha = 4.max(start_ha / 3);
-                    if heavy_atom_count(&product_mol) < min_ha {
+                    if heavy_atom_count(product) < min_ha {
                         continue;
                     }
-                    pool.push(product.clone());
+                    pool.push(csmi);
                     if pool.len() >= 8 {
                         break 'outer;
                     }
@@ -344,7 +342,7 @@ proptest! {
         start in find_path_corpus(),
         index in any::<prop::sample::Index>(),
     ) {
-        let mol = parse_mol(start).unwrap();
+        let mol = ForestMol::parse(start).unwrap();
         let start_csmi = canon_of(start).unwrap();
         let mut seen = std::collections::HashSet::new();
         seen.insert(start_csmi);
@@ -361,16 +359,16 @@ proptest! {
                 .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
             {
                 for product in &emission.products {
-                    if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
+                    let csmi = product.csmi().as_ref().to_string();
+                    if csmi.is_empty() || csmi.contains('.') || !seen.insert(csmi.clone())
                     {
                         continue;
                     }
-                    let product_mol = parse_mol(product).unwrap();
                     let min_ha = 4.max(start_ha / 3);
-                    if heavy_atom_count(&product_mol) < min_ha {
+                    if heavy_atom_count(product) < min_ha {
                         continue;
                     }
-                    pool.push(product.clone());
+                    pool.push(csmi);
                     if pool.len() >= 10 {
                         break 'outer;
                     }

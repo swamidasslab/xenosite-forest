@@ -10,7 +10,7 @@ use std::rc::Rc;
 use chematic::core::{Atom, BondOrder, Element};
 use chematic::perception::find_sssr;
 
-use crate::kekule::{conjugated_component, kekule_forms};
+use crate::kekule::{conjugated_component_ext, kekule_forms};
 use crate::mol::{ForestError, Molecule, aromatize, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
 use crate::smarts::smarts_matches;
@@ -119,6 +119,22 @@ fn flip_path(mol: &mut Molecule, path: &[usize]) -> bool {
     flipped
 }
 
+/// Legacy Tautomerization gate: no atom may carry two double bonds (drops allenes).
+fn at_most_one_double_per_atom(mol: &Molecule) -> bool {
+    for (idx, _) in mol.atoms() {
+        let mut doubles = 0;
+        for (_, bond_idx) in mol.neighbors(idx) {
+            if mol.bond(bond_idx).order == BondOrder::Double {
+                doubles += 1;
+                if doubles > 1 {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
 fn clear_aromatic(mol: &mut Molecule) {
     for atom in mol.atoms().map(|(idx, _)| idx).collect::<Vec<_>>() {
         if mol.atom(atom).aromatic {
@@ -190,6 +206,45 @@ fn site_atom(mapped: &BTreeMap<u16, usize>, pattern: &PatternInfo) -> Option<usi
     mapped.get(&pattern.primary_map()).copied()
 }
 
+fn is_pair_endpoint(pattern: &PatternInfo, name: &str) -> bool {
+    matches!(&pattern.edit, Edit::PairEndpoint(e) if e == name)
+}
+
+fn is_tautomer_extend(pattern: &PatternInfo) -> bool {
+    is_pair_endpoint(pattern, "tautomer_extend")
+}
+
+fn is_tautomer_far(pattern: &PatternInfo) -> bool {
+    is_pair_endpoint(pattern, "tautomer_far")
+}
+
+/// H-donor atom (map 2) for a tautomer_extend endpoint, if mapped.
+fn tautomer_h_donor(mapped: &BTreeMap<u16, usize>, pattern: &PatternInfo) -> Option<usize> {
+    if !is_tautomer_extend(pattern) {
+        return None;
+    }
+    mapped.get(&2).copied()
+}
+
+/// Prepend or append `h_donor` onto an alternating path that ends at `anchor`.
+fn extend_path_with_h(path: &[usize], anchor: usize, h_donor: usize) -> Option<Vec<usize>> {
+    if path.is_empty() || path.contains(&h_donor) {
+        return None;
+    }
+    if path[0] == anchor {
+        let mut full = Vec::with_capacity(path.len() + 1);
+        full.push(h_donor);
+        full.extend_from_slice(path);
+        Some(full)
+    } else if path[path.len() - 1] == anchor {
+        let mut full = path.to_vec();
+        full.push(h_donor);
+        Some(full)
+    } else {
+        None
+    }
+}
+
 fn edit_end(
     mol: &mut Molecule,
     mapped: &BTreeMap<u16, usize>,
@@ -214,7 +269,9 @@ fn edit_end(
             true
         }
         "dealkylate" => edit_dealkylate(mol, mapped, pattern, rings),
-        "keep" => mapped.contains_key(&1),
+        // Path flip carries the tautomer; end edits only validate maps.
+        "tautomer_extend" => mapped.contains_key(&1) && mapped.contains_key(&2),
+        "tautomer_far" | "keep" => mapped.contains_key(&1),
         _ => false,
     }
 }
@@ -302,6 +359,10 @@ pub struct PairEmission {
 pub type PairCandidate = crate::candidate::DeferredSite;
 
 /// Apply path flip for a resonance-pair match (used by [`DeferredSite::materialize_mols`]).
+///
+/// Tautomer pairs (`tautomer_extend` on exactly one end) reuse the same
+/// alternating-path discovery and [`flip_path`], after extending the path by
+/// the H-donor (map 2). Odd atom counts are allowed only for that extension.
 pub(crate) fn materialize_pair_mols(
     mol: &Molecule,
     left: &PatternInfo,
@@ -313,6 +374,22 @@ pub(crate) fn materialize_pair_mols(
     end: usize,
     system: &HashSet<usize>,
 ) -> Result<Vec<Molecule>, ForestError> {
+    let left_h = tautomer_h_donor(map1, left);
+    let right_h = tautomer_h_donor(map2, right);
+    // PatternInfo edits decide the door: exactly one tautomer_extend + one tautomer_far.
+    let tautomer_anchor_h = match (left_h, right_h, is_tautomer_far(left), is_tautomer_far(right)) {
+        (Some(h), None, false, true) => Some((map1.get(&1).copied(), h)),
+        (None, Some(h), true, false) => Some((map2.get(&1).copied(), h)),
+        _ => None,
+    };
+    let is_tautomer = tautomer_anchor_h.is_some();
+    // extend×extend, far×far, or extend paired with a non-far end: not a tautomer site.
+    if (is_tautomer_extend(left) || is_tautomer_extend(right) || is_tautomer_far(left) || is_tautomer_far(right))
+        && !is_tautomer
+    {
+        return Ok(Vec::new());
+    }
+
     let forms = kekule_forms(mol)?;
     let rings = ring_sets(mol);
     let neighbors = system_neighbors(mol, system);
@@ -323,9 +400,22 @@ pub(crate) fn materialize_pair_mols(
         let mut paths = alternating_from(&bond_map, start, end, &neighbors, 2);
         paths.extend(alternating_from(&bond_map, end, start, &neighbors, 2));
         for path in paths {
-            if path.len() % 2 == 1 {
+            // Ordinary ResonancePair: even atom count (odd bonds). Tautomer
+            // PatternInfo edits allow either parity — extension by the H-donor
+            // makes the flipped path; long-range enol↔ketone needs odd conjugated paths.
+            if !is_tautomer && path.len() % 2 == 1 {
                 continue;
             }
+            let flip_atoms = if let Some((Some(anchor), h_donor)) = tautomer_anchor_h {
+                match extend_path_with_h(&path, anchor, h_donor) {
+                    Some(full) => full,
+                    None => continue,
+                }
+            } else if is_tautomer {
+                continue;
+            } else {
+                path.clone()
+            };
             let mut rw = form.clone();
             clear_aromatic(&mut rw);
             if !edit_end(&mut rw, map1, left, &rings) {
@@ -334,7 +424,19 @@ pub(crate) fn materialize_pair_mols(
             if !edit_end(&mut rw, map2, right, &rings) {
                 continue;
             }
-            if !flip_path(&mut rw, &path) {
+            if !flip_path(&mut rw, &flip_atoms) {
+                continue;
+            }
+            if is_tautomer {
+                // Path flip relocates H via bond orders; bracket H (e.g. [nH])
+                // must not stick on the donor or the product fails valence
+                // (imine→amine on tacrine). Clear path atoms so implicit H
+                // recomputes — same as RDKit SanitizeMol after swap_bonds.
+                for &i in &flip_atoms {
+                    rw.set_hydrogen_count(atom_idx(i), None);
+                }
+            }
+            if is_tautomer && !at_most_one_double_per_atom(&rw) {
                 continue;
             }
             if !accept_product(&rw) {
@@ -482,13 +584,15 @@ pub(crate) fn compose_pair_sites(
         return Ok(Vec::new());
     }
 
+    let chain_conjugate = ends.iter().any(|e| e.pattern.chain_conjugate);
+
     let mut systems: Vec<HashSet<usize>> = Vec::new();
     let mut covered = HashSet::new();
     for &anchor in by_anchor.keys() {
         if !covered.insert(anchor) {
             continue;
         }
-        let (atoms, _) = conjugated_component(mol, anchor);
+        let (atoms, _) = conjugated_component_ext(mol, anchor, chain_conjugate);
         let set: HashSet<usize> = atoms.iter().copied().collect();
         covered.extend(&set);
         if by_anchor.keys().filter(|a| set.contains(a)).count() >= 2 {
@@ -619,6 +723,7 @@ pub fn dehydrogenate_hydroquinone(mol: &ForestMol) -> Result<Vec<String>, Forest
         .sealed(),
         possibilities: Vec::new(),
         skip_same_rings: false,
+        chain_conjugate: false,
         cleave_side_group: None,
         search_bias: 0,
     };
@@ -718,5 +823,195 @@ mod tests {
                 .flatten()
                 .any(|p| canon_of(&p).unwrap() == want)
         }));
+    }
+
+    #[test]
+    fn tautomerization_cyclohexanone_enol() {
+        use crate::rules::tautomerization;
+        let mol = ForestMol::parse("O=C1CCCCC1").unwrap();
+        let endpoints: Vec<_> = tautomerization()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of("OC1=CCCCC1").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "want {want}; got {emissions:?}"
+        );
+    }
+
+    #[test]
+    fn tautomerization_enol_to_ketone() {
+        use crate::rules::tautomerization;
+        let mol = ForestMol::parse("OC1=CCCCC1").unwrap();
+        let endpoints: Vec<_> = tautomerization()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of("O=C1CCCCC1").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "want {want}; got {emissions:?}"
+        );
+    }
+
+    #[test]
+    fn tautomerization_tacrine_amine_imine() {
+        use crate::rules::tautomerization;
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let imine = "N=c1c2c([nH]c3ccccc13)CCCC2";
+        let mol = ForestMol::parse(amine).unwrap();
+        let endpoints: Vec<_> = tautomerization()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of(imine).unwrap();
+        let products: Vec<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().cloned())
+            .collect();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == want),
+            "tacrine amine→imine; got {products:?}"
+        );
+    }
+
+    #[test]
+    fn tautomerization_tacrine_imine_amine() {
+        use crate::rules::tautomerization;
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let imine = "N=c1c2c([nH]c3ccccc13)CCCC2";
+        let mol = ForestMol::parse(imine).unwrap();
+        let endpoints: Vec<_> = tautomerization()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of(amine).unwrap();
+        let products: Vec<_> = emissions
+            .iter()
+            .flat_map(|e| e.products.iter().cloned())
+            .collect();
+        assert!(
+            products.iter().any(|p| canon_of(p).unwrap() == want),
+            "tacrine imine→amine; got {products:?}"
+        );
+    }
+
+    #[test]
+    fn tautomerization_tacrine_imine_manual_path_flip() {
+        // Legacy-winning path [0,1,2,3,4] on a D-S-D-S kekulé form must yield aromatic amine.
+        let imine = ForestMol::parse("N=c1c2c([nH]c3ccccc13)CCCC2").unwrap();
+        let want = canon_of("Nc1c2c(nc3ccccc13)CCCC2").unwrap();
+        let forms = kekule_forms(imine.mol()).unwrap();
+        let path = [0usize, 1, 2, 3, 4];
+        let mut any = false;
+        for form in &forms {
+            let mut rw = form.clone();
+            clear_aromatic(&mut rw);
+            assert!(flip_path(&mut rw, &path), "flip must touch bonds");
+            for &i in &path {
+                rw.set_hydrogen_count(atom_idx(i), None);
+            }
+            if !at_most_one_double_per_atom(&rw) {
+                continue;
+            }
+            if !accept_product(&rw) {
+                continue;
+            }
+            let checked = aromatize(&rw);
+            let smiles = canon_smiles(&checked);
+            eprintln!("smiles={smiles}");
+            if smiles == want {
+                any = true;
+            }
+        }
+        assert!(any, "manual legacy path flip should aromatize to amine");
+    }
+
+    #[test]
+    fn tautomerization_long_range_polyene() {
+        use crate::rules::tautomerization;
+        let mol = ForestMol::parse("ClCC=CC=CC=CC=CO").unwrap();
+        let endpoints: Vec<_> = tautomerization()
+            .patterns()
+            .into_iter()
+            .filter(|&p| matches!(p.edit, Edit::PairEndpoint(_)))
+            .cloned()
+            .collect();
+        let emissions = pair_metabolize(&mol, &endpoints).unwrap();
+        let want = canon_of("ClCCC=CC=CC=CC=O").unwrap();
+        assert!(
+            emissions
+                .iter()
+                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+            "want {want}; got {emissions:?}"
+        );
+    }
+
+
+    #[test]
+    fn tautomerization_find_path_tacrine_7oh() {
+        use crate::find_path::{FindPathConfig, PathCounters, find_path_with};
+        use crate::rules::default_ruleset;
+        let r = "N=c1c2c([nH]c3ccccc13)CCCC2";
+        let p = "Nc1c2c(nc3c(O)cccc13)CCCC2";
+        let set = default_ruleset();
+        let mut c = PathCounters::default();
+        let cfg = FindPathConfig {
+            max_paths: 1,
+            max_nodes: 400,
+            use_atom_diff: true,
+            ..FindPathConfig::default()
+        };
+        let hits = find_path_with(r, p, &set, &mut c, cfg, |_| true)
+            .unwrap()
+            .collect_all()
+            .unwrap();
+        assert_eq!(
+            c.formula_delta_mismatch, 0,
+            "tautomer multi-product alternatives must not sum as cleavage; {:?}",
+            c.formula_delta_mismatches
+        );
+        assert!(
+            !hits.is_empty(),
+            "tacrine→7-OH should hit under default_ruleset (with Tautomerization); bill={} nodes={}",
+            c.billed(),
+            c.nodes
+        );
+        let step_names: Vec<_> = hits[0]
+            .steps
+            .iter()
+            .map(|s| s.pattern_name.as_str())
+            .collect();
+        assert!(
+            step_names.len() <= 2,
+            "expect tautomer↔OH (≤2 steps), not quinoid+DH detour; bill={} steps={step_names:?}",
+            c.billed()
+        );
+        assert!(
+            !step_names.iter().any(|n| *n == "amine"),
+            "DH amine must not repair stuck [nH]; bill={} steps={step_names:?}",
+            c.billed()
+        );
+        eprintln!(
+            "tacrine→7-OH bill={} steps={step_names:?}",
+            c.billed()
+        );
     }
 }

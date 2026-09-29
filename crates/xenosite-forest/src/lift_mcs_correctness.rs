@@ -383,12 +383,7 @@ fn one_hop_phase_one_lift_matches_mcs_on_eugenol() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     for c in &cands {
-        if !crate::atom_diff::candidate_could_help_on(
-            c,
-            &parent_diff,
-            Some(parent.mol()),
-            Some(&target),
-        ) {
+        if !c.could_help_on(&parent_diff, Some(&target)) {
             continue;
         }
         let atoms: Vec<usize> = {
@@ -451,7 +446,7 @@ fn one_hop_phase_one_lift_matches_mcs_on_eugenol() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     for pair in &pairs {
-        if !crate::atom_diff::pair_could_help(pair, &parent_diff, parent.mol(), &target) {
+        if !pair.could_help_on(&parent_diff, Some(&target)) {
             continue;
         }
         let (p0, p1) = pair.path_ends();

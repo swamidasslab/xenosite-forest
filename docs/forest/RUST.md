@@ -5,6 +5,8 @@ canonaut), WASM-clean. Python callers use the thin wrapper
 ``xenosite.forest`` (PyO3). **New features land here**, not in
 `xenosite.forest.native` (frozen RDKit reference — [NATIVE.md](NATIVE.md)).
 
+Forest↔XMET SSSOM (`xf:` CURIEs, `resolve`, `BoundPattern`): [MAPPING.md](MAPPING.md).
+
 ## Why this crate exists
 
 The historical Python engine is RDKit + pynauty (`xenosite.forest.native`).

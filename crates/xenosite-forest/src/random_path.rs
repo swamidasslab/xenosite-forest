@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use crate::ForestError;
 use crate::candidate::Candidate;
-use crate::forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
+use crate::forest_mol::{IntoForestMol, as_forest_mol};
 use crate::pathway::PathwayOptions;
 use crate::pattern::PatternInfo;
 use crate::ruleset::RuleSet;

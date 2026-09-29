@@ -16,9 +16,13 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
-use crate::find_path::{FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
+use crate::find_path::{
+    FindPathConfig, FindPathPartialResult, HeapScoreMode, PathCounters, find_path_partial,
+    find_path_with, find_path_with_network,
+};
 use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
+use crate::metabolic_network::MetabolicNetwork;
 use crate::mol::Molecule;
 use crate::pathway::PathwayOptions;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
@@ -253,6 +257,195 @@ pub struct PyRuleSet {
     inner: RuleSet,
 }
 
+/// Python wrap of [`crate::bound_pattern::BoundPattern`].
+#[pyclass(name = "BoundPattern", unsendable)]
+#[derive(Clone)]
+pub struct PyBoundPattern {
+    inner: crate::bound_pattern::BoundPattern,
+}
+
+#[pymethods]
+impl PyBoundPattern {
+    #[getter]
+    fn rule(&self) -> PyRuleSet {
+        PyRuleSet {
+            inner: self.inner.rule().clone(),
+        }
+    }
+
+    #[getter]
+    fn pattern(&self) -> PyPatternInfo {
+        PyPatternInfo {
+            inner: self.inner.pattern().clone(),
+        }
+    }
+
+    #[getter]
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    #[getter]
+    fn rule_name(&self) -> Option<String> {
+        self.inner.rule_name().map(str::to_string)
+    }
+
+    #[getter]
+    fn curie(&self) -> String {
+        self.inner.curie()
+    }
+
+    #[getter]
+    fn iri(&self) -> String {
+        self.inner.iri()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __contains__(&self, key: &str) -> bool {
+        self.inner.contains_name(key)
+    }
+
+    fn __getitem__(&self, key: Bound<'_, PyAny>) -> PyResult<PyBoundPattern> {
+        if let Ok(index) = key.extract::<isize>() {
+            let index = if index < 0 {
+                return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                    "BoundPattern index out of range",
+                ));
+            } else {
+                index as usize
+            };
+            return self
+                .inner
+                .get(index)
+                .map(|inner| PyBoundPattern { inner })
+                .ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyIndexError, _>("BoundPattern index out of range")
+                });
+        }
+        let name: String = key.extract()?;
+        self.inner
+            .get_str(&name)
+            .map(|inner| PyBoundPattern { inner })
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>(name))
+    }
+
+    #[pyo3(signature = (mol, filter_rules=None, filter_sites=None))]
+    fn metabolize(
+        slf: &Bound<'_, Self>,
+        mol: &Bound<'_, PyForestMol>,
+        filter_rules: Option<Bound<'_, PyAny>>,
+        filter_sites: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<Vec<MetabolizeRow>> {
+        let forest = mol.borrow().inner.copy_mol();
+        let bp = slf.borrow().inner.clone();
+        let set = bp.rule().clone();
+        let pattern_name = bp.name().to_string();
+        let emissions = if filter_rules.is_none() && filter_sites.is_none() {
+            bp.metabolize_default(&forest, true)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(py_err)?
+        } else {
+            // Compose BoundPattern name filter with optional Python callables.
+            let name = pattern_name.clone();
+            metabolize_with_python_bound(mol, &set, &forest, &name, filter_rules, filter_sites)?
+        };
+        let _ = pattern_name;
+        Ok(emissions
+            .into_iter()
+            .map(|e| {
+                let products = e.product_csmis();
+                (e.pattern_name, e.site, products, e.rule_path)
+            })
+            .collect())
+    }
+
+    fn __repr__(&self) -> String {
+        format!("BoundPattern({:?})", self.inner.curie())
+    }
+}
+
+fn metabolize_with_python_bound(
+    mol: &Bound<'_, PyForestMol>,
+    set: &RuleSet,
+    forest: &crate::ForestMol,
+    pattern_name: &str,
+    filter_rules: Option<Bound<'_, PyAny>>,
+    filter_sites: Option<Bound<'_, PyAny>>,
+) -> PyResult<Vec<crate::pattern::Emission>> {
+    let pname = pattern_name.to_string();
+    let py_rules = filter_rules.map(|cb| cb.unbind());
+    let py_sites = filter_sites.map(|cb| cb.unbind());
+    let py_mol = mol.clone().unbind();
+    let err: RefCell<Option<PyErr>> = RefCell::new(None);
+    let take_bool = |result: PyResult<bool>, slot: &RefCell<Option<PyErr>>| match result {
+        Ok(keep) => keep,
+        Err(e) => {
+            *slot.borrow_mut() = Some(e);
+            false
+        }
+    };
+    let rules = |_: &Molecule, leaf: &RuleSet, pattern: &PatternInfo| {
+        if pattern.name != pname {
+            return false;
+        }
+        if err.borrow().is_some() {
+            return false;
+        }
+        let Some(cb) = &py_rules else {
+            return true;
+        };
+        take_bool(
+            Python::attach(|py| {
+                let info = Py::new(
+                    py,
+                    PyPatternInfo {
+                        inner: pattern.clone(),
+                    },
+                )?;
+                let rule = Py::new(
+                    py,
+                    PyRuleSet {
+                        inner: leaf.clone(),
+                    },
+                )?;
+                let mol = py_mol.bind(py);
+                cb.bind(py)
+                    .call1((mol, rule, info))?
+                    .extract::<bool>()
+            }),
+            &err,
+        )
+    };
+    let sites = |_: &Molecule, site: usize, info: &SiteInfo| {
+        if err.borrow().is_some() {
+            return false;
+        }
+        let Some(cb) = &py_sites else {
+            return true;
+        };
+        take_bool(
+            Python::attach(|py| {
+                let mol = py_mol.bind(py);
+                cb.bind(py)
+                    .call1((mol, site, info.site))?
+                    .extract::<bool>()
+            }),
+            &err,
+        )
+    };
+    let out = set
+        .metabolize(forest, rules, sites, true)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(py_err)?;
+    if let Some(e) = err.into_inner() {
+        return Err(e);
+    }
+    Ok(out)
+}
+
 #[pymethods]
 impl PyRuleSet {
     #[new]
@@ -301,6 +494,48 @@ impl PyRuleSet {
         self.inner.members().len()
     }
 
+    fn __contains__(&self, key: &str) -> bool {
+        self.inner.contains_name(key)
+    }
+
+    /// Index by int or name: catalog → child ``RuleSet``; leaf → ``BoundPattern``.
+    fn __getitem__(&self, key: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        Python::attach(|py| {
+            if let Ok(mut index) = key.extract::<isize>() {
+                let len = self.inner.len() as isize;
+                if index < 0 {
+                    index += len;
+                }
+                if index < 0 || index >= len {
+                    return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                        "RuleSet index out of range",
+                    ));
+                }
+                let index = index as usize;
+                if self.inner.is_catalog() {
+                    let child = self.inner.get(index).ok_or_else(|| {
+                        PyErr::new::<pyo3::exceptions::PyIndexError, _>("RuleSet index out of range")
+                    })?;
+                    return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
+                }
+                let bp = self.inner.bound_pattern_at(index).ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyIndexError, _>("RuleSet index out of range")
+                })?;
+                return Ok(Py::new(py, PyBoundPattern { inner: bp })?.into_any());
+            }
+            let name: String = key.extract()?;
+            if self.inner.is_catalog() {
+                if let Some(child) = self.inner.get_str(&name) {
+                    return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
+                }
+            }
+            if let Some(bp) = self.inner.bound_pattern(&name) {
+                return Ok(Py::new(py, PyBoundPattern { inner: bp })?.into_any());
+            }
+            Err(PyErr::new::<pyo3::exceptions::PyKeyError, _>(name))
+        })
+    }
+
     /// Flat leaf patterns under this set (including nested members).
     fn patterns(&self) -> Vec<PyPatternInfo> {
         self.inner
@@ -335,7 +570,10 @@ impl PyRuleSet {
         // Explicit CSMI downgrade at the Python string-row boundary.
         Ok(emissions
             .into_iter()
-            .map(|e| (e.pattern_name, e.site, e.product_csmis(), e.rule_path))
+            .map(|e| {
+                let products = e.product_csmis();
+                (e.pattern_name, e.site, products, e.rule_path)
+            })
             .collect())
     }
 
@@ -434,11 +672,12 @@ fn metabolize_with_python(
     Ok(emissions)
 }
 
-/// Native chematic ``find_path`` (PhaseOne). Returns ``(hits, counters)``.
+/// Native chematic ``find_path`` (default ruleset). Returns ``(hits, counters)``.
 ///
-/// Each hit is ``{"smiles": str, "steps": [{"rule": str, "site": [...]}]``.
-/// Counters is a plain dict of the billed fields. Separate from the Python
-/// RDKit ``xenosite.forest.find_path`` walk.
+/// Default ruleset is QuinoneFormation + EpoxideHydration + Tautomerization +
+/// PhaseOne core. Each hit is ``{"smiles": str, "steps": [{"rule": str,
+/// "site": [...]}]``. Counters is a plain dict of the billed fields. Separate
+/// from the Python RDKit ``xenosite.forest.find_path`` walk.
 #[pyfunction]
 #[pyo3(signature = (
     reactant,
@@ -452,6 +691,7 @@ fn metabolize_with_python(
     drop_skeleton_twins=true,
     score="log-neg-pc",
     timeout=None,
+    network=None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn find_path(
@@ -466,40 +706,101 @@ fn find_path(
     drop_skeleton_twins: bool,
     score: &str,
     timeout: Option<f64>,
+    network: Option<&Bound<'_, PyMetabolicNetwork>>,
 ) -> PyResult<(Vec<Py<PyAny>>, Py<PyAny>)> {
-    let heap_score = HeapScoreMode::from_label(score).ok_or_else(|| {
-        PyValueError::new_err(format!(
-            "unknown score {score:?}; try log-neg-pc, soft, add-both, …"
-        ))
-    })?;
-    let timeout = match timeout {
-        None => None,
-        Some(secs) if secs.is_finite() && secs >= 0.0 => {
-            Some(std::time::Duration::from_secs_f64(secs))
-        }
-        Some(secs) => {
-            return Err(PyValueError::new_err(format!(
-                "timeout must be a non-negative finite number of seconds; got {secs}"
-            )));
-        }
-    };
-    let config = FindPathConfig {
+    let config = parse_find_path_config(
+        score,
         max_paths,
         max_nodes,
         use_atom_diff,
         lazy_closer,
-        heap_score,
-        drop_skeleton_twins,
         diversity,
+        drop_skeleton_twins,
         timeout,
-    };
-    let rules = phase_one_rs();
+    )?;
+    let rules = default_ruleset_rs();
     let mut counters = PathCounters::default();
-    let hits = find_path_with(reactant, target, &rules, &mut counters, config, |_| true)
-        .map_err(py_err)?
-        .collect_all()
-        .map_err(py_err)?;
+    let hits = match network {
+        Some(net) => {
+            let mut py_net = net.borrow_mut();
+            find_path_with_network(
+                reactant,
+                target,
+                &rules,
+                &mut counters,
+                config,
+                Some(&mut py_net.inner),
+                |_| true,
+            )
+            .map_err(py_err)?
+            .collect_all()
+            .map_err(py_err)?
+        }
+        None => find_path_with(reactant, target, &rules, &mut counters, config, |_| true)
+            .map_err(py_err)?
+            .collect_all()
+            .map_err(py_err)?,
+    };
+    Ok((path_outcome_dicts(py, &hits)?, counters_dict(py, &counters)?))
+}
 
+/// Explored metabolic network (reactant root + hops). Mutated by search when
+/// passed as ``network=``.
+#[pyclass(name = "MetabolicNetwork", unsendable)]
+struct PyMetabolicNetwork {
+    inner: MetabolicNetwork,
+}
+
+#[pymethods]
+impl PyMetabolicNetwork {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: MetabolicNetwork::new(),
+        }
+    }
+
+    #[getter]
+    fn root_csmi(&self) -> Option<String> {
+        self.inner.root_csmi.clone()
+    }
+
+    fn n_nodes(&self) -> usize {
+        self.inner.n_nodes()
+    }
+
+    fn n_edges(&self) -> usize {
+        self.inner.n_edges()
+    }
+
+    fn reaches(&self, target_csmi: &str) -> bool {
+        self.inner.reaches(target_csmi)
+    }
+
+    fn closest(&self, target: &str, k: usize) -> PyResult<Vec<(String, usize)>> {
+        self.inner.closest(target, k).map_err(py_err)
+    }
+
+    fn missed(&self, py: Python<'_>, csmi: &str, target: &str) -> PyResult<Option<Py<PyAny>>> {
+        let residual = self.inner.missed(csmi, target).map_err(py_err)?;
+        Ok(match residual {
+            None => None,
+            Some(r) => {
+                let d = pyo3::types::PyDict::new(py);
+                d.set_item("cost", r.cost)?;
+                d.set_item("n_extra", r.n_extra)?;
+                d.set_item("categories", r.categories.clone())?;
+                d.set_item("unresolvable", r.unresolvable)?;
+                Some(d.unbind().into_any())
+            }
+        })
+    }
+}
+
+fn path_outcome_dicts(
+    py: Python<'_>,
+    hits: &[crate::find_path::PathOutcome],
+) -> PyResult<Vec<Py<PyAny>>> {
     let mut out = Vec::with_capacity(hits.len());
     for hit in hits {
         let steps: Vec<Py<PyAny>> = hit
@@ -525,7 +826,10 @@ fn find_path(
         d.set_item("steps", steps)?;
         out.push(d.unbind().into_any());
     }
+    Ok(out)
+}
 
+fn counters_dict(py: Python<'_>, counters: &PathCounters) -> PyResult<Py<PyAny>> {
     let c = pyo3::types::PyDict::new(py);
     c.set_item("nodes", counters.nodes)?;
     c.set_item("mol_edits", counters.mol_edits)?;
@@ -537,7 +841,154 @@ fn find_path(
     c.set_item("diversity_repush", counters.diversity_repush)?;
     c.set_item("unstable_csmi_key", counters.unstable_csmi_key)?;
     c.set_item("timed_out", counters.timed_out)?;
-    Ok((out, c.unbind().into_any()))
+    Ok(c.unbind().into_any())
+}
+
+fn parse_find_path_config(
+    score: &str,
+    max_paths: usize,
+    max_nodes: usize,
+    use_atom_diff: bool,
+    lazy_closer: bool,
+    diversity: bool,
+    drop_skeleton_twins: bool,
+    timeout: Option<f64>,
+) -> PyResult<FindPathConfig> {
+    let heap_score = HeapScoreMode::from_label(score).ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "unknown score {score:?}; try log-neg-pc, soft, add-both, …"
+        ))
+    })?;
+    let timeout = match timeout {
+        None => None,
+        Some(secs) if secs.is_finite() && secs >= 0.0 => {
+            Some(std::time::Duration::from_secs_f64(secs))
+        }
+        Some(secs) => {
+            return Err(PyValueError::new_err(format!(
+                "timeout must be a non-negative finite number of seconds; got {secs}"
+            )));
+        }
+    };
+    Ok(FindPathConfig {
+        max_paths,
+        max_nodes,
+        use_atom_diff,
+        lazy_closer,
+        heap_score,
+        drop_skeleton_twins,
+        diversity,
+        timeout,
+        ..FindPathConfig::default()
+    })
+}
+
+/// Like ``find_path``, but also returns closest unreachable reaches.
+///
+/// Returns ``(exact_hits, partials, counters)``. Each partial is
+/// ``{"smiles", "steps", "residual": {"cost", "categories", ...}}``.
+/// Pass ``network=`` to record hops on a [`MetabolicNetwork`].
+#[pyfunction]
+#[pyo3(name = "find_path_partial", signature = (
+    reactant,
+    target,
+    *,
+    max_paths=1,
+    max_nodes=800,
+    use_atom_diff=true,
+    lazy_closer=false,
+    diversity=false,
+    drop_skeleton_twins=true,
+    score="log-neg-pc",
+    timeout=None,
+    network=None,
+))]
+#[allow(clippy::too_many_arguments)]
+fn find_path_partial_py(
+    py: Python<'_>,
+    reactant: &str,
+    target: &str,
+    max_paths: usize,
+    max_nodes: usize,
+    use_atom_diff: bool,
+    lazy_closer: bool,
+    diversity: bool,
+    drop_skeleton_twins: bool,
+    score: &str,
+    timeout: Option<f64>,
+    network: Option<&Bound<'_, PyMetabolicNetwork>>,
+) -> PyResult<(Vec<Py<PyAny>>, Vec<Py<PyAny>>, Py<PyAny>)> {
+    let config = parse_find_path_config(
+        score,
+        max_paths,
+        max_nodes,
+        use_atom_diff,
+        lazy_closer,
+        diversity,
+        drop_skeleton_twins,
+        timeout,
+    )?;
+    let rules = default_ruleset_rs();
+    let mut counters = PathCounters::default();
+    let result = match network {
+        Some(net) => {
+            let mut py_net = net.borrow_mut();
+            find_path_partial(
+                reactant,
+                target,
+                &rules,
+                &mut counters,
+                config,
+                Some(&mut py_net.inner),
+                |_| true,
+            )
+            .map_err(py_err)?
+        }
+        None => find_path_partial(
+            reactant,
+            target,
+            &rules,
+            &mut counters,
+            config,
+            None,
+            |_| true,
+        )
+        .map_err(py_err)?,
+    };
+    let FindPathPartialResult { exact, partials } = result;
+    let exact_out = path_outcome_dicts(py, &exact)?;
+    let mut partial_out = Vec::with_capacity(partials.len());
+    for p in partials {
+        let steps: Vec<Py<PyAny>> = p
+            .plan
+            .iter()
+            .map(|step| {
+                let site: Vec<String> = step
+                    .site
+                    .iter()
+                    .map(|a| match a {
+                        crate::PlanAtom::Index(i) => i.to_string(),
+                        other => format!("{other:?}"),
+                    })
+                    .collect();
+                let d = pyo3::types::PyDict::new(py);
+                d.set_item("rule", step.rule.as_str())?;
+                d.set_item("site", site)?;
+                Ok::<_, PyErr>(d.unbind().into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        let residual = pyo3::types::PyDict::new(py);
+        residual.set_item("cost", p.residual.cost)?;
+        residual.set_item("n_extra", p.residual.n_extra)?;
+        residual.set_item("categories", p.residual.categories.clone())?;
+        residual.set_item("unresolvable", p.residual.unresolvable)?;
+        let d = pyo3::types::PyDict::new(py);
+        d.set_item("smiles", p.smiles.as_str())?;
+        d.set_item("steps", steps)?;
+        d.set_item("residual", residual)?;
+        partial_out.push(d.unbind().into_any());
+    }
+    Ok((exact_out, partial_out, counters_dict(py, &counters)?))
 }
 
 /// Seeded random walk: apply up to ``max_steps`` rules. Returns a dict with
@@ -676,6 +1127,36 @@ fn default_ruleset() -> PyRuleSet {
     wrap_ruleset(default_ruleset_rs())
 }
 
+#[pyfunction]
+fn forest_xmet_sssom() -> String {
+    crate::mapping::forest_xmet_sssom().to_string()
+}
+
+#[pyfunction]
+#[pyo3(name = "resolve")]
+fn resolve_py(id: &str) -> PyResult<Py<PyAny>> {
+    Python::attach(|py| match crate::mapping::resolve(id).map_err(py_err)? {
+        crate::mapping::Resolved::Rule(inner) => {
+            Ok(Py::new(py, PyRuleSet { inner })?.into_any())
+        }
+        crate::mapping::Resolved::Pattern(inner) => {
+            Ok(Py::new(py, PyBoundPattern { inner })?.into_any())
+        }
+    })
+}
+
+#[pyfunction]
+#[pyo3(name = "expand_iri")]
+fn expand_iri_py(curie_or_iri: &str) -> String {
+    crate::mapping::expand_iri(curie_or_iri)
+}
+
+#[pyfunction]
+#[pyo3(name = "to_curie")]
+fn to_curie_py(iri: &str) -> String {
+    crate::mapping::to_curie(iri)
+}
+
 #[pymodule]
 #[pyo3(name = "_rust")]
 fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -683,7 +1164,10 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyFormula>()?;
     m.add_class::<PyPatternInfo>()?;
     m.add_class::<PyRuleSet>()?;
+    m.add_class::<PyBoundPattern>()?;
+    m.add_class::<PyMetabolicNetwork>()?;
     m.add_function(wrap_pyfunction!(find_path, m)?)?;
+    m.add_function(wrap_pyfunction!(find_path_partial_py, m)?)?;
     m.add_function(wrap_pyfunction!(random_path, m)?)?;
     m.add_function(wrap_pyfunction!(phase_one, m)?)?;
     m.add_function(wrap_pyfunction!(epoxidation, m)?)?;
@@ -695,6 +1179,10 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dealkylation, m)?)?;
     m.add_function(wrap_pyfunction!(hydrolysis, m)?)?;
     m.add_function(wrap_pyfunction!(default_ruleset, m)?)?;
+    m.add_function(wrap_pyfunction!(forest_xmet_sssom, m)?)?;
+    m.add_function(wrap_pyfunction!(resolve_py, m)?)?;
+    m.add_function(wrap_pyfunction!(expand_iri_py, m)?)?;
+    m.add_function(wrap_pyfunction!(to_curie_py, m)?)?;
     Ok(())
 }
 

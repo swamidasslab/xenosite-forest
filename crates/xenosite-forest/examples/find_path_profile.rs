@@ -17,7 +17,7 @@ use xenosite_forest::atom_diff::{
     atom_diff, atom_diff_for_child, candidate_could_help_on, candidate_order_key, pair_could_help,
 };
 use xenosite_forest::forest_mol::ForestMol;
-use xenosite_forest::mol::{Molecule, canon_of, parse_mol};
+use xenosite_forest::mol::{Molecule, parse_mol};
 use xenosite_forest::rules::phase_one;
 use xenosite_forest::ruleset::RuleSet;
 use xenosite_forest::{Candidate, FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
@@ -142,15 +142,12 @@ fn expand_timed(
 ) -> Vec<ForestEmission> {
     let mol = parent.mol();
     let t0 = Instant::now();
-    let mut candidates = ruleset
-        .candidates(mol)
+    let all = ruleset
+        .candidates(parent)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    // Nested sets: full pair_candidates (same as production walk).
-    let mut pairs = ruleset
-        .pair_candidates(mol)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+    let mut candidates: Vec<_> = all.iter().filter(|c| !c.is_pair()).cloned().collect();
+    let mut pairs: Vec<_> = all.into_iter().filter(|c| c.is_pair()).collect();
     t.discover += t0.elapsed();
 
     let t0 = Instant::now();
@@ -165,32 +162,32 @@ fn expand_timed(
     let mut out = Vec::new();
     for c in candidates {
         t.mol_edits += 1;
-        let pieces = c.materialize_mols(mol).unwrap();
-        if pieces.is_empty() {
+        let Ok(Some(em)) = c.apply() else {
+            continue;
+        };
+        if em.products.is_empty() {
             continue;
         }
-        let products: Vec<_> = pieces
-            .into_iter()
-            .map(|piece| parent.from_edit_product(piece))
-            .collect();
-        out.push(ForestEmission { products });
+        out.push(ForestEmission {
+            products: em.products,
+        });
     }
     for pair in pairs {
-        let pieces = pair.materialize_mols(mol).unwrap();
-        if pieces.is_empty() {
+        let Ok(Some(em)) = pair.apply() else {
+            continue;
+        };
+        if em.products.is_empty() {
             continue;
         }
         t.mol_edits += 1;
-        let products: Vec<_> = pieces
-            .into_iter()
-            .map(|piece| parent.from_edit_product(piece))
-            .collect();
         let _ = ruleset.canonical_plan(
             mol,
             &pair.plan_site_atoms(),
             Some(&[&pair.left.effect, &pair.right.effect]),
         );
-        out.push(ForestEmission { products });
+        out.push(ForestEmission {
+            products: em.products,
+        });
     }
     t.materialize += t0.elapsed();
     out
@@ -362,15 +359,19 @@ fn microbench() {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     let adopt = if let Some(c) = cands.first() {
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        if let Some(piece) = pieces.into_iter().next() {
-            let t0 = Instant::now();
-            for _ in 0..50 {
-                let _ = parent.from_edit_product(piece.clone());
+        match c.materialize_mols() {
+            Ok(pieces) => {
+                if let Some(piece) = pieces.into_iter().next() {
+                    let t0 = Instant::now();
+                    for _ in 0..50 {
+                        let _ = ForestMol::product(piece.clone(), &parent);
+                    }
+                    Some(t0.elapsed())
+                } else {
+                    None
+                }
             }
-            Some(t0.elapsed())
-        } else {
-            None
+            Err(_) => None,
         }
     } else {
         None

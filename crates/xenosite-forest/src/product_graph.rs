@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::ForestError;
-use crate::atom_diff::{atom_diff, candidate_could_help_on, pair_could_help};
+use crate::atom_diff::atom_diff;
 use crate::forest_mol::ForestMol;
 use crate::labels::Tag;
 use crate::mol::{Molecule, canon_of};
@@ -155,7 +155,7 @@ pub fn product_layer(
     for c in ruleset.candidates(&parent) {
         let c = c?;
         if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !candidate_could_help_on(&c, diff, Some(mol), Some(t)) {
+            if !c.could_help_on(diff, Some(t)) {
                 continue;
             }
         }
@@ -225,7 +225,7 @@ pub fn product_layer(
     for pair in ruleset.candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair())) {
         let pair = pair?;
         if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair_could_help(&pair, diff, mol, t) {
+            if !pair.could_help_on(diff, Some(t)) {
                 continue;
             }
         }

@@ -107,6 +107,7 @@ fn conjugated_bond(
     right: usize,
     order: BondOrder,
     in_ring: &BTreeSet<(usize, usize)>,
+    chain_conjugate: bool,
 ) -> bool {
     let key = bond_key(left, right);
     match order {
@@ -122,10 +123,22 @@ fn conjugated_bond(
             let z_left = mol.atom(atom_idx(left)).element.atomic_number();
             let z_right = mol.atom(atom_idx(right)).element.atomic_number();
             let elements = [z_left, z_right];
-            if !elements.contains(&6) || !elements.iter().any(|z| matches!(z, 7 | 8 | 16)) {
-                return false;
+            if elements.contains(&6) && elements.iter().any(|z| matches!(z, 7 | 8 | 16)) {
+                return pi_center(mol, left) || pi_center(mol, right);
             }
-            pi_center(mol, left) || pi_center(mol, right)
+            // Opt-in polyene: aliphatic C–C between two π centers. Biaryl stays
+            // split (both aromatic → not taken here).
+            if chain_conjugate
+                && z_left == 6
+                && z_right == 6
+                && !mol.atom(atom_idx(left)).aromatic
+                && !mol.atom(atom_idx(right)).aromatic
+                && pi_center(mol, left)
+                && pi_center(mol, right)
+            {
+                return true;
+            }
+            false
         }
         _ => mol.atom(atom_idx(left)).aromatic && mol.atom(atom_idx(right)).aromatic,
     }
@@ -136,6 +149,16 @@ pub fn conjugated_component(
     mol: &Molecule,
     start: usize,
 ) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
+    conjugated_component_ext(mol, start, false)
+}
+
+/// Like [`conjugated_component`], optionally walking aliphatic π–π C–C singles
+/// (`chain_conjugate`, from PatternInfo on tautomer pair ends).
+pub fn conjugated_component_ext(
+    mol: &Molecule,
+    start: usize,
+    chain_conjugate: bool,
+) -> (BTreeSet<usize>, BTreeSet<(usize, usize)>) {
     let in_ring = in_ring_bonds(mol);
     let mut atoms = BTreeSet::from([start]);
     let mut bonds = BTreeSet::new();
@@ -144,7 +167,7 @@ pub fn conjugated_component(
         for (nbr, bond_idx) in mol.neighbors(atom_idx(index)) {
             let bond = mol.bond(bond_idx);
             let other = atom_usize(nbr);
-            if !conjugated_bond(mol, index, other, bond.order, &in_ring) {
+            if !conjugated_bond(mol, index, other, bond.order, &in_ring, chain_conjugate) {
                 continue;
             }
             bonds.insert(bond_key(index, other));

@@ -94,6 +94,8 @@ include = [
     { path = "Cargo.toml", format = "sdist" },
     { path = "Cargo.lock", format = "sdist" },
     { path = "crates/xenosite-forest/**/*", format = "sdist" },
+    # Forest↔XMET SSSOM SoT (build.rs gzips into OUT_DIR for include_bytes!).
+    { path = "mappings/**/*", format = "sdist" },
 ]
 
 [tool.towncrier]

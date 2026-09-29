@@ -12,6 +12,7 @@ compile_error!(
 
 pub mod atom_diff;
 pub mod atom_tracker;
+pub mod bound_pattern;
 pub mod candidate;
 pub mod canonical_plan;
 pub mod chematic_tags;
@@ -24,7 +25,9 @@ pub mod formula_check;
 pub mod hydroxylation;
 pub mod kekule;
 pub mod labels;
+pub mod mapping;
 pub mod matched_atom;
+pub mod metabolic_network;
 pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
@@ -52,20 +55,22 @@ mod python_api;
 mod wasm_api;
 
 pub use atom_diff::{
-    AtomDiff, added_heavy_atoms, aligned_shells, any_h_gain, any_h_loss, any_needs_oxygen,
-    atom_diff, atom_diff_after_cleavage, atom_diff_after_cleavage_tracked, atom_diff_for_child,
-    atom_diff_from_mappings, atom_diff_mcs_extend, atom_h_delta, atom_needs_carbonyl,
-    atom_needs_oxygen, candidate_could_help, candidate_could_help_on, candidate_order_key,
-    candidate_order_key_on, dh_neighbors_match_any_view, dh_product_ends_match,
-    extend_mapping_for_added, extend_mapping_where_possible, is_dehydrogenation_effect,
-    keep_against_diff, lift_mappings, mcs_align, mcs_bare, mcs_extend, pair_could_help,
-    pair_site_h_progress, pattern_could_help, pattern_could_help_mol,
-    projected_unaligned_reductions, residual_cost_after_site_cast, site_h_progress,
-    site_h_progress_best_placement, site_shell_forecast, try_atom_diff_for_child,
-    try_atom_diff_for_child_goal, try_atom_diff_for_child_tracked, try_lift_cleaved_child,
-    try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
+    AtomDiff, AtomDiffResidual, added_heavy_atoms, aligned_shells, any_h_gain, any_h_loss,
+    any_needs_oxygen, atom_diff, atom_diff_after_cleavage, atom_diff_after_cleavage_tracked,
+    atom_diff_for_child, atom_diff_from_mappings, atom_diff_mcs_extend, atom_h_delta,
+    atom_needs_carbonyl, atom_needs_oxygen, candidate_could_help, candidate_could_help_on,
+    candidate_order_key, candidate_order_key_on, candidate_site_h_progress,
+    dh_neighbors_match_any_view, dh_product_ends_match, extend_mapping_for_added,
+    extend_mapping_where_possible, is_dehydrogenation_effect, keep_against_diff, lift_mappings,
+    mcs_align, mcs_bare, mcs_extend, pair_could_help, pair_site_h_progress, pattern_could_help,
+    pattern_could_help_mol, projected_unaligned_reductions, residual_cost_after_site_cast,
+    residual_from_diff, residual_resolvable, site_h_progress, site_h_progress_best_placement,
+    site_shell_forecast, try_atom_diff_for_child, try_atom_diff_for_child_goal,
+    try_atom_diff_for_child_tracked, try_lift_cleaved_child, try_lift_cleaved_child_goal,
+    try_lift_cleaved_child_tracked,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
+pub use bound_pattern::BoundPattern;
 pub use candidate::{Candidate, DeferredSite, ParentRef};
 pub use canonical_plan::{
     CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
@@ -82,8 +87,8 @@ pub use cleavage_graph::{
 };
 pub use find_path::{
     FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
-    MatchScoreSpec, OpenFindPath, PathCounters, PathOutcome, PathStep, diversity_penalty,
-    find_path, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
+    MatchScoreSpec, OpenFindPath, PathCounters, PathOutcome, PartialOutcome, FindPathPartialResult, PathStep, diversity_penalty,
+    find_path, find_path_partial, find_path_with_network, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
     hop_match_add_score, hop_match_product_score, hop_match_score, log_close_term,
     log_improve_term, neg_log1p_score,
 };
@@ -94,6 +99,10 @@ pub use forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
+pub use mapping::{
+    Resolved, SssomRow, XF_PREFIX, XMET_PREFIX, expand_iri, forest_xmet_sssom, forest_xmet_sssom_gz,
+    parse_forest_xmet_sssom, resolve, to_curie, xf_path_segments,
+};
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
     SiteShellCostOpts, SiteShellMismatch, align_shells, aligned_shells_h_closer_no_n2,
@@ -101,6 +110,9 @@ pub use matched_atom::{
     format_shell, molecule_shells, molecule_shells_h_closer_no_n2, neighborhood_h_closer_no_n2,
     shell_l1, shell_norm_l1, site_atoms_with_leave, site_delta_forecast, site_shell_cost,
     site_shell_cost_best_map, site_shell_cost_leave, site_shell_cost_opts,
+};
+pub use metabolic_network::{
+    MetabolicHop, MetabolicNetwork, MetabolicNode, hop_from_parts, tags_for_atoms,
 };
 pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
@@ -124,7 +136,8 @@ pub use product_graph::{
 };
 pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
-    all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
+    LEAF_CTORS, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset, epoxide_hydration,
+    leaf_rule, phase_one, reduction, resolve_root, stable_oxygenation, unstable_oxygenation,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,
