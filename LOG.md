@@ -2,6 +2,8 @@
 
 ## 2026-09-28
 
+- **Pathway API naming.** Settled on **`apply`**. Type is **`StepSequence`** (ordered steps that act like a step); `Linearization` remains a type alias. StepPlan/`Deps` methods stay `linearizations` / `same_linearizations`. Atom tags: ensure missing, never overwrite (shared wrapper).
+
 - **0.8.0 release.** Tag `v0.8.0`. Rust stub public API, optional `[rdkit]`, no nested `forest.rust`. Release CI builds the maturin extension before the forest suite. CHANGELOG compiled by the tag workflow.
 
 - **0.8 prep.** Public API lives on `xenosite.forest` only — no `find_path_rust.py`, no nested `forest.rust` package. Migrating doc is `docs/forest/MIGRATING_0.8.md`. `native/bfs.py` renamed to `cli.py` (`native.cli:main`). Doc paths updated to `native/` / `tests/forest/rust/` product suite.

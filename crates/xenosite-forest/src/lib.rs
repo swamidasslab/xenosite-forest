@@ -66,7 +66,7 @@ pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use candidate::{Candidate, ParentRef};
 pub use canonical_plan::{
     CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
-    align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
+    StepSequence, align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
     epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
     identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
     transitive_closure_masks,

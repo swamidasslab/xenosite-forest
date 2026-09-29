@@ -9,7 +9,7 @@
 //! Cleavage fragments discarded by the walk live on the plan as [`Maybe`]
 //! (not a sibling on the path outcome, and not searched).
 //!
-//! Replay: [`Deps::linearizations`] → [`Linearization::apply`] through named
+//! Apply: [`Deps::linearizations`] → [`StepSequence::apply`] through named
 //! elementary rules at resolved sites.
 
 use std::collections::{BTreeSet, HashSet, VecDeque};
@@ -329,7 +329,11 @@ impl Maybe {
     }
 }
 
-/// Flat elementary steps plus precedes (transitive reduction) and [`Maybe`].
+/// Compact set of linearizations under step + precedes constraints.
+///
+/// Python calls this `StepPlan`. Each linear extension is a [`StepSequence`]
+/// (ordered steps that act like one step). Enumerate with [`Self::linearizations`]
+/// / [`Self::n_linearizations`] without always listing them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Deps {
     steps: Vec<Step>,
@@ -398,10 +402,10 @@ impl Deps {
     }
 
     /// Every topological sort under precedes (tiny graphs).
-    pub fn linearizations(&self) -> Vec<Linearization> {
+    pub fn linearizations(&self) -> Vec<StepSequence> {
         let n = self.steps.len();
         if n == 0 {
-            return vec![Linearization { steps: Vec::new() }];
+            return vec![StepSequence { steps: Vec::new() }];
         }
         let mut outgoing = vec![Vec::new(); n];
         let mut indeg = vec![0usize; n];
@@ -417,10 +421,10 @@ impl Deps {
             outgoing: &[Vec<usize>],
             indeg: &mut [usize],
             path: &mut Vec<usize>,
-            out: &mut Vec<Linearization>,
+            out: &mut Vec<StepSequence>,
         ) {
             if path.len() == steps.len() {
-                out.push(Linearization {
+                out.push(StepSequence {
                     steps: path.iter().map(|&i| steps[i].clone()).collect(),
                 });
                 return;
@@ -460,7 +464,7 @@ impl Deps {
 
     /// Number of topological sorts under precedes.
     ///
-    /// Counts via bitmask DP (no materializing [`Linearization`]s). `n > 20`
+    /// Counts via bitmask DP (no materializing [`StepSequence`]s). `n > 20`
     /// falls back to enumerating [`Self::linearizations`] (plans that large are
     /// not expected in PhaseOne multipath).
     pub fn n_linearizations(&self) -> usize {
@@ -664,13 +668,19 @@ impl Deref for Deps {
     }
 }
 
-/// Ordered elementary steps; apply chains resolve → rule.
+/// Ordered elementary steps that act like a single step (composite).
+///
+/// One total order from a [`Deps`] / StepPlan. Enumerate via
+/// [`Deps::linearizations`] (method keeps the poset “linear extension” name;
+/// this type is the concrete sequence).
+///
+/// `apply` is the same door as for one hop: length 1 is not a special case.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Linearization {
+pub struct StepSequence {
     pub steps: Vec<Step>,
 }
 
-impl Linearization {
+impl StepSequence {
     /// Apply steps in order. Returns product molecules after the last step.
     pub fn apply(&self, mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         if self.steps.is_empty() {
@@ -696,6 +706,9 @@ impl Linearization {
         Ok(currents)
     }
 }
+
+/// Former name of [`StepSequence`]. Prefer `StepSequence`.
+pub type Linearization = StepSequence;
 
 /// One bitmask per node: bit `b` set iff `a` must precede `b`.
 ///

@@ -44,10 +44,14 @@ contract). Callers: `docs/forest/MIGRATING_0.7.md`.
 
 Status: approved (Rust derisk; shape may replace Python `CanonicalStep`).
 
-The plan language is flat [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs):
-elementary `Step`s (rule name + site notes) plus precedes, plus [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs)
-cleavage bags on the same plan (not a sibling on the path outcome). There is no
-parallel `CanonicalStep` dialect for search.
+The plan language is flat [`Deps`](../../crates/xenosite-forest/src/canonical_plan.rs)
+(Python `StepPlan`): a compact representation of a large set of linearizations
+that match step + precedes constraints (plus [`Maybe`](../../crates/xenosite-forest/src/canonical_plan.rs)
+cleavage bags on the same plan). Each linearization is a
+[`StepSequence`](../../crates/xenosite-forest/src/canonical_plan.rs) — an
+ordered container of elementary `Step`s that acts like a step. Enumerate via
+`Deps::linearizations` (method name keeps the poset sense; the type is
+`StepSequence`). There is no parallel `CanonicalStep` dialect for search.
 
 Site notes are one enum: known index | `WillAdd(element @ anchor)` | `AddedBy(rule, anchors)`.
 `Deps::bind` rewrites will-add → added-by and builds precedes from those notes.
@@ -55,12 +59,12 @@ Composite hops own a `canonical_plan` hook on the leaf (Python
 `ReactionRule.canonical_plan`): it returns elementary `Step`s named after
 catalog rules (`Hydroxylation`, `Dehydrogenation`, …). Search asks the leaf;
 there is no `PlanKind` enum. Metabolize may still apply a composite leaf in one
-hop; the plan is the elementary split for search and replay. QuinoneFormation
+hop; the plan is the elementary split for search and apply. QuinoneFormation
 expands to Hydroxylation (or OxidativeDehalogenation) then Dehydrogenation.
 EpoxideHydration expands to Epoxidation then EpoxideOpening (peers already in
 PhaseOne). Status: approved (Rust derisk).
 
-Replay: `Deps::linearizations` → each `Linearization::apply` runs named
+Apply: `Deps::linearizations` → each `StepSequence::apply` runs named
 elementary rules at resolved sites. Correctness: an accepted product’s plan
 must reach that product under some linearization; a `find_path` hit’s plan
 must reach the hit. No mid-plan re-metabolize of the composite leaf.
