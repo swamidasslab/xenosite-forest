@@ -2,6 +2,8 @@
 
 ## 2026-09-28
 
+- **Created-target fuzz → `random_path`.** `phase1_plan_fuzz` uses `random_path_with` + `PathwayOptions::no_loops_or_fragments` (not hand-rolled metabolize pools). Native `_walk` stays frozen.
+
 - **`find_path` timeout.** `timeout=` (seconds, optional) on Rust Python door / `xenosite.forest.find_path`; counters expose `timed_out`. Not on native.
 
 - **`PathwayOptions`.** Skip multicomponent / skip-seen are opt-in only (`default` off). Shared by `random_path` / `random_path_with`; same knobs for StepSequence/`PathOutcome` `apply`. Preset: `PathwayOptions::no_loops_or_fragments()`.

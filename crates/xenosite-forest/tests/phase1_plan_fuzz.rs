@@ -9,16 +9,19 @@
 //!
 //! Case count: `PROPTEST_CASES`, or `XENOSITE_FUZZ_EXAMPLES` when set (Python
 //! parity). Defaults match the Hypothesis suites (4).
+//!
+//! Created targets come from [`random_path_with`] +
+//! [`PathwayOptions::no_loops_or_fragments`] (not hand-rolled metabolize walks).
 
 use proptest::prelude::*;
-use proptest::test_runner::Config as ProptestConfig;
+use proptest::test_runner::{Config as ProptestConfig, FileFailurePersistence};
 use xenosite_forest::rules::{
     dealkylation, dehydrogenation, epoxidation, hydroxylation, n_dealkylation, phase_one,
     quinone_formation,
 };
 use xenosite_forest::{
-    FindPathConfig, PathCounters, PathOutcome, accept_all_rules, accept_all_sites, canon_of,
-    find_path_with, parse_mol,
+    FindPathConfig, PathCounters, PathOutcome, PathwayOptions, RuleSet, accept_all_rules,
+    accept_all_sites, canon_of, find_path_with, parse_mol, random_path_with,
 };
 
 fn fuzz_config(default_cases: u32) -> ProptestConfig {
@@ -26,7 +29,14 @@ fn fuzz_config(default_cases: u32) -> ProptestConfig {
         .ok()
         .and_then(|raw| raw.parse().ok())
         .unwrap_or(default_cases);
-    ProptestConfig::with_cases(cases)
+    ProptestConfig {
+        cases,
+        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/proptest-regressions/phase1_plan_fuzz.txt"
+        )))),
+        ..ProptestConfig::default()
+    }
 }
 
 fn corpus_smiles() -> impl Strategy<Value = &'static str> {
@@ -87,6 +97,33 @@ fn heavy_atom_count(mol: &xenosite_forest::Molecule) -> usize {
     mol.atoms()
         .filter(|(_, atom)| atom.element.atomic_number() > 1)
         .count()
+}
+
+/// One seeded walk under the shared no-loops/fragments preset; `None` if empty
+/// or the product is too small (same HA floor as the old metabolize pool).
+fn created_target(start: &str, seed: u64, rules: &RuleSet, max_steps: usize) -> Option<String> {
+    let walk = random_path_with(
+        start,
+        seed,
+        rules,
+        max_steps,
+        PathwayOptions::no_loops_or_fragments(),
+    )
+    .ok()?;
+    if walk.steps.is_empty() {
+        return None;
+    }
+    let start_csmi = canon_of(start).ok()?;
+    if walk.smiles == start_csmi || walk.smiles.contains('.') {
+        return None;
+    }
+    let reactant = parse_mol(start).ok()?;
+    let product = parse_mol(&walk.smiles).ok()?;
+    let min_ha = 4.max(heavy_atom_count(&reactant) / 3);
+    if heavy_atom_count(&product) < min_ha {
+        return None;
+    }
+    Some(walk.smiles)
 }
 
 fn assert_plan_elementary(outcome: &PathOutcome, target: &str) {
@@ -255,43 +292,20 @@ proptest! {
     #[test]
     fn fuzz_created_target_hit_or_honest_miss(
         start in find_path_corpus(),
+        seed in any::<u64>(),
         _canonical_emitted_sites in any::<bool>(),
-        index in any::<prop::sample::Index>(),
     ) {
-        let mol = parse_mol(start).unwrap();
-        let start_csmi = canon_of(start).unwrap();
-        let mut seen = std::collections::HashSet::new();
-        seen.insert(start_csmi);
-        let create_rules = [quinone_formation(), hydroxylation(), dehydrogenation()];
-        let mut pool = Vec::new();
-        let start_ha = heavy_atom_count(&mol);
-        'outer: for rule in &create_rules {
-            for emission in rule
-                .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
-            {
-                for product in &emission.products {
-                    if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
-                    {
-                        continue;
-                    }
-                    let product_mol = parse_mol(product).unwrap();
-                    let min_ha = 4.max(start_ha / 3);
-                    if heavy_atom_count(&product_mol) < min_ha {
-                        continue;
-                    }
-                    pool.push(product.clone());
-                    if pool.len() >= 8 {
-                        break 'outer;
-                    }
-                }
-            }
-        }
-        prop_assume!(!pool.is_empty());
-        let target = &pool[index.index(pool.len())];
+        let create = RuleSet::compose(
+            Some("create".into()),
+            [quinone_formation(), hydroxylation(), dehydrogenation()],
+        );
+        let target = created_target(start, seed, &create, 1);
+        prop_assume!(target.is_some());
+        let target = target.unwrap();
         let mut counters = PathCounters::default();
         let hits = find_path_with(
             start,
-            target,
+            &target,
             &phase_one(),
             &mut counters,
             FindPathConfig {
@@ -301,9 +315,11 @@ proptest! {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         if let Some(hit) = hits.first() {
-            assert_plan_elementary(hit, target);
+            assert_plan_elementary(hit, &target);
         }
     }
 }
@@ -338,51 +354,28 @@ proptest! {
         }
     }
 
-    /// Create a Phase-I product, find_path with max_paths>1, assert no overlap.
+    /// Create a Phase-I product via `random_path`, find_path with max_paths>1.
     #[test]
     fn fuzz_created_target_multipath_no_linearization_overlap(
         start in find_path_corpus(),
-        index in any::<prop::sample::Index>(),
+        seed in any::<u64>(),
     ) {
-        let mol = parse_mol(start).unwrap();
-        let start_csmi = canon_of(start).unwrap();
-        let mut seen = std::collections::HashSet::new();
-        seen.insert(start_csmi);
-        let create_rules = [
-            quinone_formation(),
-            hydroxylation(),
-            dehydrogenation(),
-            dealkylation(),
-        ];
-        let mut pool = Vec::new();
-        let start_ha = heavy_atom_count(&mol);
-        'outer: for rule in &create_rules {
-            for emission in rule
-                .metabolize(&mol, accept_all_rules, accept_all_sites, true).collect::<Result<Vec<_>, _>>().unwrap()
-            {
-                for product in &emission.products {
-                    if product.is_empty() || product.contains('.') || !seen.insert(product.clone())
-                    {
-                        continue;
-                    }
-                    let product_mol = parse_mol(product).unwrap();
-                    let min_ha = 4.max(start_ha / 3);
-                    if heavy_atom_count(&product_mol) < min_ha {
-                        continue;
-                    }
-                    pool.push(product.clone());
-                    if pool.len() >= 10 {
-                        break 'outer;
-                    }
-                }
-            }
-        }
-        prop_assume!(!pool.is_empty());
-        let target = &pool[index.index(pool.len())];
+        let create = RuleSet::compose(
+            Some("create".into()),
+            [
+                quinone_formation(),
+                hydroxylation(),
+                dehydrogenation(),
+                dealkylation(),
+            ],
+        );
+        let target = created_target(start, seed, &create, 1);
+        prop_assume!(target.is_some());
+        let target = target.unwrap();
         let mut counters = PathCounters::default();
         let hits = find_path_with(
             start,
-            target,
+            &target,
             &phase_one(),
             &mut counters,
             FindPathConfig {
@@ -392,11 +385,13 @@ proptest! {
             },
             |_| true,
         )
-        .unwrap().collect_all().unwrap();
+        .unwrap()
+        .collect_all()
+        .unwrap();
         if hits.len() < 2 {
             return Ok(());
         }
-        prop_assert!(hits.iter().all(|h| h.smiles == *target));
+        prop_assert!(hits.iter().all(|h| h.smiles == target));
         assert_no_linearization_overlap(&hits);
     }
 }
