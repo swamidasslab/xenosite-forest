@@ -2,6 +2,12 @@
 
 Pass any **name** below to `bfs(..., ruleset=...)` or `load_ruleset(...)`. Aliases in parentheses are also registered.
 
+**Note:** The `bfs` / `load_ruleset` / `xenosite.forest.native.rules` examples in
+this page document the **RDKit reference** engine (`[rdkit]` extra). That
+engine is **feature-frozen**. New rulesets and product APIs belong on the Rust
+door (`xenosite.forest` / `crates/xenosite-forest`). See
+[`forest/NATIVE.md`](forest/NATIVE.md).
+
 These rules *enumerate structures*. The cited papers are the XenoSite models and labeling schemes the rulesets are written to match. Site-of-metabolism scores from those models are at [xenosite.org](https://xenosite.org).
 
 Always cite Metabolic Forest when you use this package. Cite the matching paper as well when a specific ruleset or labeling scheme is central to the work.

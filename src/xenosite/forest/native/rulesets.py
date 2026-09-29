@@ -1,5 +1,8 @@
 """A rule set is a rule that runs the rules it contains.
 
+**Feature-frozen RDKit reference.** New ruleset work belongs in
+``crates/xenosite-forest`` — see ``docs/forest/NATIVE.md``.
+
 Callers execute one set. ``filter_rules`` and ``filter_sites`` are passed to
 each child, so the set does not hide that child's patterns. A pattern the
 filter refuses is not run. A pattern it accepts is.

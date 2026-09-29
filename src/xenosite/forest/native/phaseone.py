@@ -1,5 +1,8 @@
 """Phase I as rules, and the names already on each addition.
 
+**Feature-frozen RDKit reference.** New Phase I / ruleset work belongs in
+``crates/xenosite-forest`` — see ``docs/forest/NATIVE.md``.
+
 Call :data:`PhaseOne` or one of the grouped sets. Each product records the
 rules that ran under ``atom_trace["additions"]``. :func:`reaction_labels`
 reads that chain. The label is each rule's initialization name. A ruleset

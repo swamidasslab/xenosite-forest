@@ -1,6 +1,8 @@
 # xenosite.forest
 
-Python implementation of **Metabolic Forest**: enumerate explicit metabolite structures from reaction rules, and search pathways that connect a reactant to a putative product.
+**Metabolic Forest**: enumerate explicit metabolite structures from reaction rules, and search pathways that connect a reactant to a putative product.
+
+The **product API** is the Rust chematic engine (`crates/xenosite-forest`) exposed as `xenosite.forest` (PyO3 wrapper). **New features go there** — not in the pure-Python RDKit package `xenosite.forest.native`, which is a frozen reference/validation engine. See [`docs/forest/NATIVE.md`](docs/forest/NATIVE.md).
 
 Site-of-metabolism *prediction* models (epoxidation, quinonation, Phase I, reactivity, and others) are on the web at **[xenosite.org](https://xenosite.org)**. This package is the structure-enumeration engine, not those neural-network models.
 
@@ -18,8 +20,9 @@ or
 pip install xenosite-forest
 ```
 
-The default install is the **Rust** chematic door (no RDKit). For the RDKit
-reference engine and the frozen 0.6.x archive:
+The default install is the **Rust** chematic door (no RDKit) — that is the
+supported surface for new work. For the frozen RDKit reference engine and the
+frozen 0.6.x archive (parity / historical only; not extended for new features):
 
 ```bash
 uv add "xenosite-forest[rdkit]"
@@ -50,7 +53,7 @@ hits, counters = find_path("CC", "CCO", max_paths=1)
 print(hits[0]["steps"], counters["billed"])
 ```
 
-RDKit reference engine (requires ``[rdkit]``):
+RDKit reference engine (requires ``[rdkit]``; **feature-frozen** — prefer Rust above):
 
 ```python
 from rdkit import Chem
@@ -97,6 +100,7 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[Usage](https://github.com/swamidasslab/xenosite-forest/blob/main/docs/usage.md)** — public API and pathway search
 - **[Migrating to 0.7.0](docs/forest/MIGRATING_0.7.md)** — `metabolize` yield shape and other breaking changes
 - **[Migrating to 0.8.0](docs/forest/MIGRATING_0.8.md)** — rust / native / legacy layout, optional RDKit
+- **[Native freeze](docs/forest/NATIVE.md)** — RDKit Python engine is reference-only; new features go to Rust
 - **[Legacy freeze](docs/forest/LEGACY.md)** — frozen 0.6.x archive notes
 - **[xenosite-predict notes](docs/xenosite-predict.md)** — RDKit 2026 valence caches and DNA/CN conjugation vs GSH (downstream adapters)
 - **[Path-search performance](docs/forest/PERFORMANCE.md)** — archive BFS/DFS vs live `find_path` head-to-head
@@ -105,9 +109,9 @@ Related single-rule papers: epoxidation ([10.1021/acscentsci.5b00131](https://do
 - **[xenosite.org](https://xenosite.org)** — XenoSite models for sites of metabolism and reactivity
 - **[Source repository](https://github.com/swamidasslab/xenosite-forest)** — code, issues, and releases
 
-Import the package as `xenosite.forest` (Rust public stub). The RDKit reference
-engine is `xenosite.forest.native`; the frozen 0.6.x archive is
-`xenosite.forest.legacy` (see [`docs/forest/LEGACY.md`](docs/forest/LEGACY.md)).
+Import the package as `xenosite.forest` (Rust public API). `xenosite.forest.native`
+is the RDKit reference engine (**no new features** — [`NATIVE.md`](docs/forest/NATIVE.md)).
+`xenosite.forest.legacy` is the frozen 0.6.x archive ([`LEGACY.md`](docs/forest/LEGACY.md)).
 `xenosite` is a PEP 420 namespace, so other `xenosite.*` packages can be
 installed alongside this one.
 
@@ -141,10 +145,17 @@ A machine-readable citation is also in [`CITATION.cff`](https://github.com/swami
 
 ## Development
 
+**New features:** implement in `crates/xenosite-forest/` and expose via
+`src/xenosite/forest/` (this package’s public wrapper). Do **not** extend
+`src/xenosite/forest/native/` or `legacy/` for product work — see
+[`docs/forest/NATIVE.md`](docs/forest/NATIVE.md).
+
 ```bash
 git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
 uv sync --extra network --group dev
+# rebuild the PyO3 extension after Rust changes:
+# maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
 uv run pytest -n auto
 uv run pytest --cov=xenosite.forest
 ```

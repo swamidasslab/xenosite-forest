@@ -6,7 +6,7 @@ build-backend = "maturin"
 [project]
 name = "xenosite-forest-native"
 version = "0.1.0"
-description = "Derisk native chemistry door (chematic + canonaut)"
+description = "Metabolic Forest product door (chematic + canonaut; PyO3 is xenosite.forest)"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 

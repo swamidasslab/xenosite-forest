@@ -1,4 +1,8 @@
-"""Define specific reaction rules."""
+"""Define specific reaction rules.
+
+**Feature-frozen RDKit reference.** New rules and PatternInfo work belong in
+``crates/xenosite-forest`` — see ``docs/forest/NATIVE.md``.
+"""
 
 from __future__ import annotations
 

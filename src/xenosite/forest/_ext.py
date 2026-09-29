@@ -1,4 +1,4 @@
-"""Load the maturin extension ``xenosite_forest``."""
+"""Load the maturin extension ``xenosite_forest`` (Rust product door)."""
 
 from __future__ import annotations
 

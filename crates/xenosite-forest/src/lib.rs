@@ -1,8 +1,9 @@
-//! Metabolic Forest chemistry door on chematic + canonaut.
+//! Metabolic Forest **product** chemistry door on chematic + canonaut.
 //!
-//! Derisk crate for a full Rust port. The algorithm lives in the Python
-//! package; this crate proves the chemistry seams compile and behave on
-//! chematic, including `wasm32-unknown-unknown`.
+//! New features land in this crate (and the thin `xenosite.forest` PyO3
+//! wrapper). Do **not** back-port them to `xenosite.forest.native` (frozen
+//! RDKit reference) or `legacy`. See `docs/forest/NATIVE.md` /
+//! `docs/forest/RUST.md`. WASM-clean (`wasm32-unknown-unknown`).
 
 #[cfg(all(feature = "python", feature = "wasm"))]
 compile_error!(

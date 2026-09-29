@@ -3,16 +3,24 @@
 Breaking import and install changes from **0.7.x** → **0.8.0**. Chemistry notes
 for the earlier 0.7 rewrite remain in [MIGRATING_0.7.md](MIGRATING_0.7.md).
 
+## Feature policy (read this first)
+
+**New features go only to the Rust door** (`crates/xenosite-forest` + public
+`xenosite.forest` wrapper). Do **not** add them to `xenosite.forest.native` or
+`xenosite.forest.legacy`. Native is a frozen RDKit reference for parity;
+legacy is a frozen 0.6.x archive. Details: [NATIVE.md](NATIVE.md),
+[LEGACY.md](LEGACY.md).
+
 ## Layout
 
 | Import | Role |
 |--------|------|
-| `xenosite.forest` | Public API: Rust chematic door (`find_path`, allowlisted rulesets). |
-| `xenosite.forest.native` | RDKit Python engine. **Reference / validation.** Optional `[rdkit]` extra. Emits `UserWarning` on import. |
+| `xenosite.forest` | **Product API:** Rust chematic door (`find_path`, allowlisted rulesets). New work lands here. |
+| `xenosite.forest.native` | RDKit Python engine. **Reference / validation only — feature-frozen.** Optional `[rdkit]` extra. Emits `UserWarning` on import. |
 | `xenosite.forest.legacy` | Frozen 0.6.x archive. Optional `[rdkit]` extra. Emits `DeprecationWarning` on import. See [LEGACY.md](LEGACY.md). |
 
 API divergence across the public stub / native / legacy is expected. Do not force
-shared signatures.
+shared signatures, and do not back-port Rust APIs into native.
 
 ## Public stub allowlist
 

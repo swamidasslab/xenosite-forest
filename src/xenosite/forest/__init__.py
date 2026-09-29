@@ -4,6 +4,11 @@ Recommended imports::
 
     from xenosite.forest import find_path, PhaseOne, Epoxidation
 
+**New features** are implemented in ``crates/xenosite-forest`` and exposed
+here. Do **not** add them to :mod:`xenosite.forest.native` (frozen RDKit
+reference) or :mod:`xenosite.forest.legacy` (frozen 0.6.x archive). See
+``docs/forest/NATIVE.md``.
+
 The RDKit reference engine is :mod:`xenosite.forest.native` (optional
 ``[rdkit]`` extra). The frozen 0.6.x archive is :mod:`xenosite.forest.legacy``.
 """
@@ -46,6 +51,9 @@ def find_path(
     """Run PhaseOne chematic ``find_path``; return ``(hits, counters)``.
 
     Each hit is ``{"smiles": str, "steps": [{"rule": str, "site": list[str]}]}``.
+
+    This is the Rust product door. New search features belong in the Rust crate
+    and this wrapper — not in :mod:`xenosite.forest.native`.
     """
 
     return load().find_path(

@@ -1,7 +1,12 @@
-"""RDKit Python reference / validation engine.
+"""RDKit Python reference / validation engine — **feature-frozen**.
 
-Not the recommended product API. Prefer :mod:`xenosite.forest` (Rust).
-Call signatures may diverge from the Rust door over time.
+Not the product API. Prefer :mod:`xenosite.forest` (Rust chematic door).
+**New features** (APIs, rules, search, sampling, conjugation helpers, …) go in
+``crates/xenosite-forest`` and the ``xenosite.forest`` wrapper — **not here**.
+See ``docs/forest/NATIVE.md``.
+
+Call signatures may diverge from the Rust door over time. Allowed native edits
+are parity bugfixes, CI, and docs that restate this freeze.
 """
 
 from __future__ import annotations
@@ -18,8 +23,9 @@ except ImportError as e:  # pragma: no cover - optional extra
     ) from e
 
 warnings.warn(
-    "xenosite.forest.native is the RDKit reference/validation engine; "
-    "the recommended API is xenosite.forest (Rust).",
+    "xenosite.forest.native is a frozen RDKit reference/validation engine; "
+    "new features go in xenosite.forest (Rust) / crates/xenosite-forest, "
+    "not here. See docs/forest/NATIVE.md.",
     UserWarning,
     stacklevel=2,
 )

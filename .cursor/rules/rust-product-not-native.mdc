@@ -1,0 +1,20 @@
+---
+description: New forest features go in Rust + xenosite.forest wrapper, not native or legacy Python.
+alwaysApply: true
+---
+
+# Rust product door — do not extend native
+
+New Metabolic Forest features (APIs, rules, search, sampling, conjugation
+helpers, CLI, etc.) land in:
+
+1. `crates/xenosite-forest/` (Rust chematic engine)
+2. `src/xenosite/forest/` public wrapper (`__init__.py`, `_ext.py` — PyO3)
+
+**Do not** implement or back-port those features into:
+
+- `src/xenosite/forest/native/` — RDKit reference; **feature-frozen** (see `docs/forest/NATIVE.md`)
+- `src/xenosite/forest/legacy/` — frozen 0.6.x archive (see `docs/forest/LEGACY.md`)
+
+Native/legacy edits are allowed only for parity bugfixes, CI, or docs that
+restate this freeze — and only when explicitly asked. Prefer Rust when unsure.

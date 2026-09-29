@@ -4,6 +4,10 @@
 era. It is **not** evolved toward 0.7 / Rust APIs. Importing the package emits
 a `DeprecationWarning`. Prefer `xenosite.forest` (Rust).
 
+The RDKit **0.7-era** reference engine (`xenosite.forest.native`) is separately
+**feature-frozen** — see [NATIVE.md](NATIVE.md). Neither native nor legacy is
+the place for new product features.
+
 Native may still import `xenosite.forest.legacy.step_plan` (`StepPlan` / `Deps`)
 until those types are re-homed.
 

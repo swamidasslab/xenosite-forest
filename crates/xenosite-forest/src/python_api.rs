@@ -1,5 +1,9 @@
 //! PyO3 class wrap of [`crate::forest_mol::ForestMol`].
 //!
+//! This is the **product** Python door (`xenosite_forest` / `xenosite.forest`).
+//! New public APIs are added here — not in `xenosite.forest.native` (frozen
+//! RDKit reference; see `docs/forest/NATIVE.md`).
+//!
 //! `#[pyclass]` stores the Rust struct as the Python instance payload. One
 //! Python object ↔ one `ForestMol`. Getters are methods on that payload.
 //!

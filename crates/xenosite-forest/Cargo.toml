@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-description = "Derisk crate: Metabolic Forest on chematic + canonaut, WASM-clean"
+description = "Metabolic Forest product door: chematic + canonaut (WASM-clean; PyO3 wrapper is xenosite.forest)"
 repository = "https://github.com/swamidasslab/xenosite-forest"
 publish = false
 
