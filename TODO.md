@@ -7,7 +7,7 @@ the temporary native console script).
 
 ## Now (find_path + sampling)
 
-- find_path_partial: like find_path when rules cannot reach target; report closest reach and what was missed (may replace find_path); DRY/clarity refactor of shared search so top-level find_path stays easy to follow
+- find_path_partial: like find_path when rules cannot reach target; report closest reach and what was missed (may replace find_path); Expand is now one DeferredSite stream — next, peel child-enqueue / heap update out of the PathSearch loop so partial can share it
 - find_path: mapping argument between target and reactant
 - find_path: return graph alongside paths; emit graph even when path not found (crate has `product_graph`; public API still `(hits, counters)`)
 - Collect hard metabolism-DB cases where find_path / find_path_partial do not fail fast; harden fail-fast (includes MeOPhOH seen-after-`mol_edits` residual)

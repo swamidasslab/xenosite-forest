@@ -2,6 +2,8 @@
 
 ## 2026-09-28
 
+- **Expand unified on DeferredSite.** `find_path::Expand` no longer walks a separate pair DFS (`PairFrame` / `emit_pair` / `load_leaf_pairs`). One filter+sort over `RuleSet::candidates`, one `emit_site` that calls `site_atoms` / `elementary_plan` / `cleave_side_sig` (pair ends into plan hooks). ~260 lines out of `find_path.rs`. Metabolize dropped its plan overlay — `DeferredSite::apply` already sets `elementary_plan`. Next lever for `find_path_partial`: keep search loop thin; put more of the child-enqueue branching into objects beside Expand.
+
 - **JS/WASM door + GitHub Packages.** Expanded `wasm_api` to match the Python public surface (`find_path` + timeout/`timed_out`, `random_path`, factories, structured `metabolize`). Package `js/` (`@xenosite/forest` → publish `@swamidasslab/forest`). Node smokes via `tsx`. Same `v*` tag publishes npm to GH Packages alongside PyPI wheels. Build: `./scripts/build_wasm.sh` (put `--target web` before `--features` — wasm-pack 0.15 quirk). serde-wasm-bindgen uses `json_compatible()` so Maps are not empty `{}` under JSON.stringify.
 
 - **`find_path` timeout.** `timeout=` (seconds, optional) on Rust Python door / `xenosite.forest.find_path`; counters expose `timed_out`. Not on native.

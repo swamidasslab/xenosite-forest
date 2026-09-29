@@ -140,7 +140,7 @@ fn bfs_keep_if_drop(reactant: &str, target: &str, max_nodes: usize) -> Option<us
                 continue;
             };
             for piece in pieces {
-                let child = parent.adopt_product(piece);
+                let child = parent.from_edit_product(piece);
                 if !residual_drops(&parent, &child, &goal, &atoms) {
                     continue;
                 }
@@ -164,7 +164,7 @@ fn bfs_keep_if_drop(reactant: &str, target: &str, max_nodes: usize) -> Option<us
                 continue;
             };
             for piece in pieces {
-                let child = parent.adopt_product(piece);
+                let child = parent.from_edit_product(piece);
                 if !residual_drops(&parent, &child, &goal, &atoms) {
                     continue;
                 }

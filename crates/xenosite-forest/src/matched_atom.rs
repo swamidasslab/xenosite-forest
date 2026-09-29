@@ -1086,7 +1086,7 @@ mod tests {
         let map = atom_diff(parent.mol(), &target).mapping;
         let set = dealkylation();
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = cands
@@ -1120,8 +1120,8 @@ mod tests {
             "perfect residual δ"
         );
 
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let actual = edit_site_bag(&parent, &child, &atoms);
         check_site_shell_bags(
             "anisole demethylation",
@@ -1146,7 +1146,7 @@ mod tests {
         let map = atom_diff(parent.mol(), &target).mapping;
         let set = dealkylation();
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = cands
@@ -1154,8 +1154,8 @@ mod tests {
             .find(|c| c.pattern.name.contains("methyl_alcohol"))
             .expect("methyl_alcohol");
         let atoms = site_atoms_cand(c);
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let cur = molecule_shells(parent.mol());
         let tgt = molecule_shells(&target);
@@ -1191,7 +1191,7 @@ mod tests {
         let map = atom_diff(parent.mol(), &target).mapping;
         let set = hydroxylation();
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = &cands[0];
@@ -1203,8 +1203,8 @@ mod tests {
         atoms.sort_unstable();
         atoms.dedup();
         let forecast = forecast_site_bag(&align, &atoms);
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let actual = edit_site_bag(&parent, &child, &atoms);
         check_site_shell_bags("ethane OH orbit", &forecast, &actual, SiteShellCheck::Error)
             .unwrap();
@@ -1224,15 +1224,15 @@ mod tests {
         let align = aligned_shells_mol(parent.mol(), &target);
         let map = atom_diff(parent.mol(), &target).mapping;
         let pairs = dehydrogenation()
-            .pair_candidates_leaf(parent.mol())
+            .candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair())).collect::<Result<Vec<_>, _>>()
             .unwrap();
         let pair = &pairs[0];
         let (a, b) = pair.end_atoms().expect("ends");
         // Joint site — each end’s shell sees the other when close.
         let atoms = [a, b];
         let forecast = forecast_site_bag(&align, &atoms);
-        let pieces = pair.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = pair.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let actual = edit_site_bag(&parent, &child, &atoms);
         check_site_shell_bags("HQ DH joint", &forecast, &actual, SiteShellCheck::Error).unwrap();
         let cur = molecule_shells(parent.mol());
@@ -1258,7 +1258,7 @@ mod tests {
         let tgt = molecule_shells(&target);
         let set = epoxidation();
         let c = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
@@ -1269,8 +1269,8 @@ mod tests {
             "aromatic MeOPhOH site must resolve dearomatizes"
         );
         let atoms = site_atoms_cand(&c);
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let opts = SiteShellCostOpts {
             dearomatic: c.pattern.effect.dearomatizes,
@@ -1338,7 +1338,7 @@ mod tests {
         let tgt = molecule_shells(&target);
         let set = dehydration();
         let c = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
@@ -1373,8 +1373,8 @@ mod tests {
             !leave_only.is_empty(),
             "expected OH leave beyond site {site:?}, got {atoms:?}"
         );
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let before = site_shell_cost_leave(
             &cur,
@@ -1410,7 +1410,7 @@ mod tests {
         let tgt = molecule_shells(&target);
         let set = dealkylation();
         let c = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
@@ -1432,8 +1432,8 @@ mod tests {
             2,
             "open leave must stay at bond ends, not flood the ring: {expanded:?}"
         );
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         // Leave = heavies the edit actually drops from the alignment.
         let leave_only: Vec<usize> = expanded

@@ -380,7 +380,7 @@ fn eval_suite(
         let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
 
         for c in set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
         {
@@ -405,7 +405,7 @@ fn eval_suite(
                 if pieces.is_empty() {
                     continue;
                 }
-                let child = parent.adopt_product(pieces[0].clone());
+                let child = parent.from_edit_product(pieces[0].clone());
                 let edit = edit_shells(&parent, &child);
                 let (atoms, leave_only) = if c.pattern.effect.cleaves || mode.leave {
                     leave_debt(&site, &expanded, leave_n, Some(&edit))
@@ -495,7 +495,7 @@ fn eval_suite(
                 if pieces.is_empty() {
                     continue;
                 }
-                let child = parent.adopt_product(pieces[0].clone());
+                let child = parent.from_edit_product(pieces[0].clone());
                 let edit = edit_shells(&parent, &child);
                 let before = residual(
                     mode,

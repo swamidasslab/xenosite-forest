@@ -323,18 +323,19 @@ impl PyRuleSet {
         filter_rules: Option<Bound<'_, PyAny>>,
         filter_sites: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Vec<MetabolizeRow>> {
-        let chemistry = mol.borrow().inner.mol().clone();
+        let forest = mol.borrow().inner.copy_mol();
         let set = slf.borrow().inner.clone();
         let emissions = if filter_rules.is_none() && filter_sites.is_none() {
-            set.metabolize(&chemistry, accept_all_rules, accept_all_sites, true)
+            set.metabolize(&forest, accept_all_rules, accept_all_sites, true)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(py_err)?
         } else {
-            metabolize_with_python(mol, &set, &chemistry, filter_rules, filter_sites)?
+            metabolize_with_python(mol, &set, &forest, filter_rules, filter_sites)?
         };
+        // Explicit CSMI downgrade at the Python string-row boundary.
         Ok(emissions
             .into_iter()
-            .map(|e| (e.pattern_name, e.site, e.products, e.rule_path))
+            .map(|e| (e.pattern_name, e.site, e.product_csmis(), e.rule_path))
             .collect())
     }
 
@@ -357,7 +358,7 @@ impl PyRuleSet {
 fn metabolize_with_python(
     mol: &Bound<'_, PyForestMol>,
     set: &RuleSet,
-    chemistry: &Molecule,
+    forest: &crate::ForestMol,
     filter_rules: Option<Bound<'_, PyAny>>,
     filter_sites: Option<Bound<'_, PyAny>>,
 ) -> PyResult<Vec<crate::pattern::Emission>> {
@@ -424,7 +425,7 @@ fn metabolize_with_python(
         )
     };
     let emissions = set
-        .metabolize(chemistry, rules, sites, true)
+        .metabolize(forest, rules, sites, true)
         .collect::<Result<Vec<_>, _>>()
         .map_err(py_err)?;
     if let Some(e) = err.into_inner() {

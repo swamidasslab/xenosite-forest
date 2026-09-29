@@ -1975,7 +1975,7 @@ mod tests {
             "catalog capability must declare dearomatizes"
         );
 
-        let benzene = parse_mol("c1ccccc1").unwrap();
+        let benzene = crate::as_forest_mol("c1ccccc1").unwrap();
         let arom = set
             .candidates(&benzene)
             .collect::<Result<Vec<_>, _>>()
@@ -1989,7 +1989,7 @@ mod tests {
                 .collect::<Vec<_>>()
         );
 
-        let ethene = parse_mol("C=C").unwrap();
+        let ethene = crate::as_forest_mol("C=C").unwrap();
         let aliph = set
             .candidates(&ethene)
             .collect::<Result<Vec<_>, _>>()
@@ -2024,7 +2024,7 @@ mod tests {
             other => panic!("expected Smirks edit, got {other:?}"),
         }
 
-        let mol = parse_mol("C=C").unwrap();
+        let mol = crate::as_forest_mol("C=C").unwrap();
         let emissions = set
             .metabolize(&mol, accept_all_rules, accept_all_sites, true)
             .collect::<Result<Vec<_>, _>>()
@@ -2034,13 +2034,13 @@ mod tests {
         assert!(
             emissions
                 .iter()
-                .any(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want)),
+                .any(|e| e.products.iter().any(|p| p.csmi().as_ref() == want)),
             "want OCCO, got {:?}",
             emissions.iter().map(|e| &e.products).collect::<Vec<_>>()
         );
         let emission = emissions
             .iter()
-            .find(|e| e.products.iter().any(|p| canon_of(p).unwrap() == want))
+            .find(|e| e.products.iter().any(|p| p.csmi().as_ref() == want))
             .unwrap();
         assert_eq!(emission.pattern_name, "diol");
         assert_eq!(emission.leaf_rule(), Some("EpoxideHydration"));
@@ -2048,7 +2048,7 @@ mod tests {
         assert_eq!(names, ["Epoxidation", "EpoxideOpening"]);
         assert_eq!(emission.site_atoms.len(), 2);
 
-        let benzene = parse_mol("c1ccccc1").unwrap();
+        let benzene = crate::as_forest_mol("c1ccccc1").unwrap();
         let arom = set
             .metabolize(&benzene, accept_all_rules, accept_all_sites, true)
             .collect::<Result<Vec<_>, _>>()
@@ -2175,7 +2175,7 @@ mod tests {
 
     #[test]
     fn dealkylation_anisole_emits_phenol() {
-        let mol = parse_mol("COc1ccccc1").unwrap();
+        let mol = crate::as_forest_mol("COc1ccccc1").unwrap();
         let emissions = dealkylation()
             .metabolize(&mol, accept_all_rules, accept_all_sites, true)
             .collect::<Result<Vec<_>, _>>()
@@ -2184,21 +2184,21 @@ mod tests {
         assert!(
             emissions
                 .iter()
-                .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == phenol) }),
+                .any(|e| { e.products.iter().any(|p| p.csmi().as_ref() == phenol) }),
             "{emissions:?}"
         );
     }
 
     #[test]
     fn hydroxylation_still_matches_built_in_door() {
-        let mol = parse_mol("CC").unwrap();
+        let mol = crate::as_forest_mol("CC").unwrap();
         let emissions = hydroxylation()
             .metabolize(&mol, accept_all_rules, accept_all_sites, true)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert_eq!(emissions.len(), 1);
         assert_eq!(
-            canon_of(&emissions[0].products[0]).unwrap(),
+            emissions[0].products[0].csmi().as_ref().to_string(),
             canon_of("CCO").unwrap()
         );
     }

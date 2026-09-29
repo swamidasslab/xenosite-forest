@@ -88,7 +88,7 @@ fn main() {
         println!("=== {name}  parent_residual={parent_residual:.4} ===");
 
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let mut checked = 0usize;
@@ -109,7 +109,7 @@ fn main() {
             }
             let mut best: Option<(xenosite_forest::ForestMol, f64)> = None;
             for piece in pieces {
-                let child = parent.adopt_product(piece);
+                let child = parent.from_edit_product(piece);
                 let child_shells = molecule_shells(child.mol());
                 let child_map = atom_diff(child.mol(), &tgt).mapping;
                 let child_residual = site_shell_cost(
@@ -203,7 +203,7 @@ fn main() {
             if pieces.is_empty() {
                 continue;
             }
-            let child = parent.adopt_product(pieces[0].clone());
+            let child = parent.from_edit_product(pieces[0].clone());
             let child_shells = molecule_shells(child.mol());
             let child_map = atom_diff(child.mol(), &tgt).mapping;
             let child_residual = site_shell_cost(

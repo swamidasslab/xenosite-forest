@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::as_forest_mol;
 use crate::ForestMol;
 use crate::mol::{atom_idx, parse_mol};
 use crate::pattern::{Edit, Effect, PatternInfo, SiteKind, compose_delta_formula};
@@ -157,7 +158,7 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
             let Ok(parent) = ForestMol::parse(smi) else {
                 continue;
             };
-            let Ok(cands) = set.candidates(parent.mol()).collect::<Result<Vec<_>, _>>() else {
+            let Ok(cands) = set.candidates(&parent).collect::<Result<Vec<_>, _>>() else {
                 continue;
             };
             for c in cands {
@@ -187,13 +188,13 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
                 if !aromatic_before.iter().any(|&a| a) {
                     continue;
                 }
-                let Ok(pieces) = c.materialize_mols(parent.mol()) else {
+                let Ok(pieces) = c.materialize_mols() else {
                     continue;
                 };
                 let Some(product) = pieces.first() else {
                     continue;
                 };
-                let child = parent.adopt_product(product.clone());
+                let child = parent.from_edit_product(product.clone());
                 let lost = site_atoms.iter().enumerate().any(|(k, &r)| {
                     if !aromatic_before[k] {
                         return false;
@@ -239,7 +240,7 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
             continue;
         }
         for &smi in PROBES {
-            let Ok(mol) = parse_mol(smi) else {
+            let Ok(mol) = as_forest_mol(smi) else {
                 continue;
             };
             let Ok(cands) = set.candidates(&mol).collect::<Result<Vec<_>, _>>() else {
@@ -254,7 +255,7 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
                     .site_map
                     .iter()
                     .filter_map(|m| c.mapped.get(m).copied())
-                    .any(|i| mol.atom(atom_idx(i)).aromatic);
+                    .any(|i| mol.mol().atom(atom_idx(i)).aromatic);
                 // Candidate carries resolved effect (context mol).
                 assert_eq!(
                     c.pattern.effect.dearomatizes, site_aromatic,

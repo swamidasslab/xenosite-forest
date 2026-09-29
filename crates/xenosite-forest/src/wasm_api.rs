@@ -396,19 +396,20 @@ impl JsRuleSet {
     /// Run owned members. Returns rows
     /// `{pattern_name, site, products, rule_path}` (no Python filter callbacks).
     pub fn metabolize(&self, mol: &JsForestMol) -> Result<JsValue, JsValue> {
-        let chemistry = mol.inner.mol().clone();
+        let forest = mol.inner.copy_mol();
         let emissions = self
             .inner
-            .metabolize(&chemistry, accept_all_rules, accept_all_sites, true)
+            .metabolize(&forest, accept_all_rules, accept_all_sites, true)
             .collect::<Result<Vec<_>, _>>()
             .map_err(js_err)?;
+        // Explicit CSMI downgrade at the JS string-row boundary.
         let rows: Vec<Value> = emissions
             .into_iter()
             .map(|e| {
                 json!({
                     "pattern_name": e.pattern_name,
                     "site": e.site,
-                    "products": e.products,
+                    "products": e.product_csmis(),
                     "rule_path": e.rule_path,
                 })
             })

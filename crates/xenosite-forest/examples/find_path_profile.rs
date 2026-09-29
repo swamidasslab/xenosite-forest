@@ -12,6 +12,7 @@ use std::collections::{BinaryHeap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use xenosite_forest::as_forest_mol;
 use xenosite_forest::atom_diff::{
     atom_diff, atom_diff_for_child, candidate_could_help_on, candidate_order_key, pair_could_help,
 };
@@ -170,7 +171,7 @@ fn expand_timed(
         }
         let products: Vec<_> = pieces
             .into_iter()
-            .map(|piece| parent.adopt_product(piece))
+            .map(|piece| parent.from_edit_product(piece))
             .collect();
         out.push(ForestEmission { products });
     }
@@ -182,7 +183,7 @@ fn expand_timed(
         t.mol_edits += 1;
         let products: Vec<_> = pieces
             .into_iter()
-            .map(|piece| parent.adopt_product(piece))
+            .map(|piece| parent.from_edit_product(piece))
             .collect();
         let _ = ruleset.canonical_plan(
             mol,
@@ -201,15 +202,16 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
     let mut t = Timers::default();
     let set = phase_one();
 
-    let start = ForestMol::parse(reactant).unwrap();
+    let start = as_forest_mol(reactant).unwrap();
+    let target = as_forest_mol(target).unwrap();
     let t0 = Instant::now();
     let start_csmi = start.csmi();
     t.csmi += t0.elapsed();
     t.csmi_calls += 1;
 
-    let target_csmi = canon_of(target).unwrap();
-    let target_mol = parse_mol(&target_csmi).unwrap();
-    let target_ha = ForestMol::parse(&target_csmi).unwrap().heavy_atom_count();
+    let target_csmi = target.csmi().as_ref().to_string();
+    let target_mol = target.mol();
+    let target_ha = target.heavy_atom_count();
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
@@ -356,7 +358,7 @@ fn microbench() {
 
     // Adopt cost: one real hydroxylation-style product if any candidate exists.
     let cands = set
-        .candidates(parent.mol())
+        .candidates(&parent)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     let adopt = if let Some(c) = cands.first() {
@@ -364,7 +366,7 @@ fn microbench() {
         if let Some(piece) = pieces.into_iter().next() {
             let t0 = Instant::now();
             for _ in 0..50 {
-                let _ = parent.adopt_product(piece.clone());
+                let _ = parent.from_edit_product(piece.clone());
             }
             Some(t0.elapsed())
         } else {

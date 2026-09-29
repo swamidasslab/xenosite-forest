@@ -444,12 +444,17 @@ pub struct SiteInfo {
     pub shell_forecast: Option<crate::matched_atom::AlignedShells>,
 }
 
-/// One metabolize emission: discovery site, pattern, rule namespace, product CSMIs.
+/// One metabolize hop: discovery metadata + product CSMIs.
+///
+/// Built by [`crate::candidate::DeferredSite::emit`]. Contrast
+/// [`crate::candidate::DeferredSite::apply`]. Products are [`crate::ForestMol`]
+/// with tags and caches adopted from the discovery parent — never CSMI by
+/// default. Call [`Self::product_csmis`] only when a string identity is chosen.
 ///
 /// `rule_path` is leaf-first (emitting rule, then each containing [`crate::ruleset::RuleSet`]),
 /// matching Python `info["rule"]` / addition chain order. Unnamed sets stay on the
 /// chain as `None`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Emission {
     pub site: usize,
     /// Primary-map orbit passed down from unique-edit (see [`SiteInfo::orbit`]).
@@ -461,7 +466,8 @@ pub struct Emission {
     /// From [`PatternInfo::search_bias`] (pair: min of both ends).
     pub search_bias: i8,
     pub rule_path: Vec<Option<String>>,
-    pub products: Vec<String>,
+    /// Tagged products; atom tracking + kekulé caches propagate from the parent.
+    pub products: Vec<crate::ForestMol>,
     /// Elementary steps for this hop (identity or quinone-shaped expansion).
     /// Bind with [`crate::canonical_plan::Deps::bind`] for precedes / replay.
     pub plan: Vec<crate::canonical_plan::Step>,
@@ -479,6 +485,17 @@ impl Emission {
     /// Emitting (leaf) rule name, if the leaf was named.
     pub fn leaf_rule(&self) -> Option<&str> {
         self.rule_path.first().and_then(|n| n.as_deref())
+    }
+
+    /// Explicit downgrade to product CSMIs (dedup / display / Python string rows).
+    ///
+    /// Prefer keeping [`Self::products`] as [`crate::ForestMol`] so tags and
+    /// caches stay continuous. Do not re-parse these strings into ForestMol.
+    pub fn product_csmis(&self) -> Vec<String> {
+        self.products
+            .iter()
+            .map(|p| p.csmi().as_ref().to_string())
+            .collect()
     }
 }
 

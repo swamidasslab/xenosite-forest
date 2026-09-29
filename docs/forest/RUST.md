@@ -76,14 +76,25 @@ cargo test -p xenosite-forest --features python
 
 `python3-dev` (libpython) is required to link the test binary. `#[pyclass]` is CPython; it is not WASM.
 
+**ForestMol intake / tracing:** Public doors take [`IntoForestMol`](../../crates/xenosite-forest/src/forest_mol.rs)
+via [`as_forest_mol`](../../crates/xenosite-forest/src/forest_mol.rs) (SMILES,
+bare chematic mol, or `ForestMol`). Existing `ForestMol` input **keeps tracing**.
+APIs do not reinit tags — call [`ForestMol::with_new_trace`](../../crates/xenosite-forest/src/forest_mol.rs)
+only when a caller wants a disconnected tag tree. CSMI downgrade is explicit
+([`Emission::product_csmis`](../../crates/xenosite-forest/src/pattern.rs)); do
+not re-parse CSMI into `ForestMol`.
+
 **RuleSet / candidates:** Primary walk is [`RuleSet::candidates`](../../crates/xenosite-forest/src/ruleset.rs)
-— site–pattern–[`ParentRef`](../../crates/xenosite-forest/src/candidate.rs) triples
-without applying edits. A search reads `PatternInfo` / `Effect` to filter, then
-[`Candidate::materialize`](../../crates/xenosite-forest/src/candidate.rs) only for
-survivors. Filter closures on `metabolize` remain for Python parity; they are
-not required. `metabolites(mol)` materializes everything. ResonancePair uses
-[`PairCandidate`](../../crates/xenosite-forest/src/pair_edit.rs) the same way
-(merged `Effect` for filtering; path flip on materialize).
+(alias `sites`) — every SOM as [`DeferredSite`](../../crates/xenosite-forest/src/candidate.rs)
+(atom/bond + ResonancePair composed from endpoint hits) without applying edits.
+A search filters, then [`DeferredSite::apply`](../../crates/xenosite-forest/src/candidate.rs)
+(alias `emit`) → [`Emission`](../../crates/xenosite-forest/src/pattern.rs) with
+tagged [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) products
+(atom tracking + caches continue from the discovery parent).
+[`RuleSet::metabolize`](../../crates/xenosite-forest/src/ruleset.rs) is
+candidates → filter → `apply`. Prefer candidates + `apply` when filters are
+not needed. Pair ends are internal (`end_candidates` →
+`compose_pair_sites`); there is no separate `pair_candidates` / `metabolites` API.
 
 **RuleSet / closures (optional):** Python `FilterRules` / `FilterSites` are
 `Callable`. Rust can still pass `impl Fn` on `RuleSet::metabolize`, or
@@ -91,7 +102,7 @@ not required. `metabolites(mol)` materializes everything. ResonancePair uses
 
 Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.compose([hydroxylation, dealkylation])`). That copies pattern data into the Rust payload. Later `metabolize(mol)` / `candidates(mol)` passes handles only.
 
-**RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. Children run with `unique_csmi=false` so alternate rules bubble; the caller's `unique_csmi` is the cross-child CSMI layer. Filters see the leaf set, not the outer compose container.
+**RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. `unique_csmi` dedups within and across leaves on the flat candidate walk. Filters see the leaf set (resolved from the site's leaf name), not the outer compose container.
 
 **Rule catalog:** every concrete Python reaction rule is a leaf `RuleSet` in
 [`rules.rs`](../../crates/xenosite-forest/src/rules.rs) (`phase_one`,

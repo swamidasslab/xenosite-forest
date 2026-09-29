@@ -66,7 +66,7 @@ pub use atom_diff::{
     try_lift_cleaved_child_goal, try_lift_cleaved_child_tracked,
 };
 pub use atom_tracker::{AtomTracker, tags_agree_elements};
-pub use candidate::{Candidate, ParentRef};
+pub use candidate::{Candidate, DeferredSite, ParentRef};
 pub use canonical_plan::{
     CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
     StepSequence, align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
@@ -90,7 +90,7 @@ pub use find_path::{
 pub use forest::{
     Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
 };
-pub use forest_mol::ForestMol;
+pub use forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
@@ -111,7 +111,7 @@ pub use orbits::{
     atom_pair_orbit_id_with_gens, atoms_orbit_with_gens, unordered_atom_pair_groups_with_gens,
     unordered_atom_pair_orbit_sizes,
 };
-pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
+pub use pair_edit::dehydrogenate_hydroquinone;
 pub use pathway::PathwayOptions;
 pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
@@ -132,7 +132,7 @@ pub use ruleset::{
 };
 pub use smarts::smarts_matches;
 pub use smirks::apply_smirks_at;
-pub use stream::{Candidates, Metabolize, PairCandidates};
+pub use stream::{Candidates, Metabolize};
 pub use unique_edit::{
     UniqueSite, same_site_orbit, unique_atom_sites, unique_atom_sites_with_orbits,
 };
