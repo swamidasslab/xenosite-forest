@@ -39,3 +39,6 @@ Pushing `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release
 tests, platform wheels (manylinux / musllinux / macOS / Windows, x86_64 +
 aarch64), sdist, GitHub Release, PyPI upload, and towncrier compiling
 `CHANGELOG.md` onto the default branch when the branch ruleset allows.
+
+Wheels are built **only** on that tag workflow — not on PR or push to
+`main` (`test.yml` runs pytest / rust / lint only).
