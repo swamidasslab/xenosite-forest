@@ -6,11 +6,11 @@ All items below target the **Rust** door (`crates/xenosite-forest` +
 
 ## Now
 
-- lift/MCS + find_path multipath / atom_diff (7 `cargo test --lib` fails after
-  catalog Effect green): hydroquinone DH lift, QF ends, dimethoxy dealk,
-  matched_atom HQ bag, multipath alkene H soft-mismatch
-- Then: re-enable Keep-H / Effect-formula materialize filters + parity harness
+- Re-enable Keep-H / Effect-formula materialize filters + parity harness
   formula gates (`allow_formula_delta_mismatch`, SiteDeduplicationWarning)
+- **Do not remove** `inventory_fully_covered_in_sssom` xfail until the **next
+  version bump** (map new Effect SMARTS-split PatternInfo names into
+  `mappings/xmet-forest.sssom.tsv` as part of that bump)
 
 ## After parity + catalog
 
