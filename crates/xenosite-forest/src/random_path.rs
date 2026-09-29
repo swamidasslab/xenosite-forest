@@ -73,8 +73,8 @@ impl XorShift64 {
 }
 
 enum Pending {
-    Candidate(Candidate),
-    Pair(PairCandidate),
+    Candidate(Box<Candidate>),
+    Pair(Box<PairCandidate>),
 }
 
 /// Randomly apply up to `max_steps` rules from `ruleset` starting at `reactant`.
@@ -123,8 +123,10 @@ pub fn random_path_with(
             let pick = rng.index(pending.len());
             let item = pending.swap_remove(pick);
             let (step, pattern, next) = match item {
-                Pending::Candidate(c) => apply_candidate(&c, &mol, &mut rng, &seen, options)?,
-                Pending::Pair(p) => apply_pair(&p, &mol, &mut rng, &seen, options)?,
+                Pending::Candidate(c) => {
+                    apply_candidate(c.as_ref(), &mol, &mut rng, &seen, options)?
+                }
+                Pending::Pair(p) => apply_pair(p.as_ref(), &mol, &mut rng, &seen, options)?,
             };
             let Some(next) = next else {
                 // Try another pending (empty materialize or all products filtered).
@@ -155,14 +157,14 @@ pub fn random_path_with(
 fn collect_pending(ruleset: &RuleSet, mol: &Molecule) -> Result<Vec<Pending>, ForestError> {
     let mut out = Vec::new();
     for c in ruleset.candidates(mol) {
-        out.push(Pending::Candidate(c?));
+        out.push(Pending::Candidate(Box::new(c?)));
     }
     for p in ruleset.pair_candidates(mol) {
-        out.push(Pending::Pair(p?));
+        out.push(Pending::Pair(Box::new(p?)));
     }
     // Stable order so the same seed picks the same hop across runs (HashMap
     // iteration order is otherwise process-randomized).
-    out.sort_by(|a, b| pending_sort_key(a).cmp(&pending_sort_key(b)));
+    out.sort_by_key(pending_sort_key);
     Ok(out)
 }
 
