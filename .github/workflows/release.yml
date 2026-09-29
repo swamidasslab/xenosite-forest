@@ -35,15 +35,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
           # Tag events disable setup-uv cache by default; suffix still documents intent.
           cache-suffix: portable-x86-64
-      - name: Install package and test extras
-        run: uv sync --extra network --group dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+      - name: Python headers
+        run: sudo apt-get update && sudo apt-get install -y python3-dev
+      - name: Install package (RDKit extras) and build extension
+        run: |
+          uv sync --extra rdkit --extra network --group dev
+          uv run maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
       - name: Show package version
-        run: uv run python -c "import xenosite.forest as m; print(m.__version__)"
+        run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
       - name: Require clean release version on tags
         # Reject dirty/dev/local versions so PyPI never sees +g… tags by mistake.
         run: |
@@ -56,8 +66,8 @@ jobs:
               exit 1
               ;;
           esac
-      - name: Run tests in parallel
-        run: uv run pytest -n auto --cov=xenosite.forest --cov-report=term-missing
+      - name: Full forest suite (public stub + native + legacy)
+        run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
 
   build:
     needs: test

@@ -2,6 +2,8 @@
 
 ## 2026-09-28
 
+- **0.8.0 release.** Tag `v0.8.0`. Rust stub public API, optional `[rdkit]`, no nested `forest.rust`. Release CI builds the maturin extension before the forest suite. CHANGELOG compiled by the tag workflow.
+
 - **0.8 prep.** Public API lives on `xenosite.forest` only — no `find_path_rust.py`, no nested `forest.rust` package. Migrating doc is `docs/forest/MIGRATING_0.8.md`. `native/bfs.py` renamed to `cli.py` (`native.cli:main`). Doc paths updated to `native/` / `tests/forest/rust/` product suite.
 
 - **Forest package reorg.** Layout is `xenosite.forest` (Rust stub) / `.rust` / `.native` (RDKit reference) / `.legacy` (frozen 0.6.1). RDKit+pynauty moved to optional `[rdkit]` extra. Public `__all__`: `find_path`, `available`, `PhaseOne`, `Epoxidation`, `QuinoneFormation`, `EpoxideOpening`, `NDealkylation`. Checkpoints: `artifacts/reorg_checkpoint_*.live.log` — native+rust stayed 1652/3/2; full with legacy 2766/3/18.
