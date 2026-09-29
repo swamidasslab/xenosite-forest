@@ -36,6 +36,11 @@ fn embed_round_trip() {
     }
 }
 
+/// Every Forest object IRI/CURIE in the SSSOM must resolve.
+///
+/// This is the gate for **dangling xf: references** in the mapping file
+/// (object_id as CURIE or absolute IRI). Inventory coverage the other way
+/// (catalog → SSSOM) is [`inventory_fully_covered_in_sssom`].
 #[test]
 fn all_sssom_objects_resolve() {
     let rows = parse_forest_xmet_sssom();
@@ -43,28 +48,55 @@ fn all_sssom_objects_resolve() {
     let mut failures = Vec::new();
     for row in &rows {
         let id = &row.object_id;
-        match resolve(id) {
-            Ok(Resolved::Rule(r)) => {
-                if id.contains('/') {
-                    failures.push(format!("{id}: expected BoundPattern, got Rule {:?}", r.name));
+        // CURIE form (as stored) and expanded absolute IRI must both resolve.
+        let expanded = xenosite_forest::expand_iri(id);
+        for form in [id.as_str(), expanded.as_str()] {
+            match resolve(form) {
+                Ok(Resolved::Rule(r)) => {
+                    if id.contains('/') {
+                        failures.push(format!(
+                            "{form}: expected BoundPattern, got Rule {:?}",
+                            r.name
+                        ));
+                    }
                 }
-            }
-            Ok(Resolved::Pattern(bp)) => {
-                if !id.contains('/') {
-                    failures.push(format!("{id}: expected Rule, got BoundPattern {}", bp.name()));
-                } else {
-                    let expect = id.strip_prefix("xf:").unwrap_or(id);
-                    assert_eq!(bp.curie(), format!("xf:{expect}"));
+                Ok(Resolved::Pattern(bp)) => {
+                    if !id.contains('/') {
+                        failures.push(format!(
+                            "{form}: expected Rule, got BoundPattern {}",
+                            bp.name()
+                        ));
+                    } else {
+                        let expect = id.strip_prefix("xf:").unwrap_or(id);
+                        if bp.curie() != format!("xf:{expect}") {
+                            failures.push(format!(
+                                "{form}: curie mismatch {} vs xf:{expect}",
+                                bp.curie()
+                            ));
+                        }
+                    }
                 }
+                Err(e) => failures.push(format!("{form}: {e}")),
             }
-            Err(e) => failures.push(format!("{id}: {e}")),
         }
     }
     assert!(
         failures.is_empty(),
-        "SSSOM objects failed to resolve ({}):\n{}",
+        "SSSOM object IRIs failed to resolve ({}):\n{}",
         failures.len(),
         failures.join("\n")
+    );
+}
+
+#[test]
+fn unknown_sssom_object_iri_does_not_resolve() {
+    assert!(
+        resolve("xf:NotARealLeaf/not_a_pattern").is_err(),
+        "unknown xf: IRI must fail resolve"
+    );
+    assert!(
+        resolve("https://w3id.org/xenosite/forest/NotARealLeaf").is_err(),
+        "unknown absolute Forest IRI must fail resolve"
     );
 }
 
