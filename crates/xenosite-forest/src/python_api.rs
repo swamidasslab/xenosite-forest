@@ -21,6 +21,8 @@ use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
+use crate::pathway::PathwayOptions;
+use crate::random_path::{random_path as random_path_rs, random_path_with};
 use crate::rules::{
     dealkylation as dealkylation_rs, default_ruleset as default_ruleset_rs,
     dehydrogenation as dehydrogenation_rs, epoxidation as epoxidation_rs,
@@ -537,6 +539,88 @@ fn find_path(
     Ok((out, c.unbind().into_any()))
 }
 
+/// Seeded random walk: apply up to ``max_steps`` rules. Returns a dict with
+/// ``smiles``, ``path``, ``steps``, and ``patterns``.
+///
+/// Default ruleset is PhaseOne. Pass a ``RuleSet`` to override.
+/// ``skip_multicomponent`` / ``skip_seen`` map to [`PathwayOptions`] (off by
+/// default; same knobs for StepSequence / PathOutcome ``apply``).
+#[pyfunction]
+#[pyo3(signature = (
+    reactant,
+    seed,
+    *,
+    max_steps=1,
+    ruleset=None,
+    skip_multicomponent=false,
+    skip_seen=false,
+))]
+fn random_path(
+    py: Python<'_>,
+    reactant: &str,
+    seed: u64,
+    max_steps: usize,
+    ruleset: Option<&Bound<'_, PyRuleSet>>,
+    skip_multicomponent: bool,
+    skip_seen: bool,
+) -> PyResult<Py<PyAny>> {
+    let owned;
+    let rules = match ruleset {
+        Some(rs) => {
+            owned = rs.borrow().inner.clone();
+            &owned
+        }
+        None => {
+            owned = phase_one_rs();
+            &owned
+        }
+    };
+    let options = PathwayOptions {
+        skip_multicomponent,
+        skip_seen,
+    };
+    let outcome = if options == PathwayOptions::default() {
+        random_path_rs(reactant, seed, rules, max_steps)
+    } else {
+        random_path_with(reactant, seed, rules, max_steps, options)
+    }
+    .map_err(py_err)?;
+
+    let steps: Vec<Py<PyAny>> = outcome
+        .steps
+        .iter()
+        .map(|step| {
+            let d = pyo3::types::PyDict::new(py);
+            d.set_item("rule", step.rule.as_str())?;
+            d.set_item("pattern", step.pattern_name.as_str())?;
+            d.set_item("site", step.site.clone())?;
+            d.set_item("products", step.products.clone())?;
+            d.set_item("chosen", step.chosen)?;
+            Ok::<_, PyErr>(d.unbind().into_any())
+        })
+        .collect::<PyResult<_>>()?;
+
+    let patterns: Vec<Py<PyAny>> = outcome
+        .patterns
+        .iter()
+        .map(|p| {
+            let d = pyo3::types::PyDict::new(py);
+            d.set_item("name", p.name.as_str())?;
+            d.set_item("smarts", p.smarts.as_str())?;
+            d.set_item("cleaves", p.effect.cleaves)?;
+            d.set_item("search_bias", p.search_bias)?;
+            Ok::<_, PyErr>(d.unbind().into_any())
+        })
+        .collect::<PyResult<_>>()?;
+
+    let d = pyo3::types::PyDict::new(py);
+    d.set_item("smiles", outcome.smiles.as_str())?;
+    d.set_item("path", outcome.path.clone())?;
+    d.set_item("steps", steps)?;
+    d.set_item("patterns", patterns)?;
+    Ok(d.unbind().into_any())
+}
+
 fn wrap_ruleset(inner: RuleSet) -> PyRuleSet {
     PyRuleSet { inner }
 }
@@ -598,6 +682,7 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyPatternInfo>()?;
     m.add_class::<PyRuleSet>()?;
     m.add_function(wrap_pyfunction!(find_path, m)?)?;
+    m.add_function(wrap_pyfunction!(random_path, m)?)?;
     m.add_function(wrap_pyfunction!(phase_one, m)?)?;
     m.add_function(wrap_pyfunction!(epoxidation, m)?)?;
     m.add_function(wrap_pyfunction!(quinone_formation, m)?)?;

@@ -19,6 +19,7 @@ from xenosite.forest import (  # noqa: F401 — import gap gate
     __version__,
     available,
     find_path,
+    random_path,
 )
 
 
@@ -34,6 +35,7 @@ def test_public_allowlist():
         "__version__",
         "available",
         "find_path",
+        "random_path",
         "PhaseOne",
         "Epoxidation",
         "QuinoneFormation",
@@ -48,6 +50,7 @@ def test_ruleset_factories_callable_from_stub():
     """Factories are reachable via the public stub (extension may be absent)."""
 
     assert callable(find_path)
+    assert callable(random_path)
     assert callable(available)
     assert callable(PhaseOne)
     assert callable(Epoxidation)

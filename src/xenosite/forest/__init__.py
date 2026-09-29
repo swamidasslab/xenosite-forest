@@ -2,7 +2,7 @@
 
 Recommended imports::
 
-    from xenosite.forest import find_path, PhaseOne, Epoxidation
+    from xenosite.forest import find_path, random_path, PhaseOne, Epoxidation
 
 **New features** are implemented in ``crates/xenosite-forest`` and exposed
 here. Do **not** add them to :mod:`xenosite.forest.native` (frozen RDKit
@@ -28,6 +28,7 @@ __all__ = [
     "__version__",
     "available",
     "find_path",
+    "random_path",
     "PhaseOne",
     "Epoxidation",
     "QuinoneFormation",
@@ -71,6 +72,38 @@ def find_path(
         score=score,
         timeout=timeout,
     )
+
+
+def random_path(
+    reactant: str,
+    seed: int,
+    *,
+    max_steps: int = 1,
+    ruleset: Any | None = None,
+    skip_multicomponent: bool = False,
+    skip_seen: bool = False,
+) -> dict[str, Any]:
+    """Seeded random walk over a ruleset (default PhaseOne).
+
+    Returns ``{"smiles", "path", "steps", "patterns"}``. ``path`` is reactant
+    CSMI then each chosen product. Each step is
+    ``{"rule", "pattern", "site", "products", "chosen"}``. Same ``seed`` is
+    deterministic; different seeds diverge on a rich ruleset.
+
+    ``skip_multicomponent`` / ``skip_seen`` are shared pathway filters (off by
+    default); the same options will apply to StepSequence.apply.
+
+    Implemented in Rust; not available on :mod:`xenosite.forest.native`.
+    """
+
+    kwargs: dict[str, Any] = {
+        "max_steps": max_steps,
+        "skip_multicomponent": skip_multicomponent,
+        "skip_seen": skip_seen,
+    }
+    if ruleset is not None:
+        kwargs["ruleset"] = ruleset
+    return load().random_path(reactant, seed, **kwargs)
 
 
 def _ruleset(attr: str, label: str) -> Any:

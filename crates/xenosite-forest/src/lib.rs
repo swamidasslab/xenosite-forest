@@ -27,8 +27,10 @@ pub mod matched_atom;
 pub mod mol;
 pub mod orbits;
 pub mod pair_edit;
+pub mod pathway;
 pub mod pattern;
 pub mod product_graph;
+pub mod random_path;
 pub mod rules;
 pub mod ruleset;
 pub mod smarts;
@@ -109,6 +111,7 @@ pub use orbits::{
     unordered_atom_pair_orbit_sizes,
 };
 pub use pair_edit::{PairCandidate, dehydrogenate_hydroquinone};
+pub use pathway::PathwayOptions;
 pub use pattern::{
     CleaveFoldKey, CleaveSideSig, Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind, When,
     bag_counts, bag_delta_formula, compose_delta_formula, leave_ch2, leave_me, leave_o, leave_oo,
@@ -118,6 +121,7 @@ pub use product_graph::{
     ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
     product_graph, product_graph_stats, product_layer,
 };
+pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
     all_rules, catalog_names, default_ruleset, epoxide_hydration, leaf_rule, phase_one,
 };

@@ -4,6 +4,10 @@
 
 - **`find_path` timeout.** `timeout=` (seconds, optional) on Rust Python door / `xenosite.forest.find_path`; counters expose `timed_out`. Not on native.
 
+- **`PathwayOptions`.** Skip multicomponent / skip-seen are opt-in only (`default` off). Shared by `random_path` / `random_path_with`; same knobs for StepSequence/`PathOutcome` `apply`. Preset: `PathwayOptions::no_loops_or_fragments()`.
+
+- **`random_path`.** Seeded walk over a RuleSet (candidates + ResonancePairs); returns steps, final SMILES, PatternInfos. Rust `crates/xenosite-forest/src/random_path.rs`; public `xenosite.forest.random_path`. No `rand` dep (XorShift). Tests: cargo `random_path::*`, `tests/forest/rust/test_random_path.py`. PathOutcome / richer StepSequence.apply still TODO.
+
 - **Pathway API naming.** Settled on **`apply`**. Type is **`StepSequence`** (ordered steps that act like a step); `Linearization` remains a type alias. StepPlan/`Deps` methods stay `linearizations` / `same_linearizations`. Atom tags: ensure missing, never overwrite (shared wrapper).
 
 - **0.8.0 release.** Tag `v0.8.0`. Rust stub public API, optional `[rdkit]`, no nested `forest.rust`. Release CI builds the maturin extension before the forest suite. CHANGELOG compiled by the tag workflow.
