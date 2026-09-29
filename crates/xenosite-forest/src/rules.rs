@@ -1237,7 +1237,10 @@ pub fn reductive_dehalogenation() -> RuleSet {
             .with_possibilities(halide_remove_branches(1, base.clone())),
             smirks_row(
                 "alkene",
-                "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]",
+                // Map 3 must be aliphatic: aromatic partner forces a
+                // dearomatizing exocyclic methylene that RDKit sanitize
+                // papers into junk (C=C1CCCCC1) — C18 / C10. Keep both off.
+                "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6;!a:3]>>[*:1].[*:2]=[*:3]",
                 SiteKind::Atom,
                 vec![2],
                 base.clone(),
@@ -1385,10 +1388,14 @@ pub fn sulfur_oxidation() -> RuleSet {
             ),
             smirks_row(
                 "hydroxy",
-                "[#16;v2,v4:1]>>[*:1][O]",
+                // Organic `O` (not `[O]`): chematic `[O]` leaves a radical;
+                // RDKit `[O]` becomes OH. Bare `O` matches both (CCSO). C18.
+                "[#16;v2,v4:1]>>[*:1]O",
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    // Net H is substrate-dependent (thioether may gain H; thiol
+                    // may not). Keep O-only; Keep-H materialize drops H-disagree.
                     adds: Some("O".into()),
                     removes: None,
                     cleaves: false,
@@ -1446,8 +1453,9 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    // Primary amine → nitroso: +O and lose both N–H (C18).
                     adds: Some("O".into()),
-                    removes: None,
+                    removes: Some("HH".into()),
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -1458,7 +1466,9 @@ pub fn nitrogen_oxidation() -> RuleSet {
             ),
             smirks_row(
                 "n_oxide",
-                "[#7v3H0:1]>>[*&H0&+:1][O-]",
+                // Chematic aromatic N is X2 (not v3); RDKit still matches v3H0.
+                // Union keeps tertiary aliphatic and pyridine-like aromatic (C18).
+                "[#7v3H0,#7X2H0:1]>>[*&H0&+:1][O-]",
                 SiteKind::Atom,
                 vec![1],
                 Effect {

@@ -361,6 +361,21 @@ pub(crate) fn apply_edit_mols(
     pattern: &PatternInfo,
     mapped: &BTreeMap<u16, usize>,
 ) -> Result<Vec<Molecule>, ForestError> {
+    let products = apply_edit_mols_raw(mol, pattern, mapped)?;
+    // Aromatic alkene/alkyne SMIRKS can rematerialize the reactant (pyrrole /
+    // thiophene H). Refuse identity — same gate as pair path_end (C18).
+    let parent_csmi = canon_smiles(mol);
+    Ok(products
+        .into_iter()
+        .filter(|p| canon_smiles(p) != parent_csmi)
+        .collect())
+}
+
+fn apply_edit_mols_raw(
+    mol: &Molecule,
+    pattern: &PatternInfo,
+    mapped: &BTreeMap<u16, usize>,
+) -> Result<Vec<Molecule>, ForestError> {
     match &pattern.edit {
         Edit::Hydroxyl => {
             let Some(&carbon) = mapped.get(&1) else {
