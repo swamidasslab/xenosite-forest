@@ -2,6 +2,29 @@
 
 ## 2026-09-29
 
+- **MetX nostereo call-site + tautomer ±.** `metx_hard_cases` strips stereo on
+  R/P before search (no lib canon change). Same budget 200/1.5s:
+  - nostereo + tautnorm=**off**: hits=**1268** / misses=175 / t/o=41 / 154.7s
+    (`artifacts/metx_hard_scan_nostereo.out`)
+  - nostereo + tautnorm=**on**: hits=**1121** / misses=322 / t/o=49 / 230.8s
+    (`artifacts/metx_hard_scan_nostereo_tautnorm.out`)
+  Prior stereo-on: off 902 / on 809. Nostereo recovers ~366 exact hits off.
+  Thrash filter (miss, bill≥200, rcost≥3, dearomatize|O|extra): **5** off /
+  **6** on — `00138` S-ox saturate (ΔH+10), chromenone trio `00197–199`
+  (ΔH+10), amphetamine `00055` (ΔH+6); tautnorm adds `01270` leflunomide.
+  TSVs: `metx_hard_{misses,thrash}_nostereo{,_tautnorm}.tsv`.
+
+- **MetX Phase I `find_path_partial` + tautomer normalize (rayon).** Example
+  `metx_hard_cases` parallelizes with rayon; CLI `normalize_tautomer` defaults
+  **on** (pass `0` for as-is). Scan @200 nodes / 1.5s / tautnorm=**on**:
+  runnable=1443 **hits=809** misses=634 partial_flush=622 partial_cost0=0
+  timed_out=58 wall=168.6s (`artifacts/metx_hard_scan_tautnorm.out`). Prior
+  baseline without tautnorm was ~871–873 hits / ~790–900s serial — tautnorm
+  *lowered* exact hit rate on this corpus. Paired baseline tautnorm=**off**
+  same HEAD: **hits=902** / misses=541 / timed_out=57 / wall=248.6s
+  (`artifacts/metx_hard_scan_no_tautnorm.out`). Misses:
+  `artifacts/metx_hard_misses_tautnorm.tsv`.
+
 - **Alkene patterns mutually exclusive.** `alkene` + `alkene_aliphatic` both
   hit the same aromatic sites (chemic `C`/`!a` matched aromatics). Collapsed
   to one `alkene` `[#6X3:1]=,:[#6X3:2]` (+HH) and disjoint `alkene_cumulene`

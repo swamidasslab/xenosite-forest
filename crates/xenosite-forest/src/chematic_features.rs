@@ -15,44 +15,42 @@
 //!
 //! Run: `cargo test -p xenosite-forest chematic_features -- --ignored`
 
-use chematic::chem::{canonical_tautomer, normalize_zwitterion, remove_hydrogens};
-use chematic::core::Element;
-use chematic::smiles::parse;
-
-use crate::chematic_tags::{get_label, set_label};
-use crate::labels::Tag;
-use crate::mol::{Molecule, atom_idx};
-
-fn stamp_unique_tags(mol: &mut Molecule) {
-    for i in 0..mol.atom_count() {
-        set_label(mol, atom_idx(i), Some(Tag::new(100 + i as u16).unwrap()));
-    }
-}
-
-fn tags_in_order(mol: &Molecule) -> Vec<Option<u16>> {
-    (0..mol.atom_count())
-        .map(|i| get_label(mol, atom_idx(i)).map(Tag::get))
-        .collect()
-}
-
-fn survivor_tags(mol: &Molecule) -> Vec<Option<u16>> {
-    (0..mol.atom_count())
-        .filter(|&i| {
-            let a = mol.atom(atom_idx(i));
-            !(a.element == Element::H && a.isotope.is_none())
-        })
-        .map(|i| get_label(mol, atom_idx(i)).map(Tag::get))
-        .collect()
-}
-
-fn any_caller_tag(mol: &Molecule) -> bool {
-    (0..mol.atom_count()).any(|i| get_label(mol, atom_idx(i)).is_some())
-}
-
 /// Desired: chematic stages keep caller tags. Ignored until upstream does.
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use chematic::chem::{canonical_tautomer, normalize_zwitterion, remove_hydrogens};
+    use chematic::core::Element;
+    use chematic::smiles::parse;
+
+    use crate::chematic_tags::{get_label, set_label};
+    use crate::labels::Tag;
+    use crate::mol::{Molecule, atom_idx};
+
+    fn stamp_unique_tags(mol: &mut Molecule) {
+        for i in 0..mol.atom_count() {
+            set_label(mol, atom_idx(i), Some(Tag::new(100 + i as u16).unwrap()));
+        }
+    }
+
+    fn tags_in_order(mol: &Molecule) -> Vec<Option<u16>> {
+        (0..mol.atom_count())
+            .map(|i| get_label(mol, atom_idx(i)).map(Tag::get))
+            .collect()
+    }
+
+    fn survivor_tags(mol: &Molecule) -> Vec<Option<u16>> {
+        (0..mol.atom_count())
+            .filter(|&i| {
+                let a = mol.atom(atom_idx(i));
+                !(a.element == Element::H && a.isotope.is_none())
+            })
+            .map(|i| get_label(mol, atom_idx(i)).map(Tag::get))
+            .collect()
+    }
+
+    fn any_caller_tag(mol: &Molecule) -> bool {
+        (0..mol.atom_count()).any(|i| get_label(mol, atom_idx(i)).is_some())
+    }
 
     #[test]
     #[ignore = "xfail: chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); keep to track chematic — Forest restamp is a workaround"]

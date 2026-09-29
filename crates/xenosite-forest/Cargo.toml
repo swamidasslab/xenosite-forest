@@ -55,6 +55,7 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 proptest = "1.11"
+rayon = "1.10"
 
 # Newer rustc emits bulk-memory / saturating float ops; enable all features for
 # the wasm-opt shipped with wasm-pack (same as xenosite-pict).

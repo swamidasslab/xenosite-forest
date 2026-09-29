@@ -14,7 +14,7 @@ Python loaders live next to the tests that need them (thin wrappers only).
 | [`conjugation_probes.txt`](conjugation_probes.txt) | **Conjugation SMARTS site probes** — one SMILES per reactive class (phenol, acid, epoxide, Michael acceptor, …). Test wiring still binds rule factory + rxn index; this file owns the molecule list so it is not duplicated across legacy/native conjugate tests. |
 | [`bfs_fuzz_corpus.txt`](bfs_fuzz_corpus.txt) | **Drug-like RDKit crashers + suite anchors** for bounded BFS/DFS fuzz (no crash, no dotted product). Keep when a new field crash appears. |
 | [`find_path_bench_cases.txt`](find_path_bench_cases.txt) | **find_path wall / bill benches** — `label\treactant\ttarget` rows, sections `[mid]` and `[larger]`. Shared by native + rust `bench_find_path_h2h` / profile scripts so doors do not drift apart. |
-
+| [`metx/`](metx/) | **MetXBioDB Phase I hard-case bins** (thrash/cover/gap/near-miss). Own subdir for DB provenance; see [`metx/README.md`](metx/README.md). |
 ## Not moved here (on purpose)
 
 | Location | Why it stays |

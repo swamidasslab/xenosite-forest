@@ -2,21 +2,37 @@
 //!
 //! Input TSV from RDKit InChI→SMILES (see `artifacts/metx_phase1_pairs.tsv`):
 //! ```text
-//! uv run --extra rdkit python …  # regenerates TSV
 //! cargo run -p xenosite-forest --example metx_hard_cases --release -- \
-//!   artifacts/metx_phase1_pairs.tsv 200 1.5
+//!   artifacts/metx_phase1_pairs.tsv 200 1.5 0 1
 //! ```
-//! Args: `[tsv] [max_nodes=200] [timeout_secs=1.5] [limit=0]` (`limit` 0 = all).
+//! Args: `[tsv] [max_nodes=200] [timeout_secs=1.5] [limit=0] [normalize_tautomer=1]`
+//! (`limit` 0 = all; `normalize_tautomer` defaults **on** for this scanner —
+//! pass `0` to search given forms as-is).
+//!
+//! Reactant and product are stereo-stripped at the call site before search /
+//! CSMI compare (enantiomers and E/Z match). No library canon change.
+
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use chematic::chem::remove_stereo;
+use rayon::prelude::*;
 use xenosite_forest::{
-    FindPathConfig, PathCounters, atom_diff, canon_of, find_path_partial, parse_mol, phase_one,
+    FindPathConfig, PathCounters, as_forest_mol, atom_diff, find_path_partial, phase_one,
     residual_from_diff,
 };
+
+/// Stereo-free CSMI for MetX matching (call-site only).
+fn nostereo_smi(s: &str) -> Option<String> {
+    let fm = as_forest_mol(s).ok()?;
+    let stripped = remove_stereo(fm.mol());
+    Some(as_forest_mol(stripped).ok()?.csmi().as_ref().to_string())
+}
 
 #[derive(Clone)]
 struct Pair {
@@ -44,6 +60,8 @@ struct RowOut {
     root_n_extra: usize,
     parse_ok: bool,
     skipped_equal: bool,
+    /// Exact empty but a partial was flushed (closest residual).
+    has_partial: bool,
 }
 
 fn load_tsv(path: &Path) -> Vec<Pair> {
@@ -100,11 +118,12 @@ fn run_one(pair: &Pair, config: FindPathConfig) -> RowOut {
         root_n_extra: 0,
         parse_ok: false,
         skipped_equal: false,
+        has_partial: false,
     };
-    let Ok(rc) = canon_of(&pair.reactant_smi) else {
+    let Some(rc) = nostereo_smi(&pair.reactant_smi) else {
         return row;
     };
-    let Ok(pc) = canon_of(&pair.product_smi) else {
+    let Some(pc) = nostereo_smi(&pair.product_smi) else {
         return row;
     };
     row.parse_ok = true;
@@ -112,23 +131,24 @@ fn run_one(pair: &Pair, config: FindPathConfig) -> RowOut {
         row.skipped_equal = true;
         return row;
     }
-    let Ok(rmol) = parse_mol(&pair.reactant_smi) else {
+    let Ok(rmol) = as_forest_mol(rc.as_str()) else {
         row.parse_ok = false;
         return row;
     };
-    let Ok(pmol) = parse_mol(&pair.product_smi) else {
+    let Ok(pmol) = as_forest_mol(pc.as_str()) else {
         row.parse_ok = false;
         return row;
     };
-    let diff0 = atom_diff(&rmol, &pmol);
+    let diff0 = atom_diff(rmol.mol(), pmol.mol());
     row.root_cost = diff0.cost();
     row.root_n_extra = diff0.n_extra;
     let set = phase_one();
     let mut counters = PathCounters::default();
     let t0 = Instant::now();
+    // Search on stereo-stripped CSMI spellings.
     let out = match find_path_partial(
-        pair.reactant_smi.as_str(),
-        pair.product_smi.as_str(),
+        rc.as_str(),
+        pc.as_str(),
         &set,
         &mut counters,
         config,
@@ -151,13 +171,14 @@ fn run_one(pair: &Pair, config: FindPathConfig) -> RowOut {
     row.bill = counters.billed();
     row.timed_out = counters.timed_out;
     row.hit = !out.exact.is_empty();
+    row.has_partial = !out.partials.is_empty();
     if let Some(p) = out.partials.first() {
         row.residual_cost = Some(p.residual.cost);
         row.residual_cats = p.residual.categories.clone();
         row.closest_smi = Some(p.smiles.clone());
     } else if !row.hit {
         // No partial tracked — still report root residual categories.
-        let r = residual_from_diff(&diff0, Some(&rmol), Some(&pmol));
+        let r = residual_from_diff(&diff0, Some(rmol.mol()), Some(pmol.mol()));
         row.residual_cost = Some(r.cost);
         row.residual_cats = r.categories;
     }
@@ -173,6 +194,11 @@ fn main() {
     let max_nodes: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(200);
     let timeout_secs: f64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(1.5);
     let limit: usize = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let normalize_tautomer: bool = args
+        .get(5)
+        .and_then(|s| s.parse::<u8>().ok())
+        .map(|v| v != 0)
+        .unwrap_or(true);
 
     let mut pairs = load_tsv(tsv);
     if limit > 0 {
@@ -184,39 +210,50 @@ fn main() {
         use_atom_diff: true,
         lazy_closer: true,
         timeout: Some(Duration::from_secs_f64(timeout_secs)),
+        normalize_tautomer,
         ..FindPathConfig::default()
     };
 
     println!(
-        "MetX Phase I hard-case scan  n={} max_nodes={max_nodes} timeout={timeout_secs}s  tsv={}",
+        "MetX Phase I hard-case scan  n={} max_nodes={max_nodes} timeout={timeout_secs}s normalize_tautomer={normalize_tautomer} nostereo=1 rayon  tsv={}",
         pairs.len(),
         tsv.display()
     );
 
-    let mut results = Vec::new();
     let wall0 = Instant::now();
-    for (i, pair) in pairs.iter().enumerate() {
-        let row = run_one(pair, config);
-        if (i + 1) % 50 == 0 || i + 1 == pairs.len() {
-            let hits = results.iter().filter(|r: &&RowOut| r.hit).count()
-                + usize::from(row.hit);
-            let misses = results
-                .iter()
-                .filter(|r| r.parse_ok && !r.skipped_equal && !r.hit)
-                .count()
-                + usize::from(row.parse_ok && !row.skipped_equal && !row.hit);
-            eprintln!(
-                "[{}/{}] elapsed={:.1}s hits={hits} misses={misses} last_bill={} last_hit={}",
-                i + 1,
-                pairs.len(),
-                wall0.elapsed().as_secs_f64(),
-                row.bill,
-                row.hit
-            );
-            let _ = std::io::stderr().flush();
-        }
-        results.push(row);
-    }
+    let done = AtomicUsize::new(0);
+    let hit_count = AtomicUsize::new(0);
+    let miss_count = AtomicUsize::new(0);
+    let n = pairs.len();
+    let progress = Mutex::new(());
+
+    let results: Vec<RowOut> = pairs
+        .par_iter()
+        .map(|pair| {
+            let row = run_one(pair, config);
+            let i = done.fetch_add(1, Ordering::Relaxed) + 1;
+            if row.parse_ok && !row.skipped_equal {
+                if row.hit {
+                    hit_count.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    miss_count.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+            if i % 50 == 0 || i == n {
+                let _g = progress.lock().unwrap();
+                eprintln!(
+                    "[{i}/{n}] elapsed={:.1}s hits={} misses={} last_bill={} last_hit={}",
+                    wall0.elapsed().as_secs_f64(),
+                    hit_count.load(Ordering::Relaxed),
+                    miss_count.load(Ordering::Relaxed),
+                    row.bill,
+                    row.hit
+                );
+                let _ = std::io::stderr().flush();
+            }
+            row
+        })
+        .collect();
 
     let parse_fail = results.iter().filter(|r| !r.parse_ok).count();
     let equal = results.iter().filter(|r| r.skipped_equal).count();
@@ -227,12 +264,22 @@ fn main() {
     let hits = runnable.iter().filter(|r| r.hit).count();
     let misses: Vec<&RowOut> = runnable.iter().copied().filter(|r| !r.hit).collect();
     let timed = runnable.iter().filter(|r| r.timed_out).count();
+    let partial_only = runnable
+        .iter()
+        .filter(|r| !r.hit && r.has_partial)
+        .count();
+    let partial_zero = runnable
+        .iter()
+        .filter(|r| !r.hit && r.has_partial && r.residual_cost == Some(0))
+        .count();
 
     println!(
-        "\nsummary: runnable={} hits={} misses={} timed_out={} parse_fail={} equal_skip={} wall={:.1}s",
+        "\nsummary: runnable={} hits={} misses={} partial_flush={} partial_cost0={} timed_out={} parse_fail={} equal_skip={} normalize_tautomer={normalize_tautomer} wall={:.1}s",
         runnable.len(),
         hits,
         misses.len(),
+        partial_only,
+        partial_zero,
         timed,
         parse_fail,
         equal,
@@ -296,8 +343,13 @@ fn main() {
         );
     }
 
-    // Dump full miss table for later.
-    let dump = Path::new("artifacts/metx_hard_misses.tsv");
+    // Dump full miss table for later (nostereo call-site).
+    let dump_name = if normalize_tautomer {
+        "artifacts/metx_hard_misses_nostereo_tautnorm.tsv"
+    } else {
+        "artifacts/metx_hard_misses_nostereo.tsv"
+    };
+    let dump = Path::new(dump_name);
     let mut f = File::create(dump).unwrap();
     writeln!(
         f,
@@ -328,4 +380,63 @@ fn main() {
         .unwrap();
     }
     println!("\nwrote {} ({} misses)", dump.display(), hard.len());
+
+    // Thrash: high bill chasing dearomatize / saturate while still far from target.
+    // Heuristic: miss + bill>=200 + (dearomatize|needs_oxygen) + residual_cost>=3.
+    let thrash: Vec<&&RowOut> = hard
+        .iter()
+        .filter(|r| {
+            r.bill >= 200
+                && r.residual_cost.unwrap_or(0) >= 3
+                && r.residual_cats.iter().any(|c| {
+                    c == "dearomatize" || c == "needs_oxygen" || c == "extra_target_heavies"
+                })
+        })
+        .collect();
+    let thrash_name = if normalize_tautomer {
+        "artifacts/metx_hard_thrash_nostereo_tautnorm.tsv"
+    } else {
+        "artifacts/metx_hard_thrash_nostereo.tsv"
+    };
+    let thrash_path = Path::new(thrash_name);
+    let mut tf = File::create(thrash_path).unwrap();
+    writeln!(
+        tf,
+        "biot_id\tbill\tsecs\troot_cost\tresidual_cost\tcategories\treaction_type\treactant_smi\tproduct_smi\tclosest"
+    )
+    .unwrap();
+    for r in &thrash {
+        writeln!(
+            tf,
+            "{}\t{}\t{:.4}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            r.pair.biot_id,
+            r.bill,
+            r.secs,
+            r.root_cost,
+            r.residual_cost.unwrap_or(0),
+            r.residual_cats.join(","),
+            r.pair.reaction_type.replace('\t', " "),
+            r.pair.reactant_smi,
+            r.pair.product_smi,
+            r.closest_smi.as_deref().unwrap_or(""),
+        )
+        .unwrap();
+    }
+    println!(
+        "wrote {} ({} thrash misses: bill>=200, rcost>=3, dearomatize/O/extra)",
+        thrash_path.display(),
+        thrash.len()
+    );
+    println!("\n=== top 20 thrash misses ===");
+    for r in thrash.iter().take(20) {
+        println!(
+            "{:<14} bill={:<5} root={} rcost={} cats={:?} | {}",
+            r.pair.biot_id,
+            r.bill,
+            r.root_cost,
+            r.residual_cost.unwrap_or(0),
+            r.residual_cats,
+            r.pair.reaction_type
+        );
+    }
 }
