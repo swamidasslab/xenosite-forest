@@ -1,0 +1,18 @@
+# Conjugation reactive-class probes (SMILES only).
+# Why: one substrate per Glucuronidation / Glutathionation SMARTS family so
+# site-of-metabolism and star-label tests share the same molecules. Test modules
+# still bind (rule factory, rxn index); do not duplicate these SMILES inline.
+# Format: id<TAB>smiles
+
+benzoic_acid	O=C(O)c1ccccc1
+phenol	Oc1ccccc1
+styrene_oxide	C1OC1c1ccccc1
+benzyl_chloride	ClCc1ccccc1
+benzyl_bromide	BrCc1ccccc1
+aliphatic_thiol	CCS
+terminal_alkene	C=C
+benzoquinone	O=C1C=CC(=O)C=C1
+acetaldehyde	CC=O
+n_phenylaziridine	c1ccccc1N1CC1
+methyl_mesylate	COS(=O)(=O)C
+phenyl_isocyanate	O=C=Nc1ccccc1

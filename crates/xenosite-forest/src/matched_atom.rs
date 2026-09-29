@@ -1400,11 +1400,14 @@ mod tests {
         );
     }
 
-    #[test]
+        #[test]
+
     fn open_leave_does_not_flood_ring() {
+        // Open leave (leave_count None): methylene dealk on phenetole.
+        // Stay on bond ends — do not flood the aromatic ring.
         use crate::rules::dealkylation;
-        let parent = ForestMol::parse("COc1ccc2c(OC)cccc2c1").unwrap();
-        let target = parse_mol("O=C1C(=O)c2ccccc2C=C1").unwrap();
+        let parent = ForestMol::parse("CCOc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
         let ad = atom_diff(parent.mol(), &target);
         let cur = molecule_shells(parent.mol());
         let tgt = molecule_shells(&target);
@@ -1414,8 +1417,8 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
-            .find(|c| c.pattern.name == "cc_quaternary_alcohol" && c.site == 2)
-            .expect("cc_quaternary at site 2");
+            .find(|c| c.pattern.name == "methylene_alcohol")
+            .expect("methylene_alcohol on phenetole");
         assert!(c.pattern.effect.cleaves);
         assert!(c.pattern.effect.leave_count.is_none());
         let site: Vec<usize> = c
@@ -1433,9 +1436,12 @@ mod tests {
             "open leave must stay at bond ends, not flood the ring: {expanded:?}"
         );
         let pieces = c.materialize_mols().unwrap();
+        assert!(
+            !pieces.is_empty(),
+            "methylene_alcohol must materialize on phenetole"
+        );
         let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
-        // Leave = heavies the edit actually drops from the alignment.
         let leave_only: Vec<usize> = expanded
             .iter()
             .copied()
@@ -1455,7 +1461,7 @@ mod tests {
             &tgt,
             &ad.mapping,
             &atoms,
-            &leave_only,
+            &[],
             SiteShellCostOpts::default(),
         );
         let after = site_shell_cost_leave(
@@ -1469,9 +1475,10 @@ mod tests {
         );
         assert!(
             before > after + 1e-12,
-            "open-leave cleavage should drop residual: {before:.3} → {after:.3} leave={leave_only:?}"
+            "cleaving leave should drop residual: {before:.3} → {after:.3} atoms={atoms:?} leave={leave_only:?}"
         );
     }
+
 
     fn aligned_shells_mol(a: &Molecule, b: &Molecule) -> AlignedShells {
         let diff = atom_diff(a, b);

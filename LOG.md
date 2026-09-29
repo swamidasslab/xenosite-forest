@@ -2,6 +2,136 @@
 
 ## 2026-09-29
 
+- **Alkene patterns mutually exclusive.** `alkene` + `alkene_aliphatic` both
+  hit the same aromatic sites (chemic `C`/`!a` matched aromatics). Collapsed
+  to one `alkene` `[#6X3:1]=,:[#6X3:2]` (+HH) and disjoint `alkene_cumulene`
+  `[#6:1]=[#6X2:2]=[#8,#7,#16]` (+H). Unit test:
+  `alkene_patterns_do_not_duplicate_site_product`. Lib still 372p / 0f / 9x.
+
+- **Lift/MCS + multipath green.** Root cause for HQ tag loss:
+  `kekule::with_atom_explicit_h` rebuilt via `MoleculeBuilder` without
+  `copy_atom_tags_from` — fixed. Chematic xfails kept as trackers.
+  Multipath alkene H:2 vs H:1: fulvene-ketone intermediate `c1ccc:C(:c1)=C=O`
+  nets +H on cumulene saturate; split Hydrogenation alkene SMARTS into
+  `alkene` (a–a +HH), `alkene_aliphatic` (X3=X3 +HH), `alkene_cumulene`
+  (=C=X +H). Coverage: `C=C=O`. `cargo test -p xenosite-forest --lib`:
+  371 passed / 0 failed / 9 ignored.
+
+- **Tag-preserving wrappers + unit tests (desired behavior / xfail).** Chematic
+  `with_atom_*` / `fragments` / raw aromatize keep caller tags on this chematic.
+  `kekule::with_atom_explicit_h` rebuilds via `MoleculeBuilder` **without**
+  `copy_atom_tags_from` → drops all tags (xfail). ResonancePair HQ materialize
+  still yields untagged products (xfail) even with `preserving::` on aromatic
+  mutators and valence fill — more droppers remain. Prefer wrappers over
+  SMIRKS/index remapping. Suite: `chematic_tags::` 12 pass / 2 ignored xfail.
+
+- **Catalog Effect formula gate green.** Declared Keep-H bags now match
+  materialized products on `coverage_substrates.txt` (non-adduct leaves).
+  Fixes: SOx zwitterion/hydroxy When on S–H vs thioether vs hetaryl; ODH
+  rearrange aromatic OHH; QF cumulated dealkylate SMARTS split; Dealk/NDealk
+  nitro quaternary_alcohol SMARTS; dehyd β-elim X4/X3 + aromatic map-3 When;
+  dehyd/OR nitro vs nitroso SMARTS splits; NR hydroxylamine requires `#8H1`.
+  `make test-python`: 9282 passed / 64 xfailed / 0 unexpected. `cargo test
+  --lib`: 350 passed / 7 failed (lift/MCS/find_path/atom_diff — next).
+
+- **Product parity gate closed.** `make test-python`: 9282 passed, 64 xfailed
+  (C18 corpus), 0 unexpected. Soft `accept_pair_product` iminium carve-out
+  stays transitional (HEURISTICS); fix emit later, not more refuse branches.
+- **Catalog / Rust next.** Dearomatizes capability green (H alkene + SOx hydroxy
+  `dearomatizes=true`). Effect formula mismatches cut ~1848→~182 (alcohol/ODH
+  OHH bags, dehyd/RDH +HH for HX/H2O leave, tautomer formula-conservation on
+  path-flip, QF At When dropped). `make test-rust --lib`: 15→10 fails (catalog
+  Effect residual + lift/MCS/find_path multipath). Anisole find_path green.
+
+- **`make test-python` green for product parity:** 9282 passed, 64 xfailed (C18
+  corpus), 0 unexpected fails. Fixes: `accept_pair_product` on pair materialize
+  (H path-end iminium junk); `normalize_hetaryl_s_o_hydroxy` on SOx `hydroxy`
+  (thiophene → RDKit `O[SH]1CCCC1`); `nitrogen_bonded_sulfinic_hydroxy_sulfur`
+  refuse (sulfonamide H junk). Rebuild extension after Rust edits (`maturin
+  develop`).
+- **`make test-rust`:** 342 passed, 15 failed (PatternInfo catalog, find_path,
+  lift/MCS) — deferred until catalog/Effect gate after parity.
+
+- **Restored parity pairing metadata (C18 harness).** Rust `RuleSet.parity_exception`
+  + `with_parity_exception` on `EpoxideHydration` / `Tautomerization`; PyO3
+  `RuleSet.catalog_names()`, `.leaf()`, `.parity_exception`; native
+  `rust_parity_exception` on `ReactionRule` + conjugation leaves; ported
+  `rule_parity_pairs.py` / `test_rule_parity_pairs.py`; fuzz uses
+  `paired_rule_names()` (26 leaves) instead of a hardcoded tuple.
+
+- **C18 parity port in progress (sole priority).** Brought onto HEAD:
+  C18 `smirks.rs` (specialize / charged-H0 / organic variants), C18
+  `valence.rs` refuse gates + closed-shell H fill, C18 `ruleset` ring-open
+  oxygenate / CH2-leave / hydrolysis graph-edit apply path, `bond_order_sums`
+  / `with_atom_explicit_h`, zwitterion Effect bags `O+-`, conjugation Effect
+  bags matching chematic H (no false `removes=H`), parity harness
+  `as_star=False` like C18. Corpus fuzz vs C18 (4186p/29x/0f): HEAD now
+  **3826 passed / 26 xfailed / 336 failed / 6 errors** (was 3630/26/532).
+  Still to port: C18 `pair_edit` + remaining rule chemistry — unexpected
+  fails → 0 before PatternInfo coverage.
+
+- **HEAD vs C18 product-parity fuzz (same corpus).** Restored harness as
+  `tests/forest/native/test_rule_parity_fuzz.py` + `rule_parity_corpus.py`
+  (product-set only; site bags need ForestMol.ranks). C18 worktree:
+  **4186 passed / 29 xfailed / 0 failed**. HEAD: **3630 passed / 26 xfailed /
+  532 failed / 5 errors**. Of the C18 29: 26 still fail, **3 now pass**
+  (benzene-oxide / dihydroacridine DH, cinnoline QF) — those XPASS under
+  `strict=True`. ~529 new product gaps outside the annotated set (biggest:
+  Dealkylation 124, conjugation adducts, QF, SulfurOxidation, NOx).
+
+- **C18 baseline verified in worktree.** Checkout
+  `/Users/swamidass/Workspaces/xenosite/xenosite-metabolite-c18-baseline`
+  at `a814b83` (tag `py-rust-parity-c18-baseline` + 2 annotation commits).
+  Chematic: `vendor/chematic` @ `v1.0.21` +
+  `patches/chematic-v1.0.21-atom-tag-visit-order.patch` (same delta as
+  `swamidass/chematic` branch `cursor/atom-tag-visit-order-fffe`).
+  `pytest tests/forest/test_rule_parity_fuzz.py`: **4186 passed, 29 xfailed,
+  0 failed**. NitrogenOxidation tertiary N-oxides match native (`CN(C)C` →
+  `[N+](C)(C)(C)[O-]`). On HEAD (chematic crates.io **1.0.27**), same
+  `n_oxide` SMARTS candidates but `apply_edit` returns **empty** — mute is
+  chematic apply, not missing pattern / Keep-H. Restoring emit needs a
+  chematic fix or pin, not another SMARTS edit.
+
+- **find_path `normalize_tautomer` default off.** Door stays; default is
+  `false` again so search / coverage / parity match the pre-normalize
+  baseline (given forms as-is). Opt in when both ends should share a
+  chematic preferred form. Python + WASM kwargs follow.
+
+- **Native↔Rust product drift: bisect vs C18.** Alignment was achieved on
+  tag `py-rust-parity-c18-baseline` (branch `cursor/find-path-ms1-7f58`),
+  **not merged into main**. Merge-base with HEAD: `e2edd82`. HEAD-only since
+  then that changes emit: `2f05de4` (Keep H + materialize drops H-disagreeing
+  products). C18-only (~50 chematic/Kekulé/refuse commits + nitroso
+  `removes=HH`) never landed on main. Adjudication: missing C18 chemistry =
+  **regression vs achieved alignment**; Keep H gate = **progression** (Effect
+  contract) that surfaces SMIRKS/Effect gaps native still hides by stripping H;
+  nitroso bag on HEAD missing C18 `removes=HH` = **Effect regression**.
+
+- **Coverage SoT → `tests/data/`.** `coverage_substrates.txt` shared by Rust
+  `include_str!` and Python loaders. Native↔Rust product parity over that
+  pool: `test_rust_parity_coverage.py` (leaf by catalog name via `leaf_rule`,
+  not `xf:` short codes).
+
+- **MeOPhOH→hydroxyQ xfail.** `find_path_mcs_fallback_zero_meophoh_hydroxyq` ignored: QF product CSMI (`OC1=CC(=O)C(=CC1=O)O`) not unified with target `O=C1C=C(O)C(=O)C(O)=C1`; find_path does not accept the cost-0 hop. Mid suite keeps other cases.
+
+- **Coverage substrates centralized (Rust SoT).** Pool lives in
+  `tests/data/coverage_substrates.txt` (`[library]` /
+  `[pattern]`); `substrate_library.rs` `include_str!` →
+  `coverage_candidates()`. Catalog PatternInfo/When/Effect tests scan that
+  pool. Leaf `LEAF_EXAMPLE_SUBSTRATES` stays the short site_kind list only.
+  Native `substrate_library.py` thin-loads the same file; `_PATTERN_SUBSTRATES`
+  removed from `test_pattern_info_coverage.py`.
+
+- **Leaf example substrates on RuleSet.** `LEAF_EXAMPLE_SUBSTRATES` beside
+  `LEAF_CTORS`; `seal_leaf` → `RuleSet::example_substrates` (native
+  `_example_substrates` parity). Not used for PatternInfo/When coverage.
+
+- **Formula charge units.** `Formula.counts` carries formal charge under
+  ``"+"`` / ``"-"`` (strictly positive magnitudes; zwitterions keep both).
+  Net signed charge stays on `Formula.charge`. `formula_l1` includes those
+  keys (atom_diff / MatchScore formula distance); `formula_heavy_l1` skips
+  them. Bag strings may use ``+`` / ``-`` tokens.
+
 - **could_help T/H tighten.** `scope_could_help`: formula-neutral +
   `path_ends` require both ΔH>0 and ΔH<0 (tautomer redistribute). Adds-H
   requires primary-site H-need; partner-extend only when site has O/N.

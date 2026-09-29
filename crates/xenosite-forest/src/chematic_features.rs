@@ -8,11 +8,10 @@
 //! [`crate::normalize`] snapshots survivor tags and restamps once after the
 //! pick until that is fixed upstream.
 //!
-//! These tests assert the **desired** chematic behavior and are
-//! `#[ignore]` (= xfail). When they pass without ignore:
-//!
-//! 1. Drop the begin/end restamp in [`crate::normalize::chematic_tautomer_pick`].
-//! 2. Remove the `#[ignore]` attributes here (or delete this module).
+//! These tests assert the **desired** chematic behavior and stay
+//! `#[ignore]` (= xfail) to **track chematic**. Do not remove them when
+//! Forest works around the drop. Only clear ignore if chematic itself keeps
+//! tags (then also drop Forest restamp in `chematic_tautomer_pick`).
 //!
 //! Run: `cargo test -p xenosite-forest chematic_features -- --ignored`
 
@@ -56,7 +55,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); remove ignore + Forest restamp when fixed"]
+    #[ignore = "xfail: chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); keep to track chematic — Forest restamp is a workaround"]
     fn remove_hydrogens_preserves_survivor_tags() {
         let mut mol = parse("[H]OC([H])=C([H])[H]").unwrap();
         stamp_unique_tags(&mut mol);
@@ -67,7 +66,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); remove ignore + Forest restamp when fixed"]
+    #[ignore = "xfail: chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); keep to track chematic — Forest restamp is a workaround"]
     fn normalize_zwitterion_preserves_tags_on_rebuild() {
         let mut mol = parse("[NH3+]CC(=O)[O-]").unwrap();
         stamp_unique_tags(&mut mol);
@@ -83,7 +82,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); remove ignore + Forest restamp when fixed"]
+    #[ignore = "xfail: chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); keep to track chematic — Forest restamp is a workaround"]
     fn canonical_tautomer_preserves_tags_on_rebuild() {
         let mut mol = parse("OC=C").unwrap();
         stamp_unique_tags(&mut mol);
@@ -99,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); remove ignore + Forest restamp when fixed"]
+    #[ignore = "xfail: chematic-chem rebuilds drop atom_tags (no copy_atom_tags_from); keep to track chematic — Forest restamp is a workaround"]
     fn full_pick_stream_preserves_survivor_tags_without_forest_restamp() {
         let mut mol = parse("[H]OC([H])=C([H])[H]").unwrap();
         stamp_unique_tags(&mut mol);

@@ -40,7 +40,10 @@ fn endpoint_row(
     effect: Effect,
     pair_edit: &str,
 ) -> PatternInfo {
-    let skip_same_rings = matches!(name, "single_to_double" | "iminium" | "dealkylate");
+    let skip_same_rings = matches!(
+        name,
+        "single_to_double" | "iminium" | "dealkylate" | "dealkylate_cumulated"
+    );
     PatternInfo {
         name: name.into(),
         smarts: smarts.into(),
@@ -58,10 +61,15 @@ fn endpoint_row(
 
 /// Halogen atomic numbers used by dehalogenation / replace_halogen Whens.
 const HALIDE_Z: &[(u8, &str)] = &[(9, "F"), (17, "Cl"), (35, "Br"), (53, "I"), (85, "At")];
+/// F/Cl/Br/I only — QF `replace_halogen` SMARTS has no At (native parity).
+const HALIDE_Z_NO_AT: &[(u8, &str)] = &[(9, "F"), (17, "Cl"), (35, "Br"), (53, "I")];
 
 fn halide_remove_branches(map: u16, base: Effect) -> Vec<Effect> {
-    HALIDE_Z
-        .iter()
+    halide_remove_branches_z(map, base, HALIDE_Z)
+}
+
+fn halide_remove_branches_z(map: u16, base: Effect, zs: &[(u8, &str)]) -> Vec<Effect> {
+    zs.iter()
         .map(|&(z, sym)| {
             let mut effect = Effect {
                 when: Some(crate::pattern::When::atomic(map, z)),
@@ -83,18 +91,18 @@ fn halide_remove_branches(map: u16, base: Effect) -> Vec<Effect> {
 
 /// `Hydroxylation` from Python `xenosite.forest.rules`.
 pub fn hydroxylation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Hydroxylation", RuleSet::new(
         Some("Hydroxylation".into()),
         [
             PatternInfo::hydroxyl("h", "[#6h1:1]"),
             PatternInfo::hydroxyl("h2", "[#6h2,#6h3:1]"),
         ],
-    )
+    ))
 }
 
 /// `Dehydrogenation` from Python `xenosite.forest.rules`.
 pub fn dehydrogenation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Dehydrogenation", RuleSet::new(
         Some("Dehydrogenation".into()),
         [
             smirks_row(
@@ -103,8 +111,9 @@ pub fn dehydrogenation() -> RuleSet {
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
+                    // S–OH → S=O is formula-neutral after chematic H settle.
                     adds: None,
-                    removes: Some("HH".into()),
+                    removes: None,
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -211,12 +220,12 @@ pub fn dehydrogenation() -> RuleSet {
                 "single_to_double",
             ),
         ],
-    )
+    ))
 }
 
 /// `QuinoneFormation` from Python `xenosite.forest.rules`.
 pub fn quinone_formation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("QuinoneFormation", RuleSet::new(
         Some("QuinoneFormation".into()),
         [
             endpoint_row(
@@ -228,6 +237,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: Some("H".into()),
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -276,6 +286,7 @@ pub fn quinone_formation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -283,39 +294,65 @@ pub fn quinone_formation() -> RuleSet {
                 },
                 "replace_halogen",
             )
-            .with_possibilities(halide_remove_branches(
+            .with_possibilities(halide_remove_branches_z(
                 2,
                 Effect {
                     adds: Some("O".into()),
                     dearomatizes: true,
+                    exclusive_partner: true,
                     ..Default::default()
                 },
+                HALIDE_Z_NO_AT,
             )),
             endpoint_row(
                 "iminium",
                 "[#6H0R:1][#7D3:2]",
                 vec![1],
                 Effect {
-                    adds: None,
+                    // Formal + on N; H loss (if any) comes from the other end.
+                    adds: Some("+".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
-                    partner: None,
+                    partner: Some("N".into()),
                     ..Default::default()
                 },
                 "iminium",
             ),
             endpoint_row(
                 "dealkylate",
-                "[#6R:1][#7,#8:2][#6:3]",
+                // Alkyl (X4) or acyl (X3) leave — not cumulated X2 (PhNCO).
+                "[#6R:1]~[#7,#8:2]~[#6X3,#6X4:3]",
                 vec![1],
                 Effect {
-                    adds: None,
+                    // Leave alkyl picks up H (Me → CH4); cancels add_carbonyl H:-1.
+                    adds: Some("H".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
+                    exclusive_partner: true,
+                    dearomatizes: true,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+                "dealkylate",
+            ),
+            endpoint_row(
+                "dealkylate_cumulated",
+                // Cumulated N=C=X (PhNCO / carbodiimide): leave is CO-class;
+                // pair nets +HH beyond the alkyl/acyl case.
+                "[#6R:1]~[#7,#8:2]=[#6X2:3]=[#7,#8,#16]",
+                vec![1],
+                Effect {
+                    adds: Some("HHH".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    exclusive_partner: true,
                     dearomatizes: true,
                     leave_count: None,
                     partner: None,
@@ -325,12 +362,12 @@ pub fn quinone_formation() -> RuleSet {
             ),
         ],
     )
-    .with_canonical_plan(crate::canonical_plan::quinone_canonical_plan)
+    .with_canonical_plan(crate::canonical_plan::quinone_canonical_plan))
 }
 
 /// `Dealkylation` from Python `xenosite.forest.rules`.
 pub fn dealkylation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Dealkylation", RuleSet::new(
         Some("Dealkylation".into()),
         [
             smirks_row(
@@ -386,7 +423,7 @@ pub fn dealkylation() -> RuleSet {
             .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methylene_carboxylic",
-                "[#6H2:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1](=O)O)",
+                "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -402,7 +439,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methylene_carbonyl",
-                "[#6H2:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]=O)",
+                "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -418,7 +455,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methylene_alcohol",
-                "[#6H2:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]-O)",
+                "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -434,7 +471,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methine_carbonyl",
-                "[#6H1:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]=O)",
+                "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -450,7 +487,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methine_alcohol",
-                "[#6H1:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]-O)",
+                "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -466,7 +503,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "quaternary_alcohol",
-                "[#6H0:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]-O)",
+                "[#6H0:1][#8H0,#16:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -481,10 +518,41 @@ pub fn dealkylation() -> RuleSet {
                 },
             ),
             smirks_row(
-                // C–C open-leave: aliphatic, non-ring bond — aromatic/ring
-                // SMIRKS duplicates atoms (epoxide C–C, arene).
+                "quaternary_alcohol_n",
+                "[#6H0:1][#7;!+:2]>>([*:2].[*:1]-O)",
+                SiteKind::DirectedBond,
+                vec![1, 2],
+                Effect {
+                    adds: Some("OHH".into()),
+                    removes: None,
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+            ),
+            smirks_row(
+                "quaternary_alcohol_nitro",
+                "[#6H0:1][#7+:2]>>([*:2].[*:1]-O)",
+                SiteKind::DirectedBond,
+                vec![1, 2],
+                Effect {
+                    // Nitro leave drops formal + (Ar–NO2 → phenol + nitrite).
+                    adds: Some("OH".into()),
+                    removes: Some("+".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+            ),
+            smirks_row(
                 "cc_quaternary_alcohol",
-                "[CH0:1]!@[C:2]>>(O-[*:1].[*:2])",
+                "[#6H0:1][#6:2]>>(O-[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -500,11 +568,10 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "cc_alcohol",
-                "[Ch1,Ch2,Ch3:1]!@[C:2]>>(O-[*:1].[*:2])",
+                "[#6h1,#6h2,#6h3:1][#6:2]>>(O-[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    // OH on the kept carbon + H cap on the leave → +O +2H.
                     adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
@@ -517,7 +584,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "cc_carbonyl",
-                "[Ch1,Ch2,Ch3:1]!@[C:2]>>(O=[*:1].[*:2])",
+                "[#6h1,#6h2,#6h3:1][#6:2]>>(O=[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -537,7 +604,7 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    // Net formula unchanged (OH → carbonyl + H on the leave).
+                    // Hemiaminal → carbonyl + leave is formula-neutral.
                     adds: None,
                     removes: None,
                     cleaves: true,
@@ -549,12 +616,12 @@ pub fn dealkylation() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `NDealkylation` from Python `xenosite.forest.rules`.
 pub fn n_dealkylation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("NDealkylation", RuleSet::new(
         Some("NDealkylation".into()),
         [
             smirks_row(
@@ -690,7 +757,7 @@ pub fn n_dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "quaternary_alcohol",
-                "[#6H0:1][#7:2]>>([*:2].[*:1]-O)",
+                "[#6H0:1][#7;!+:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -705,12 +772,27 @@ pub fn n_dealkylation() -> RuleSet {
                 },
             ),
             smirks_row(
+                "quaternary_alcohol_nitro",
+                "[#6H0:1][#7+:2]>>([*:2].[*:1]-O)",
+                SiteKind::DirectedBond,
+                vec![1, 2],
+                Effect {
+                    adds: Some("OH".into()),
+                    removes: Some("+".into()),
+                    cleaves: true,
+                    methide: false,
+                    dearomatizes: false,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+            ),
+            smirks_row(
                 "hemiaminal",
                 "[#8H1:3]-[#6:1]-[#7:2]>>([*:3]=[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    // Net formula unchanged (OH → carbonyl + H on the leave).
                     adds: None,
                     removes: None,
                     cleaves: true,
@@ -722,12 +804,12 @@ pub fn n_dealkylation() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `AzoSplitting` from Python `xenosite.forest.rules`.
 pub fn azo_splitting() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("AzoSplitting", RuleSet::new(
         Some("AzoSplitting".into()),
         [smirks_row(
             "azo",
@@ -735,7 +817,7 @@ pub fn azo_splitting() -> RuleSet {
             SiteKind::Bond,
             vec![1, 2],
             Effect {
-                adds: None,
+                adds: Some("HHHH".into()),
                 removes: None,
                 cleaves: true,
                 methide: false,
@@ -746,19 +828,23 @@ pub fn azo_splitting() -> RuleSet {
             },
         )
         .with_cleave_side_group("azo", "azo")],
-    )
+    ))
 }
 
 /// `BenzodioxoleReduction` from Python `xenosite.forest.rules`.
 pub fn benzodioxole_reduction() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("BenzodioxoleReduction", RuleSet::new(
         Some("BenzodioxoleReduction".into()),
         [smirks_row(
             "dioxole_methylene",
-            "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:1]-[*:2].[*:3].[*:4]-[*:5])",
+            // Keep catechol as one fragment (aromatic bond between bridgeheads);
+            // disconnected [*:1]-[*:2].[*:3] duplicates the ring.
+            "[#6R:1]-[#8R:2]-[#6H2R:3]-[#8R:4]-[#6R:5]>>([*:2]-[*:1]-,:[*:5]-[*:4].[*:3])",
             SiteKind::DirectedBond,
             vec![2, 3],
             Effect {
+                // Leave CH2; chematic caps both fragments with HH (+HHHH net).
+                adds: Some("HHHH".into()),
                 cleaves: true,
                 leave_count: Some(1),
                 leave_formula: crate::pattern::leave_ch2(),
@@ -766,12 +852,22 @@ pub fn benzodioxole_reduction() -> RuleSet {
                 ..Default::default()
             },
         )],
-    )
+    ))
 }
 
 /// `NitroaromaticReduction` from Python `xenosite.forest.rules`.
 pub fn nitroaromatic_reduction() -> RuleSet {
-    RuleSet::new(
+    // Leave O as H2O (+HH); charged nitro loses formal +/- pair.
+    let o_leave = Effect {
+        adds: Some("HH".into()),
+        removes: Some("+-".into()),
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("N".into()),
+        ..Default::default()
+    };
+    seal_leaf("NitroaromaticReduction", RuleSet::new(
         Some("NitroaromaticReduction".into()),
         [
             smirks_row(
@@ -779,34 +875,22 @@ pub fn nitroaromatic_reduction() -> RuleSet {
                 "[#8-1:1]-[#7+1:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
                 SiteKind::DirectedBond,
                 vec![1, 2],
-                Effect {
-                    cleaves: true,
-                    leave_count: Some(1),
-                    leave_formula: crate::pattern::leave_o(),
-                    partner: Some("N".into()),
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "nitro_neutral",
                 "[#8:1]-[#7:2]([#6R:4])=[#8:3]>>[*:1].[*:2]([*:4])=[*:3]",
                 SiteKind::DirectedBond,
                 vec![1, 2],
-                Effect {
-                    cleaves: true,
-                    leave_count: Some(1),
-                    leave_formula: crate::pattern::leave_o(),
-                    partner: Some("N".into()),
-                    ..Default::default()
-                },
+                o_leave,
             ),
         ],
-    )
+    ))
 }
 
 /// `ThiopheneSulfurOxidation` from Python `xenosite.forest.rules`.
 pub fn thiophene_sulfur_oxidation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("ThiopheneSulfurOxidation", RuleSet::new(
         Some("ThiopheneSulfurOxidation".into()),
         [smirks_row(
             "thiophene_s_oxide",
@@ -814,7 +898,7 @@ pub fn thiophene_sulfur_oxidation() -> RuleSet {
             SiteKind::Atom,
             vec![1],
             Effect {
-                adds: Some("O".into()),
+                adds: Some("O+-".into()),
                 removes: None,
                 cleaves: false,
                 methide: false,
@@ -824,12 +908,12 @@ pub fn thiophene_sulfur_oxidation() -> RuleSet {
                 ..Default::default()
             },
         )],
-    )
+    ))
 }
 
 /// `Dephosphorylation` from Python `xenosite.forest.rules`.
 pub fn dephosphorylation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Dephosphorylation", RuleSet::new(
         Some("Dephosphorylation".into()),
         [smirks_row(
             "phosphate_ester",
@@ -837,7 +921,8 @@ pub fn dephosphorylation() -> RuleSet {
             SiteKind::Atom,
             vec![1],
             Effect {
-                adds: None,
+                // Chematic caps cleaved P–O with H (+HH net).
+                adds: Some("HH".into()),
                 removes: None,
                 cleaves: true,
                 methide: false,
@@ -847,12 +932,12 @@ pub fn dephosphorylation() -> RuleSet {
                 ..Default::default()
             },
         )],
-    )
+    ))
 }
 
 /// `EpoxideOpening` from Python `xenosite.forest.rules`.
 pub fn epoxide_opening() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("EpoxideOpening", RuleSet::new(
         Some("EpoxideOpening".into()),
         [
             smirks_row(
@@ -888,17 +973,20 @@ pub fn epoxide_opening() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `Hydrolysis` from Python `xenosite.forest.rules`.
 pub fn hydrolysis() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Hydrolysis", RuleSet::new(
         Some("Hydrolysis".into()),
         [
             smirks_row(
                 "add_water",
-                "[#8,#16:1]=[#6:2]-[#7,#8,#16:3]>>([*:1]=[*:2](O).[*:3])",
+                // Exclude carboxylic acids: acid OH is #8H1; ester O is #8H0.
+                // Acid + this edit rematerializes the parent (identity refuse
+                // would leave orphan O) — native RDKit never emits that arm.
+                "[#8,#16:1]=[#6:2]-[#7,#16,#8H0:3]>>([*:1]=[*:2](O).[*:3])",
                 SiteKind::Bond,
                 vec![2, 3],
                 Effect {
@@ -929,15 +1017,13 @@ pub fn hydrolysis() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `Dehydration` from Python `xenosite.forest.rules`.
 pub fn dehydration() -> RuleSet {
-    // Cleavage caps fragments with H (chematic). Alcohol: +HH; carbonyl: +HHHH.
-    // beta_elimination stays formula-neutral (alkene + water). Leave O is the
-    // oxygen fragment; H caps are junction bags so cleavage_net matches.
-    let o_leave_alcohol = Effect {
+    // C–OH cleavage to saturated fragment + H2O is net +HH vs atomic leave_o.
+    let alcohol_leave = Effect {
         adds: Some("HH".into()),
         cleaves: true,
         leave_count: Some(1),
@@ -945,14 +1031,16 @@ pub fn dehydration() -> RuleSet {
         partner: Some("O".into()),
         ..Default::default()
     };
-    let o_leave_beta = Effect {
+    // β-elim / carbonyl: water leave is formula-neutral vs parent (alkene+H2O).
+    let neutral_o_leave = Effect {
         cleaves: true,
         leave_count: Some(1),
         leave_formula: crate::pattern::leave_o(),
         partner: Some("O".into()),
         ..Default::default()
     };
-    let o_leave_carbonyl = Effect {
+    // Carbonyl C=O split can mint ether+water with +HHHH net (ester probes).
+    let carbonyl_leave = Effect {
         adds: Some("HHHH".into()),
         cleaves: true,
         leave_count: Some(1),
@@ -960,7 +1048,7 @@ pub fn dehydration() -> RuleSet {
         partner: Some("O".into()),
         ..Default::default()
     };
-    RuleSet::new(
+    seal_leaf("Dehydration", RuleSet::new(
         Some("Dehydration".into()),
         [
             smirks_row(
@@ -968,26 +1056,105 @@ pub fn dehydration() -> RuleSet {
                 "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                o_leave_alcohol,
+                alcohol_leave,
             ),
             smirks_row(
                 "beta_elimination",
-                "[#6:3]-[#6:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
+                // X4 alcohol carbon — ordinary alkene+water leave.
+                "[#6:3]-[#6X4:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
                 SiteKind::Atom,
-                // Alcohol carbon + adjacent carbon — site set differs from a
-                // lone hydroxylation site, so OH→beta-elim is not circular.
-                vec![1, 3],
-                o_leave_beta,
-            ),
+                // Match Python PatternInfo (default site_map=1): both alcohol
+                // and beta-elim share the alcohol-carbon atom site. Product
+                // bags differ (CC vs C=C); topo collapse is one site.
+                vec![1],
+                neutral_o_leave.clone(),
+            )
+            .with_possibilities([
+                // Aliphatic β-carbon: water leave is formula-neutral.
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(3, false)),
+                    cleaves: true,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("O".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+                // Aromatic β-carbon (quinone-methide direction): chematic Keep-H
+                // nets +H vs the aliphatic alkene+water case.
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(3, true)),
+                    adds: Some("H".into()),
+                    cleaves: true,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("O".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+            ]),
             smirks_row(
-                "carbonyl",
-                "[#6,#7:1]=[#8:2]>>[*:1].[*:2]",
+                "beta_elimination_acid",
+                // Carboxylic / X3 carbonyl–OH (ketene-direction leave).
+                "[#6:3]-[#6X3:1]-[#8H1:2]>>[*:3]=[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                o_leave_carbonyl,
+                neutral_o_leave.clone(),
+            )
+            .with_possibilities([
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(3, false)),
+                    cleaves: true,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("O".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+                // Aromatic map-3 (benzoic): chematic Keep-H nets +H.
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(3, true)),
+                    adds: Some("H".into()),
+                    cleaves: true,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("O".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+            ]),
+            smirks_row(
+                "carbonyl",
+                "[#6:1]=[#8:2]>>[*:1].[*:2]",
+                SiteKind::Atom,
+                vec![1],
+                carbonyl_leave.clone(),
+            ),
+            smirks_row(
+                "nitroso",
+                "[#7X2:1]=[#8:2]>>[*:1].[*:2]",
+                SiteKind::Atom,
+                vec![1],
+                carbonyl_leave.clone(),
+            ),
+            smirks_row(
+                "nitro",
+                "[#7+:1]=[#8:2]>>[*:1].[*:2]",
+                SiteKind::Atom,
+                vec![1],
+                Effect {
+                    // Nitro N+=O leave drops formal +; Keep-H net is +HHH −+.
+                    adds: Some("HHH".into()),
+                    removes: Some("+".into()),
+                    cleaves: true,
+                    leave_count: Some(1),
+                    leave_formula: crate::pattern::leave_o(),
+                    partner: Some("O".into()),
+                    ..Default::default()
+                },
             ),
         ],
-    )
+    ))
 }
 
 /// `Hydrogenation` from Python `xenosite.forest.rules`.
@@ -997,7 +1164,7 @@ pub fn dehydration() -> RuleSet {
 /// edits). Soft demotion on the `find_path` heap only — never dropped
 /// (HEURISTICS: not decided).
 pub fn hydrogenation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Hydrogenation", RuleSet::new(
         Some("Hydrogenation".into()),
         [
             demote_reductive(smirks_row(
@@ -1018,7 +1185,9 @@ pub fn hydrogenation() -> RuleSet {
             )),
             demote_reductive(smirks_row(
                 "alkene",
-                "[#6:1]=,:[#6:2]>>[*:1]-[*:2]",
+                // Aromatic or aliphatic C=C / C:C: both ends X3 (ethene, benzene).
+                // X3 excludes cumulene =C=X (center is X2) — that arm is separate.
+                "[#6X3:1]=,:[#6X3:2]>>[*:1]-[*:2]",
                 SiteKind::AtomPair,
                 vec![1, 2],
                 Effect {
@@ -1026,7 +1195,30 @@ pub fn hydrogenation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
-                    dearomatizes: false,
+                    // Capability: aromatic C=C→CC clears the ring bit. Resolve
+                    // false on aliphatic sites (same shape as Epoxidation /
+                    // path_end). Catalog audit requires this when chemistry
+                    // dearomatizes; pattern-level “all dearomatizes” refuse
+                    // skips adds-H spans (HEURISTICS).
+                    dearomatizes: true,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+            )),
+            demote_reductive(smirks_row(
+                "alkene_cumulene",
+                // =C=X: saturating yields +H (fulvene-ketone → benzaldehyde).
+                // Disjoint from alkene (X3–X3): center carbon is X2.
+                "[#6:1]=[#6X2:2]=[#8,#7,#16]>>[*:1]-[*:2]",
+                SiteKind::AtomPair,
+                vec![1, 2],
+                Effect {
+                    adds: Some("H".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: true,
                     leave_count: None,
                     partner: None,
                     ..Default::default()
@@ -1049,12 +1241,15 @@ pub fn hydrogenation() -> RuleSet {
                 "keep",
             )),
         ],
-    )
+    ))
 }
 
 /// `NitrogenReduction` from Python `xenosite.forest.rules`.
 pub fn nitrogen_reduction() -> RuleSet {
+    // Leave O as water (+HH); charged nitro also drops formal +/-.
     let o_leave = Effect {
+        adds: Some("HH".into()),
+        removes: Some("+-".into()),
         cleaves: true,
         leave_count: Some(1),
         leave_formula: crate::pattern::leave_o(),
@@ -1062,13 +1257,32 @@ pub fn nitrogen_reduction() -> RuleSet {
         ..Default::default()
     };
     let oo_leave = Effect {
+        adds: Some("HHHHHH".into()),
+        removes: Some("+-".into()),
         cleaves: true,
         leave_count: Some(2),
         leave_formula: crate::pattern::leave_oo(),
         partner: Some("O".into()),
         ..Default::default()
     };
-    RuleSet::new(
+    // Nitroso / hydroxylamine: no formal charge pair on typical probes.
+    let o_leave_neutral = Effect {
+        adds: Some("HH".into()),
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
+    let nitroso = Effect {
+        adds: Some("HHHH".into()),
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
+    seal_leaf("NitrogenReduction", RuleSet::new(
         Some("NitrogenReduction".into()),
         [
             smirks_row(
@@ -1108,17 +1322,18 @@ pub fn nitrogen_reduction() -> RuleSet {
             ),
             smirks_row(
                 "hydroxylamine",
-                "[#7:1]-,:[#8:2]>>([*:1].[*:2])",
+                // Require O–H: true hydroxylamines only (not isoxazole N–O).
+                "[#7:1]-[#8H1:2]>>([*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                o_leave.clone(),
+                o_leave_neutral.clone(),
             ),
             smirks_row(
                 "nitroso",
                 "[#7D2:1]=[#8:2]>>([*:1].[*:2])",
                 SiteKind::Atom,
                 vec![1],
-                o_leave,
+                nitroso,
             ),
             smirks_row(
                 "nitro_both_any",
@@ -1128,7 +1343,7 @@ pub fn nitrogen_reduction() -> RuleSet {
                 oo_leave,
             ),
         ],
-    )
+    ))
 }
 
 /// `Tautomerization` — ResonancePair path flip with one H-donor extension.
@@ -1162,9 +1377,15 @@ pub fn tautomerization() -> RuleSet {
         "tautomer_far",
     );
     path_partner.chain_conjugate = true;
-    RuleSet::new(
-        Some("Tautomerization".into()),
-        [tautomer_h, path_partner],
+    seal_leaf(
+        "Tautomerization",
+        RuleSet::new(
+            Some("Tautomerization".into()),
+            [tautomer_h, path_partner],
+        )
+        .with_parity_exception(
+            "Rust product leaf; native RDKit door keeps TautomerRule design stub only",
+        ),
     )
 }
 
@@ -1179,12 +1400,12 @@ fn demote_reductive(pattern: PatternInfo) -> PatternInfo {
 ///
 /// Patterns carry `search_bias = -1` (see [`demote_reductive`]).
 pub fn oxygen_reduction() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("OxygenReduction", RuleSet::new(
         Some("OxygenReduction".into()),
         [
             demote_reductive(smirks_row(
                 "carbonyl",
-                "[#8:1]=[#6,#7:2]>>[*:1]-[*:2]",
+                "[#8:1]=[#6:2]>>[*:1]-[*:2]",
                 SiteKind::Atom,
                 vec![1],
                 Effect {
@@ -1199,12 +1420,45 @@ pub fn oxygen_reduction() -> RuleSet {
                 },
             )),
             demote_reductive(smirks_row(
+                "nitroso",
+                "[#8:1]=[#7X2:2]>>[*:1]-[*:2]",
+                SiteKind::Atom,
+                vec![1],
+                Effect {
+                    adds: Some("HH".into()),
+                    removes: None,
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+            )),
+            demote_reductive(smirks_row(
+                "nitro",
+                "[#8:1]=[#7+:2]>>[*:1]-[*:2]",
+                SiteKind::Atom,
+                vec![1],
+                Effect {
+                    // Nitro N+=O → N(OH); Keep-H drops formal + and adds one H.
+                    adds: Some("H".into()),
+                    removes: Some("+".into()),
+                    cleaves: false,
+                    methide: false,
+                    dearomatizes: false,
+                    leave_count: None,
+                    partner: None,
+                    ..Default::default()
+                },
+            )),
+            demote_reductive(smirks_row(
                 "peroxide",
                 "[#8:1]-[#8:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: None,
+                    adds: Some("HH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -1215,16 +1469,18 @@ pub fn oxygen_reduction() -> RuleSet {
                 },
             )),
         ],
-    )
+    ))
 }
 
 /// `ReductiveDehalogenation` from Python `xenosite.forest.rules`.
 pub fn reductive_dehalogenation() -> RuleSet {
     let base = Effect {
+        // Hydrogenolysis: R–X → R–H + HX is net +HH vs atomic halide leave.
+        adds: Some("HH".into()),
         cleaves: true,
         ..Default::default()
     };
-    RuleSet::new(
+    seal_leaf("ReductiveDehalogenation", RuleSet::new(
         Some("ReductiveDehalogenation".into()),
         [
             smirks_row(
@@ -1239,20 +1495,44 @@ pub fn reductive_dehalogenation() -> RuleSet {
                 "alkene",
                 // Map 3 must be aliphatic: aromatic partner forces a
                 // dearomatizing exocyclic methylene that RDKit sanitize
-                // papers into junk (C=C1CCCCC1) — C18 / C10. Keep both off.
+                // papers into junk (C=C1CCCCC1) — C10. Rust refused; keep both off.
+                // β-elim: R–CH2–CH2–X → alkene + HX is formula-neutral (no +HH).
                 "[#9,#17,#35,#53,#85:1]-[#6:2]-[#6;!a:3]>>[*:1].[*:2]=[*:3]",
                 SiteKind::Atom,
                 vec![2],
-                base.clone(),
+                Effect {
+                    cleaves: true,
+                    ..Default::default()
+                },
             )
-            .with_possibilities(halide_remove_branches(1, base)),
+            .with_possibilities(halide_remove_branches(
+                1,
+                Effect {
+                    cleaves: true,
+                    ..Default::default()
+                },
+            )),
         ],
-    )
+    ))
 }
 
 /// `SulfurReduction` from Python `xenosite.forest.rules`.
 pub fn sulfur_reduction() -> RuleSet {
-    RuleSet::new(
+    // Leave O/S as a fragment; chematic caps with H → H2O / RSH (+HH net).
+    let o_leave = Effect {
+        adds: Some("HH".into()),
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
+    let s_cleave = Effect {
+        adds: Some("HH".into()),
+        cleaves: true,
+        ..Default::default()
+    };
+    seal_leaf("SulfurReduction", RuleSet::new(
         Some("SulfurReduction".into()),
         [
             smirks_row(
@@ -1260,13 +1540,7 @@ pub fn sulfur_reduction() -> RuleSet {
                 "[#16:1]=[#8:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    cleaves: true,
-                    leave_count: Some(1),
-                    leave_formula: crate::pattern::leave_o(),
-                    partner: Some("O".into()),
-                    ..Default::default()
-                },
+                o_leave.clone(),
             ),
             smirks_row(
                 "disulfide",
@@ -1274,6 +1548,7 @@ pub fn sulfur_reduction() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
+                    adds: Some("HH".into()),
                     cleaves: true,
                     partner: Some("S".into()),
                     ..Default::default()
@@ -1284,20 +1559,19 @@ pub fn sulfur_reduction() -> RuleSet {
                 "[#16:1]-[#6,#8:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                Effect {
-                    cleaves: true,
-                    ..Default::default()
-                },
+                s_cleave.clone(),
             )
             .with_possibilities(vec![
                 Effect {
                     when: Some(crate::pattern::When::atomic(2, 6)),
+                    adds: Some("HH".into()),
                     cleaves: true,
                     ..Default::default()
                 }
                 .sealed(),
                 Effect {
                     when: Some(crate::pattern::When::atomic(2, 8)),
+                    adds: Some("HH".into()),
                     cleaves: true,
                     leave_count: Some(1),
                     leave_formula: crate::pattern::leave_o(),
@@ -1306,7 +1580,7 @@ pub fn sulfur_reduction() -> RuleSet {
                 .sealed(),
             ]),
         ],
-    )
+    ))
 }
 
 /// `Epoxidation` from Python `xenosite.forest.rules`.
@@ -1315,7 +1589,7 @@ pub fn sulfur_reduction() -> RuleSet {
 /// bit at the site (shell residual needs |Δaromatic|). Resolved false on
 /// aliphatic matches via [`PatternInfo::resolve_for_match`].
 pub fn epoxidation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Epoxidation", RuleSet::new(
         Some("Epoxidation".into()),
         [smirks_row(
             "epoxide",
@@ -1323,6 +1597,7 @@ pub fn epoxidation() -> RuleSet {
             SiteKind::Bond,
             vec![1, 2],
             Effect {
+                // Epoxide is +O only (ethene C2H4 → C2H4O).
                 adds: Some("O".into()),
                 removes: None,
                 cleaves: false,
@@ -1333,7 +1608,7 @@ pub fn epoxidation() -> RuleSet {
                 ..Default::default()
             },
         )],
-    )
+    ))
 }
 
 /// Alkene → vicinal diol in one hop (epoxidation then hydrolytic opening).
@@ -1343,7 +1618,7 @@ pub fn epoxidation() -> RuleSet {
 /// Catalog `dearomatizes` is capability (aromatic alkene clears the ring bit).
 /// Net formula vs alkene: +2 O and +2 H (aliphatic and aromatic).
 pub fn epoxide_hydration() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("EpoxideHydration", RuleSet::new(
         Some("EpoxideHydration".into()),
         [smirks_row(
             "diol",
@@ -1363,11 +1638,14 @@ pub fn epoxide_hydration() -> RuleSet {
         )],
     )
     .with_canonical_plan(crate::canonical_plan::epoxide_hydration_canonical_plan)
+    .with_parity_exception(
+        "Rust-only PhaseOne leaf (epoxide→diol one-hop); Python PhaseOne omits it",
+    ))
 }
 
 /// `SulfurOxidation` from Python `xenosite.forest.rules`.
 pub fn sulfur_oxidation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("SulfurOxidation", RuleSet::new(
         Some("SulfurOxidation".into()),
         [
             smirks_row(
@@ -1376,7 +1654,8 @@ pub fn sulfur_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("O".into()),
+                    // Default thioether / aromatic S: +O and +/- (no H loss).
+                    adds: Some("O+-".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -1385,7 +1664,23 @@ pub fn sulfur_oxidation() -> RuleSet {
                     partner: None,
                     ..Default::default()
                 },
-            ),
+            )
+            .with_possibilities([
+                // Thiol S–H → zwitterion drops that H (`CCS` → `[O-][S+]CC`).
+                Effect {
+                    when: Some(crate::pattern::When::atomic_h(1, 16, 1)),
+                    adds: Some("O+-".into()),
+                    removes: Some("H".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+                Effect {
+                    when: Some(crate::pattern::When::atomic_h(1, 16, 0)),
+                    adds: Some("O+-".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+            ]),
             smirks_row(
                 "hydroxy",
                 // Organic `O` (not `[O]`): chematic `[O]` leaves a radical;
@@ -1394,18 +1689,42 @@ pub fn sulfur_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    // Net H is substrate-dependent (thioether may gain H; thiol
-                    // may not). Keep O-only; Keep-H materialize drops H-disagree.
                     adds: Some("O".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
-                    dearomatizes: false,
+                    dearomatizes: true,
                     leave_count: None,
                     partner: None,
                     ..Default::default()
                 },
-            ),
+            )
+            .with_possibilities([
+                // Hetaryl S–OH saturate (thiophene → O[SH]1CCCC1) gains HHHHHH.
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(1, true)),
+                    adds: Some("OHHHHHH".into()),
+                    dearomatizes: true,
+                    ..Default::default()
+                }
+                .sealed(),
+                // Thiol: +O only (`CCS` → `S(O)CC`).
+                Effect {
+                    when: Some(crate::pattern::When::atomic_h(1, 16, 1)),
+                    adds: Some("O".into()),
+                    dearomatizes: false,
+                    ..Default::default()
+                }
+                .sealed(),
+                // Thioether / sulfoxide S–OH: chematic saturates with +HH.
+                Effect {
+                    when: Some(crate::pattern::When::atomic_h(1, 16, 0)),
+                    adds: Some("OHH".into()),
+                    dearomatizes: false,
+                    ..Default::default()
+                }
+                .sealed(),
+            ]),
             smirks_row(
                 "oxo",
                 "[#16;v2,v4:1]>>[*:1]=O",
@@ -1416,19 +1735,19 @@ pub fn sulfur_oxidation() -> RuleSet {
                     removes: None,
                     cleaves: false,
                     methide: false,
-                    dearomatizes: false,
+                    dearomatizes: true,
                     leave_count: None,
                     partner: None,
                     ..Default::default()
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `NitrogenOxidation` from Python `xenosite.forest.rules`.
 pub fn nitrogen_oxidation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("NitrogenOxidation", RuleSet::new(
         Some("NitrogenOxidation".into()),
         [
             smirks_row(
@@ -1472,7 +1791,8 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("O".into()),
+                    // Zwitterion: +O and a formal +/- pair (Keep-H formula).
+                    adds: Some("O+-".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -1483,7 +1803,7 @@ pub fn nitrogen_oxidation() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `OxidativeDehalogenation` from Python `xenosite.forest.rules`.
@@ -1493,12 +1813,28 @@ pub fn oxidative_dehalogenation() -> RuleSet {
         cleaves: true,
         ..Default::default()
     };
+    // Alcohol / hydrate leaves: chematic saturates O with H → net +OHH / …
+    let ohh_cleave = Effect {
+        adds: Some("OHH".into()),
+        cleaves: true,
+        ..Default::default()
+    };
     let oo_cleave = Effect {
         adds: Some("OO".into()),
         cleaves: true,
         ..Default::default()
     };
-    RuleSet::new(
+    let oohh_cleave = Effect {
+        adds: Some("OOHH".into()),
+        cleaves: true,
+        ..Default::default()
+    };
+    let oohhhh_cleave = Effect {
+        adds: Some("OOHHHH".into()),
+        cleaves: true,
+        ..Default::default()
+    };
+    seal_leaf("OxidativeDehalogenation", RuleSet::new(
         Some("OxidativeDehalogenation".into()),
         [
             smirks_row(
@@ -1506,9 +1842,9 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                 "[#9,#17,#35,#53,#85:1]-[#6:2]>>[*:1].[*:2]O",
                 SiteKind::Atom,
                 vec![2],
-                o_cleave.clone(),
+                ohh_cleave.clone(),
             )
-            .with_possibilities(halide_remove_branches(1, o_cleave.clone())),
+            .with_possibilities(halide_remove_branches(1, ohh_cleave.clone())),
             smirks_row(
                 "carbonyl",
                 "[#9,#17,#35,#53,#85:1]-[#6h1:2]>>[*:1].[*:2]=O",
@@ -1535,30 +1871,45 @@ pub fn oxidative_dehalogenation() -> RuleSet {
                     adds: Some("O".into()),
                     ..Default::default()
                 },
-            ),
+            )
+            .with_possibilities([
+                // Aromatic rearrange saturates (+HH) under chematic Keep-H.
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(2, true)),
+                    adds: Some("OHH".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+                Effect {
+                    when: Some(crate::pattern::When::aromaticity(2, false)),
+                    adds: Some("O".into()),
+                    ..Default::default()
+                }
+                .sealed(),
+            ]),
             smirks_row(
                 "gem_carboxylic",
                 "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)=O.[*:3]",
                 SiteKind::Atom,
                 vec![2],
-                oo_cleave.clone(),
+                oohh_cleave.clone(),
             )
-            .with_possibilities(halide_remove_branches(1, oo_cleave.clone())),
+            .with_possibilities(halide_remove_branches(1, oohh_cleave.clone())),
             smirks_row(
                 "gem_hydrate",
                 "[#9,#17,#35,#53,#85:1]-[#6:2]-[#9,#17,#35,#53,#85:3]>>[*:1].[*:2](O)O.[*:3]",
                 SiteKind::Atom,
                 vec![2],
-                oo_cleave.clone(),
+                oohhhh_cleave.clone(),
             )
-            .with_possibilities(halide_remove_branches(1, oo_cleave)),
+            .with_possibilities(halide_remove_branches(1, oohhhh_cleave)),
         ],
-    )
+    ))
 }
 
 /// `Acetylation` from Python `xenosite.forest.rules`.
 pub fn acetylation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Acetylation", RuleSet::new(
         Some("Acetylation".into()),
         [smirks_row(
             "acetyl",
@@ -1566,8 +1917,9 @@ pub fn acetylation() -> RuleSet {
             SiteKind::Atom,
             vec![1],
             Effect {
-                adds: Some("CCO".into()),
-                removes: Some("H".into()),
+                // Chematic keeps hetero H; acetyl is +C2H3O net → bag CCOHH.
+                adds: Some("CCOHH".into()),
+                removes: None,
                 cleaves: false,
                 methide: false,
                 dearomatizes: false,
@@ -1576,12 +1928,12 @@ pub fn acetylation() -> RuleSet {
                 ..Default::default()
             },
         )],
-    )
+    ))
 }
 
 /// `Sulfation` from Python `xenosite.forest.rules`.
 pub fn sulfation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Sulfation", RuleSet::new(
         Some("Sulfation".into()),
         [
             smirks_row(
@@ -1590,8 +1942,9 @@ pub fn sulfation() -> RuleSet {
                 SiteKind::Atom,
                 vec![2],
                 Effect {
+                    // Chematic keeps alcohol H; sulfate is +SO3 net.
                     adds: Some("SOOO".into()),
-                    removes: Some("H".into()),
+                    removes: None,
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -1617,12 +1970,12 @@ pub fn sulfation() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `Glucuronidation` from Python `xenosite.forest.rules`.
 pub fn glucuronidation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Glucuronidation", RuleSet::new(
         Some("Glucuronidation".into()),
         [
             smirks_row(
@@ -1631,8 +1984,9 @@ pub fn glucuronidation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("CCCCCCOOOOOO".into()),
-                    removes: Some("H".into()),
+                    // Chematic keeps alcohol H; glucuronide is +C6H8O6 net.
+                    adds: Some("CCCCCCOOOOOOHHHHHHHH".into()),
+                    removes: None,
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -1640,7 +1994,7 @@ pub fn glucuronidation() -> RuleSet {
                     partner: None,
                     ..Default::default()
                 },
-            ),
+                ),
             smirks_row(
                 "carboxylate",
                 "[#8H1,#8-:1][#6:2](=[#8:3])[#6:4]>>O1C(C(=O)O)C(O)C(O)C(O)C([*:1][*:2](=[#8:3])[*:4])1",
@@ -1658,12 +2012,12 @@ pub fn glucuronidation() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// `Glutathionation` from Python `xenosite.forest.rules`.
 pub fn glutathionation() -> RuleSet {
-    RuleSet::new(
+    seal_leaf("Glutathionation", RuleSet::new(
         Some("Glutathionation".into()),
         [
             smirks_row(
@@ -1875,7 +2229,7 @@ pub fn glutathionation() -> RuleSet {
                 },
             ),
         ],
-    )
+    ))
 }
 
 /// Phase I leaf sets without QuinoneFormation, EpoxideHydration, or
@@ -2034,6 +2388,58 @@ pub const LEAF_CTORS: &[(&str, fn() -> RuleSet)] = &[
     ("Glucuronidation", glucuronidation),
     ("Glutathionation", glutathionation),
 ];
+
+/// Short example substrates for site_kind / emit smoke (native
+/// `ReactionRule._example_substrates`).
+///
+/// **Find this next to [`LEAF_CTORS`].** Sealed onto each leaf by [`seal_leaf`]
+/// → [`RuleSet::example_substrates`]. PatternInfo / When **coverage** does
+/// **not** read this table — expand
+/// `tests/data/coverage_substrates.txt` instead.
+///
+/// Keep these short and guaranteed to metabolize. Tautomerization / a few
+/// native-empty leaves carry a minimal SMILES so the site_kind seal stays
+/// non-empty.
+pub const LEAF_EXAMPLE_SUBSTRATES: &[(&str, &[&str])] = &[
+    ("Hydroxylation", &["CCO", "c1ccccc1"]),
+    ("Dehydrogenation", &["CCO", "Oc1ccc(O)cc1"]),
+    ("QuinoneFormation", &["c1ccccc1", "Oc1ccccc1"]),
+    ("Dealkylation", &["CCO", "COc1ccccc1"]),
+    ("NDealkylation", &["CCN", "CN(C)C", "c1ccncc1"]),
+    ("AzoSplitting", &["N=Nc1ccccc1"]),
+    ("BenzodioxoleReduction", &["c1ccc2c(c1)OCO2"]),
+    ("NitroaromaticReduction", &["[O-][N+](=O)c1ccccc1"]),
+    ("ThiopheneSulfurOxidation", &["c1ccsc1"]),
+    ("Dephosphorylation", &["COP(=O)(O)O"]),
+    ("EpoxideOpening", &["C1OC1", "c1ccccc1C1CO1"]),
+    ("Hydrolysis", &["CC(=O)OC"]),
+    ("Dehydration", &["CCO"]),
+    ("Hydrogenation", &["C=C", "C#C"]),
+    ("Tautomerization", &["O=C1CCCCC1"]),
+    ("NitrogenReduction", &["CCNO", "[O-][N+](=O)c1ccccc1"]),
+    ("OxygenReduction", &["CC(=O)OC", "CC=O"]),
+    ("ReductiveDehalogenation", &["CCCl", "Clc1ccccc1"]),
+    ("SulfurReduction", &["CS(=O)C", "CCSO"]),
+    ("Epoxidation", &["C=C", "c1ccccc1"]),
+    ("EpoxideHydration", &["C=C", "c1ccccc1", "C1OC1"]),
+    ("SulfurOxidation", &["CCS", "CSC"]),
+    ("NitrogenOxidation", &["CCN", "CN(C)C"]),
+    ("OxidativeDehalogenation", &["CCCl", "Clc1ccccc1"]),
+    ("Acetylation", &["CCO", "Nc1ccccc1"]),
+    ("Sulfation", &["CCO", "Oc1ccccc1"]),
+    ("Glucuronidation", &["CCO", "Oc1ccccc1"]),
+    ("Glutathionation", &["C=C", "C1OC1"]),
+];
+
+/// Attach [`LEAF_EXAMPLE_SUBSTRATES`] onto a leaf [`RuleSet`].
+pub fn seal_leaf(name: &'static str, set: RuleSet) -> RuleSet {
+    let smiles = LEAF_EXAMPLE_SUBSTRATES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, s)| *s)
+        .unwrap_or_else(|| panic!("LEAF_EXAMPLE_SUBSTRATES missing leaf {name}"));
+    set.with_example_substrates(smiles.iter().copied())
+}
 
 /// Top-level catalogs that appear as SSSOM first segments (not leaves).
 pub const ROOT_CATALOGS: &[(&str, fn() -> RuleSet)] = &[
@@ -2272,7 +2678,7 @@ mod tests {
         assert!(!h.effect.delta_formula.contains_key("H"));
         let dh_set = dehydrogenation();
         let dh_patterns = dh_set.patterns();
-        let dh = dh_patterns.iter().find(|p| p.name == "sulfoxide").unwrap();
+        let dh = dh_patterns.iter().find(|p| p.name == "alcohol").unwrap();
         assert_eq!(dh.effect.delta_formula.get("H"), Some(&-2));
     }
 
@@ -2320,7 +2726,8 @@ mod tests {
 
         let dioxole = benzodioxole_reduction().patterns()[0].clone();
         assert_eq!(dioxole.effect.delta_formula.get("C"), Some(&-1));
-        assert_eq!(dioxole.effect.delta_formula.get("H"), Some(&-2));
+        // leave CH2 (−H2) + junction HHHH → net +H2
+        assert_eq!(dioxole.effect.delta_formula.get("H"), Some(&2));
 
         let nitro = nitroaromatic_reduction().patterns()[0].clone();
         assert_eq!(nitro.effect.delta_formula.get("O"), Some(&-1));
@@ -2359,6 +2766,25 @@ mod tests {
             assert!(!set.patterns().is_empty(), "{:?}", set.name);
         }
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     #[test]
     fn dealkylation_anisole_emits_phenol() {
@@ -2406,3 +2832,4 @@ mod tests {
         );
     }
 }
+

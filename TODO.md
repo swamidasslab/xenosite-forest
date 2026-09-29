@@ -2,37 +2,36 @@
 
 All items below target the **Rust** door (`crates/xenosite-forest` +
 `xenosite.forest` wrapper). Do not implement them in `xenosite.forest.native`
-— see `docs/forest/NATIVE.md`. No CLI work for now (no Rust CLI; do not grow
-the temporary native console script).
+— see `docs/forest/NATIVE.md`. No CLI work for now.
 
-## Now (find_path + sampling)
+## Now
 
-- Tautomerization: cut find_path bill on tacrine further (fanout / unique-edit); imine↔amine coverage fixed; normalize_tautomer door shipped (chematic pick + Forest adopt)
-- Validate walk-history residual bags on MetX hard misses (chromenone OH thrash, S-ox, arene-epoxide) + +GSH before coding invariant-leftover cuts
-- Boost / `stop_after_sealed_basins` stay parked until bag history is measured (early-stop hurt closest)
+- lift/MCS + find_path multipath / atom_diff (7 `cargo test --lib` fails after
+  catalog Effect green): hydroquinone DH lift, QF ends, dimethoxy dealk,
+  matched_atom HQ bag, multipath alkene H soft-mismatch
+- Then: re-enable Keep-H / Effect-formula materialize filters + parity harness
+  formula gates (`allow_formula_delta_mismatch`, SiteDeduplicationWarning)
+
+## After parity + catalog
+
+- Pair materialize: stop minting path-end iminium/sulfinic junk; collapse
+  `accept_pair_product` → `accept_product` (HEURISTICS: soft failure today)
+- Re-enable parity-chase soft filters: Rust Keep-H / Effect-formula drop in
+  `materialize_pair_mols` + `DeferredSite::materialize_mols`; drop
+  `allow_formula_delta_mismatch` and `SiteDeduplicationWarning` ignore on
+  `test_rule_parity_fuzz.py` (conftest formula collector gate back on)
+- Tautomerization: cut find_path bill on tacrine further; normalize_tautomer
+  stays opt-in (default off)
+- Validate walk-history residual bags on MetX hard misses
 - find_path: mapping argument between target and reactant
-- StepSequence: ordered container of steps that **acts like a Step** (composite). Same `apply` (intermediates + final, `PathwayOptions`, ensure-tags-never-overwrite) for length 1..n or `random_path`
-- StepPlan (`Deps` in Rust): compact set of linearizations under constraints; `linearizations()` yields `StepSequence`s then `apply`
-- PathOutcome: randomly sample a StepSequence from a plan; `apply` it on a molecule (same as above)
-
-## Next (conjugation / reactivity)
-
-- Preserve text labels on stars through the pipeline; wrap chematics where labels drop and reapply
-- Normalize conjugated/adduct mols (collapse glucuronide, GSH, etc. to `*` with normalized labels; standardize common/hinted text ids); wire into target-seeking
-- Validate conjugation rules with examples + review; ship a prebuilt Reactivity ruleset (protein, DNA, cyanide, GSH)
-
-## Mapping / XMET (upstream)
-
-- XFAIL: mapped chemist homes still mention Forest in tagger `xmet.yaml` (`test_xmet_definition_lint.py`, strict); drop xfail when prose is cleaned
-- Consider distinct chemist homes / always_with for `Tautomerization/tautomer_h` vs `path_partner` (both map to `xmet:4000186` today)
-- Add a correct `Conjugation` catalog + SSSOM rows when Phase II composition is settled (CJ rows removed)
-- On forest release: snapshot SSSOM into xenosite-xmet (`docs/release.md`)
+- StepSequence / StepPlan / PathOutcome sampling doors
+- Preserve text labels on stars; conjugation normalize; Reactivity ruleset
+- XMET SSSOM / chemist-home lint; Conjugation catalog when Phase II settles
 
 ## Later
 
-- Optimize `alternating_paths` (path clone per BFS step; odd-ring / 2-colorable decomposition)
-- PatternInfo coverage gaps still worth asserting (product-side SMARTS; `pin`; `skip_same_rings` / `edit`; `breaks_ring` + `partner`/`partner_h` from `resolve_effect`)
-- `find_path_to_MS1` / then `find_path_to_MS2` (isotope-aware m/z within tolerance; MS fragmentation rules)
-- Rank PathOutcome hits by likelihood via `xenosite-predict` (cleavage-side bags; no side-reaction enum)
-- Deferred: tautomer SMARTS / TautomerQuery (Status: not decided) — orthogonal to Default `Tautomerization`
+- Optimize `alternating_paths`
+- PatternInfo coverage gaps (product-side SMARTS; `pin`; `breaks_ring`)
+- `find_path_to_MS1` / MS2; rank hits via `xenosite-predict`
+- Deferred: tautomer SMARTS / TautomerQuery (not decided)
 - SMARTS least-common atoms first

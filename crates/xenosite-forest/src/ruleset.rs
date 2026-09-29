@@ -11,18 +11,19 @@
 //! products). [`RuleSet::metabolize`] is that loop with optional filter
 //! closures and unique-CSMI yield.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chematic::core::{Atom, BondOrder, Element};
+use chematic::perception::find_sssr;
 use chematic::smarts::{BondPrimitive, BondQuery, parse_smarts};
 
 use crate::ForestError;
 use crate::ForestMol;
 use crate::canonical_plan::{CanonicalPlanFn, Step, steps_for_leaf};
-use crate::mol::{Molecule, atom_idx, canon_smiles};
+use crate::mol::{Molecule, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo, SiteInfo};
-use crate::smirks::apply_smirks_at;
-use crate::valence::accept_product;
+use crate::smirks::{apply_smirks_at, normalize_hetaryl_s_o_hydroxy};
+use crate::valence::{accept_o_leave_product, accept_product};
 
 /// True when the SMARTS bond between the first two `site_map` atoms is an
 /// exclusive double (`=`), not `=,:`. Epoxidation matches that on Kekulé forms.
@@ -95,12 +96,26 @@ pub struct RuleSet {
     /// Leaf-owned expander for [`Self::canonical_plan`] (Python method).
     plan_fn: Option<CanonicalPlanFn>,
     members: Vec<RuleMember>,
+    /// SMILES substrates that must hit this leaf's patterns / Whens.
+    ///
+    /// Short site_kind / emit examples (native `_example_substrates`).
+    /// PatternInfo / When coverage reads
+    /// [`crate::substrate_library::coverage_candidates`] — SoT
+    /// `tests/data/coverage_substrates.txt` — not this field.
+    example_substrates: Vec<&'static str>,
+    /// Cross-language parity excuse (data). `None` ⇒ must pair with a
+    /// same-named Python leaf and match products. Non-empty ⇒ unpaired or
+    /// intentionally divergent; reason is the string (tests read attributes,
+    /// not hardcoded name lists).
+    pub parity_exception: Option<String>,
 }
 
 impl PartialEq for RuleSet {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.members == other.members
+            && self.example_substrates == other.example_substrates
+            && self.parity_exception == other.parity_exception
             && match (self.plan_fn, other.plan_fn) {
                 (None, None) => true,
                 (Some(a), Some(b)) => std::ptr::fn_addr_eq(a, b),
@@ -117,6 +132,8 @@ impl RuleSet {
             name,
             plan_fn: None,
             members: patterns.into_iter().map(RuleMember::Pattern).collect(),
+            example_substrates: Vec::new(),
+            parity_exception: None,
         }
     }
 
@@ -126,6 +143,8 @@ impl RuleSet {
             name,
             plan_fn: None,
             members: sets.into_iter().map(RuleMember::Set).collect(),
+            example_substrates: Vec::new(),
+            parity_exception: None,
         }
     }
 
@@ -133,6 +152,27 @@ impl RuleSet {
     pub fn with_canonical_plan(mut self, f: CanonicalPlanFn) -> Self {
         self.plan_fn = Some(f);
         self
+    }
+
+    /// Attach example substrates (see [`Self::example_substrates`]).
+    pub fn with_example_substrates(
+        mut self,
+        smiles: impl IntoIterator<Item = &'static str>,
+    ) -> Self {
+        self.example_substrates = smiles.into_iter().collect();
+        self
+    }
+
+    /// Mark this leaf as excused from Rust↔Python product parity (or as
+    /// intentionally unpaired). Reason is required; empty is rejected by tests.
+    pub fn with_parity_exception(mut self, reason: impl Into<String>) -> Self {
+        self.parity_exception = Some(reason.into());
+        self
+    }
+
+    /// SMILES that must exercise this leaf's PatternInfo / When arms.
+    pub fn example_substrates(&self) -> &[&'static str] {
+        &self.example_substrates
     }
 
     /// `true` when a composite [`Self::canonical_plan`] hook is attached.
@@ -342,8 +382,203 @@ fn add_hydroxyl(mol: &Molecule, carbon: usize) -> Result<Molecule, ForestError> 
     Ok(product)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RingOpenOxygenate {
+    Alcohol,
+    Carbonyl,
+    Carboxylic,
+    /// Ester/amide/lactone: cleave map2–map3; add OH on map2.
+    HydrolysisAddWater,
+    /// Same cut without adding water (aldehyde + alcohol pieces).
+    HydrolysisCleave,
+    /// Hemiaminal / hemiacetal: cleave map1–map2; promote map3–map1 to double
+    /// (`[*:3]=[*:1].[*:2]`). No new O — the reactant OH collapses to carbonyl.
+    Hemiaminal,
+}
+
+/// Detect `>>(O-[*:1].[*:2])` / `>>([*:2].[*:1]-O)` / carbonyl / carboxylic /
+/// hydrolysis `[*:2](O).[*:3]` / hemiaminal `[*:3]=[*:1].[*:2]` forms.
+fn ring_open_oxygenate_mode(smirks: &str) -> Option<RingOpenOxygenate> {
+    let product = smirks.split_once(">>")?.1.trim();
+    let product = product
+        .strip_prefix('(')
+        .and_then(|p| p.strip_suffix(')'))
+        .unwrap_or(product);
+    if !product.contains('.') {
+        return None;
+    }
+    // Hydrolysis before generic carbonyl/alcohol (uses map 2/3, not map 1).
+    // Require the carbonyl oxygen map writeup so gem-dihalide OxDehal
+    // `>>[*:1].[*:2](O)=O.[*:3]` is not misclassified.
+    if product.contains("[*:1]=[*:2](O)") {
+        return Some(RingOpenOxygenate::HydrolysisAddWater);
+    }
+    if product.contains("[*:1]=[*:2].[*:3]") {
+        return Some(RingOpenOxygenate::HydrolysisCleave);
+    }
+    // Existing OH collapses to carbonyl while cutting C–hetero (map 1–2).
+    // Distinct from adding `O=` / `[*:1]=O` — chematic A.B on a ring drops
+    // connectivity and wrongly bifurcates (cyclic hemiaminal → amino-aldehyde).
+    if product.contains("[*:3]=[*:1].[*:2]") {
+        return Some(RingOpenOxygenate::Hemiaminal);
+    }
+    // Carboxylic before bare carbonyl (`(=O)O` contains `=O`).
+    if product.contains("[*:1](=O)O") {
+        return Some(RingOpenOxygenate::Carboxylic);
+    }
+    if product.contains("O=[*:1]") || product.contains("[*:1]=O") {
+        return Some(RingOpenOxygenate::Carbonyl);
+    }
+    if product.contains("O-[*:1]") || product.contains("[*:1]-O") {
+        return Some(RingOpenOxygenate::Alcohol);
+    }
+    None
+}
+
+/// Chematic cleavage SMIRKS (`A.B`) drops ring atoms and can fail to apply on
+/// open chains (methyl acetate cc_quat). Break the mapped bond and oxygenate
+/// on the live graph; split into fragments when the cut disconnects.
+fn cleave_oxygenate(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    mode: RingOpenOxygenate,
+) -> Option<Vec<Molecule>> {
+    use crate::valence::{edited_valence_atoms, fill_closed_shell_h};
+
+    let (left, right, oxygenate) = match mode {
+        RingOpenOxygenate::HydrolysisAddWater | RingOpenOxygenate::HydrolysisCleave => {
+            let carbon = *mapped.get(&2)?;
+            let hetero = *mapped.get(&3)?;
+            (carbon, hetero, carbon)
+        }
+        // Alcohol / Carbonyl / Carboxylic / Hemiaminal: cleave map 1–2.
+        RingOpenOxygenate::Alcohol
+        | RingOpenOxygenate::Carbonyl
+        | RingOpenOxygenate::Carboxylic
+        | RingOpenOxygenate::Hemiaminal => {
+            let left = *mapped.get(&1)?;
+            let right = *mapped.get(&2)?;
+            (left, right, left)
+        }
+    };
+    let (bond_idx, bond) = mol.bond_between(atom_idx(left), atom_idx(right))?;
+    // Oxygenate cleavage is a σ-bond cut (Me–O, ring Kekulé single, or the
+    // aromatic bond when no single parent exists). Do not cleave a carbonyl
+    // C=O into atomic O + hemiacetal (methyl acetate).
+    match bond.order {
+        BondOrder::Single | BondOrder::Aromatic => {}
+        _ => return None,
+    }
+    let mut product = mol.with_bond_removed(bond_idx);
+    match mode {
+        RingOpenOxygenate::Alcohol | RingOpenOxygenate::HydrolysisAddWater => {
+            let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(oxygenate), oxygen, BondOrder::Single)
+                .ok()?;
+        }
+        RingOpenOxygenate::Carbonyl => {
+            let (next, oxygen) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(oxygenate), oxygen, BondOrder::Double)
+                .ok()?;
+        }
+        RingOpenOxygenate::Carboxylic => {
+            let (next, oxo) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(oxygenate), oxo, BondOrder::Double)
+                .ok()?;
+            let (next, hydroxy) = product.with_atom_added(Atom::organic(Element::O));
+            product = next;
+            product
+                .add_bond(atom_idx(oxygenate), hydroxy, BondOrder::Single)
+                .ok()?;
+        }
+        RingOpenOxygenate::HydrolysisCleave => {}
+        RingOpenOxygenate::Hemiaminal => {
+            // Map 3 is the reactant OH oxygen; promote O–C to O=C (no new atom).
+            let oxygen = *mapped.get(&3)?;
+            let (oh_bond_idx, oh_bond) =
+                product.bond_between(atom_idx(oxygen), atom_idx(left))?;
+            match oh_bond.order {
+                BondOrder::Single | BondOrder::Aromatic => {}
+                _ => return None,
+            }
+            product.set_bond_order(oh_bond_idx, BondOrder::Double);
+            let ox_el = product.atom(atom_idx(oxygen)).element;
+            product = product.with_atom_element(atom_idx(oxygen), ox_el);
+        }
+    }
+    // Bracket H on the cleaved atoms (e.g. pyrrole [nH]) is stale after the
+    // bond break; clear so chematic recomputes implicit H (aniline NH2).
+    let left_el = product.atom(atom_idx(left)).element;
+    let right_el = product.atom(atom_idx(right)).element;
+    product = product.with_atom_element(atom_idx(left), left_el);
+    product = product.with_atom_element(atom_idx(right), right_el);
+
+    // Emit-path closed-shell settle (same as pair dealkylate): fill H from
+    // remaining bond orders so ring-open leaves are not radicals / overfilled.
+    for a in edited_valence_atoms(mol, &product) {
+        fill_closed_shell_h(&mut product, a);
+    }
+
+    let mut frags: Vec<Molecule> = product
+        .fragments()
+        .into_iter()
+        .filter(|f| accept_product(f))
+        .collect();
+    if frags.is_empty() && accept_product(&product) {
+        frags.push(product);
+    }
+    if frags.is_empty() {
+        None
+    } else {
+        Some(frags)
+    }
+}
+
+fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
+    for ring in find_sssr(mol).rings() {
+        let atoms: BTreeSet<usize> = ring.iter().copied().map(atom_usize).collect();
+        if atoms.contains(&left) && atoms.contains(&right) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Atoms of the σ bond the mode cleaves (hydrolysis map 2–3; else map 1–2).
+/// Hemiaminal also maps the OH as 3, so "has map 3" is not hydrolysis.
+fn cleaved_mapped_pair(
+    mode: RingOpenOxygenate,
+    mapped: &BTreeMap<u16, usize>,
+) -> Option<(usize, usize)> {
+    match mode {
+        RingOpenOxygenate::HydrolysisAddWater | RingOpenOxygenate::HydrolysisCleave => {
+            Some((*mapped.get(&2)?, *mapped.get(&3)?))
+        }
+        RingOpenOxygenate::Alcohol
+        | RingOpenOxygenate::Carbonyl
+        | RingOpenOxygenate::Carboxylic
+        | RingOpenOxygenate::Hemiaminal => Some((*mapped.get(&1)?, *mapped.get(&2)?)),
+    }
+}
+
+fn mapped_bond_in_ring(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    mode: RingOpenOxygenate,
+) -> bool {
+    let Some((left, right)) = cleaved_mapped_pair(mode, mapped) else {
+        return false;
+    };
+    atoms_share_ring(mol, left, right)
+}
+
 /// Same as [`apply_edit_mols`], returning product CSMIs.
-#[allow(dead_code)]
 pub(crate) fn apply_edit_for_candidate(
     mol: &Molecule,
     pattern: &PatternInfo,
@@ -363,15 +598,24 @@ pub(crate) fn apply_edit_mols(
 ) -> Result<Vec<Molecule>, ForestError> {
     let products = apply_edit_mols_raw(mol, pattern, mapped)?;
     // Aromatic alkene/alkyne SMIRKS can rematerialize the reactant (pyrrole /
-    // thiophene H). Refuse identity — same gate as pair path_end (C18).
+    // thiophene H). Refuse identity — same gate as pair path_end.
     let parent_csmi = canon_smiles(mol);
+    let o_leave = pattern.effect.cleaves
+        && pattern.effect.leave_formula == crate::pattern::leave_o();
     Ok(products
         .into_iter()
         .filter(|p| canon_smiles(p) != parent_csmi)
+        .filter(|p| {
+            if o_leave {
+                accept_o_leave_product(mol, p)
+            } else {
+                true
+            }
+        })
         .collect())
 }
 
-fn apply_edit_mols_raw(
+pub(crate) fn apply_edit_mols_raw(
     mol: &Molecule,
     pattern: &PatternInfo,
     mapped: &BTreeMap<u16, usize>,
@@ -389,12 +633,115 @@ fn apply_edit_mols_raw(
             }
         }
         Edit::Smirks(smirks) => {
+            // CH2 leave (dioxole methylene, …): chematic SMIRKS disconnect
+            // drops ring bonds and opens the aromatic system. Removing the
+            // leave carbon on the live mol preserves the ring (catechol).
+            if pattern.effect.leave_count == Some(1)
+                && pattern.effect.leave_formula == crate::pattern::leave_ch2()
+            {
+                if let Some(products) = remove_mapped_ch2_leave(mol, mapped) {
+                    return Ok(products);
+                }
+            }
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
-            apply_smirks_at(smirks, &work, mapped)
+            let mode = ring_open_oxygenate_mode(smirks);
+            // Ring bond: chematic A.B returns wrong non-empty fragments — prefer
+            // graph edit (σ cut on Kekulé single or aromatic). Open-chain: try
+            // SMIRKS first (anisole O-dealk); fall back to graph edit when
+            // chematic apply is empty (methyl acetate).
+            if let Some(mode) = mode {
+                // Hydrolysis graph edit is authoritative (chematic A.B drops the
+                // ring hetero). Prefer it on ring cuts and for Hydrolysis* modes
+                // on open esters before SMIRKS junk.
+                let prefer_graph = mapped_bond_in_ring(&work, mapped, mode)
+                    || matches!(
+                        mode,
+                        RingOpenOxygenate::HydrolysisAddWater
+                            | RingOpenOxygenate::HydrolysisCleave
+                    );
+                if prefer_graph {
+                    if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
+                        // Ring-open must stay one connected piece. A ring σ cut
+                        // that yields ≥2 fragments is a bad parent/cut (thiophene
+                        // truncated aldehyde + junk leave) — refuse rather than
+                        // emit or fall through to aromatic SMIRKS.
+                        if mapped_bond_in_ring(&work, mapped, mode) && products.len() >= 2 {
+                            return Ok(Vec::new());
+                        }
+                        return Ok(products);
+                    }
+                    if mapped_bond_in_ring(&work, mapped, mode) {
+                        // Ring oxygenate refused — do not fall through to aromatic
+                        // SMIRKS junk (thiophene `O=CC=CS` / unparseable `:ccs`).
+                        return Ok(Vec::new());
+                    }
+                }
+            }
+            let smirks_products = apply_smirks_at(smirks, &work, mapped)?;
+            if !smirks_products.is_empty() {
+                let mut out = Vec::new();
+                for mut p in smirks_products {
+                    if pattern.name == "hydroxy" {
+                        let s_on_product = p.atoms().find_map(|(idx, atom)| {
+                            (atom.element == Element::S).then_some(atom_usize(idx))
+                        });
+                        if let Some(s) = s_on_product {
+                            p = normalize_hetaryl_s_o_hydroxy(p, s);
+                        }
+                    }
+                    if accept_product(&p) {
+                        out.push(p);
+                    }
+                }
+                return Ok(out);
+            }
+            if let Some(mode) = mode {
+                if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
+                    return Ok(products);
+                }
+            }
+            Ok(Vec::new())
         }
         Edit::PairEndpoint(_) => Ok(Vec::new()),
     }
+}
+
+/// Remove a mapped dioxole-style methylene (C with two O neighbors).
+///
+/// Returns the aromatized heavy fragment plus a methane leave piece — matching
+/// Python's catechol + C split for benzodioxole reduction.
+fn remove_mapped_ch2_leave(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+) -> Option<Vec<Molecule>> {
+    use chematic::core::Element;
+    let mut leave_idx: Option<usize> = None;
+    for &idx in mapped.values() {
+        let atom = mol.atom(atom_idx(idx));
+        if atom.element != Element::C {
+            continue;
+        }
+        let nbrs: Vec<_> = mol
+            .neighbors(atom_idx(idx))
+            .map(|(n, _)| mol.atom(n).element)
+            .collect();
+        if nbrs.len() == 2 && nbrs.iter().all(|e| *e == Element::O) {
+            leave_idx = Some(idx);
+            break;
+        }
+    }
+    let leave_idx = leave_idx?;
+    let (product, _remap) = mol.with_atom_removed(atom_idx(leave_idx));
+    let product = crate::mol::aromatize(&product);
+    if !accept_product(&product) {
+        return None;
+    }
+    let leave = crate::mol::parse_mol("C").ok()?;
+    if !accept_product(&leave) {
+        return None;
+    }
+    Some(vec![product, leave])
 }
 
 /// O-dealkylation of a methyl ether (anisole-shaped SMARTS / SMIRKS).
@@ -533,15 +880,18 @@ mod tests {
     fn filter_rules_reads_methide_as_an_effect_field() {
         let mut pattern = PatternInfo::hydroxyl("methide-ish", "[#6h3:1]");
         pattern.effect = Effect {
-            adds: None,
-            removes: Some("H".into()),
+            // Keep hydroxyl bags so materialize accepts the product; methide is
+            // the field under test for filter_rules.
+            adds: Some("O".into()),
+            removes: None,
             cleaves: false,
             methide: true,
             dearomatizes: false,
             leave_count: None,
             partner: None,
             ..Default::default()
-        };
+        }
+        .sealed();
         let set = RuleSet::new(Some("probe".into()), [pattern]);
         let refuse_methide = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| !p.effect.methide;
         assert!(products_of(&set, "CC", refuse_methide, accept_all_sites).is_empty());

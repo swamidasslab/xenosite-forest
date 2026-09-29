@@ -38,15 +38,25 @@ fn nonzero(counts: &BTreeMap<String, i32>) -> BTreeMap<String, i32> {
 
 fn sum_formulas(mols: &[Molecule]) -> Formula {
     let mut counts = BTreeMap::new();
-    let mut charge = 0i32;
+    let mut positive = 0i32;
+    let mut negative = 0i32;
     for mol in mols {
         let f = molecule_formula(mol);
         for (el, n) in f.counts {
-            *counts.entry(el).or_insert(0) += n;
+            if el == crate::forest::CHARGE_PLUS {
+                positive += n;
+            } else if el == crate::forest::CHARGE_MINUS {
+                negative += n;
+            } else {
+                *counts.entry(el).or_insert(0) += n;
+            }
         }
-        charge += f.charge;
     }
-    Formula { counts, charge }
+    Formula {
+        counts,
+        charge: 0,
+    }
+    .with_charge_units(positive, negative)
 }
 
 /// Expected net for multi-fragment cleavage: junction bags only.
@@ -310,5 +320,93 @@ mod tests {
         }
         .sealed();
         assert!(check_effect_delta_formula(&parent, &effect, &[product], "h").is_none());
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#[cfg(test)]
+mod alkene_probe {
+    use super::*;
+    use crate::ForestMol;
+    use crate::mol::canon_smiles;
+    use crate::rules::hydrogenation;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn alkene_patterns_do_not_duplicate_site_product() {
+        // Two patterns must not match the same site to yield the same product.
+        let substrates = ["C=C", "c1ccccc1", "C=C=O", "C=Cc1ccccc1", "CC=C", "c1ccc:C(:c1)=C=O"];
+        let mut dups = Vec::new();
+        for smi in substrates {
+            let Ok(parent) = ForestMol::parse(smi) else { continue };
+            let mut by_key: BTreeMap<(Vec<usize>, String), Vec<String>> = BTreeMap::new();
+            for site in hydrogenation().candidates(&parent).filter_map(Result::ok) {
+                if !site.pattern_name().starts_with("alkene") {
+                    continue;
+                }
+                let Ok(pieces) = site.materialize_mols() else { continue };
+                let mut atoms = site.site_atoms();
+                atoms.sort_unstable();
+                for p in pieces {
+                    let key = (atoms.clone(), canon_smiles(&p));
+                    by_key.entry(key).or_default().push(site.pattern_name().to_string());
+                }
+            }
+            for ((atoms, prod), names) in by_key {
+                let mut u = names.clone();
+                u.sort();
+                u.dedup();
+                if u.len() > 1 {
+                    dups.push(format!("{smi} atoms={atoms:?} product={prod} patterns={u:?}"));
+                }
+            }
+        }
+        assert!(
+            dups.is_empty(),
+            "overlapping alkene patterns on same site/product:\n  {}",
+            dups.join("\n  ")
+        );
+    }
+
+    #[test]
+    fn alkene_effect_bags_match_on_cumulene_ethene_benzene() {
+        for smi in ["C=C=O", "C=C", "c1ccccc1"] {
+            let parent = ForestMol::parse(smi).unwrap();
+            let mut saw = false;
+            for site in hydrogenation().candidates(&parent).filter_map(Result::ok) {
+                if !site.pattern_name().starts_with("alkene") {
+                    continue;
+                }
+                saw = true;
+                let Ok(pieces) = site.materialize_mols() else { continue };
+                if pieces.is_empty() {
+                    continue;
+                }
+                assert!(
+                    check_effect_delta_formula(
+                        parent.mol(),
+                        &site.effect,
+                        &pieces,
+                        site.pattern_name(),
+                    )
+                    .is_none(),
+                    "bag mismatch on {smi} / {}",
+                    site.pattern_name()
+                );
+            }
+            assert!(saw, "expected alkene* on {smi}");
+        }
     }
 }

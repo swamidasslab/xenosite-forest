@@ -1076,8 +1076,9 @@ pub struct FindPathConfig {
     pub stop_after_sealed_basins: Option<usize>,
     /// Normalize reactant and target with [`crate::normalize_tautomer`] once
     /// before search (chematic zwitterion → remove explicit H → canonical
-    /// tautomer, adopted with Forest tracing). Default **true**. Set false to
-    /// search the given forms as-is (and for any future inner map recursion).
+    /// tautomer, adopted with Forest tracing). Default **false** — search the
+    /// given forms as-is (parity / coverage baseline). Opt in when both ends
+    /// should share a chematic preferred form.
     pub normalize_tautomer: bool,
     /// When true with [`Self::normalize_tautomer`], append reverse target
     /// tautomer hops so emit ends in the **user** target form. Default
@@ -1100,7 +1101,7 @@ impl Default for FindPathConfig {
             diversity: false,
             timeout: None,
             stop_after_sealed_basins: None,
-            normalize_tautomer: true,
+            normalize_tautomer: false,
             invert_target_tautomer: false,
         }
     }

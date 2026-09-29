@@ -62,7 +62,13 @@ def test_forest_mol_normalize_tautomer_method():
 def test_find_path_normalize_tautomer_enol_keto():
     # Emit is normalized space — judge against normalized target CSMI.
     want, _ = normalize_tautomer("CC=O")
-    hits, _ = find_path("OC=C", "CC=O", max_paths=1, max_nodes=50)
+    hits, _ = find_path(
+        "OC=C",
+        "CC=O",
+        max_paths=1,
+        max_nodes=50,
+        normalize_tautomer=True,
+    )
     assert len(hits) == 1
     assert hits[0]["steps"] == []
     assert hits[0]["smiles"] == want.csmi
@@ -75,6 +81,7 @@ def test_find_path_invert_target_tautomer_not_implemented():
             "OC=C",
             max_paths=1,
             max_nodes=50,
+            normalize_tautomer=True,
             invert_target_tautomer=True,
         )
 

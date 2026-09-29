@@ -3,9 +3,9 @@
 //! `SiteKind`, `Edit`, and `Effect` are the categories. Methide is an effect
 //! field, not a pathway flag.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::mol::{Molecule, atom_idx};
+use crate::mol::{Molecule, atom_idx, atom_usize};
 
 /// What kind of site this pattern names. Discovery indexes follow this.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,7 +95,9 @@ impl When {
 }
 
 /// Known element symbols, longest first (for bag strings like ``Cl``, ``Br``).
-const ELEMENT_SYMBOLS: &[&str] = &["At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H"];
+const ELEMENT_SYMBOLS: &[&str] = &[
+    "At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H", "+", "-",
+];
 
 /// Parse an ``adds`` / ``removes`` bag (``"OO"``, ``"HH"``, ``"Cl"``, ``"OH"``)
 /// into element → count. Unknown characters are skipped.
@@ -214,10 +216,18 @@ pub struct Effect {
     /// ``removes`` (e.g. dehydration ``OH``).
     pub leave_formula: BTreeMap<String, i32>,
     pub cleaves: bool,
+    /// Cleaved bond is in a ring (ring-open). Filled at resolve from the match.
+    pub breaks_ring: bool,
     /// Named leaving heavy-atom count (methyl dealkylation = 1). `None` = open.
     pub leave_count: Option<u16>,
     /// Effect bit, not a `pathways=("methide",)` switch.
     pub methide: bool,
+    /// Partner atom (non-site mapped) is exclusive to this ResonancePair end.
+    ///
+    /// Set when chemistry consumes that partner (bridging N/O on iminium /
+    /// hetero ``single_to_double`` / dealkylate). Not a global shared-map
+    /// refuse — methide alkyl (`partner == "C"`) leaves this false.
+    pub exclusive_partner: bool,
     /// Capability: pair/path may dearomatize. Resolved against system aromaticity.
     pub dearomatizes: bool,
     /// Methide / alkyl partner element hint (`"C"`). Filters read this.
@@ -410,6 +420,9 @@ impl PatternInfo {
         if out.effect.dearomatizes {
             out.effect.dearomatizes = site_map_aromatic(mol, mapped, &out.site_map);
         }
+        if out.effect.cleaves {
+            out.effect.breaks_ring = cleavage_breaks_ring(mol, mapped, &out.site_map);
+        }
         out
     }
 
@@ -440,6 +453,40 @@ pub fn site_map_aromatic(mol: &Molecule, mapped: &BTreeMap<u16, usize>, site_map
             .get(m)
             .is_some_and(|&i| mol.atom(atom_idx(i)).aromatic)
     })
+}
+
+/// True when the cleaved bond's atoms share a ring (Python `_cleavage_breaks_ring`).
+pub fn cleavage_breaks_ring(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    site_map: &[u16],
+) -> bool {
+    let (left, right) = if site_map.len() == 2 {
+        match (mapped.get(&site_map[0]), mapped.get(&site_map[1])) {
+            (Some(&a), Some(&b)) => (a, b),
+            _ => return false,
+        }
+    } else {
+        match (mapped.get(&1), mapped.get(&2)) {
+            (Some(&a), Some(&b)) => (a, b),
+            _ => return false,
+        }
+    };
+    let rings = chematic::perception::find_sssr(mol);
+    let mut left_rings = BTreeSet::new();
+    let mut right_rings = BTreeSet::new();
+    for (ri, ring) in rings.rings().iter().enumerate() {
+        for &atom in ring {
+            let i = atom_usize(atom);
+            if i == left {
+                left_rings.insert(ri);
+            }
+            if i == right {
+                right_rings.insert(ri);
+            }
+        }
+    }
+    !left_rings.is_disjoint(&right_rings)
 }
 
 /// How cleavage sides participate in cross-rule Or fold keys.

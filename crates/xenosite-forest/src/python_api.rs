@@ -28,11 +28,12 @@ use crate::pathway::PathwayOptions;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
 use crate::random_path::{random_path as random_path_rs, random_path_with};
 use crate::rules::{
-    dealkylation as dealkylation_rs, default_ruleset as default_ruleset_rs,
+    catalog_names, dealkylation as dealkylation_rs, default_ruleset as default_ruleset_rs,
     dehydrogenation as dehydrogenation_rs, epoxidation as epoxidation_rs,
     epoxide_opening as epoxide_opening_rs, hydrolysis as hydrolysis_rs,
-    hydroxylation as hydroxylation_rs, n_dealkylation as n_dealkylation_rs,
-    phase_one as phase_one_rs, quinone_formation as quinone_formation_rs,
+    hydroxylation as hydroxylation_rs, leaf_rule as leaf_rule_rs,
+    n_dealkylation as n_dealkylation_rs, phase_one as phase_one_rs,
+    quinone_formation as quinone_formation_rs,
 };
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
@@ -484,6 +485,20 @@ impl PyRuleSet {
         }
     }
 
+    /// Named leaf catalog rule (`Hydroxylation`, `Dealkylation`, …).
+    #[staticmethod]
+    fn leaf(name: &str) -> PyResult<Self> {
+        leaf_rule_rs(name)
+            .map(|inner| Self { inner })
+            .ok_or_else(|| PyValueError::new_err(format!("unknown leaf rule: {name:?}")))
+    }
+
+    /// Leaf names in catalog order.
+    #[staticmethod]
+    fn catalog_names() -> Vec<String> {
+        catalog_names().iter().map(|s| (*s).to_string()).collect()
+    }
+
     #[staticmethod]
     #[pyo3(signature = (sets, name=None))]
     fn compose(sets: Vec<PyRef<'_, PyRuleSet>>, name: Option<String>) -> Self {
@@ -495,6 +510,12 @@ impl PyRuleSet {
     #[getter]
     fn name(&self) -> Option<String> {
         self.inner.name.clone()
+    }
+
+    /// Cross-language parity excuse, if any (see Rust `RuleSet::parity_exception`).
+    #[getter]
+    fn parity_exception(&self) -> Option<String> {
+        self.inner.parity_exception.clone()
     }
 
     /// Direct member count (nested sets count as one member each).
@@ -710,7 +731,7 @@ fn normalize_tautomer(smiles: &str) -> PyResult<(PyForestMol, bool)> {
     score="log-neg-pc",
     timeout=None,
     network=None,
-    normalize_tautomer=true,
+    normalize_tautomer=false,
     invert_target_tautomer=false,
 ))]
 #[allow(clippy::too_many_arguments)]
@@ -926,7 +947,7 @@ fn parse_find_path_config(
     score="log-neg-pc",
     timeout=None,
     network=None,
-    normalize_tautomer=true,
+    normalize_tautomer=false,
     invert_target_tautomer=false,
 ))]
 #[allow(clippy::too_many_arguments)]
@@ -1112,6 +1133,16 @@ fn phase_one() -> PyRuleSet {
     wrap_ruleset(phase_one_rs())
 }
 
+/// Look up a sealed leaf by catalog name (`LEAF_CTORS`).
+///
+/// Used by native↔Rust product parity over the shared coverage substrate pool.
+#[pyfunction]
+fn leaf_rule(name: &str) -> PyResult<PyRuleSet> {
+    leaf_rule_rs(name)
+        .map(wrap_ruleset)
+        .ok_or_else(|| PyValueError::new_err(format!("unknown leaf rule: {name}")))
+}
+
 #[pyfunction]
 fn epoxidation() -> PyRuleSet {
     wrap_ruleset(epoxidation_rs())
@@ -1201,6 +1232,7 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(normalize_tautomer, m)?)?;
     m.add_function(wrap_pyfunction!(random_path, m)?)?;
     m.add_function(wrap_pyfunction!(phase_one, m)?)?;
+    m.add_function(wrap_pyfunction!(leaf_rule, m)?)?;
     m.add_function(wrap_pyfunction!(epoxidation, m)?)?;
     m.add_function(wrap_pyfunction!(quinone_formation, m)?)?;
     m.add_function(wrap_pyfunction!(epoxide_opening, m)?)?;

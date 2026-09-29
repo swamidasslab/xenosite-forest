@@ -3,27 +3,24 @@
 //! Structural invariants + chemistry probe: if applying a pattern clears
 //! aromaticity at `site_map` atoms, the catalog must declare
 //! `Effect.dearomatizes` capability (resolved false on aliphatic matches).
+//!
+//! Effect / When coverage scans the shared native-parity pool
+//! [`crate::substrate_library::coverage_candidates`]
+//! (`substrate_library` + `pattern_substrates` from
+//! `tests/data/coverage_substrates.txt`) — same split as
+//! historical native `SUBSTRATE_LIBRARY` + `_PATTERN_SUBSTRATES`. Per-leaf
+//! [`RuleSet::example_substrates`] / [`crate::rules::LEAF_EXAMPLE_SUBSTRATES`]
+//! stay the short site_kind list (native `_example_substrates`); do not grow
+//! that table to chase mute patterns.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::as_forest_mol;
 use crate::ForestMol;
-use crate::mol::{atom_idx, parse_mol};
+use crate::mol::atom_idx;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteKind, compose_delta_formula};
-use crate::rules::{catalog_names, leaf_rule};
-
-/// Probe mols that expose aromatic (and a few aliphatic) sites.
-const PROBES: &[&str] = &[
-    "c1ccccc1",
-    "COc1ccccc1",
-    "COc1ccc(O)cc1",
-    "Oc1ccc(O)cc1",
-    "c1ccc2ccccc2c1",
-    "COc1ccc2ccccc2c1",
-    "C=C",
-    "CC=O",
-    "C1OC1",
-];
+use crate::rules::{LEAF_EXAMPLE_SUBSTRATES, catalog_names, leaf_rule};
+use crate::substrate_library::coverage_candidates;
 
 /// Conjugation adducts — not publicly published; Effect bags still unfinished.
 /// Tracked as xfail: [`catalog_adduct_effect_and_atom_diff_match_materialized_products`].
@@ -66,14 +63,12 @@ fn assert_site_map_matches_kind(leaf: &str, info: &PatternInfo) {
     );
     let n = info.site_map.len();
     match info.site_kind {
-        // Atom primary; extra maps allowed (e.g. Dehydration beta-elim adjacent C).
         SiteKind::Atom => assert!(n >= 1, "{leaf}/{}: Atom site_map empty", info.name),
         SiteKind::Bond | SiteKind::DirectedBond => assert_eq!(
             n, 2,
             "{leaf}/{}: {:?} site_map must be length 2, got {:?}",
             info.name, info.site_kind, info.site_map
         ),
-        // ResonancePair ends are one atom; one-bond SMARTS may list both.
         SiteKind::AtomPair => assert!(
             n == 1 || n == 2,
             "{leaf}/{}: AtomPair site_map must be length 1 or 2, got {:?}",
@@ -107,10 +102,24 @@ fn assert_edit_present(leaf: &str, info: &PatternInfo) {
 #[test]
 fn catalog_pattern_info_structural() {
     let mut seen_leaves = BTreeSet::new();
+    let example_names: BTreeSet<&str> = LEAF_EXAMPLE_SUBSTRATES.iter().map(|(n, _)| *n).collect();
+    assert_eq!(
+        example_names.len(),
+        LEAF_EXAMPLE_SUBSTRATES.len(),
+        "duplicate leaf in LEAF_EXAMPLE_SUBSTRATES"
+    );
     for &name in catalog_names() {
         assert!(seen_leaves.insert(name), "duplicate catalog name {name}");
+        assert!(
+            example_names.contains(name),
+            "{name}: missing from LEAF_EXAMPLE_SUBSTRATES (beside LEAF_CTORS in rules.rs)"
+        );
         let set = leaf_rule(name).unwrap_or_else(|| panic!("leaf_rule({name})"));
         assert_eq!(set.name.as_deref(), Some(name));
+        assert!(
+            !set.example_substrates().is_empty(),
+            "{name}: example_substrates empty after seal_leaf"
+        );
         let patterns = set.patterns();
         assert!(
             !patterns.is_empty(),
@@ -151,8 +160,8 @@ fn catalog_pattern_info_structural() {
     );
 }
 
-/// If a catalog pattern clears aromaticity at site_map atoms on a probe,
-/// `Effect.dearomatizes` capability must be true on the catalog record.
+/// If a catalog pattern clears aromaticity at site_map atoms on a coverage
+/// candidate, `Effect.dearomatizes` capability must be true on the catalog record.
 #[test]
 fn catalog_dearomatizes_capability_matches_chemistry() {
     let mut misses: Vec<String> = Vec::new();
@@ -164,7 +173,7 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
             .map(|p| (p.name.as_str(), p))
             .collect();
 
-        for &smi in PROBES {
+        for &smi in coverage_candidates() {
             let Ok(parent) = ForestMol::parse(smi) else {
                 continue;
             };
@@ -175,12 +184,7 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
                 let Some(catalog_info) = catalog.get(c.pattern.name.as_str()) else {
                     continue;
                 };
-                if catalog_info.effect.dearomatizes {
-                    continue;
-                }
-                // Cleavage can destroy aromatic sites without being a
-                // dearomatizing pathway — capability is for kept-site ring loss.
-                if catalog_info.effect.cleaves {
+                if catalog_info.effect.dearomatizes || catalog_info.effect.cleaves {
                     continue;
                 }
                 let site_atoms: Vec<usize> = catalog_info
@@ -212,7 +216,6 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
                     let Some(tag) = parent.tag_of(r) else {
                         return false;
                     };
-                    // Atom must still be present; gone/cleaved is not dearomatize.
                     let Some(j) = child.index_of(tag) else {
                         return false;
                     };
@@ -235,7 +238,25 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
     );
 }
 
-/// Hits + miss messages for Effect / atom_diff accuracy on `leaves` × PROBES.
+fn expected_coverage_keys(leaves: &[&str]) -> (BTreeSet<String>, BTreeSet<String>) {
+    let mut patterns = BTreeSet::new();
+    let mut whens = BTreeSet::new();
+    for &name in leaves {
+        let set = leaf_rule(name).expect(name);
+        for info in set.patterns() {
+            patterns.insert(format!("{name}/{}", info.name));
+            for (i, arm) in info.possibilities.iter().enumerate() {
+                if arm.when.is_some() {
+                    whens.insert(format!("{name}/{}#when{i}", info.name));
+                }
+            }
+        }
+    }
+    (patterns, whens)
+}
+
+/// Effect / atom_diff accuracy + pattern/When coverage on
+/// [`coverage_candidates`] (crate data file: library + pattern sections).
 fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
     use crate::atom_diff::{effect_adds_oxygen, effect_removes_h};
     use crate::forest::{formula_delta, molecule_formula};
@@ -245,11 +266,22 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
         effect.adds.as_deref().is_some_and(|a| a.contains('H'))
     }
 
+    let (want_patterns, want_whens) = expected_coverage_keys(leaves);
+    let mut hit_patterns: BTreeSet<String> = BTreeSet::new();
+    let mut hit_whens: BTreeSet<String> = BTreeSet::new();
     let mut misses: Vec<String> = Vec::new();
     let mut hits = 0usize;
+
     for &name in leaves {
         let set = leaf_rule(name).expect(name);
-        for &smi in PROBES {
+        let catalog: BTreeMap<String, PatternInfo> = set
+            .patterns()
+            .into_iter()
+            .cloned()
+            .map(|p| (p.name.clone(), p))
+            .collect();
+
+        for &smi in coverage_candidates() {
             let Ok(parent) = ForestMol::parse(smi) else {
                 continue;
             };
@@ -258,10 +290,41 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
             };
             let parent_f = molecule_formula(parent.mol());
             for c in cands {
+                if let Some(pair) = c.pair.as_ref() {
+                    hit_patterns.insert(format!("{name}/{}", pair.left.name));
+                    hit_patterns.insert(format!("{name}/{}", pair.right.name));
+                } else {
+                    hit_patterns.insert(format!("{name}/{}", c.pattern.name));
+                }
+
+                let infos: Vec<&PatternInfo> = if let Some(pair) = c.pair.as_ref() {
+                    vec![&pair.left, &pair.right]
+                } else {
+                    catalog.get(&c.pattern.name).into_iter().collect()
+                };
+                for info in infos {
+                    if info.possibilities.is_empty() {
+                        continue;
+                    }
+                    let selected = info.possibilities.iter().position(|a| {
+                        a.when.as_ref().is_some_and(|w| {
+                            w.matches(parent.mol(), &c.mapped)
+                                || c.pair
+                                    .as_ref()
+                                    .is_some_and(|p| w.matches(parent.mol(), &p.map2))
+                        })
+                    });
+                    if let Some(i) = selected {
+                        hit_whens.insert(format!("{name}/{}#when{i}", info.name));
+                    }
+                }
+
                 let Ok(pieces) = c.materialize_mols() else {
                     continue;
                 };
                 if pieces.is_empty() {
+                    // Match without materialize is soft here — same as native
+                    // coverage (resolution on SMARTS hit, not product emit).
                     continue;
                 }
                 hits += 1;
@@ -277,7 +340,6 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
                     ));
                     continue;
                 }
-                // Bag flags vs observed net (cleavage: sum products − parent).
                 let observed = if c.effect.cleaves && pieces.len() > 1 {
                     let mut counts = BTreeMap::new();
                     for piece in &pieces {
@@ -299,8 +361,6 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
                 let dh = observed.get("H").copied().unwrap_or(0);
                 let d_o = observed.get("O").copied().unwrap_or(0);
                 if dh > 0 && !effect_adds_h(&c.effect) && !c.effect.cleaves {
-                    // Cleavage nets can gain H from caps without an adds bag when
-                    // leave bookkeeping cancels; non-cleaving must declare HH.
                     misses.push(format!(
                         "{name}/{} on {smi}: observed H:+{dh} but Effect adds has no H ({:?})",
                         c.pattern_name, c.effect.adds
@@ -321,16 +381,34 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
             }
         }
     }
+
+    let mute_patterns: Vec<_> = want_patterns.difference(&hit_patterns).cloned().collect();
+    if !mute_patterns.is_empty() {
+        misses.push(format!(
+            "patterns never matched on coverage_candidates ({}):\n  {}\n  \
+             (expand tests/data/coverage_substrates.txt [pattern])",
+            mute_patterns.len(),
+            mute_patterns.join("\n  ")
+        ));
+    }
+    let mute_whens: Vec<_> = want_whens.difference(&hit_whens).cloned().collect();
+    if !mute_whens.is_empty() {
+        misses.push(format!(
+            "When arms never selected on coverage_candidates ({}):\n  {}\n  \
+             (expand tests/data/coverage_substrates.txt [pattern])",
+            mute_whens.len(),
+            mute_whens.join("\n  ")
+        ));
+    }
+
     (hits, misses)
 }
 
 #[test]
 fn catalog_effect_and_atom_diff_match_materialized_products() {
-    //! Every non-adduct LEAF_CTORS hit on PROBES: declared Effect (incl. H)
-    //! matches the product formula delta, and atom_diff bag flags agree.
-    //! When OR arms disagree on H/O, annotate each arm with [`When`] — do not
-    //! hide disagreement by dropping H from the check.
-    //! Adducts: see xfail [`catalog_adduct_effect_and_atom_diff_match_materialized_products`].
+    //! Every non-adduct PatternInfo + When arm on
+    //! `coverage_candidates()` (crate data file): match coverage, then
+    //! declared Effect (incl. H) matches product deltas when materialize succeeds.
     let leaves: Vec<&str> = catalog_names()
         .iter()
         .copied()
@@ -339,37 +417,35 @@ fn catalog_effect_and_atom_diff_match_materialized_products() {
     let (hits, misses) = effect_atom_diff_accuracy(&leaves);
     assert!(
         hits > 0,
-        "expected at least one materialize hit across catalog probes"
+        "expected at least one materialize hit across coverage_candidates"
     );
     assert!(
         misses.is_empty(),
-        "PatternInfo Effect / atom_diff bag flags disagree with materialized products (incl. H).\n\
+        "PatternInfo Effect / coverage disagree with coverage_substrates.txt.\n\
          When OR arms disagree, use When possibilities — do not drop H from the check.\n  {}",
         misses.join("\n  ")
     );
 }
 
-/// Same Effect/atom_diff accuracy gate as the catalog test, for conjugation
-/// adducts only. `#[ignore]` = xfail until adduct Effect bags are refactored
-/// (not published yet). Run: `cargo test -p xenosite-forest catalog_adduct -- --ignored`
+/// Same Effect/atom_diff + coverage gate for conjugation adducts only.
+/// `#[ignore]` = xfail until adduct Effect bags are refactored (not published).
 #[test]
 #[ignore = "xfail: adduct Effect bags unfinished / not published; remove ignore when refactor seals formula Effects"]
 fn catalog_adduct_effect_and_atom_diff_match_materialized_products() {
     let (hits, misses) = effect_atom_diff_accuracy(ADDUCT_LEAVES);
     assert!(
         hits > 0,
-        "expected at least one adduct materialize hit on probes"
+        "expected at least one adduct materialize hit on coverage_candidates"
     );
     assert!(
         misses.is_empty(),
-        "adduct Effect / atom_diff bag flags disagree with products (incl. H).\n  {}",
+        "adduct Effect / coverage disagree with coverage_substrates.txt.\n  {}",
         misses.join("\n  ")
     );
 }
 
 #[test]
 fn catalog_resolve_dearomatizes_on_aromatic_probes() {
-    // Capability true + aromatic site_map → resolved true; aliphatic → false.
     for &name in catalog_names() {
         let set = leaf_rule(name).expect(name);
         let capable: Vec<&str> = set
@@ -381,7 +457,7 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
         if capable.is_empty() {
             continue;
         }
-        for &smi in PROBES {
+        for &smi in coverage_candidates() {
             let Ok(mol) = as_forest_mol(smi) else {
                 continue;
             };
@@ -398,13 +474,16 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
                     .iter()
                     .filter_map(|m| c.mapped.get(m).copied())
                     .any(|i| mol.mol().atom(atom_idx(i)).aromatic);
-                // Candidate carries resolved effect (context mol).
                 assert_eq!(
-                    c.pattern.effect.dearomatizes, site_aromatic,
-                    "{name}/{} on {smi}: resolved dearomatizes={} but site_aromatic={site_aromatic}",
-                    c.pattern.name, c.pattern.effect.dearomatizes
+                    c.effect.dearomatizes, site_aromatic,
+                    "{name}/{} on {smi}: resolved dearomatizes={} site_aromatic={}",
+                    c.pattern.name, c.effect.dearomatizes, site_aromatic
                 );
             }
         }
     }
 }
+
+
+
+

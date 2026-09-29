@@ -70,7 +70,7 @@ def find_path(
     score: str = "log-neg-pc",
     timeout: float | None = None,
     network: Any | None = None,
-    normalize_tautomer: bool = True,
+    normalize_tautomer: bool = False,
     invert_target_tautomer: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Run default-ruleset chematic ``find_path``; return ``(hits, counters)``.
@@ -80,10 +80,11 @@ def find_path(
     ``{"smiles": str, "steps": [{"rule": str, "site": list[str]}]}``.
     ``timeout`` is an optional wall-clock budget in seconds; counters include
     ``timed_out``. Pass ``network=`` a :class:`MetabolicNetwork` to record hops.
-    ``normalize_tautomer`` (default True) runs chematic zwitterion → remove
+    ``normalize_tautomer`` (default False) runs chematic zwitterion → remove
     explicit H → canonical tautomer on reactant and target once before search.
-    Emit stays in that normalized target form unless
-    ``invert_target_tautomer`` (not implemented yet when the target changes).
+    Opt in when both ends should share a chematic preferred form. Emit stays
+    in that normalized target form unless ``invert_target_tautomer`` (not
+    implemented yet when the target changes).
 
     This is the Rust product door. New search features belong in the Rust crate
     and this wrapper — not in :mod:`xenosite.forest.native`.
@@ -119,7 +120,7 @@ def find_path_partial(
     score: str = "log-neg-pc",
     timeout: float | None = None,
     network: Any | None = None,
-    normalize_tautomer: bool = True,
+    normalize_tautomer: bool = False,
     invert_target_tautomer: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Exact hits plus end-of-search closest reaches when the target is missed.
@@ -195,6 +196,12 @@ def _ruleset(attr: str, label: str) -> Any:
             f"(maturin develop --features python,extension-module) to use {label}"
         )
     return factory()
+
+
+def leaf_rule(name: str) -> Any:
+    """Sealed leaf ``RuleSet`` by catalog name (Rust ``LEAF_CTORS``)."""
+
+    return load().leaf_rule(name)
 
 
 def PhaseOne() -> Any:

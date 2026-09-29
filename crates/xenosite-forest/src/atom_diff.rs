@@ -92,8 +92,9 @@ impl AtomDiff {
     }
 
     fn field_cost(&self) -> usize {
-        // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a cost
-        // term: `formula_l1` counts it like any element; H at atoms is via
+        // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H and formal
+        // charge are not field-cost terms: `formula_l1` counts them like any
+        // formula key (``H``, ``"+"``, ``"-"``); per-atom H is via
         // [`Self::atom_h_delta`] (no cache).
         //
         // `n_extra` (unmapped target heavies) weighs more than cleaved /
@@ -2174,7 +2175,8 @@ mod tests {
     #[test]
     fn h_via_methods_not_stored_cost_or_field() {
         // H is never a stored AtomDiff field and never a field_cost term.
-        // Per-atom H is recomputed; global H rides formula_l1 (like any element).
+        // Per-atom H is recomputed; global H and formal-charge units ride
+        // formula_l1 (like any formula key).
         use crate::forest::{formula_l1, molecule_formula};
 
         // ethane → ethene: same MCS skeleton → atom cost 0; H 6→4 → formula_l1=2;
@@ -2230,6 +2232,16 @@ mod tests {
             -1,
             "[NH4+] has 4 H, N has 3 → delta −1 (not −5 from double-count)"
         );
+
+        // Neutral → cation: charge units ride formula_l1; atom field_cost stays
+        // map/aromatic only (no stored charge field on AtomDiff).
+        use crate::forest::{CHARGE_PLUS, formula_delta};
+        let d5 = atom_diff(&ammonia, &ammonium);
+        assert_eq!(d5.cost(), 0, "same heavy map; charge not in field_cost: {d5:?}");
+        let f_charge = formula_l1(&molecule_formula(&ammonia), &molecule_formula(&ammonium));
+        assert!(f_charge >= 1, "formula_l1 must see charge units: {f_charge}");
+        let delta = formula_delta(&molecule_formula(&ammonia), &molecule_formula(&ammonium));
+        assert_eq!(delta.counts.get(CHARGE_PLUS), Some(&1));
     }
 
     #[test]

@@ -646,7 +646,7 @@ fn run_find_path(
         drop_skeleton_twins: drop_skeleton_twins.unwrap_or(true),
         diversity: diversity.unwrap_or(false),
         timeout,
-        normalize_tautomer: normalize_tautomer.unwrap_or(true),
+        normalize_tautomer: normalize_tautomer.unwrap_or(false),
         invert_target_tautomer: invert_target_tautomer.unwrap_or(false),
         ..FindPathConfig::default()
     };

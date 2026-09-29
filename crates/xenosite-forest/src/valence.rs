@@ -1,9 +1,15 @@
 //! Product gate: chematic valence plus forest's two-double nitrogen drop.
+//!
+//! Also: generic closed-shell H fill from bond orders + charge (emit path),
+//! not rule-named chemistry.
+
+use std::collections::BTreeSet;
 
 use chematic::core::BondOrder;
 use chematic::perception::validate_valence;
 
-use crate::mol::Molecule;
+use crate::kekule::bond_order_sums;
+use crate::mol::{Molecule, atom_idx, atom_usize};
 
 /// True when a nitrogen has two double bonds (`C=[N+]=C` is not an iminium).
 pub fn nitrogen_two_doubles(mol: &Molecule) -> bool {
@@ -24,12 +30,331 @@ pub fn nitrogen_two_doubles(mol: &Molecule) -> bool {
     false
 }
 
-/// Forest `_sanitize_piece`: valence ok and not the two-double nitrogen.
+/// Forest `_sanitize_piece`: valence ok, not the two-double nitrogen, and
+/// closed-shell (chematic does not model radicals — refuse underfilled C/N/O).
 pub fn accept_product(mol: &Molecule) -> bool {
     if !validate_valence(mol).is_empty() {
         return false;
     }
-    !nitrogen_two_doubles(mol)
+    if nitrogen_two_doubles(mol) {
+        return false;
+    }
+    if oxygen_oxonium(mol) {
+        return false;
+    }
+    if nitrogen_iminium(mol) {
+        return false;
+    }
+    if nitrogen_bonded_sulfinic_hydroxy_sulfur(mol) {
+        return false;
+    }
+    if nitrogen_anion(mol) {
+        return false;
+    }
+    if oxygen_anion_on_carbon(mol) {
+        return false;
+    }
+    closed_shell(mol)
+}
+
+/// Pair-endpoint materialize gate — **transitional soft failure layer**.
+///
+/// Should match [`accept_product`]. Any divergence (today: iminium refuse waiver
+/// when an endpoint is `iminium`) means pair materialize still mints structures
+/// the edit contract should not build. Fix emit in `pair_edit`, then delete
+/// the carve-out. See `docs/forest/HEURISTICS.md` (pair materialize / iminium).
+pub fn accept_pair_product(
+    mol: &Molecule,
+    left: &crate::pattern::PatternInfo,
+    right: &crate::pattern::PatternInfo,
+) -> bool {
+    let iminium_endpoint = |p: &crate::pattern::PatternInfo| {
+        matches!(&p.edit, crate::pattern::Edit::PairEndpoint(e) if e == "iminium")
+    };
+    let allow_iminium = iminium_endpoint(left) || iminium_endpoint(right);
+    if !validate_valence(mol).is_empty() {
+        return false;
+    }
+    if nitrogen_two_doubles(mol) {
+        return false;
+    }
+    if oxygen_oxonium(mol) {
+        return false;
+    }
+    if !allow_iminium && nitrogen_iminium(mol) {
+        return false;
+    }
+    if nitrogen_bonded_sulfinic_hydroxy_sulfur(mol) {
+        return false;
+    }
+    if nitrogen_anion(mol) {
+        return false;
+    }
+    if oxygen_anion_on_carbon(mol) {
+        return false;
+    }
+    closed_shell(mol)
+}
+
+/// Alkoxide / carboxylate / enolate (`CC[O-]`, `[O-]C(O)=`) and sulfoxide
+/// dianion junk (`C[S-](C)[O-]`). Keep `O-` on nitrogen (nitro / reduction
+/// anions) and on cationic S (S-oxide zwitterion). Closed-shell prefer
+/// (HEURISTICS C10).
+fn oxygen_anion_on_carbon(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() != 8 || atom.charge >= 0 {
+            continue;
+        }
+        let allowed = mol.neighbors(idx).any(|(nbr, _)| {
+            let n = mol.atom(nbr);
+            let z = n.element.atomic_number();
+            z == 7 || (z == 16 && n.charge > 0)
+        });
+        if !allowed {
+            return true;
+        }
+    }
+    false
+}
+
+/// Protonated carbonyl / phenol oxonium (`=[OH+]`): closed-shell prefer
+/// neutral (HEURISTICS C10 — not a sanitize rescue, a refuse).
+fn oxygen_oxonium(mol: &Molecule) -> bool {
+    for (_idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() == 8 && atom.charge > 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// N–S(=O)(OH) with H on S from path-end hydrogenation of sulfonamides
+/// (`Cc1cc(N[SH](=O)(O)…)no1`); native does not emit (HEURISTICS C10).
+fn nitrogen_bonded_sulfinic_hydroxy_sulfur(mol: &Molecule) -> bool {
+    for (n_idx, n_atom) in mol.atoms() {
+        if n_atom.element.atomic_number() != 7 {
+            continue;
+        }
+        for (s_idx, _) in mol.neighbors(n_idx) {
+            if mol.atom(s_idx).element.atomic_number() != 16 {
+                continue;
+            }
+            let mut double_o = 0u8;
+            let mut single_o = 0u8;
+            for (o_idx, bidx) in mol.neighbors(s_idx) {
+                if mol.atom(o_idx).element.atomic_number() != 8 {
+                    continue;
+                }
+                match mol.bond(bidx).order {
+                    BondOrder::Double => double_o += 1,
+                    BondOrder::Single | BondOrder::Up | BondOrder::Down => single_o += 1,
+                    _ => {}
+                }
+            }
+            let s_atom = mol.atom(s_idx);
+            let h_on_s = s_atom
+                .hydrogen_count
+                .unwrap_or_else(|| mol.implicit_hydrogen_count(s_idx))
+                > 0;
+            if double_o >= 1 && single_o >= 1 && h_on_s {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Protonated iminium (`[NH+]=`) and quaternary iminium (`C[N+](C)=C`):
+/// path-end rematch junk from neutral amides / dialkylanilines
+/// (APAP H → `CC(=O)[NH+]=C1…`; `CN(C)c1ccc(O)cc1` → `C[N+](C)=C1…`).
+/// Nitro `N+` (doubles only to O), N-oxides (`[N+]([O-])=`), and pyridinium
+/// (no C=N+) stay. Pair `iminium` endpoints may pass via [`accept_pair_product`].
+/// Policy: `docs/forest/HEURISTICS.md` (quaternary / protonated iminium).
+fn nitrogen_iminium(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() != 7 || atom.charge <= 0 {
+            continue;
+        }
+        let mut double_to_carbon = false;
+        let mut oxide = false;
+        for (nbr, bidx) in mol.neighbors(idx) {
+            let nz = mol.atom(nbr).element.atomic_number();
+            let order = mol.bond(bidx).order;
+            if nz == 6 && matches!(order, BondOrder::Double) {
+                double_to_carbon = true;
+            }
+            if nz == 8 && mol.atom(nbr).charge < 0 {
+                oxide = true;
+            }
+        }
+        // N-oxide / nitro: O- on N+ is a real metabolite (PhNCO NOx).
+        if double_to_carbon && !oxide {
+            return true;
+        }
+    }
+    false
+}
+
+/// Amide / ketene-imine anions (`[N-]C=O`) from ring-open dealk junk.
+/// Closed-shell prefer neutral (HEURISTICS C10).
+fn nitrogen_anion(mol: &Molecule) -> bool {
+    mol.atoms()
+        .any(|(_idx, atom)| atom.element.atomic_number() == 7 && atom.charge < 0)
+}
+
+/// Cumulative `C=C=O` (ketene carbon: C with double bonds to C and O).
+pub fn has_ketene(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        if atom.element.atomic_number() != 6 {
+            continue;
+        }
+        let mut to_c = false;
+        let mut to_o = false;
+        for (nbr, bidx) in mol.neighbors(idx) {
+            if mol.bond(bidx).order != BondOrder::Double {
+                continue;
+            }
+            match mol.atom(nbr).element.atomic_number() {
+                6 => to_c = true,
+                8 => to_o = true,
+                _ => {}
+            }
+        }
+        if to_c && to_o {
+            return true;
+        }
+    }
+    false
+}
+
+/// True when any atom is aromatic.
+pub fn has_aromatic_atom(mol: &Molecule) -> bool {
+    mol.atoms().any(|(_, a)| a.aromatic)
+}
+
+/// O-leave cleavage must not fully dearomatize into a ketene (benzoic acid →
+/// `O=C=C1CCCCC1`). Ring-open dealk ketenes that keep an aromatic piece pass.
+/// Leave fragments (water) are not judged — only heavy products.
+pub fn accept_o_leave_product(parent: &Molecule, product: &Molecule) -> bool {
+    if !accept_product(product) {
+        return false;
+    }
+    let heavy = product
+        .atoms()
+        .filter(|(_, a)| a.element.atomic_number() > 1)
+        .count();
+    if heavy <= 1 {
+        return true;
+    }
+    if has_aromatic_atom(parent) && !has_aromatic_atom(product) && has_ketene(product) {
+        return false;
+    }
+    true
+}
+
+/// Organic C/N/O atoms have enough bonds+H for a closed shell (no radicals).
+fn closed_shell(mol: &Molecule) -> bool {
+    for (idx, atom) in mol.atoms() {
+        let z = atom.element.atomic_number();
+        let target = match z {
+            6 => 4 + atom.charge as i16,
+            7 => 3 + atom.charge as i16,
+            8 => 2 + atom.charge as i16,
+            _ => continue,
+        };
+        let mut bond_sum = 0.0_f32;
+        for (_nbr, bidx) in mol.neighbors(idx) {
+            bond_sum += match mol.bond(bidx).order {
+                BondOrder::Single | BondOrder::Up | BondOrder::Down => 1.0,
+                BondOrder::Double => 2.0,
+                BondOrder::Triple => 3.0,
+                BondOrder::Aromatic => 1.5,
+                BondOrder::Quadruple => 4.0,
+                _ => 1.0,
+            };
+        }
+        let h = atom.hydrogen_count.unwrap_or_else(|| {
+            // Implicit H: chematic inference when unset.
+            mol.implicit_hydrogen_count(idx)
+        }) as i16;
+        let used = bond_sum.round() as i16 + h;
+        if used < target {
+            return false;
+        }
+    }
+    true
+}
+
+/// Set explicit H so atom valence is complete (closed shell).
+///
+/// Generic emit-path bookkeeping after graph edits (forced doubles, cleavage,
+/// saturate). Organic targets: C 4, N 3, O 2, adjusted by formal charge.
+/// Not rule-named chemistry — Kekulé matching stays charge/H-agnostic.
+pub fn fill_closed_shell_h(mol: &mut Molecule, atom: usize) {
+    let idx = atom_idx(atom);
+    let a = mol.atom(idx);
+    let z = a.element.atomic_number();
+    let charge = a.charge as i16;
+    let mut bond_sum = 0.0_f32;
+    for (_nbr, bidx) in mol.neighbors(idx) {
+        bond_sum += match mol.bond(bidx).order {
+            BondOrder::Single | BondOrder::Up | BondOrder::Down => 1.0,
+            BondOrder::Double => 2.0,
+            BondOrder::Triple => 3.0,
+            BondOrder::Aromatic => 1.5,
+            BondOrder::Quadruple => 4.0,
+            _ => 1.0,
+        };
+    }
+    let target = match z {
+        6 => 4 + charge,
+        7 => 3 + charge,
+        8 => 2 + charge,
+        _ => return,
+    };
+    let need = target - bond_sum.round() as i16;
+    if need >= 0 {
+        *mol = crate::chematic_tags::preserving::with_atom_explicit_h(mol, idx, need as u8);
+    }
+}
+
+/// Atoms whose neighbor set changed between `parent` and `edited` (same index
+/// layout), plus atoms born on `edited`. Perception — not edit-token names.
+pub fn skeleton_changed_between(parent: &Molecule, edited: &Molecule) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    let n = parent.atom_count().min(edited.atom_count());
+    for i in 0..n {
+        let pn: BTreeSet<_> = parent
+            .neighbors(atom_idx(i))
+            .map(|(nbr, _)| atom_usize(nbr))
+            .collect();
+        let en: BTreeSet<_> = edited
+            .neighbors(atom_idx(i))
+            .map(|(nbr, _)| atom_usize(nbr))
+            .collect();
+        if pn != en {
+            out.insert(i);
+        }
+    }
+    for i in n..edited.atom_count() {
+        out.insert(i);
+    }
+    out
+}
+
+/// Atoms that need emit-path closed-shell settle and charge-baseline reset:
+/// neighbor-set change **or** incident bond-order sum change (forced
+/// single→double, new leaf, cleavage). Perception — not edit tokens.
+pub fn edited_valence_atoms(parent: &Molecule, edited: &Molecule) -> BTreeSet<usize> {
+    let mut out = skeleton_changed_between(parent, edited);
+    let before = bond_order_sums(parent);
+    let after = bond_order_sums(edited);
+    for (&a, &v) in &after {
+        if before.get(&a).copied() != Some(v) {
+            out.insert(a);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -45,15 +370,99 @@ mod tests {
     }
 
     #[test]
-    fn iminium_is_kept() {
+    fn quaternary_iminium_is_refused_outside_iminium_pairs() {
         let mol = parse_mol("C[N+](C)=C").unwrap();
-        assert!(!nitrogen_two_doubles(&mol));
-        assert!(accept_product(&mol));
+        assert!(nitrogen_iminium(&mol));
+        assert!(!accept_product(&mol));
+    }
+
+    #[test]
+    fn sulfonamide_sulfinic_hydroxy_hydrogenation_junk_is_refused() {
+        let mol = parse_mol("Cc1cc(N[SH](=O)(O)c2ccc(N)cc2)no1").unwrap();
+        assert!(nitrogen_bonded_sulfinic_hydroxy_sulfur(&mol));
+        assert!(!accept_product(&mol));
+    }
+
+    #[test]
+    fn carbon_bound_oxide_refused_nitro_oxide_kept() {
+        assert!(!accept_product(&parse_mol("CC[O-]").unwrap()));
+        assert!(!accept_product(&parse_mol("[O-]C=C").unwrap()));
+        assert!(!accept_product(&parse_mol("C[S-](C)[O-]").unwrap()));
+        assert!(accept_product(
+            &parse_mol("[O-][N+](=O)c1ccccc1").unwrap()
+        ));
+        assert!(accept_product(&parse_mol("[O-][s+]1cccc1").unwrap()));
+        assert!(accept_product(&parse_mol("[O-]N(O)c1ccccc1").unwrap()));
     }
 
     #[test]
     fn ethanol_is_kept() {
         let mol = parse_mol("CCO").unwrap();
         assert!(accept_product(&mol));
+    }
+
+    #[test]
+    fn fill_closed_shell_h_makes_methane_from_isolated_carbon() {
+        let mut mol = parse_mol("C").unwrap();
+        // Force zero explicit H then refill.
+        fill_closed_shell_h(&mut mol, 0);
+        assert!(accept_product(&mol));
+    }
+
+    #[test]
+    fn radical_carbon_is_refused() {
+        // Formyl radical — chematic valence may pass; closed-shell gate refuses.
+        let mol = parse_mol("[C]=O").unwrap();
+        assert!(!accept_product(&mol), "open-shell [C]=O must be refused");
+    }
+
+    #[test]
+    fn edited_valence_atoms_sees_bond_order_change() {
+        let parent = parse_mol("CCO").unwrap();
+        let mut edited = parent.clone();
+        // Raise C–O to double (phenol/enol-style end edit).
+        let (bi, _) = edited
+            .bond_between(atom_idx(1), atom_idx(2))
+            .expect("C-O");
+        edited.set_bond_order(bi, BondOrder::Double);
+        let settle = edited_valence_atoms(&parent, &edited);
+        assert!(settle.contains(&1) && settle.contains(&2));
+        fill_closed_shell_h(&mut edited, 2);
+        assert_eq!(edited.atom(atom_idx(2)).charge, 0);
+    }
+
+    #[test]
+    fn dimethylaniline_iminium_quinone_accepted_on_iminium_pair_only() {
+        use crate::pattern::{Edit, Effect, PatternInfo, SiteKind};
+        let mol = parse_mol("C[N+](C)=C1C=CC(=O)C=C1").unwrap();
+        assert!(nitrogen_iminium(&mol));
+        assert!(!accept_product(&mol));
+        let iminium = PatternInfo {
+            name: "iminium".into(),
+            smarts: "[*:1]".into(),
+            site_kind: SiteKind::AtomPair,
+            site_map: vec![1, 2],
+            edit: Edit::PairEndpoint("iminium".into()),
+            effect: Effect::default().sealed(),
+            possibilities: Vec::new(),
+            skip_same_rings: false,
+            chain_conjugate: false,
+            cleave_side_group: None,
+            search_bias: 0,
+        };
+        let other = PatternInfo {
+            name: "add_carbonyl_o".into(),
+            smarts: "[*:1]".into(),
+            site_kind: SiteKind::AtomPair,
+            site_map: vec![1, 2],
+            edit: Edit::PairEndpoint("add_carbonyl_o".into()),
+            effect: Effect::default().sealed(),
+            possibilities: Vec::new(),
+            skip_same_rings: false,
+            chain_conjugate: false,
+            cleave_side_group: None,
+            search_bias: 0,
+        };
+        assert!(accept_pair_product(&mol, &iminium, &other));
     }
 }

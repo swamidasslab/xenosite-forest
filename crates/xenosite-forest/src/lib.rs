@@ -42,6 +42,7 @@ pub mod ruleset;
 pub mod smarts;
 pub mod smirks;
 pub mod stream;
+pub mod substrate_library;
 pub mod unique_edit;
 pub mod valence;
 
@@ -96,6 +97,7 @@ pub use find_path::{
 };
 pub use forest::{
     Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
+    CHARGE_MINUS, CHARGE_PLUS, is_charge_key,
 };
 pub use forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
@@ -139,8 +141,9 @@ pub use product_graph::{
 };
 pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
-    LEAF_CTORS, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset, epoxide_hydration,
-    leaf_rule, phase_one, reduction, resolve_root, stable_oxygenation, unstable_oxygenation,
+    LEAF_CTORS, LEAF_EXAMPLE_SUBSTRATES, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset,
+    epoxide_hydration, leaf_rule, phase_one, reduction, resolve_root, seal_leaf, stable_oxygenation,
+    unstable_oxygenation,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,

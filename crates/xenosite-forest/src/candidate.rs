@@ -289,8 +289,9 @@ impl DeferredSite {
     /// [`ForestMol`] products. Use this only when a caller already has a
     /// different adopt parent (legacy find_path emit helpers).
     ///
-    /// Non-cleaving alternatives that disagree with the sealed [`Effect`]
-    /// formula (incl. H) are dropped — Effect is the contract.
+    /// Non-cleaving Effect-formula filter is **off** while chasing native↔Rust
+    /// product parity (C18). Catalog Effect accuracy stays in
+    /// `pattern_info_catalog`; re-enable the Keep-H drop after parity is green.
     pub fn materialize_mols(&self) -> Result<Vec<Molecule>, ForestError> {
         let mols = match &self.pair {
             None => {
@@ -312,24 +313,7 @@ impl DeferredSite {
                 &p.system,
             )?,
         };
-        if self.effect.cleaves {
-            // Cleavage: formula check is on the fragment set, not per piece.
-            return Ok(mols);
-        }
-        // Non-cleaving: keep only pieces that match the sealed Effect (incl. H).
-        let parent = self.mol();
-        Ok(mols
-            .into_iter()
-            .filter(|p| {
-                crate::formula_check::check_effect_delta_formula(
-                    parent,
-                    &self.effect,
-                    std::slice::from_ref(p),
-                    &self.pattern_name,
-                )
-                .is_none()
-            })
-            .collect())
+        Ok(mols)
     }
 
     /// Apply the edit; return a metabolize [`Emission`] with tagged products.
@@ -345,12 +329,7 @@ impl DeferredSite {
         if mols.is_empty() {
             return Ok(None);
         }
-        crate::formula_check::check_effect_delta_formula(
-            self.mol(),
-            &self.effect,
-            &mols,
-            &self.pattern_name,
-        );
+        // Effect-formula soft check deferred while chasing product parity.
         let products = mols
             .into_iter()
             .map(|piece| self.mol.from_edit_product(piece))

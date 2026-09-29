@@ -39,8 +39,9 @@ agent-exchange/
 mappings/**/*.gz
 *.sssom.tsv.gz
 
-# Local data (never ship)
+# Local data (never ship). Keep tests/data/ — shared coverage SoT fixtures.
 data/
+!tests/data/
 _api
 .cenv
 .devcontainer
