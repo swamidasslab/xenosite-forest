@@ -10,6 +10,37 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.8.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.8.0) - 2026-09-28
+
+### Removed
+
+- Remove ``xenosite.forest.find_path_rust`` / ``native_available`` and the nested
+  ``xenosite.forest.rust`` wrapper package. Use ``xenosite.forest.find_path`` and
+  ``available``. ([#find-path-rust-shim](https://github.com/swamidasslab/xenosite-forest/issues/find-path-rust-shim))
+
+### Added
+
+- A WASM-clean Rust derisk crate (`crates/xenosite-forest`) on chematic and canonaut: SMARTS/SMIRKS, unique-edit, pair orbits, per-system on-demand kekulé cache shared across relatives, `ForestMol` owning caches (no `_forest`/`xf` hack), atom tags as a sidecar remapped through apply and SMILES write (not `atom_map`, not `canonical_atom_order`), PyO3 class wrap, `RuleSet` / `PatternInfo` with `FilterRules` closures, `wasm32-unknown-unknown`, and a size-tuned native wheel.
+
+  Chematic is vendored as a sparse submodule at `v1.0.21` with a tiny local patch (`Atom.tag`, `write_with_order` / `canonical_smiles_with_order`). See `patches/README.md` and `./scripts/vendor-chematic.sh`.
+
+  `AtomTracker` POC follows atoms via chematic `Atom.tag` through SMIRKS apply and SMILES write/parse (no isotope probe, no sidecar).
+
+  **Pair door:** ResonancePair endpoints (`Edit::PairEndpoint`) metabolize via
+  alternating-path flip on Kekulé forms. Hydroquinone → quinone and benzene
+  QF `add_carbonyl_o`×2 are covered. SMIRKS apply uses a Kekulé
+  `reactant_parent` when maps 1–2 are aromatic. ([#rust-chematic](https://github.com/swamidasslab/xenosite-forest/issues/rust-chematic))
+
+### Changed
+
+- Split the forest package into a Rust public stub (``xenosite.forest``),
+  ``native`` (RDKit reference), and ``legacy`` (frozen 0.6.x). Default install no
+  longer requires RDKit; use the ``rdkit`` extra for native/legacy. Public stub
+  exports only ``find_path``, ``available``, ``PhaseOne``, ``Epoxidation``,
+  ``QuinoneFormation``, ``EpoxideOpening``, and ``NDealkylation``. See
+  ``docs/forest/MIGRATING_0.8.md``. ([#package-reorg](https://github.com/swamidasslab/xenosite-forest/issues/package-reorg))
+
+
 ## [0.7.3](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.7.3) - 2026-09-21
 
 ### Fixed
