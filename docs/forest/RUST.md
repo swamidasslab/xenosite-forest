@@ -155,7 +155,9 @@ wasm-opt -Oz --enable-bulk-memory --enable-sign-ext --enable-mutable-globals \
 
 ## Wheel size
 
-The PyPI package is still pure Python (hatchling + RDKit). The native door wheel is a separate maturin artifact from `crates/xenosite-forest` (`xenosite-forest-native`, import `xenosite_forest`). Same size profile as WASM.
+PyPI ships **one** package, ``xenosite-forest``: maturin mixed wheels with the
+Python tree under ``src/xenosite`` and the ``xenosite.forest._rust`` extension.
+Platforms: manylinux, musllinux, macOS, Windows (x86_64 + aarch64).
 
 Measured CPython 3.12 linux x86_64 (`--features python,extension-module`):
 
@@ -204,9 +206,6 @@ Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --
 
 Chematic on crates.io still has no atom userdata and no public SMILES visit
 order. This repo vendors `chematic` @ `v1.0.21` as a **sparse submodule**
-(`vendor/chematic`) and applies
-[`patches/chematic-v1.0.21-atom-tag-visit-order.patch`](../../patches/chematic-v1.0.21-atom-tag-visit-order.patch)
-via `./scripts/vendor-chematic.sh`.
 
 The patch adds:
 

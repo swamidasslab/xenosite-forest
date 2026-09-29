@@ -10,6 +10,10 @@
 
 - **Pathway API naming.** Settled on **`apply`**. Type is **`StepSequence`** (ordered steps that act like a step); `Linearization` remains a type alias. StepPlan/`Deps` methods stay `linearizations` / `same_linearizations`. Atom tags: ensure missing, never overwrite (shared wrapper).
 
+- **Chematic from crates.io.** Dropped `vendor/chematic` submodule + local Atom.tag patch; depend on `chematic ^1.0.27` (caller tags + `*_with_atom_order`). Forest [`Tag`] is `NonZeroU16` (chematic `1..=u16::MAX`; `None`/0 clear).
+
+- **0.8.1 packaging.** One PyPI package via maturin (Python `src/xenosite` + `xenosite.forest._rust` extension). Version from Cargo.toml. Release CI builds manylinux/musllinux/macOS/Windows wheels (x86_64 + aarch64) + sdist. Dropped separate `xenosite-forest-native` crate pyproject.
+
 - **0.8.0 release.** Tag `v0.8.0`. Rust stub public API, optional `[rdkit]`, no nested `forest.rust`. Release CI builds the maturin extension before the forest suite. CHANGELOG compiled by the tag workflow.
 
 - **0.8 prep.** Public API lives on `xenosite.forest` only — no `find_path_rust.py`, no nested `forest.rust` package. Migrating doc is `docs/forest/MIGRATING_0.8.md`. `native/bfs.py` renamed to `cli.py` (`native.cli:main`). Doc paths updated to `native/` / `tests/forest/rust/` product suite.

@@ -15,11 +15,12 @@ The RDKit reference engine is :mod:`xenosite.forest.native` (optional
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 try:
-    from ._version import __version__
-except ImportError:  # pragma: no cover - missing only in incomplete checkouts
+    __version__ = version("xenosite-forest")
+except PackageNotFoundError:  # pragma: no cover - incomplete checkout / editable edge
     __version__ = "0.0.0"
 
 from ._ext import available, load
@@ -113,8 +114,8 @@ def _ruleset(attr: str, label: str) -> Any:
     factory = getattr(mod, attr, None)
     if factory is None:
         raise AttributeError(
-            f"xenosite_forest has no {attr!r}; rebuild xenosite-forest-native "
-            f"to use {label}"
+            f"xenosite.forest._rust has no {attr!r}; rebuild the extension "
+            f"(maturin develop --features python,extension-module) to use {label}"
         )
     return factory()
 

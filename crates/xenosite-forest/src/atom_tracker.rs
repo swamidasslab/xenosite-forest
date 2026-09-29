@@ -1,6 +1,6 @@
-//! Atom tracker POC on chematic `Atom.tag` + SMILES visit order.
+//! Atom tracker POC on chematic caller tags + SMILES visit order.
 //!
-//! Stamps a unique integer on each atom. Apply copies it (patch); born atoms
+//! Stamps a unique integer on each atom. Apply copies it; born atoms
 //! are `None` until [`AtomTracker::adopt_born`] mints ids. Write/parse uses
 //! visit-order helpers so tags ride the permutation onto the new mol without
 //! isotopes or a sidecar.
@@ -9,15 +9,19 @@
 //! [`crate::labels`] beside the graph. `ForestMol`'s sidecar stays for now.
 
 use chematic::core::{Molecule, MoleculeBuilder};
-use chematic::smiles::{canonical_smiles_with_order, parse, write_with_order};
+use chematic::smiles::{
+    canonical_smiles_with_atom_order as canonical_smiles_with_order, parse,
+    write_with_atom_order as write_with_order,
+};
 
+use crate::chematic_tags::{get_label, set_label};
 use crate::labels::Tag;
 use crate::mol::{ForestError, atom_idx};
 
 /// Mints and follows chematic atom tags through rewrite.
 #[derive(Debug, Clone)]
 pub struct AtomTracker {
-    next: u32,
+    next: u16,
 }
 
 impl AtomTracker {
@@ -28,24 +32,29 @@ impl AtomTracker {
     /// same [`AtomTracker`] and use [`Self::adopt_born`], not re-stamp.
     pub fn stamp(mol: &mut Molecule) -> Self {
         let n = mol.atom_count();
+        assert!(n < u16::MAX as usize, "too many atoms for chematic tags");
         for i in 0..n {
-            mol.set_tag(atom_idx(i), Some(i as u32));
+            let tag = Tag::new((i as u16) + 1).expect("non-zero stamp");
+            set_label(mol, atom_idx(i), Some(tag));
         }
-        Self { next: n as u32 }
+        Self {
+            next: (n as u16) + 1,
+        }
     }
 
-    pub fn next_tag(&self) -> u32 {
+    pub fn next_tag(&self) -> u16 {
         self.next
     }
 
     /// Tag at `idx`, or `None` if out of range or untagged.
     pub fn tag_of(mol: &Molecule, idx: usize) -> Option<Tag> {
-        mol.atom_opt(atom_idx(idx))?.tag.map(Tag)
+        mol.atom_opt(atom_idx(idx))?;
+        get_label(mol, atom_idx(idx))
     }
 
     /// First index holding `tag`, if any. Duplicate tags are ambiguous.
     pub fn index_of(mol: &Molecule, tag: Tag) -> Option<usize> {
-        (0..mol.atom_count()).find(|&i| mol.atom(atom_idx(i)).tag == Some(tag.0))
+        (0..mol.atom_count()).find(|&i| get_label(mol, atom_idx(i)) == Some(tag))
     }
 
     /// Snapshot of every atom's tag (parallel to index order).
@@ -59,9 +68,10 @@ impl AtomTracker {
     pub fn adopt_born(&mut self, mol: &mut Molecule) {
         for i in 0..mol.atom_count() {
             let idx = atom_idx(i);
-            if mol.atom(idx).tag.is_none() {
-                mol.set_tag(idx, Some(self.next));
-                self.next += 1;
+            if get_label(mol, idx).is_none() {
+                let tag = Tag::new(self.next).expect("tag id exhausted");
+                set_label(mol, idx, Some(tag));
+                self.next = self.next.checked_add(1).expect("tag counter overflow");
             }
         }
     }
@@ -105,8 +115,7 @@ impl AtomTracker {
             )));
         }
         for (new_i, &old_idx) in order.iter().enumerate() {
-            let tag = mol.atom(old_idx).tag;
-            fresh.set_tag(atom_idx(new_i), tag);
+            set_label(&mut fresh, atom_idx(new_i), get_label(mol, old_idx));
         }
         Ok((smi, fresh))
     }
@@ -134,9 +143,13 @@ pub fn tags_agree_elements(parent: &Molecule, product: &Molecule) -> bool {
 mod tests {
     use std::collections::{BTreeMap, HashSet};
 
+    use crate::chematic_tags::{get_label, set_label};
     use chematic::core::{Atom, BondOrder, Element, MoleculeBuilder};
     use chematic::rxn::{apply_reaction_match, find_reaction_matches};
-    use chematic::smiles::{canonical_smiles_with_order, parse, write, write_with_order};
+    use chematic::smiles::{
+        canonical_smiles_with_atom_order as canonical_smiles_with_order, parse, write,
+        write_with_atom_order as write_with_order,
+    };
 
     use super::*;
     use crate::mol::atom_usize;
@@ -190,7 +203,7 @@ mod tests {
         let mut mol = MoleculeBuilder::new().build();
         let tracker = AtomTracker::stamp(&mut mol);
         assert_eq!(mol.atom_count(), 0);
-        assert_eq!(tracker.next_tag(), 0);
+        assert_eq!(tracker.next_tag(), 1); // next mintable id (1..=u16::MAX)
         assert!(AtomTracker::all_tags(&mol).is_empty());
         let (smi, fresh) = AtomTracker::write_parse(&mol).unwrap();
         assert_eq!(smi, "");
@@ -204,29 +217,36 @@ mod tests {
     fn stamp_single_atom_and_lookups() {
         let mut mol = parse("C").unwrap();
         let tracker = AtomTracker::stamp(&mut mol);
-        assert_eq!(tracker.next_tag(), 1);
-        assert_eq!(AtomTracker::tag_of(&mol, 0), Some(Tag(0)));
+        assert_eq!(tracker.next_tag(), 2);
+        assert_eq!(AtomTracker::tag_of(&mol, 0), Some(Tag::new(1).unwrap()));
         assert_eq!(AtomTracker::tag_of(&mol, 1), None); // OOB
-        assert_eq!(AtomTracker::index_of(&mol, Tag(0)), Some(0));
-        assert_eq!(AtomTracker::index_of(&mol, Tag(99)), None);
-        assert_eq!(AtomTracker::all_tags(&mol), vec![Some(Tag(0))]);
+        assert_eq!(AtomTracker::index_of(&mol, Tag::new(1).unwrap()), Some(0));
+        assert_eq!(AtomTracker::index_of(&mol, Tag::new(99).unwrap()), None);
+        assert_eq!(
+            AtomTracker::all_tags(&mol),
+            vec![Some(Tag::new(1).unwrap())]
+        );
     }
 
     #[test]
     fn stamp_overwrites_and_restarts_counter() {
         let mut mol = parse("CCO").unwrap();
         let mut tracker = AtomTracker::stamp(&mut mol);
-        mol.set_tag(atom_idx(0), Some(900));
+        set_label(&mut mol, atom_idx(0), Some(Tag::new(900).unwrap()));
         tracker.adopt_born(&mut mol); // no-op; all tagged
-        assert_eq!(tracker.next_tag(), 3);
-        // Re-stamp is destructive: ids restart at 0..n.
+        assert_eq!(tracker.next_tag(), 4);
+        // Re-stamp is destructive: ids restart at 1..=n.
         let tracker2 = AtomTracker::stamp(&mut mol);
         assert_eq!(
             AtomTracker::all_tags(&mol),
-            vec![Some(Tag(0)), Some(Tag(1)), Some(Tag(2))]
+            vec![
+                Some(Tag::new(1).unwrap()),
+                Some(Tag::new(2).unwrap()),
+                Some(Tag::new(3).unwrap())
+            ]
         );
-        assert_eq!(tracker2.next_tag(), 3);
-        assert_ne!(AtomTracker::tag_of(&mol, 0), Some(Tag(900)));
+        assert_eq!(tracker2.next_tag(), 4);
+        assert_ne!(AtomTracker::tag_of(&mol, 0), Some(Tag::new(900).unwrap()));
     }
 
     #[test]
@@ -236,9 +256,10 @@ mod tests {
         let before = tracker.next_tag();
         tracker.adopt_born(&mut mol);
         assert_eq!(tracker.next_tag(), before);
-        mol.set_tag(atom_idx(1), None);
+        set_label(&mut mol, atom_idx(1), None);
+        let minted = Tag::new(before).unwrap();
         tracker.adopt_born(&mut mol);
-        assert_eq!(AtomTracker::tag_of(&mol, 1), Some(Tag(before)));
+        assert_eq!(AtomTracker::tag_of(&mol, 1), Some(minted));
         assert_eq!(tracker.next_tag(), before + 1);
         tracker.adopt_born(&mut mol);
         assert_eq!(tracker.next_tag(), before + 1);
@@ -248,12 +269,12 @@ mod tests {
     fn duplicate_tags_make_index_of_ambiguous() {
         let mut mol = parse("CCO").unwrap();
         let _ = AtomTracker::stamp(&mut mol);
-        mol.set_tag(atom_idx(2), Some(0)); // collide with atom 0
-        assert_eq!(AtomTracker::index_of(&mol, Tag(0)), Some(0)); // first only
+        set_label(&mut mol, atom_idx(2), Some(Tag::new(1).unwrap())); // collide with atom 0
+        assert_eq!(AtomTracker::index_of(&mol, Tag::new(1).unwrap()), Some(0)); // first only
         let tagged: Vec<_> = AtomTracker::all_tags(&mol)
             .into_iter()
             .flatten()
-            .filter(|t| *t == Tag(0))
+            .filter(|t| *t == Tag::new(1).unwrap())
             .collect();
         assert_eq!(tagged.len(), 2);
     }
@@ -265,7 +286,7 @@ mod tests {
         let map = AtomTracker::src_to_new(&mol, &mol);
         assert_eq!(map, vec![Some(0), Some(1), Some(2)]);
 
-        mol.set_tag(atom_idx(1), None);
+        set_label(&mut mol, atom_idx(1), None);
         let map = AtomTracker::src_to_new(&mol, &mol);
         assert_eq!(map[1], None);
         assert_eq!(map[0], Some(0));
@@ -275,15 +296,15 @@ mod tests {
     fn write_parse_preserves_none_tags() {
         let mut mol = parse("CCO").unwrap();
         let _ = AtomTracker::stamp(&mut mol);
-        mol.set_tag(atom_idx(1), None);
+        set_label(&mut mol, atom_idx(1), None);
         let (_smi, fresh) = AtomTracker::write_parse(&mol).unwrap();
         let none_count = AtomTracker::all_tags(&fresh)
             .into_iter()
             .filter(|t| t.is_none())
             .count();
         assert_eq!(none_count, 1);
-        assert!(AtomTracker::index_of(&fresh, Tag(0)).is_some());
-        assert!(AtomTracker::index_of(&fresh, Tag(2)).is_some());
+        assert!(AtomTracker::index_of(&fresh, Tag::new(1).unwrap()).is_some());
+        assert!(AtomTracker::index_of(&fresh, Tag::new(3).unwrap()).is_some());
     }
 
     #[test]
@@ -299,9 +320,13 @@ mod tests {
         for (_, bond) in parent.bonds() {
             b.add_bond(bond.atom1, bond.atom2, bond.order).unwrap();
         }
-        let parent = b.build();
+        let tags = AtomTracker::all_tags(&parent);
+        let mut parent = b.build();
+        for (i, tag) in tags.into_iter().enumerate() {
+            set_label(&mut parent, atom_idx(i), tag);
+        }
         assert!(parent.atoms().any(|(_, a)| a.atom_map.is_some()));
-        assert!(parent.atoms().all(|(_, a)| a.tag.is_some()));
+        assert!((0..parent.atom_count()).all(|i| get_label(&parent, atom_idx(i)).is_some()));
 
         let product = hydroxylate_first(&parent);
         assert!(product.atoms().all(|(_, a)| a.atom_map.is_none()));
@@ -337,7 +362,7 @@ mod tests {
 
         tracker.adopt_born(&mut product);
         assert!(AtomTracker::tag_of(&product, born[0]).is_some());
-        assert_eq!(tracker.next_tag(), 4);
+        assert_eq!(tracker.next_tag(), 5);
         assert!(tags_agree_elements(&parent, &product));
     }
 
@@ -402,7 +427,7 @@ mod tests {
                 .collect();
             assert!(parent_tags.is_subset(&product_tags));
             assert_eq!(product_tags.len(), mol.atom_count() + 1);
-            assert_eq!(tracker.next_tag() as usize, 3 + step + 1);
+            assert_eq!(tracker.next_tag() as usize, 4 + step + 1);
             assert_unique_tags(&product);
             mol = product;
         }
@@ -502,7 +527,7 @@ mod tests {
                 "{name} too small for stress"
             );
             let tracker = AtomTracker::stamp(&mut mol);
-            assert_eq!(tracker.next_tag() as usize, mol.atom_count());
+            assert_eq!(tracker.next_tag() as usize, mol.atom_count() + 1);
             assert_unique_tags(&mol);
             assert_identity_roundtrip(&mol);
         }
@@ -552,7 +577,7 @@ mod tests {
     #[test]
     fn smarts_match_count_unchanged_after_stamp() {
         // VF2 evaluates AtomQuery primitives (element, charge, …) — never
-        // Atom: PartialEq and never `.tag`. Stamping must not change hits.
+        // Atom: PartialEq (tags are off-struct). Stamping must not change hits.
         let cases = [
             ("c1ccccc1", "[#6]"),
             ("c1ccccc1", "a"),
@@ -569,7 +594,7 @@ mod tests {
                 &mol,
             );
             let _ = AtomTracker::stamp(&mut mol);
-            assert!(mol.atoms().all(|(_, a)| a.tag.is_some()));
+            assert!((0..mol.atom_count()).all(|i| get_label(&mol, atom_idx(i)).is_some()));
             let after = crate::smarts::smarts_matches(&mol, smarts).unwrap();
             let raw_after = chematic::smarts::find_matches(
                 &chematic::smarts::parse_smarts(smarts).unwrap(),

@@ -14,6 +14,7 @@ pub mod atom_diff;
 pub mod atom_tracker;
 pub mod candidate;
 pub mod canonical_plan;
+pub mod chematic_tags;
 pub mod chematic_vendor;
 pub mod cleavage_graph;
 pub mod find_path;

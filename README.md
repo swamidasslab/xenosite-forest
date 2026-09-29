@@ -153,16 +153,14 @@ A machine-readable citation is also in [`CITATION.cff`](https://github.com/swami
 ```bash
 git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
-uv sync --extra network --group dev
-# rebuild the PyO3 extension after Rust changes:
-# maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
+uv sync --extra network --group dev   # maturin builds the Rust extension
 uv run pytest -n auto
 uv run pytest --cov=xenosite.forest
 ```
 
-Versioning comes from git tags via [hatch-vcs](https://github.com/ofek/hatch-vcs) (setuptools-scm). Tag a release as `vX.Y.Z` (for example `v0.1.0`). On that commit the version is `X.Y.Z`. On later untagged commits it becomes the next patch with a dev suffix and short commit, for example `0.1.1.dev3+gabc1234`. Read it at runtime as `xenosite.forest.__version__`. User-facing notes go in [`changelog.d/`](changelog.d/); the tag workflow compiles them into `CHANGELOG.md`. See [docs/release.md](docs/release.md).
+Versioning is the ``package.version`` in [`crates/xenosite-forest/Cargo.toml`](crates/xenosite-forest/Cargo.toml) (maturin). Tag a release as `vX.Y.Z` matching that Cargo version. Read it at runtime as `xenosite.forest.__version__`. User-facing notes go in [`changelog.d/`](changelog.d/); the tag workflow compiles them into `CHANGELOG.md`. See [docs/release.md](docs/release.md).
 
-Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/swamidasslab/xenosite-forest/blob/main/.github/workflows/release.yml): tests must pass and the resolved version must be a clean `X.Y.Z` before a GitHub Release and PyPI upload. A red tag workflow means do not treat that tag as released. To *block* creating tags unless checks pass, add a GitHub Ruleset on `refs/tags/v*` that requires the `release` / `test` status checks.
+Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/swamidasslab/xenosite-forest/blob/main/.github/workflows/release.yml): tests must pass, then platform wheels (manylinux / musllinux / macOS / Windows, x86_64 + aarch64) and an sdist are published to GitHub Releases and PyPI. A red tag workflow means do not treat that tag as released.
 
 ## License
 

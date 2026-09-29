@@ -676,6 +676,7 @@ fn default_ruleset() -> PyRuleSet {
 }
 
 #[pymodule]
+#[pyo3(name = "_rust")]
 fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyForestMol>()?;
     m.add_class::<PyFormula>()?;

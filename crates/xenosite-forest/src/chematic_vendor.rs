@@ -1,15 +1,19 @@
-//! Smoke that the vendored chematic patch works: `Atom.tag` and visit order.
+//! Smoke that crates.io chematic (≥1.0.27) caller tags + visit order work.
 
 #[cfg(test)]
 mod tests {
     use chematic::core::{Atom, AtomIdx, BondOrder, Element, MoleculeBuilder};
     use chematic::rxn::{apply_reaction_match, find_reaction_matches};
-    use chematic::smiles::{canonical_smiles_with_order, parse, write, write_with_order};
+    use chematic::smiles::{canonical_smiles_with_atom_order, parse, write, write_with_atom_order};
+
+    use crate::chematic_tags::{get_label, set_label};
+    use crate::labels::Tag;
+    use crate::mol::atom_idx;
 
     #[test]
-    fn write_with_order_matches_write_and_can_differ_from_index_order() {
+    fn write_with_atom_order_matches_write_and_can_differ_from_index_order() {
         let mol = parse("CCO").unwrap();
-        let (smi, order) = write_with_order(&mol);
+        let (smi, order) = write_with_atom_order(&mol);
         assert_eq!(smi, write(&mol));
         assert_eq!(order.len(), mol.atom_count());
 
@@ -20,15 +24,15 @@ mod tests {
         b.add_bond(c, o, BondOrder::Single).unwrap();
         b.add_bond(c, me, BondOrder::Single).unwrap();
         let scrambled = b.build();
-        let (_s, ord) = write_with_order(&scrambled);
+        let (_s, ord) = write_with_atom_order(&scrambled);
         let idxs: Vec<_> = ord.iter().map(|a| a.0).collect();
         assert_ne!(idxs, vec![0, 1, 2]);
     }
 
     #[test]
-    fn canonical_smiles_with_order_returns_visit_permutation() {
+    fn canonical_smiles_with_atom_order_returns_visit_permutation() {
         let mol = parse("CCO").unwrap();
-        let (csmi, order) = canonical_smiles_with_order(&mol);
+        let (csmi, order) = canonical_smiles_with_atom_order(&mol);
         assert!(!csmi.is_empty());
         assert_eq!(order.len(), mol.atom_count());
         let mut seen = order.clone();
@@ -45,24 +49,30 @@ mod tests {
     fn atom_tag_survives_apply_atom_map_does_not() {
         let mut mol = parse("CCO").unwrap();
         for i in 0..mol.atom_count() {
-            mol.set_tag(AtomIdx(i as u32), Some(200 + i as u32));
-            // Leave any existing maps alone; apply must clear them.
+            set_label(
+                &mut mol,
+                atom_idx(i),
+                Some(Tag::new(200 + (i as u16)).unwrap()),
+            );
         }
         let matches = find_reaction_matches("[C:1]>>[C:1]O", &[&mol]).expect("match");
         assert!(!matches.is_empty());
         let products =
             apply_reaction_match("[C:1]>>[C:1]O", &[&mol], &matches[0], true).expect("apply");
         let product = &products.expect("valence")[0];
-        let tags: Vec<_> = product.atoms().map(|(_, a)| a.tag).collect();
+        let tags: Vec<_> = (0..product.atom_count())
+            .map(|i| get_label(product, atom_idx(i)))
+            .collect();
         assert!(
-            tags.contains(&Some(200)) || tags.contains(&Some(201)) || tags.contains(&Some(202))
+            tags.contains(&Some(Tag::new(200).unwrap()))
+                || tags.contains(&Some(Tag::new(201).unwrap()))
+                || tags.contains(&Some(Tag::new(202).unwrap()))
         );
         assert!(product.atoms().all(|(_, a)| a.atom_map.is_none()));
         // Born oxygen has no tag.
-        assert!(
-            product
-                .atoms()
-                .any(|(_, a)| a.tag.is_none() && a.element.atomic_number() == 8)
-        );
+        assert!((0..product.atom_count()).any(|i| {
+            get_label(product, atom_idx(i)).is_none()
+                && product.atom(atom_idx(i)).element.atomic_number() == 8
+        }));
     }
 }

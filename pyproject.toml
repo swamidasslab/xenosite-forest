@@ -1,9 +1,11 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "xenosite-forest"
+# Version from crates/xenosite-forest/Cargo.toml (maturin). Tag releases as vX.Y.Z
+# matching that Cargo version (release CI asserts equality).
 dynamic = ["version"]
 description = "Metabolic Forest: enumerate metabolite structures from reaction rules"
 readme = "README.md"
@@ -18,8 +20,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Intended Audience :: Science/Research",
 ]
@@ -77,6 +82,18 @@ dev = [
     "ruff>=0.16.8",
     "xenopict>=0.3",
     "maturin>=1.7",
+]
+
+[tool.maturin]
+manifest-path = "crates/xenosite-forest/Cargo.toml"
+module-name = "xenosite.forest._rust"
+python-source = "src"
+features = ["python", "extension-module"]
+# Sdist needs the workspace + vendored chematic path dependency to rebuild.
+include = [
+    { path = "Cargo.toml", format = "sdist" },
+    { path = "Cargo.lock", format = "sdist" },
+    { path = "crates/xenosite-forest/**/*", format = "sdist" },
 ]
 
 [tool.towncrier]
