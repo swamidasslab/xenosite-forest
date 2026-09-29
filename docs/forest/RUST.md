@@ -202,9 +202,6 @@ Reproduce the Rust column: `cargo run -p xenosite-forest --example door_bench --
 
 Chematic on crates.io still has no atom userdata and no public SMILES visit
 order. This repo vendors `chematic` @ `v1.0.21` as a **sparse submodule**
-(`vendor/chematic`) and applies
-[`patches/chematic-v1.0.21-atom-tag-visit-order.patch`](../../patches/chematic-v1.0.21-atom-tag-visit-order.patch)
-via `./scripts/vendor-chematic.sh`.
 
 The patch adds:
 

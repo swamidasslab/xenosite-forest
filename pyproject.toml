@@ -93,9 +93,6 @@ features = ["python", "extension-module"]
 include = [
     { path = "Cargo.toml", format = "sdist" },
     { path = "Cargo.lock", format = "sdist" },
-    { path = "patches/**/*", format = "sdist" },
-    { path = "scripts/vendor-chematic.sh", format = "sdist" },
-    { path = "vendor/chematic/**/*", format = "sdist" },
     { path = "crates/xenosite-forest/**/*", format = "sdist" },
 ]
 

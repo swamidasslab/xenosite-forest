@@ -21,7 +21,6 @@ Types: `added` | `changed` | `fixed` | `removed` | `deprecated` | `security`. Sk
 Local editable install (builds the extension):
 
 ```bash
-./scripts/vendor-chematic.sh
 uv sync --extra rdkit --extra network --group dev
 ```
 

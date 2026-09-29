@@ -2,6 +2,8 @@
 
 ## 2026-09-28
 
+- **Chematic from crates.io.** Dropped `vendor/chematic` submodule + local Atom.tag patch; depend on `chematic ^1.0.27` (caller tags + `*_with_atom_order`). Forest [`Tag`] is `NonZeroU16` (chematic `1..=u16::MAX`; `None`/0 clear).
+
 - **0.8.1 packaging.** One PyPI package via maturin (Python `src/xenosite` + `xenosite.forest._rust` extension). Version from Cargo.toml. Release CI builds manylinux/musllinux/macOS/Windows wheels (x86_64 + aarch64) + sdist. Dropped separate `xenosite-forest-native` crate pyproject.
 
 - **0.8.0 release.** Tag `v0.8.0`. Rust stub public API, optional `[rdkit]`, no nested `forest.rust`. Release CI builds the maturin extension before the forest suite. CHANGELOG compiled by the tag workflow.

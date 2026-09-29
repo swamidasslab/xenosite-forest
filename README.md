@@ -144,7 +144,6 @@ A machine-readable citation is also in [`CITATION.cff`](https://github.com/swami
 ```bash
 git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
-./scripts/vendor-chematic.sh
 uv sync --extra network --group dev   # maturin builds the Rust extension
 uv run pytest -n auto
 uv run pytest --cov=xenosite.forest

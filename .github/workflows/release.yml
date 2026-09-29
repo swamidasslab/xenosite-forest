@@ -40,9 +40,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -87,10 +84,6 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -122,10 +115,6 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -157,10 +146,6 @@ jobs:
             target: aarch64
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -193,11 +178,6 @@ jobs:
             python_arch: arm64
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        shell: bash
-        run: ./scripts/vendor-chematic.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -221,10 +201,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Vendor chematic (sparse + patch)
-        run: ./scripts/vendor-chematic.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
