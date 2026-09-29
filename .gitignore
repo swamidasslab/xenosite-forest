@@ -46,3 +46,7 @@ artifacts/
 *.live.log
 *.err
 *.out
+# maturin develop may drop the extension beside sources
+*.so
+*.pyd
+*.dylib

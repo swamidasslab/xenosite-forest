@@ -20,6 +20,11 @@ on:
   push:
     tags: ["v*"]
 
+env:
+  # Pin for reproducibility across maturin-action jobs.
+  MATURIN_VERSION: v1.9.4
+  CARGO_PACKAGE_VERSION_FILE: crates/xenosite-forest/Cargo.toml
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -41,35 +46,202 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          # Tag events disable setup-uv cache by default; suffix still documents intent.
           cache-suffix: portable-x86-64
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.88.0"
       - name: Python headers
         run: sudo apt-get update && sudo apt-get install -y python3-dev
-      - name: Install package (RDKit extras) and build extension
-        run: |
-          uv sync --extra rdkit --extra network --group dev
-          uv run maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
+      - name: Install package (builds Rust extension via maturin)
+        run: uv sync --extra rdkit --extra network --group dev
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
-      - name: Require clean release version on tags
-        # Reject dirty/dev/local versions so PyPI never sees +g… tags by mistake.
+      - name: Require Cargo version matches tag
         run: |
-          ver=$(uv run python -c "import xenosite.forest as m; print(m.__version__)")
-          echo "version=$ver"
-          case "$ver" in
+          set -euo pipefail
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          PKG_VER=$(uv run python -c "import xenosite.forest as m; print(m.__version__)")
+          echo "tag=$TAG_VER cargo=$CARGO_VER package=$PKG_VER"
+          test "$TAG_VER" = "$CARGO_VER"
+          test "$TAG_VER" = "$PKG_VER"
+          case "$PKG_VER" in
             *dev*|*+*|*.d[0-9]*)
-              echo "Tagged builds must resolve to a clean X.Y.Z (got $ver)"
-              echo "Tag a clean commit and ensure the working tree matches the tag."
+              echo "Tagged builds must resolve to a clean X.Y.Z (got $PKG_VER)"
               exit 1
               ;;
           esac
       - name: Full forest suite (public stub + native + legacy)
         run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
 
-  build:
+  linux:
+    needs: test
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-22.04
+            target: x86_64
+          - runner: ubuntu-22.04-arm
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build manylinux wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: "1.88.0"
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-manylinux-${{ matrix.platform.target }}
+          path: dist
+
+  musllinux:
+    needs: test
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-22.04
+            target: x86_64
+          - runner: ubuntu-22.04-arm
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build musllinux wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          manylinux: musllinux_1_2
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: "1.88.0"
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-musllinux-${{ matrix.platform.target }}
+          path: dist
+
+  macos:
+    needs: test
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: macos-15-intel
+            target: x86_64
+          - runner: macos-latest
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build macOS wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: "1.88.0"
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}
+          path: dist
+
+  windows:
+    needs: test
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: windows-latest
+            target: x64
+            python_arch: x64
+          - runner: windows-11-arm
+            target: aarch64
+            python_arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        shell: bash
+        run: ./scripts/vendor-chematic.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.platform.python_arch }}
+      - name: Build Windows wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          rust-toolchain: "1.88.0"
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.platform.target }}
+          path: dist
+
+  sdist:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: ${{ env.MATURIN_VERSION }}
+          command: sdist
+          args: --out dist
+          rust-toolchain: "1.88.0"
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  changelog:
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -78,16 +250,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-      - name: Build sdist and wheel
-        run: uv build
-      - name: Upload dist artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
       - name: Version without v prefix
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -111,40 +273,34 @@ jobs:
           git push origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}" || \
             echo "::warning::Could not fast-forward default branch with CHANGELOG.md."
 
-  github-release:
-    needs: build
+  publish:
+    needs: [linux, musllinux, macos, windows, sdist]
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/xenosite-forest
     permissions:
+      id-token: write
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Download dist artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: python-package-distributions
-          path: dist/
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: List dist
+        run: ls -la dist
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
           fail_on_unmatched_files: true
-
-  pypi-publish:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/xenosite-forest
-    permissions:
-      id-token: write # mandatory for Trusted Publishing (OIDC)
-    steps:
-      - name: Download dist artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

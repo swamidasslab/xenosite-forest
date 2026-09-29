@@ -45,14 +45,37 @@ jobs:
           restore-keys: |
             hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-
             hypothesis-${{ runner.os }}-
-      - name: Install package (RDKit extras) and build extension
-        run: |
-          uv sync --extra rdkit --extra network --group dev
-          uv run maturin develop -m crates/xenosite-forest/Cargo.toml --features python,extension-module
+      - name: Install package (RDKit extras; maturin builds the Rust extension)
+        run: uv sync --extra rdkit --extra network --group dev
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
       - name: Full forest suite (public stub + native + legacy)
         run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+
+  # Smoke one manylinux wheel on PRs so packaging breaks fail before a tag.
+  wheels:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Vendor chematic (sparse + patch)
+        run: ./scripts/vendor-chematic.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build manylinux x86_64 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.9.4
+          target: x86_64
+          manylinux: auto
+          args: --release --out dist -i 3.12
+          rust-toolchain: "1.88.0"
+      - name: Smoke import from wheel
+        run: |
+          python -m pip install dist/*.whl
+          python -c "import xenosite.forest as m; assert m.available(); print(m.__version__)"
 
   rust:
     runs-on: ubuntu-latest
