@@ -109,7 +109,12 @@ rs.metabolize(ForestMol("c1ccccc1"))  # no per-search marshal of patterns
 
 `python` and `wasm` are mutually exclusive (both want the `cdylib`).
 
-**wasm-bindgen** (`--features wasm`): the same payload, JS classes named `ForestMol` and `RuleSet`. JS does not get `filter_rules` callbacks on this door; compose patterns in Rust/JS data, then `metabolize`.
+**wasm-bindgen** (`--features wasm`): same public surface as the PyO3 module —
+`ForestMol`, `Formula`, `PatternInfo`, `RuleSet`, `find_path` (incl. `timeout` /
+`timed_out`), `random_path`, and the ruleset factories. JS does not get Python
+`filter_rules` / `filter_sites` callbacks; compose patterns in data, then
+`metabolize`. Packaged as `@xenosite/forest` / GitHub Packages
+`@swamidasslab/forest` (see `.github/PUBLISH.md` and `js/`).
 
 
 ## Build
@@ -122,11 +127,12 @@ cargo test -p xenosite-forest --lib   # includes pattern_info_catalog
 cargo test -p xenosite-forest --features python
 ```
 
-Browser WASM (the whole rlib + cdylib, including hydroxylation and the JS `ForestMol` class):
+Browser / Node WASM (parity with the Python door):
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm --release
+./scripts/build_wasm.sh          # wasm-pack → js/src/wasm
+(cd js && npm install && npm test)  # tsc + Node smokes
 ```
 
 `.cargo/config.toml` sets `getrandom_backend="wasm_js"` so canonaut’s `rand` compiles on `wasm32-unknown-unknown`. The crate does not call C.

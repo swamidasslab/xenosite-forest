@@ -2,6 +2,8 @@
 
 ## 2026-09-28
 
+- **JS/WASM door + GitHub Packages.** Expanded `wasm_api` to match the Python public surface (`find_path` + timeout/`timed_out`, `random_path`, factories, structured `metabolize`). Package `js/` (`@xenosite/forest` → publish `@swamidasslab/forest`). Node smokes via `tsx`. Same `v*` tag publishes npm to GH Packages alongside PyPI wheels. Build: `./scripts/build_wasm.sh` (put `--target web` before `--features` — wasm-pack 0.15 quirk). serde-wasm-bindgen uses `json_compatible()` so Maps are not empty `{}` under JSON.stringify.
+
 - **`find_path` timeout.** `timeout=` (seconds, optional) on Rust Python door / `xenosite.forest.find_path`; counters expose `timed_out`. Not on native.
 
 - **`PathwayOptions`.** Skip multicomponent / skip-seen are opt-in only (`default` off). Shared by `random_path` / `random_path_with`; same knobs for StepSequence/`PathOutcome` `apply`. Preset: `PathwayOptions::no_loops_or_fragments()`.

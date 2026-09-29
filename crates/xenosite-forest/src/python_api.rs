@@ -20,8 +20,8 @@ use crate::find_path::{FindPathConfig, HeapScoreMode, PathCounters, find_path_wi
 use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
 use crate::mol::Molecule;
-use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
 use crate::pathway::PathwayOptions;
+use crate::pattern::{Edit, Effect, PatternInfo, SiteInfo};
 use crate::random_path::{random_path as random_path_rs, random_path_with};
 use crate::rules::{
     dealkylation as dealkylation_rs, default_ruleset as default_ruleset_rs,

@@ -123,9 +123,7 @@ pub fn random_path_with(
             let pick = rng.index(pending.len());
             let item = pending.swap_remove(pick);
             let (step, pattern, next) = match item {
-                Pending::Candidate(c) => {
-                    apply_candidate(&c, &mol, &mut rng, &seen, options)?
-                }
+                Pending::Candidate(c) => apply_candidate(&c, &mol, &mut rng, &seen, options)?,
                 Pending::Pair(p) => apply_pair(&p, &mol, &mut rng, &seen, options)?,
             };
             let Some(next) = next else {
@@ -190,10 +188,8 @@ fn product_indices(
 
 /// Sort pieces by CSMI so product choice is seed-stable.
 fn sorted_pieces(pieces: Vec<Molecule>) -> (Vec<Molecule>, Vec<String>) {
-    let mut pairs: Vec<(String, Molecule)> = pieces
-        .into_iter()
-        .map(|m| (canon_smiles(&m), m))
-        .collect();
+    let mut pairs: Vec<(String, Molecule)> =
+        pieces.into_iter().map(|m| (canon_smiles(&m), m)).collect();
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     let products: Vec<String> = pairs.iter().map(|(s, _)| s.clone()).collect();
     let mols: Vec<Molecule> = pairs.into_iter().map(|(_, m)| m).collect();

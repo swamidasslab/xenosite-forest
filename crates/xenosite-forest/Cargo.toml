@@ -15,7 +15,13 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = []
 # JS bindings. wasm32 getrandom backend is in the target-specific dep below.
-wasm = ["dep:wasm-bindgen"]
+wasm = [
+    "dep:wasm-bindgen",
+    "dep:js-sys",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:serde-wasm-bindgen",
+]
 # CPython class wrap (`#[pyclass]`). Native only; not wasm32-unknown-unknown.
 python = ["dep:pyo3"]
 # Wheel/cdylib: do not link libpython. cargo test --features python omits this.
@@ -32,6 +38,10 @@ chematic = { version = "1.0.27", default-features = false, features = [
 canonaut = "1.0.0"
 log = "0.4"
 wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+serde = { version = "1", optional = true, features = ["derive"] }
+serde_json = { version = "1", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
 pyo3 = { version = "0.26", optional = true }
 
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
@@ -39,3 +49,9 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 proptest = "1.11"
+
+# Newer rustc emits bulk-memory / saturating float ops; enable all features for
+# the wasm-opt shipped with wasm-pack (same as xenosite-pict).
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O", "--all-features"]
+
