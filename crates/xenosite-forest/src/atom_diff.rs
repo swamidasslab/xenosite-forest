@@ -1276,7 +1276,8 @@ pub fn pattern_could_help_on(
             (Some(_), Some(_)) => {}
         }
     }
-    let adds_h_only = !can_cleave && effect_adds_h(effect) && effect.removes.is_none();
+    let adds_h_only =
+        !can_cleave && effect_adds_h(effect) && !effect_adds_oxygen(effect) && effect.removes.is_none();
     if adds_h_only {
         match (mol, target) {
             (Some(m), Some(t)) if !any_h_gain(m, t, diff) => return false,
@@ -1444,15 +1445,38 @@ fn scope_could_help(
 ) -> bool {
     let mut scope: HashSet<usize> = atoms.iter().copied().collect();
     scope.extend(path_ends.iter().copied());
-    // Carbonyl / imine reduction sites the heteroatom; H change is on the
-    // partner heavy atom. Include double-bond neighbors so adds-H sees whether
-    // applying helps (undo would not).
-    if let Some(m) = mol {
-        extend_h_edit_partners(m, &mut scope);
-    }
     if effect.dearomatizes && !scope.iter().any(|a| diff.loses_aromaticity.contains(a)) {
         return false;
     }
+
+    // Formula-neutral + ResonancePair path (tautomer-shaped): need both an
+    // H-gain and an H-loss under this MCS view — net redistribution toward the
+    // target. Matched ends (all ΔH==0) do not help.
+    let formula_neutral = !effect_adds_h(effect)
+        && !effect_removes_h(effect)
+        && !effect_adds_oxygen(effect)
+        && !effect.cleaves;
+    if formula_neutral && !path_ends.is_empty() {
+        return match (mol, target) {
+            (Some(m), Some(t)) => {
+                let mut any_gain = false;
+                let mut any_loss = false;
+                for &a in &scope {
+                    let d = atom_h_delta(m, t, &diff.mapping, a);
+                    if d > 0 {
+                        any_gain = true;
+                    }
+                    if d < 0 {
+                        any_loss = true;
+                    }
+                }
+                any_gain && any_loss
+            }
+            // No live target: pattern-level already passed; defer.
+            _ => true,
+        };
+    }
+
     if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
         let loses_ar = scope.iter().any(|a| diff.loses_aromaticity.contains(a));
         let loses_h = match (mol, target) {
@@ -1465,17 +1489,39 @@ fn scope_could_help(
             return false;
         }
     }
-    // Adding H helps only where the target needs more H. Then undoing (remove H)
-    // would move away from the target — so it would not help.
+    // Adding H: require ΔH>0 on primary site atoms (atoms / path ends) first.
+    // Partner-extend double-bond neighbors only for heteroatom-sited edits
+    // (OxygenReduction carbonyl/imine O/N). Plain C=C hydrogenation must show
+    // H-need on those carbons.
     if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let gains = match (mol, target) {
+        let primary_gains = match (mol, target) {
             (Some(m), Some(t)) => scope
                 .iter()
                 .any(|&a| atom_h_delta(m, t, &diff.mapping, a) > 0),
             _ => true, // no live pair: defer to pattern-level gate
         };
-        if !gains {
-            return false;
+        if !primary_gains {
+            let hetero_sited = mol.is_some_and(|m| {
+                scope.iter().any(|&a| {
+                    let z = m.atom(atom_idx(a)).element.atomic_number();
+                    z == 7 || z == 8
+                })
+            });
+            if !hetero_sited {
+                return false;
+            }
+            if let Some(m) = mol {
+                extend_h_edit_partners(m, &mut scope);
+            }
+            let partner_gains = match (mol, target) {
+                (Some(m), Some(t)) => scope
+                    .iter()
+                    .any(|&a| atom_h_delta(m, t, &diff.mapping, a) > 0),
+                _ => true,
+            };
+            if !partner_gains {
+                return false;
+            }
         }
     }
     true
@@ -2553,5 +2599,87 @@ mod tests {
             .collect();
         assert_eq!(oxygens.len(), 2);
         assert!(!dh_product_ends_match(&product, &oxygens, &target));
+    }
+
+    #[test]
+    fn tautomer_refused_when_h_already_matched() {
+        // Same tautomer form: empty Effect + path ends, all ΔH==0 → refuse.
+        use crate::rules::tautomerization;
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let reactant = as_forest_mol(amine).unwrap();
+        let target = as_forest_mol(amine).unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = tautomerization()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let pairs: Vec<_> = cands.into_iter().filter(|c| c.is_pair()).collect();
+        assert!(!pairs.is_empty(), "expected tautomer pair sites on tacrine amine");
+        for c in &pairs {
+            assert!(
+                !c.could_help_on(&diff, Some(target.mol())),
+                "matched tautomer ends must not help (formula-neutral redistribute)"
+            );
+        }
+    }
+
+    #[test]
+    fn tautomer_helps_amine_toward_imine() {
+        use crate::rules::tautomerization;
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let imine = "N=c1c2c([nH]c3ccccc13)CCCC2";
+        let reactant = as_forest_mol(amine).unwrap();
+        let target = as_forest_mol(imine).unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = tautomerization()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let pairs: Vec<_> = cands.into_iter().filter(|c| c.is_pair()).collect();
+        assert!(
+            pairs.iter().any(|c| c.could_help_on(&diff, Some(target.mol()))),
+            "amine→imine should keep at least one H-redistributing tautomer site"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_helps_ethene_to_ethane() {
+        use crate::rules::hydrogenation;
+        let reactant = as_forest_mol("C=C").unwrap();
+        let target = as_forest_mol("CC").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = hydrogenation()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!cands.is_empty());
+        assert!(
+            cands
+                .iter()
+                .any(|c| c.could_help_on(&diff, Some(target.mol()))),
+            "ethene→ethane: primary C=C must show H-need"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_refused_ethene_toward_ethanol() {
+        // Target has more O, not more H on the alkene carbons in a helpful
+        // hydrogenation sense — C=C→ethanol is oxidation+saturation mix;
+        // plain H-add on the bond should not pass when site carbons do not
+        // need H toward the alcohol MCS placement.
+        use crate::rules::hydrogenation;
+        let reactant = as_forest_mol("C=C").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = hydrogenation()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        for c in &cands {
+            assert!(
+                !c.could_help_on(&diff, Some(target.mol())),
+                "hydrogenation must not help ethene→ethanol on primary site"
+            );
+        }
     }
 }

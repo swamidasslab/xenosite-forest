@@ -6,10 +6,14 @@ import pytest
 
 from xenosite.forest import available
 
-pytestmark = pytest.mark.skipif(not available(), reason="Rust extension not built")
+
+def _require_ext() -> None:
+    if not available():
+        pytest.fail("Rust extension not built; maturin develop --features python,extension-module")
 
 
 def test_forest_xmet_sssom_embedded():
+    _require_ext()
     from xenosite.forest import forest_xmet_sssom
 
     text = forest_xmet_sssom()
@@ -21,6 +25,7 @@ def test_forest_xmet_sssom_embedded():
 
 
 def test_resolve_leaf_and_bound_pattern():
+    _require_ext()
     from xenosite.forest import BoundPattern, expand_iri, resolve, to_curie
 
     rule = resolve("xf:Tautomerization")
@@ -41,6 +46,7 @@ def test_resolve_leaf_and_bound_pattern():
 
 
 def test_bound_pattern_metabolize():
+    _require_ext()
     from xenosite.forest._ext import load
 
     mod = load()
@@ -55,6 +61,7 @@ def test_bound_pattern_metabolize():
 
 
 def test_expand_iri_helpers():
+    _require_ext()
     from xenosite.forest import expand_iri, to_curie
 
     iri = expand_iri("xf:PhaseOne")

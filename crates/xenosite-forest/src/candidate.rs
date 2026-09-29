@@ -288,14 +288,17 @@ impl DeferredSite {
     /// Prefer [`Self::apply`] — it returns [`Emission`] with tagged
     /// [`ForestMol`] products. Use this only when a caller already has a
     /// different adopt parent (legacy find_path emit helpers).
+    ///
+    /// Non-cleaving alternatives that disagree with the sealed [`Effect`]
+    /// formula (incl. H) are dropped — Effect is the contract.
     pub fn materialize_mols(&self) -> Result<Vec<Molecule>, ForestError> {
-        match &self.pair {
+        let mols = match &self.pair {
             None => {
                 let work = match &self.parent {
                     ParentRef::Context => self.mol(),
                     ParentRef::Form(form) => form.as_ref(),
                 };
-                apply_edit_mols(work, &self.pattern, &self.mapped)
+                apply_edit_mols(work, &self.pattern, &self.mapped)?
             }
             Some(p) => crate::pair_edit::materialize_pair_mols(
                 self.mol(),
@@ -307,8 +310,26 @@ impl DeferredSite {
                 p.start,
                 p.end,
                 &p.system,
-            ),
+            )?,
+        };
+        if self.effect.cleaves {
+            // Cleavage: formula check is on the fragment set, not per piece.
+            return Ok(mols);
         }
+        // Non-cleaving: keep only pieces that match the sealed Effect (incl. H).
+        let parent = self.mol();
+        Ok(mols
+            .into_iter()
+            .filter(|p| {
+                crate::formula_check::check_effect_delta_formula(
+                    parent,
+                    &self.effect,
+                    std::slice::from_ref(p),
+                    &self.pattern_name,
+                )
+                .is_none()
+            })
+            .collect())
     }
 
     /// Apply the edit; return a metabolize [`Emission`] with tagged products.

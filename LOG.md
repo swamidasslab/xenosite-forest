@@ -2,6 +2,23 @@
 
 ## 2026-09-29
 
+- **could_help T/H tighten.** `scope_could_help`: formula-neutral +
+  `path_ends` require both ΔH>0 and ΔH<0 (tautomer redistribute). Adds-H
+  requires primary-site H-need; partner-extend only when site has O/N.
+  Tacrine→7-OH bill ~200 (was ~700 crossed). Tests beside OR/hydrogenation.
+- **Never skip tests — xfail.** Rule `.cursor/rules/never-skip-tests.mdc`:
+  no soft-`continue` of failing spec cases; track with `#[ignore]` /
+  pytest xfail. Conjugation adduct Effect-formula accuracy is the only
+  current carve-out (`catalog_adduct_effect_and_atom_diff_…`, ignored).
+  Main gate `catalog_effect_and_atom_diff_match_materialized_products`
+  covers all other LEAF_CTORS (incl. H). Removed open-leave soft-skip
+  from that test.
+- **Effect accuracy fixes (keep-H).** `formula_check` keeps H. Dealkylation:
+  hetero open-leave `!R` (no epoxide C–X); C–C aliphatic `!@` (no arene/
+  epoxide C–C atom-dup); `cc_alcohol` bag `OHH`. Non-cleaving
+  `Candidate::materialize_mols` drops products that disagree with sealed
+  Effect. Epoxidation stays +O (aromatic H-lose products filtered).
+
 - **Tautomer normalize door.** `normalize_tautomer` = chematic
   `normalize_zwitterion` → `remove_hydrogens` → `canonical_tautomer`, then
   Forest adopt via `ForestMol::product` (index-stable) /

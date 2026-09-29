@@ -373,7 +373,7 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -386,7 +386,7 @@ pub fn dealkylation() -> RuleSet {
             .with_cleave_side_group("Me", "hetero"),
             smirks_row(
                 "methylene_carboxylic",
-                "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1](=O)O)",
+                "[#6H2:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1](=O)O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -402,7 +402,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methylene_carbonyl",
-                "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+                "[#6H2:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]=O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -418,11 +418,11 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methylene_alcohol",
-                "[#6H2:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+                "[#6H2:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -434,7 +434,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methine_carbonyl",
-                "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]=O)",
+                "[#6H1:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]=O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -450,11 +450,11 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "methine_alcohol",
-                "[#6H1:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+                "[#6H1:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -466,11 +466,11 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "quaternary_alcohol",
-                "[#6H0:1][#7,#8H0,#16:2]>>([*:2].[*:1]-O)",
+                "[#6H0:1][#7,#8H0,#16;!R:2]>>([*:2].[*:1]-O)",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -481,12 +481,14 @@ pub fn dealkylation() -> RuleSet {
                 },
             ),
             smirks_row(
+                // C–C open-leave: aliphatic, non-ring bond — aromatic/ring
+                // SMIRKS duplicates atoms (epoxide C–C, arene).
                 "cc_quaternary_alcohol",
-                "[#6H0:1][#6:2]>>(O-[*:1].[*:2])",
+                "[CH0:1]!@[C:2]>>(O-[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -498,11 +500,12 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "cc_alcohol",
-                "[#6h1,#6h2,#6h3:1][#6:2]>>(O-[*:1].[*:2])",
+                "[Ch1,Ch2,Ch3:1]!@[C:2]>>(O-[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    // OH on the kept carbon + H cap on the leave → +O +2H.
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -514,7 +517,7 @@ pub fn dealkylation() -> RuleSet {
             ),
             smirks_row(
                 "cc_carbonyl",
-                "[#6h1,#6h2,#6h3:1][#6:2]>>(O=[*:1].[*:2])",
+                "[Ch1,Ch2,Ch3:1]!@[C:2]>>(O=[*:1].[*:2])",
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
@@ -534,8 +537,9 @@ pub fn dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
+                    // Net formula unchanged (OH → carbonyl + H on the leave).
                     adds: None,
-                    removes: Some("H".into()),
+                    removes: None,
                     cleaves: true,
                     methide: false,
                     dearomatizes: false,
@@ -593,7 +597,7 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -642,7 +646,7 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -674,7 +678,7 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -690,7 +694,7 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -706,8 +710,9 @@ pub fn n_dealkylation() -> RuleSet {
                 SiteKind::DirectedBond,
                 vec![1, 2],
                 Effect {
+                    // Net formula unchanged (OH → carbonyl + H on the leave).
                     adds: None,
-                    removes: Some("H".into()),
+                    removes: None,
                     cleaves: true,
                     methide: false,
                     dearomatizes: false,
@@ -856,7 +861,7 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("".into()),
+                    adds: Some("HH".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -872,7 +877,7 @@ pub fn epoxide_opening() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: false,
                     methide: false,
@@ -897,7 +902,7 @@ pub fn hydrolysis() -> RuleSet {
                 SiteKind::Bond,
                 vec![2, 3],
                 Effect {
-                    adds: Some("O".into()),
+                    adds: Some("OHH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -913,7 +918,7 @@ pub fn hydrolysis() -> RuleSet {
                 SiteKind::Bond,
                 vec![2, 3],
                 Effect {
-                    adds: None,
+                    adds: Some("HH".into()),
                     removes: None,
                     cleaves: true,
                     methide: false,
@@ -929,7 +934,26 @@ pub fn hydrolysis() -> RuleSet {
 
 /// `Dehydration` from Python `xenosite.forest.rules`.
 pub fn dehydration() -> RuleSet {
-    let o_leave = Effect {
+    // Cleavage caps fragments with H (chematic). Alcohol: +HH; carbonyl: +HHHH.
+    // beta_elimination stays formula-neutral (alkene + water). Leave O is the
+    // oxygen fragment; H caps are junction bags so cleavage_net matches.
+    let o_leave_alcohol = Effect {
+        adds: Some("HH".into()),
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
+    let o_leave_beta = Effect {
+        cleaves: true,
+        leave_count: Some(1),
+        leave_formula: crate::pattern::leave_o(),
+        partner: Some("O".into()),
+        ..Default::default()
+    };
+    let o_leave_carbonyl = Effect {
+        adds: Some("HHHH".into()),
         cleaves: true,
         leave_count: Some(1),
         leave_formula: crate::pattern::leave_o(),
@@ -944,7 +968,7 @@ pub fn dehydration() -> RuleSet {
                 "[#6,#7:1]-[#8H1:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                o_leave.clone(),
+                o_leave_alcohol,
             ),
             smirks_row(
                 "beta_elimination",
@@ -953,14 +977,14 @@ pub fn dehydration() -> RuleSet {
                 // Alcohol carbon + adjacent carbon — site set differs from a
                 // lone hydroxylation site, so OH→beta-elim is not circular.
                 vec![1, 3],
-                o_leave.clone(),
+                o_leave_beta,
             ),
             smirks_row(
                 "carbonyl",
                 "[#6,#7:1]=[#8:2]>>[*:1].[*:2]",
                 SiteKind::Atom,
                 vec![1],
-                o_leave,
+                o_leave_carbonyl,
             ),
         ],
     )
@@ -1314,6 +1338,7 @@ pub fn epoxidation() -> RuleSet {
 /// Metabolize applies the diol SMIRKS; [`canonical_plan`](crate::ruleset::RuleSet::canonical_plan)
 /// records `Epoxidation` then `EpoxideOpening` — the matching elementary leaves.
 /// Catalog `dearomatizes` is capability (aromatic alkene clears the ring bit).
+/// Net formula vs alkene: +2 O and +2 H (aliphatic and aromatic).
 pub fn epoxide_hydration() -> RuleSet {
     RuleSet::new(
         Some("EpoxideHydration".into()),
@@ -1323,7 +1348,7 @@ pub fn epoxide_hydration() -> RuleSet {
             SiteKind::Bond,
             vec![1, 2],
             Effect {
-                adds: Some("OO".into()),
+                adds: Some("OOHH".into()),
                 removes: None,
                 cleaves: false,
                 methide: false,
@@ -2165,8 +2190,10 @@ mod tests {
         assert_eq!(info.name, "diol");
         assert_eq!(info.site_kind, SiteKind::Bond);
         assert_eq!(info.site_map, vec![1, 2]);
-        assert_eq!(info.effect.adds.as_deref(), Some("OO"));
+        assert_eq!(info.effect.adds.as_deref(), Some("OOHH"));
         assert_eq!(info.effect.delta_formula.get("O"), Some(&2));
+        assert_eq!(info.effect.delta_formula.get("H"), Some(&2));
+        assert!(info.possibilities.is_empty());
         assert!(info.effect.dearomatizes, "catalog capability");
         assert!(!info.effect.cleaves);
         match &info.edit {
@@ -2232,7 +2259,7 @@ mod tests {
         let h_patterns = hydroxy.patterns();
         let h = &h_patterns[0];
         assert_eq!(h.effect.delta_formula.get("O"), Some(&1));
-        assert_eq!(h.effect.delta_formula.get("H"), Some(&-1));
+        assert!(!h.effect.delta_formula.contains_key("H"));
         let dh_set = dehydrogenation();
         let dh_patterns = dh_set.patterns();
         let dh = dh_patterns.iter().find(|p| p.name == "sulfoxide").unwrap();

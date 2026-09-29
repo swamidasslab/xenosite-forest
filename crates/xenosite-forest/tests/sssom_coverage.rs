@@ -140,34 +140,27 @@ fn root_tops_registered() {
     );
 }
 
-/// Growing inventory: every leaf + every live pattern must appear in SSSOM.
-/// Gaps stay on this allowlist until mappings are unlocked.
-const INVENTORY_SSSOM_ALLOWLIST: &[&str] = &[
-    // Add xf: paths here only when intentionally unmapped for now.
-];
-
 #[test]
 fn inventory_fully_covered_in_sssom() {
     let rows = parse_forest_xmet_sssom();
     let objects: BTreeSet<_> = rows.iter().map(|r| r.object_id.clone()).collect();
-    let allow: BTreeSet<_> = INVENTORY_SSSOM_ALLOWLIST.iter().copied().collect();
     let mut missing = Vec::new();
     for name in catalog_names() {
         let id = format!("xf:{name}");
-        if !objects.contains(&id) && !allow.contains(id.as_str()) {
+        if !objects.contains(&id) {
             missing.push(id);
         }
         let leaf = leaf_rule(name).expect("leaf");
         for pattern in leaf.patterns() {
             let id = format!("xf:{name}/{}", pattern.name);
-            if !objects.contains(&id) && !allow.contains(id.as_str()) {
+            if !objects.contains(&id) {
                 missing.push(id);
             }
         }
     }
     assert!(
         missing.is_empty(),
-        "inventory not in SSSOM ({}). Add mappings or INVENTORY_SSSOM_ALLOWLIST:\n{}",
+        "inventory not in SSSOM ({}):\n{}",
         missing.len(),
         missing.join("\n")
     );

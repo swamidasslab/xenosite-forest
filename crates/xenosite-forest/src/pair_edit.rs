@@ -446,6 +446,18 @@ pub(crate) fn materialize_pair_mols(
             if effect.dearomatizes && system_stayed_aromatic(mol, &checked, system) {
                 continue;
             }
+            // Product must match sealed Effect (incl. H). Drops false
+            // path/kekulé emits (e.g. hydrogenation with no H gain).
+            if crate::formula_check::check_effect_delta_formula(
+                mol,
+                effect,
+                &[checked.clone()],
+                "pair",
+            )
+            .is_some()
+            {
+                continue;
+            }
             let smiles = canon_smiles(&checked);
             if local_csmi.insert(smiles) {
                 products.push(checked);

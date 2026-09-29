@@ -6,6 +6,8 @@
 //! [`crate::find_path::PathCounters::formula_delta_mismatches`] and bump
 //! [`crate::find_path::PathCounters::formula_delta_mismatch`]. Soft only —
 //! never drops chemistry.
+//!
+//! Comparisons include hydrogen. Do not strip H to hide Effect/mol disagreement.
 
 use std::collections::BTreeMap;
 
@@ -13,23 +15,23 @@ use crate::forest::{Formula, formula_delta, molecule_formula};
 use crate::mol::Molecule;
 use crate::pattern::{Effect, bag_delta_formula};
 
-/// One soft formula-delta disagreement (declared vs observed heavy).
+/// One soft formula-delta disagreement (declared vs observed, including H).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FormulaDeltaMismatch {
     pub pattern_name: String,
-    pub declared_heavy: BTreeMap<String, i32>,
-    pub observed_heavy: BTreeMap<String, i32>,
+    pub declared: BTreeMap<String, i32>,
+    pub observed: BTreeMap<String, i32>,
     pub cleaves: bool,
     pub adds: Option<String>,
     pub removes: Option<String>,
     pub leave: BTreeMap<String, i32>,
 }
 
-/// Drop hydrogens — edit bags and sanitized mols disagree on H for hydroxyl.
-fn heavy(counts: &BTreeMap<String, i32>) -> BTreeMap<String, i32> {
+/// Zero-free element→delta map (includes H when nonzero).
+fn nonzero(counts: &BTreeMap<String, i32>) -> BTreeMap<String, i32> {
     counts
         .iter()
-        .filter(|(el, n)| *el != "H" && **n != 0)
+        .filter(|(_, n)| **n != 0)
         .map(|(el, n)| (el.clone(), *n))
         .collect()
 }
@@ -47,14 +49,14 @@ fn sum_formulas(mols: &[Molecule]) -> Formula {
     Formula { counts, charge }
 }
 
-/// Expected heavy-atom net for multi-fragment cleavage: junction bags only.
+/// Expected net for multi-fragment cleavage: junction bags only.
 ///
 /// Named ``leave_formula`` atoms stay in a product fragment (cancel in
 /// ``sum(products) − parent``). ``removes`` that are eliminated (halide, not
 /// kept as a fragment) appear in the net — use ``adds − removes``, not adds
 /// alone.
 fn cleavage_net_expected(effect: &Effect) -> BTreeMap<String, i32> {
-    heavy(&bag_delta_formula(
+    nonzero(&bag_delta_formula(
         effect.adds.as_deref(),
         effect.removes.as_deref(),
     ))
@@ -62,16 +64,16 @@ fn cleavage_net_expected(effect: &Effect) -> BTreeMap<String, i32> {
 
 fn cleavage_net_actual(parent: &Formula, products: &[Molecule]) -> BTreeMap<String, i32> {
     let after = sum_formulas(products);
-    heavy(&formula_delta(parent, &after).counts)
+    nonzero(&formula_delta(parent, &after).counts)
 }
 
 fn single_expected(effect: &Effect) -> BTreeMap<String, i32> {
-    heavy(&effect.resolved_delta_formula())
+    nonzero(&effect.resolved_delta_formula())
 }
 
 fn single_actual(parent: &Formula, product: &Molecule) -> BTreeMap<String, i32> {
     let after = molecule_formula(product);
-    heavy(&formula_delta(parent, &after).counts)
+    nonzero(&formula_delta(parent, &after).counts)
 }
 
 fn format_map(map: &BTreeMap<String, i32>) -> String {
@@ -87,11 +89,12 @@ fn format_map(map: &BTreeMap<String, i32>) -> String {
 /// Returns ``None`` when they match (or the check was skipped). On mismatch
 /// logs a warning and returns the structured record.
 ///
-/// Check declared [`Effect::delta_formula`] against observed product formulas.
+/// Check declared [`Effect::delta_formula`] against observed product formulas
+/// (including H).
 ///
 /// - One product, or several **non-cleaving** alternatives (e.g. ResonancePair
 ///   kekulé / path variants): each product is a full molecule; compare
-///   ``product − parent`` to heavy ``delta_formula`` per piece.
+///   ``product − parent`` to ``delta_formula`` per piece.
 /// - Cleavage (`effect.cleaves` with 2+ products): ``sum(products) − parent``
 ///   vs junction ``adds − removes``.
 pub fn check_effect_delta_formula(
@@ -176,7 +179,7 @@ fn finish_mismatch(
             .filter(|(_, n)| **n != 0)
             .map(|(el, n)| (el.clone(), -n))
             .collect();
-        if expected == heavy(&leave_as_delta) {
+        if expected == nonzero(&leave_as_delta) {
             return None;
         }
     }
@@ -185,7 +188,7 @@ fn finish_mismatch(
         return None;
     }
     log::warn!(
-        "Formula delta mismatch for pattern {pattern_name}: declared heavy \
+        "Formula delta mismatch for pattern {pattern_name}: declared \
          delta {} ≠ observed {} (cleaves={}, adds={:?}, removes={:?}, leave={:?})",
         format_map(&expected),
         format_map(&actual),
@@ -196,8 +199,8 @@ fn finish_mismatch(
     );
     Some(FormulaDeltaMismatch {
         pattern_name: pattern_name.to_string(),
-        declared_heavy: expected,
-        observed_heavy: actual,
+        declared: expected,
+        observed: actual,
         cleaves: effect.cleaves,
         adds: effect.adds.clone(),
         removes: effect.removes.clone(),
@@ -212,7 +215,21 @@ mod tests {
     use crate::pattern::{Effect, leave_me};
 
     #[test]
-    fn hydroxyl_heavy_delta_matches() {
+    fn hydroxyl_delta_matches_including_h() {
+        // Ethane → ethanol: net +O; H count unchanged (C2H6 → C2H6O).
+        let parent = parse_mol("CC").unwrap();
+        let product = parse_mol("CCO").unwrap();
+        let effect = Effect {
+            adds: Some("O".into()),
+            ..Effect::default()
+        }
+        .sealed();
+        assert!(check_effect_delta_formula(&parent, &effect, &[product], "h").is_none());
+    }
+
+    #[test]
+    fn hydroxyl_wrong_h_remove_mismatches() {
+        // Old edit-stoichiometry bags (O:+1,H:-1) disagree with mol formula.
         let parent = parse_mol("CC").unwrap();
         let product = parse_mol("CCO").unwrap();
         let effect = Effect {
@@ -221,7 +238,11 @@ mod tests {
             ..Effect::default()
         }
         .sealed();
-        assert!(check_effect_delta_formula(&parent, &effect, &[product], "h").is_none());
+        let detail =
+            check_effect_delta_formula(&parent, &effect, &[product], "h").expect("mismatch");
+        assert_eq!(detail.declared.get("H"), Some(&-1));
+        assert!(!detail.observed.contains_key("H"));
+        assert_eq!(detail.observed.get("O"), Some(&1));
     }
 
     #[test]
@@ -236,8 +257,8 @@ mod tests {
         let detail =
             check_effect_delta_formula(&parent, &effect, &[product], "bad").expect("mismatch");
         assert_eq!(detail.pattern_name, "bad");
-        assert_eq!(detail.declared_heavy.get("O"), Some(&2));
-        assert_eq!(detail.observed_heavy.get("O"), Some(&1));
+        assert_eq!(detail.declared.get("O"), Some(&2));
+        assert_eq!(detail.observed.get("O"), Some(&1));
     }
 
     #[test]
@@ -277,5 +298,17 @@ mod tests {
         assert!(
             check_effect_delta_formula(&parent, &effect, &[enol, bad], "tautomer").is_some()
         );
+    }
+
+    #[test]
+    fn hydrogenation_h_delta_matches() {
+        let parent = parse_mol("C=C").unwrap();
+        let product = parse_mol("CC").unwrap();
+        let effect = Effect {
+            adds: Some("HH".into()),
+            ..Effect::default()
+        }
+        .sealed();
+        assert!(check_effect_delta_formula(&parent, &effect, &[product], "h").is_none());
     }
 }

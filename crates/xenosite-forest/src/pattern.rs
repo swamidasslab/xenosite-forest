@@ -37,6 +37,8 @@ pub struct When {
     pub map: u16,
     pub z: Option<u8>,
     pub h: Option<u8>,
+    /// When set, require the mapped atom's aromaticity to match.
+    pub aromatic: Option<bool>,
 }
 
 impl When {
@@ -45,6 +47,7 @@ impl When {
             map,
             z: Some(z),
             h: None,
+            aromatic: None,
         }
     }
 
@@ -53,7 +56,41 @@ impl When {
             map,
             z: Some(z),
             h: Some(h),
+            aromatic: None,
         }
+    }
+
+    pub fn aromaticity(map: u16, aromatic: bool) -> Self {
+        Self {
+            map,
+            z: None,
+            h: None,
+            aromatic: Some(aromatic),
+        }
+    }
+
+    /// True when this constraint matches `mol` under `mapped`.
+    pub fn matches(&self, mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> bool {
+        let Some(&idx) = mapped.get(&self.map) else {
+            return false;
+        };
+        let atom = mol.atom(atom_idx(idx));
+        if let Some(z) = self.z {
+            if atom.element.atomic_number() != z {
+                return false;
+            }
+        }
+        if let Some(h) = self.h {
+            if mol.implicit_hydrogen_count(atom_idx(idx)) as u8 != h {
+                return false;
+            }
+        }
+        if let Some(want) = self.aromatic {
+            if atom.aromatic != want {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -293,13 +330,14 @@ impl PatternInfo {
     }
 
     pub fn hydroxyl(name: impl Into<String>, smarts: impl Into<String>) -> Self {
+        // Net mol formula of C–H → C–OH is +O (H count unchanged: site loses
+        // one H, OH adds one). Do not seal H:-1 — that disagreed with products.
         Self::new(
             name,
             smarts,
             Edit::Hydroxyl,
             Effect {
                 adds: Some("O".into()),
-                removes: Some("H".into()),
                 ..Effect::default()
             },
         )
@@ -360,6 +398,15 @@ impl PatternInfo {
     /// not a Kekulé supplier form (flags may be cleared there).
     pub fn resolve_for_match(&self, mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Self {
         let mut out = self.clone();
+        if !out.possibilities.is_empty() {
+            if let Some(arm) = out
+                .possibilities
+                .iter()
+                .find(|e| e.when.as_ref().is_some_and(|w| w.matches(mol, mapped)))
+            {
+                out.effect = arm.clone();
+            }
+        }
         if out.effect.dearomatizes {
             out.effect.dearomatizes = site_map_aromatic(mol, mapped, &out.site_map);
         }
@@ -546,7 +593,8 @@ mod tests {
     fn hydroxyl_pattern_carries_delta() {
         let p = PatternInfo::hydroxyl("h", "[#6h1:1]");
         assert_eq!(p.effect.delta_formula.get("O"), Some(&1));
-        assert_eq!(p.effect.delta_formula.get("H"), Some(&-1));
+        assert!(!p.effect.delta_formula.contains_key("H"));
+        assert!(p.effect.removes.is_none());
     }
 
     #[test]

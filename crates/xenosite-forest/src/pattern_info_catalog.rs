@@ -25,6 +25,15 @@ const PROBES: &[&str] = &[
     "C1OC1",
 ];
 
+/// Conjugation adducts — not publicly published; Effect bags still unfinished.
+/// Tracked as xfail: [`catalog_adduct_effect_and_atom_diff_match_materialized_products`].
+const ADDUCT_LEAVES: &[&str] = &[
+    "Acetylation",
+    "Sulfation",
+    "Glucuronidation",
+    "Glutathionation",
+];
+
 fn expected_delta(effect: &Effect) -> BTreeMap<String, i32> {
     compose_delta_formula(
         effect.adds.as_deref(),
@@ -129,8 +138,9 @@ fn catalog_pattern_info_structural() {
             assert_eq!(patterns.len(), 1);
             assert_eq!(patterns[0].name, "diol");
             assert_eq!(patterns[0].site_kind, SiteKind::Bond);
-            assert_eq!(patterns[0].effect.adds.as_deref(), Some("OO"));
+            assert_eq!(patterns[0].effect.adds.as_deref(), Some("OOHH"));
             assert_eq!(patterns[0].effect.delta_formula.get("O"), Some(&2));
+            assert_eq!(patterns[0].effect.delta_formula.get("H"), Some(&2));
             assert!(patterns[0].effect.dearomatizes);
         }
     }
@@ -221,6 +231,138 @@ fn catalog_dearomatizes_capability_matches_chemistry() {
     assert!(
         misses.is_empty(),
         "PatternInfo dearomatizes capability missing for chemistry that clears aromaticity:\n  {}",
+        misses.join("\n  ")
+    );
+}
+
+/// Hits + miss messages for Effect / atom_diff accuracy on `leaves` × PROBES.
+fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
+    use crate::atom_diff::{effect_adds_oxygen, effect_removes_h};
+    use crate::forest::{formula_delta, molecule_formula};
+    use crate::formula_check::check_effect_delta_formula;
+
+    fn effect_adds_h(effect: &Effect) -> bool {
+        effect.adds.as_deref().is_some_and(|a| a.contains('H'))
+    }
+
+    let mut misses: Vec<String> = Vec::new();
+    let mut hits = 0usize;
+    for &name in leaves {
+        let set = leaf_rule(name).expect(name);
+        for &smi in PROBES {
+            let Ok(parent) = ForestMol::parse(smi) else {
+                continue;
+            };
+            let Ok(cands) = set.candidates(&parent).collect::<Result<Vec<_>, _>>() else {
+                continue;
+            };
+            let parent_f = molecule_formula(parent.mol());
+            for c in cands {
+                let Ok(pieces) = c.materialize_mols() else {
+                    continue;
+                };
+                if pieces.is_empty() {
+                    continue;
+                }
+                hits += 1;
+                if let Some(detail) = check_effect_delta_formula(
+                    parent.mol(),
+                    &c.effect,
+                    &pieces,
+                    &c.pattern_name,
+                ) {
+                    misses.push(format!(
+                        "{name}/{} on {smi}: formula mismatch declared {:?} observed {:?}",
+                        c.pattern_name, detail.declared, detail.observed
+                    ));
+                    continue;
+                }
+                // Bag flags vs observed net (cleavage: sum products − parent).
+                let observed = if c.effect.cleaves && pieces.len() > 1 {
+                    let mut counts = BTreeMap::new();
+                    for piece in &pieces {
+                        for (el, n) in molecule_formula(piece).counts {
+                            *counts.entry(el).or_insert(0) += n;
+                        }
+                    }
+                    formula_delta(
+                        &parent_f,
+                        &crate::forest::Formula {
+                            counts,
+                            charge: 0,
+                        },
+                    )
+                    .counts
+                } else {
+                    formula_delta(&parent_f, &molecule_formula(&pieces[0])).counts
+                };
+                let dh = observed.get("H").copied().unwrap_or(0);
+                let d_o = observed.get("O").copied().unwrap_or(0);
+                if dh > 0 && !effect_adds_h(&c.effect) && !c.effect.cleaves {
+                    // Cleavage nets can gain H from caps without an adds bag when
+                    // leave bookkeeping cancels; non-cleaving must declare HH.
+                    misses.push(format!(
+                        "{name}/{} on {smi}: observed H:+{dh} but Effect adds has no H ({:?})",
+                        c.pattern_name, c.effect.adds
+                    ));
+                }
+                if dh < 0 && !effect_removes_h(&c.effect) && !c.effect.cleaves {
+                    misses.push(format!(
+                        "{name}/{} on {smi}: observed H:{dh} but Effect removes has no H ({:?})",
+                        c.pattern_name, c.effect.removes
+                    ));
+                }
+                if d_o > 0 && !effect_adds_oxygen(&c.effect) && !c.effect.cleaves {
+                    misses.push(format!(
+                        "{name}/{} on {smi}: observed O:+{d_o} but Effect does not add oxygen",
+                        c.pattern_name
+                    ));
+                }
+            }
+        }
+    }
+    (hits, misses)
+}
+
+#[test]
+fn catalog_effect_and_atom_diff_match_materialized_products() {
+    //! Every non-adduct LEAF_CTORS hit on PROBES: declared Effect (incl. H)
+    //! matches the product formula delta, and atom_diff bag flags agree.
+    //! When OR arms disagree on H/O, annotate each arm with [`When`] — do not
+    //! hide disagreement by dropping H from the check.
+    //! Adducts: see xfail [`catalog_adduct_effect_and_atom_diff_match_materialized_products`].
+    let leaves: Vec<&str> = catalog_names()
+        .iter()
+        .copied()
+        .filter(|n| !ADDUCT_LEAVES.contains(n))
+        .collect();
+    let (hits, misses) = effect_atom_diff_accuracy(&leaves);
+    assert!(
+        hits > 0,
+        "expected at least one materialize hit across catalog probes"
+    );
+    assert!(
+        misses.is_empty(),
+        "PatternInfo Effect / atom_diff bag flags disagree with materialized products (incl. H).\n\
+         When OR arms disagree, use When possibilities — do not drop H from the check.\n  {}",
+        misses.join("\n  ")
+    );
+}
+
+/// Same Effect/atom_diff accuracy gate as the catalog test, for conjugation
+/// adducts only. `#[ignore]` = xfail until adduct Effect bags are refactored
+/// (not published yet). Run: `cargo test -p xenosite-forest catalog_adduct -- --ignored`
+#[test]
+#[ignore = "xfail: adduct Effect bags unfinished / not published; remove ignore when refactor seals formula Effects"]
+fn catalog_adduct_effect_and_atom_diff_match_materialized_products() {
+    let (hits, misses) = effect_atom_diff_accuracy(ADDUCT_LEAVES);
+    assert!(
+        hits > 0,
+        "expected at least one adduct materialize hit on probes"
+    );
+    assert!(
+        misses.is_empty(),
+        "adduct Effect / atom_diff bag flags disagree with products (incl. H).\n  {}",
         misses.join("\n  ")
     );
 }

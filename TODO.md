@@ -23,7 +23,7 @@ the temporary native console script).
 
 ## Mapping / XMET (upstream)
 
-- Strip Forest/Rainbow identity language from 29 allowlisted chemist homes in tagger `xmet.yaml` (see `test_xmet_definition_lint.py`); drop IDs from allowlist as they clear
+- XFAIL: mapped chemist homes still mention Forest in tagger `xmet.yaml` (`test_xmet_definition_lint.py`, strict); drop xfail when prose is cleaned
 - Consider distinct chemist homes / always_with for `Tautomerization/tautomer_h` vs `path_partner` (both map to `xmet:4000186` today)
 - Add a correct `Conjugation` catalog + SSSOM rows when Phase II composition is settled (CJ rows removed)
 - On forest release: snapshot SSSOM into xenosite-xmet (`docs/release.md`)
