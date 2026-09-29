@@ -1,13 +1,10 @@
 //! Atom identity beside the chematic graph.
 //!
-//! Chematic on crates.io has no userdata; `atom_map` is a SMIRKS match key
-//! (apply clears it; canonical write emits `:n`). This repo vendors chematic
-//! with `Atom.tag` and SMILES visit-order helpers — see
-//! [`crate::chematic_vendor`] and `patches/README.md`.
-//!
-//! [`ForestMol`] still keeps a tag sidecar for derisk continuity. Tags are
-//! remapped by a correspondence from each rewrite when one is supplied.
-//! Tests can also recover maps with public `set_isotope` plus write/parse.
+//! Chematic ≥1.0.27 stores caller labels as `1..=u16::MAX` (`None` / `0` clear).
+//! Forest [`Tag`] is that same non-zero `u16`, kept in a sidecar and synced via
+//! [`crate::chematic_tags`].
+
+use std::num::NonZeroU16;
 
 #[cfg(test)]
 use std::collections::HashSet;
@@ -18,14 +15,42 @@ use chematic::core::{BondIdx, Molecule};
 #[cfg(test)]
 use crate::mol::{atom_idx, atom_usize};
 
-/// Stable atom id in one `ForestMol` copy tree. Not a SMIRKS map number.
+/// Stable atom id in one `ForestMol` copy tree. Matches chematic caller tags:
+/// non-zero `u16`. Never `0` (chematic treats `0` as clear).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Tag(pub u32);
+pub struct Tag(NonZeroU16);
 
-/// Stamp a fresh tag on every atom, in current index order.
-pub fn stamp(n: usize) -> (Vec<Option<Tag>>, u32) {
-    let labels: Vec<Option<Tag>> = (0..n).map(|i| Some(Tag(i as u32))).collect();
-    (labels, n as u32)
+impl Tag {
+    /// `None` when `raw == 0` (cleared / invalid as a label).
+    #[inline]
+    pub fn new(raw: u16) -> Option<Self> {
+        NonZeroU16::new(raw).map(Self)
+    }
+
+    #[inline]
+    pub const fn get(self) -> u16 {
+        self.0.get()
+    }
+
+    #[inline]
+    pub const fn from_nonzero(nz: NonZeroU16) -> Self {
+        Self(nz)
+    }
+}
+
+fn mint(next: &mut u16) -> Tag {
+    let tag = Tag::new(*next).expect("tag id exhausted (u16::MAX labels)");
+    *next = next.checked_add(1).expect("tag counter overflow");
+    tag
+}
+
+/// Stamp a fresh tag on every atom, in current index order (`1..=n`).
+/// Returns labels and the next free id (`n+1`, or `0` only if `n == 0` then `1`).
+pub fn stamp(n: usize) -> (Vec<Option<Tag>>, u16) {
+    assert!(n <= u16::MAX as usize, "too many atoms for chematic tags");
+    let mut next = 1u16;
+    let labels: Vec<Option<Tag>> = (0..n).map(|_| Some(mint(&mut next))).collect();
+    (labels, next)
 }
 
 /// Carry tags through an apply: `src_to_new[src] = Some(dst)` or `None` if
@@ -34,8 +59,8 @@ pub fn remap_apply(
     parent: &[Option<Tag>],
     src_to_new: &[Option<usize>],
     product_n: usize,
-    mut next: u32,
-) -> (Vec<Option<Tag>>, u32) {
+    mut next: u16,
+) -> (Vec<Option<Tag>>, u16) {
     let mut labels = vec![None; product_n];
     for (src, dst) in src_to_new.iter().copied().enumerate() {
         let Some(dst) = dst else {
@@ -47,8 +72,7 @@ pub fn remap_apply(
     }
     for slot in &mut labels {
         if slot.is_none() {
-            *slot = Some(Tag(next));
-            next += 1;
+            *slot = Some(mint(&mut next));
         }
     }
     (labels, next)
@@ -66,17 +90,28 @@ pub fn remap_permute(parent: &[Option<Tag>], old_at_new: &[usize]) -> Vec<Option
 pub fn remap_index_stable(
     parent: &[Option<Tag>],
     product_n: usize,
-    mut next: u32,
-) -> (Vec<Option<Tag>>, u32) {
+    mut next: u16,
+) -> (Vec<Option<Tag>>, u16) {
     let mut labels: Vec<Option<Tag>> = parent.iter().copied().take(product_n).collect();
     labels.resize(product_n, None);
     for slot in &mut labels {
         if slot.is_none() {
-            *slot = Some(Tag(next));
-            next += 1;
+            *slot = Some(mint(&mut next));
         }
     }
     (labels, next)
+}
+
+#[cfg(test)]
+mod tag_nonzero_tests {
+    use super::Tag;
+
+    #[test]
+    fn zero_is_not_a_tag_none_clears() {
+        assert!(Tag::new(0).is_none());
+        assert_eq!(Tag::new(1).unwrap().get(), 1);
+        assert_eq!(Tag::new(u16::MAX).unwrap().get(), u16::MAX);
+    }
 }
 
 /// Non-canonical SMILES visit order: a **test clone** of chematic `write` DFS.
@@ -248,10 +283,10 @@ mod tests {
     #[test]
     fn parse_stamps_a_tag_per_atom() {
         let mol = ForestMol::parse("CCO").unwrap();
-        assert_eq!(mol.tag_of(0), Some(Tag(0)));
-        assert_eq!(mol.tag_of(1), Some(Tag(1)));
-        assert_eq!(mol.tag_of(2), Some(Tag(2)));
-        assert_eq!(mol.index_of(Tag(1)), Some(1));
+        assert_eq!(mol.tag_of(0), Some(Tag::new(1).unwrap()));
+        assert_eq!(mol.tag_of(1), Some(Tag::new(2).unwrap()));
+        assert_eq!(mol.tag_of(2), Some(Tag::new(3).unwrap()));
+        assert_eq!(mol.index_of(Tag::new(2).unwrap()), Some(1));
         assert_eq!(mol.tag_of(3), None);
     }
 

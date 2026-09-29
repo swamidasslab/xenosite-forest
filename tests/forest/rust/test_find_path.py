@@ -1,7 +1,7 @@
 """Product-gate tests for the chematic find_path door.
 
 Imports only ``xenosite.forest`` so missing stub re-exports fail here.
-Requires the ``xenosite_forest`` extension (no skip).
+Requires the ``xenosite.forest._rust`` extension (no skip).
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 from xenosite.forest import PhaseOne, available, find_path
 
 assert available(), (
-    "xenosite_forest extension required for tests/forest/rust; "
-    "maturin develop -m crates/xenosite-forest/Cargo.toml "
+    "xenosite.forest._rust extension required for tests/forest/rust; "
+    "uv sync (maturin build backend) or maturin develop "
     "--features python,extension-module"
 )
 

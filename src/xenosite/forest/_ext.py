@@ -1,4 +1,4 @@
-"""Load the maturin extension ``xenosite_forest``."""
+"""Load the maturin extension ``xenosite.forest._rust``."""
 
 from __future__ import annotations
 
@@ -6,24 +6,24 @@ from typing import Any
 
 
 def load() -> Any:
-    """Import ``xenosite_forest`` or raise a clear ``ImportError``."""
+    """Import ``xenosite.forest._rust`` or raise a clear ``ImportError``."""
 
     try:
-        import xenosite_forest as ext  # type: ignore[import-not-found]
-    except ImportError as e:  # pragma: no cover - optional native wheel
+        from . import _rust as ext  # type: ignore[attr-defined]
+    except ImportError as e:  # pragma: no cover - missing wheel / editable build
         raise ImportError(
-            "xenosite.forest requires the xenosite-forest-native extension "
-            "(maturin develop -m crates/xenosite-forest/Cargo.toml "
+            "xenosite.forest requires the compiled Rust extension "
+            "(install a platform wheel from PyPI, or: maturin develop "
             "--features python,extension-module)"
         ) from e
     return ext
 
 
 def available() -> bool:
-    """True when ``xenosite_forest`` can be imported."""
+    """True when ``xenosite.forest._rust`` can be imported."""
 
     try:
-        import xenosite_forest  # type: ignore[import-not-found]  # noqa: F401
+        from . import _rust  # type: ignore[attr-defined]  # noqa: F401
 
         return True
     except ImportError:
