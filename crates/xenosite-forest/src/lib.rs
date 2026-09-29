@@ -17,6 +17,7 @@ pub mod candidate;
 pub mod canonical_plan;
 pub mod chematic_tags;
 pub mod chematic_vendor;
+pub mod chematic_features;
 pub mod cleavage_graph;
 pub mod find_path;
 pub mod forest;
@@ -29,6 +30,7 @@ pub mod mapping;
 pub mod matched_atom;
 pub mod metabolic_network;
 pub mod mol;
+pub mod normalize;
 pub mod orbits;
 pub mod pair_edit;
 pub mod pathway;
@@ -118,6 +120,7 @@ pub use mol::{
     ForestError, Molecule, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
     stable_csmi_key_of,
 };
+pub use normalize::{NormalizedTautomer, chematic_tautomer_pick, normalize_tautomer};
 pub use orbits::{
     AtomBondGenerator, atom_bond_generators, atom_orbit, atom_orbit_with_gens, atom_pair_orbit_id,
     atom_pair_orbit_id_with_gens, atoms_orbit_with_gens, unordered_atom_pair_groups_with_gens,

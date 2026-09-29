@@ -268,6 +268,12 @@ impl ForestMol {
         Rc::ptr_eq(&self.tag_gen, &other.tag_gen)
     }
 
+    /// Chematic tautomer pick adopted with Forest tracing (same as
+    /// [`crate::normalize_tautomer`]).
+    pub fn normalize_tautomer(&self) -> Result<crate::NormalizedTautomer, ForestError> {
+        crate::normalize_tautomer(self)
+    }
+
     pub fn mol(&self) -> &Molecule {
         &self.mol
     }

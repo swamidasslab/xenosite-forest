@@ -2,6 +2,22 @@
 
 ## 2026-09-29
 
+- **Tautomer normalize door.** `normalize_tautomer` = chematic
+  `normalize_zwitterion` → `remove_hydrogens` → `canonical_tautomer`, then
+  Forest adopt via `ForestMol::product` (index-stable) /
+  `from_edit_product`. Chematic rebuilds drop caller tags on all three
+  stages; `chematic_tautomer_pick` snapshots survivor tags and restamps
+  once at the end (DRY begin/end — no per-stage wraps). Upstream probe
+  `chematic_features` (ignored) asserts tags survive chem rebuilds —
+  drop Forest restamp when those pass. `find_path`
+  defaults `normalize_tautomer: true` (once on reactant/target). Emit stays
+  in normalized space (`invert_target_tautomer` default false). Opt-in invert
+  when the target changed → `ForestError::NotImplemented` until conjugated
+  H-delta + iso remap. Prefer `ForestMol::normalize_tautomer()` when judging
+  expected targets. Free `normalize_tautomer` and the ForestMol method share
+  one door. Chematic `chem` feature enabled. Fixtures from chematic-chem
+  tautomer/zwitterion corpora.
+
 - **Forest↔XMET SSSOM embed + resolve.** Living SoT
   `mappings/xmet-forest.sssom.tsv` (uncompressed only; `.gitignore` blocks
   `mappings/**/*.gz`). `build.rs` gzips to `OUT_DIR`; `forest_xmet_sssom()` /

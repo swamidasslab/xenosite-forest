@@ -248,3 +248,39 @@ polyene, tacrine amine→imine, find_path tacrine→7-OH).
 
 Native `TautomerRule` stub remains patternless / not in native PhaseOne
 (feature-frozen reference).
+
+## Tautomer normalization (chematic pick + Forest adopt)
+
+Status: approved (Rust product door).
+
+Before `find_path` (default on), reactant and target pass through
+[`normalize_tautomer`](../../crates/xenosite-forest/src/normalize.rs):
+chematic `normalize_zwitterion` → `remove_hydrogens` → `canonical_tautomer`,
+then Forest birth via `ForestMol::product` when atom count is unchanged
+(index-stable) or `from_edit_product` otherwise — the same adopt doors as
+metabolize. No separate ChargeSplit rule. Opt out with
+`FindPathConfig.normalize_tautomer = false`.
+
+Chematic-chem rebuilds drop caller-tag sidecars on all three stages. Until
+upstream carries them, `chematic_tautomer_pick` snapshots survivor tags
+(heavy + isotopic H) before the stream and restamps in order afterward —
+one begin/end pair, not per-stage wraps. Survivor relative order is stable
+across the stream (`remove_hydrogens` drops plain H; tautomer keeps atom
+identity). That unlocks `from_edit_product` on explicit-H inputs.
+
+Upstream probe (ignored = xfail):
+[`chematic_features`](../../crates/xenosite-forest/src/chematic_features.rs).
+When those pass without `#[ignore]`, drop the Forest restamp.
+
+Adopt yields no Forest PathSteps, so emit stays in the **normalized** target
+form by default (`invert_target_tautomer = false`). Opt-in
+`invert_target_tautomer` would append reverse target hops into the user
+frame; when the target actually changed under normalize that path is
+**NotImplemented** until conjugated H-delta + isomorphic index remap lands
+(walk tags are reactant-lineage; target_norm sites need remapping onto the
+walk end). Judges should compare against
+`ForestMol::normalize_tautomer()` (or free `normalize_tautomer`) of the
+expected target — not the raw user SMILES — while invert is postponed.
+
+Tests: `normalize::tests::*` (chematic tautomer / zwitterion / explicit-H);
+`find_path::tests::normalize_tautomer_*` / `invert_target_tautomer_*`.

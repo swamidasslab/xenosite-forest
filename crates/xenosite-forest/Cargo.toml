@@ -34,6 +34,7 @@ chematic = { version = "1.0.27", default-features = false, features = [
     "smarts",
     "rxn",
     "perception",
+    "chem",
 ] }
 canonaut = "1.0.0"
 log = "0.4"

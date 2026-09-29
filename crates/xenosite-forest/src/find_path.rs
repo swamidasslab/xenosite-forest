@@ -1074,6 +1074,17 @@ pub struct FindPathConfig {
     /// Stop after this many distinct sealed residual classes (partial door).
     /// `None` = never stop on seal count (exact `find_path`).
     pub stop_after_sealed_basins: Option<usize>,
+    /// Normalize reactant and target with [`crate::normalize_tautomer`] once
+    /// before search (chematic zwitterion → remove explicit H → canonical
+    /// tautomer, adopted with Forest tracing). Default **true**. Set false to
+    /// search the given forms as-is (and for any future inner map recursion).
+    pub normalize_tautomer: bool,
+    /// When true with [`Self::normalize_tautomer`], append reverse target
+    /// tautomer hops so emit ends in the **user** target form. Default
+    /// **false** (emit stays in normalized space). Not implemented yet when
+    /// the target actually changes under normalize — returns
+    /// [`ForestError::NotImplemented`].
+    pub invert_target_tautomer: bool,
 }
 
 impl Default for FindPathConfig {
@@ -1089,6 +1100,8 @@ impl Default for FindPathConfig {
             diversity: false,
             timeout: None,
             stop_after_sealed_basins: None,
+            normalize_tautomer: true,
+            invert_target_tautomer: false,
         }
     }
 }
@@ -1323,8 +1336,21 @@ where
     T: IntoForestMol,
     K: Fn(&Candidate) -> bool,
 {
-    let start = as_forest_mol(reactant)?;
-    let target = as_forest_mol(target)?;
+    let mut start = as_forest_mol(reactant)?;
+    let mut target = as_forest_mol(target)?;
+    if config.normalize_tautomer {
+        start = crate::normalize_tautomer(start)?.mol;
+        let target_norm = crate::normalize_tautomer(target)?;
+        if config.invert_target_tautomer && target_norm.changed {
+            return Err(ForestError::NotImplemented(
+                "invert_target_tautomer: reverse target tautomer emit is not implemented yet \
+                 (conjugated H-delta + iso remap). Search with invert_target_tautomer=false \
+                 and judge against normalize_tautomer(target)."
+                    .into(),
+            ));
+        }
+        target = target_norm.mol;
+    }
     Ok(FindPath {
         ruleset,
         counters,
@@ -2796,6 +2822,151 @@ mod tests {
     }
 
     #[test]
+    fn normalize_tautomer_makes_enol_keto_same_form_hit() {
+        // Chematic pick puts both on the keto form → identity search.
+        // Emit stays in normalized space (invert_target_tautomer default off).
+        let want = as_forest_mol("CC=O")
+            .unwrap()
+            .normalize_tautomer()
+            .unwrap()
+            .mol
+            .csmi()
+            .as_ref()
+            .to_string();
+        let rules = default_ruleset();
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "OC=C",
+            "CC=O",
+            &rules,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 50,
+                normalize_tautomer: true,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(hits.len(), 1, "billed={}", counters.billed());
+        assert!(hits[0].steps.is_empty(), "same form after normalize");
+        assert_eq!(hits[0].smiles, want);
+    }
+
+    #[test]
+    fn invert_target_tautomer_not_implemented_when_target_changes() {
+        // Target enol → keto under normalize; invert requests user-frame emit.
+        let rules = default_ruleset();
+        let mut counters = PathCounters::default();
+        let err = match find_path_with(
+            "CC=O",
+            "OC=C",
+            &rules,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 50,
+                normalize_tautomer: true,
+                invert_target_tautomer: true,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        ) {
+            Err(e) => e,
+            Ok(_) => panic!("invert + changed target must NotImplemented"),
+        };
+        assert!(
+            matches!(err, ForestError::NotImplemented(_)),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn invert_target_tautomer_ok_when_target_already_canonical() {
+        let want = as_forest_mol("CC=O")
+            .unwrap()
+            .normalize_tautomer()
+            .unwrap()
+            .mol
+            .csmi()
+            .as_ref()
+            .to_string();
+        let rules = default_ruleset();
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "OC=C",
+            "CC=O",
+            &rules,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 50,
+                normalize_tautomer: true,
+                invert_target_tautomer: true,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(hits.len(), 1, "billed={}", counters.billed());
+        assert_eq!(hits[0].smiles, want);
+    }
+
+    #[test]
+    fn normalize_tautomer_false_still_bridges_enol_keto() {
+        // Forest T covers cyclohexanone↔enol; tiny vinyl alcohol is chematic-only.
+        let rules = crate::rules::tautomerization();
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            "OC1=CCCCC1",
+            "O=C1CCCCC1",
+            &rules,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 200,
+                normalize_tautomer: false,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(hits.len(), 1, "billed={}", counters.billed());
+        assert!(!hits[0].steps.is_empty(), "T hops without normalize");
+    }
+
+    #[test]
+    fn normalize_tautomer_tacrine_amine_imine_hits() {
+        // Chematic may keep amine/imine distinct; normalize still on, T bridges.
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let imine = "N=c1c2c([nH]c3ccccc13)CCCC2";
+        let rules = default_ruleset();
+        let mut counters = PathCounters::default();
+        let hits = find_path_with(
+            amine,
+            imine,
+            &rules,
+            &mut counters,
+            FindPathConfig {
+                max_paths: 1,
+                max_nodes: 200,
+                normalize_tautomer: true,
+                ..FindPathConfig::default()
+            },
+            accept_all_candidates,
+        )
+        .unwrap()
+        .collect_all()
+        .unwrap();
+        assert_eq!(hits.len(), 1, "billed={}", counters.billed());
+    }
 
     #[test]
     fn find_path_partial_unreachable_returns_closest() {

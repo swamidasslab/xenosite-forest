@@ -25,6 +25,8 @@ pub enum ForestError {
     Smirks(String),
     Kekule(String),
     Plan(String),
+    /// Feature postponed (e.g. target-tautomer invert on emit).
+    NotImplemented(String),
 }
 
 impl std::fmt::Display for ForestError {
@@ -34,7 +36,8 @@ impl std::fmt::Display for ForestError {
             | Self::Smarts(msg)
             | Self::Smirks(msg)
             | Self::Kekule(msg)
-            | Self::Plan(msg) => f.write_str(msg),
+            | Self::Plan(msg)
+            | Self::NotImplemented(msg) => f.write_str(msg),
         }
     }
 }

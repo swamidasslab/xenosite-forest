@@ -619,6 +619,8 @@ fn run_find_path(
     drop_skeleton_twins: Option<bool>,
     score: Option<String>,
     timeout: Option<f64>,
+    normalize_tautomer: Option<bool>,
+    invert_target_tautomer: Option<bool>,
 ) -> Result<JsValue, JsValue> {
     let score_label = score.as_deref().unwrap_or("log-neg-pc");
     let heap_score = HeapScoreMode::from_label(score_label).ok_or_else(|| {
@@ -644,6 +646,8 @@ fn run_find_path(
         drop_skeleton_twins: drop_skeleton_twins.unwrap_or(true),
         diversity: diversity.unwrap_or(false),
         timeout,
+        normalize_tautomer: normalize_tautomer.unwrap_or(true),
+        invert_target_tautomer: invert_target_tautomer.unwrap_or(false),
         ..FindPathConfig::default()
     };
     let rules = default_ruleset_rs();
@@ -707,6 +711,8 @@ pub fn find_path(
         drop_skeleton_twins,
         score,
         timeout,
+        None,
+        None,
     )
 }
 
@@ -728,7 +734,19 @@ pub fn find_path_with_options(
         opt_bool(&options, "drop_skeleton_twins", "dropSkeletonTwins")?,
         opt_string(&options, "score")?,
         opt_f64(&options, "timeout", "timeout")?,
+        opt_bool(&options, "normalize_tautomer", "normalizeTautomer")?,
+        opt_bool(&options, "invert_target_tautomer", "invertTargetTautomer")?,
     )
+}
+
+/// Chematic tautomer pick → tagged ForestMol. Returns `{csmi, changed}`.
+#[wasm_bindgen(js_name = normalize_tautomer)]
+pub fn normalize_tautomer_js(smiles: &str) -> Result<JsValue, JsValue> {
+    let out = crate::normalize_tautomer(smiles).map_err(|e| js_err(e.to_string()))?;
+    to_js(&json!({
+        "csmi": out.mol.csmi().as_ref(),
+        "changed": out.changed,
+    }))
 }
 
 /// Seeded random walk. Returns `{smiles, path, steps, patterns}`.

@@ -22,6 +22,7 @@ from xenosite.forest import (  # noqa: F401 — import gap gate
     available,
     find_path,
     find_path_partial,
+    normalize_tautomer,
     random_path,
 )
 
@@ -39,6 +40,7 @@ def test_public_allowlist():
         "available",
         "find_path",
         "find_path_partial",
+        "normalize_tautomer",
         "MetabolicNetwork",
         "random_path",
         "PhaseOne",
@@ -63,6 +65,7 @@ def test_ruleset_factories_callable_from_stub():
 
     assert callable(find_path)
     assert callable(find_path_partial)
+    assert callable(normalize_tautomer)
     assert callable(random_path)
     assert callable(available)
     assert callable(PhaseOne)

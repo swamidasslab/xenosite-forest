@@ -140,6 +140,14 @@ impl PyForestMol {
         Self::wrap(self.inner.edit_copy())
     }
 
+    /// Chematic tautomer pick adopted with Forest tracing.
+    ///
+    /// Returns ``(ForestMol, changed)``.
+    fn normalize_tautomer(&self) -> PyResult<(Self, bool)> {
+        let out = self.inner.normalize_tautomer().map_err(py_err)?;
+        Ok((Self::wrap(out.mol), out.changed))
+    }
+
     fn smarts_matches(&self, smarts: &str) -> PyResult<Vec<HashMap<u16, usize>>> {
         let hits = self.inner.smarts_matches(smarts).map_err(py_err)?;
         Ok(hits
@@ -672,6 +680,16 @@ fn metabolize_with_python(
     Ok(emissions)
 }
 
+/// Chematic tautomer pick adopted as a tagged [`ForestMol`].
+///
+/// Returns ``(mol, changed)`` where ``mol`` is a :class:`ForestMol` and
+/// ``changed`` is whether the form differed from the input.
+#[pyfunction]
+fn normalize_tautomer(smiles: &str) -> PyResult<(PyForestMol, bool)> {
+    let out = crate::normalize_tautomer(smiles).map_err(py_err)?;
+    Ok((PyForestMol::wrap(out.mol), out.changed))
+}
+
 /// Native chematic ``find_path`` (default ruleset). Returns ``(hits, counters)``.
 ///
 /// Default ruleset is QuinoneFormation + EpoxideHydration + Tautomerization +
@@ -692,6 +710,8 @@ fn metabolize_with_python(
     score="log-neg-pc",
     timeout=None,
     network=None,
+    normalize_tautomer=true,
+    invert_target_tautomer=false,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn find_path(
@@ -707,8 +727,10 @@ fn find_path(
     score: &str,
     timeout: Option<f64>,
     network: Option<&Bound<'_, PyMetabolicNetwork>>,
+    normalize_tautomer: bool,
+    invert_target_tautomer: bool,
 ) -> PyResult<(Vec<Py<PyAny>>, Py<PyAny>)> {
-    let config = parse_find_path_config(
+    let mut config = parse_find_path_config(
         score,
         max_paths,
         max_nodes,
@@ -718,6 +740,8 @@ fn find_path(
         drop_skeleton_twins,
         timeout,
     )?;
+    config.normalize_tautomer = normalize_tautomer;
+    config.invert_target_tautomer = invert_target_tautomer;
     let rules = default_ruleset_rs();
     let mut counters = PathCounters::default();
     let hits = match network {
@@ -902,6 +926,8 @@ fn parse_find_path_config(
     score="log-neg-pc",
     timeout=None,
     network=None,
+    normalize_tautomer=true,
+    invert_target_tautomer=false,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn find_path_partial_py(
@@ -917,8 +943,10 @@ fn find_path_partial_py(
     score: &str,
     timeout: Option<f64>,
     network: Option<&Bound<'_, PyMetabolicNetwork>>,
+    normalize_tautomer: bool,
+    invert_target_tautomer: bool,
 ) -> PyResult<(Vec<Py<PyAny>>, Vec<Py<PyAny>>, Py<PyAny>)> {
-    let config = parse_find_path_config(
+    let mut config = parse_find_path_config(
         score,
         max_paths,
         max_nodes,
@@ -928,6 +956,8 @@ fn find_path_partial_py(
         drop_skeleton_twins,
         timeout,
     )?;
+    config.normalize_tautomer = normalize_tautomer;
+    config.invert_target_tautomer = invert_target_tautomer;
     let rules = default_ruleset_rs();
     let mut counters = PathCounters::default();
     let result = match network {
@@ -1168,6 +1198,7 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMetabolicNetwork>()?;
     m.add_function(wrap_pyfunction!(find_path, m)?)?;
     m.add_function(wrap_pyfunction!(find_path_partial_py, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_tautomer, m)?)?;
     m.add_function(wrap_pyfunction!(random_path, m)?)?;
     m.add_function(wrap_pyfunction!(phase_one, m)?)?;
     m.add_function(wrap_pyfunction!(epoxidation, m)?)?;

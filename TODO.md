@@ -7,7 +7,7 @@ the temporary native console script).
 
 ## Now (find_path + sampling)
 
-- Tautomerization: cut find_path bill on tacrine further (fanout / unique-edit); imine↔amine coverage fixed
+- Tautomerization: cut find_path bill on tacrine further (fanout / unique-edit); imine↔amine coverage fixed; normalize_tautomer door shipped (chematic pick + Forest adopt)
 - Validate walk-history residual bags on MetX hard misses (chromenone OH thrash, S-ox, arene-epoxide) + +GSH before coding invariant-leftover cuts
 - Boost / `stop_after_sealed_basins` stay parked until bag history is measured (early-stop hurt closest)
 - find_path: mapping argument between target and reactant
