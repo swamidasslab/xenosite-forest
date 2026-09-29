@@ -47,7 +47,7 @@ jobs:
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
       - name: Full forest suite (public stub + native + legacy)
-        run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+        run: make test-python
 
   rust:
     runs-on: ubuntu-latest
@@ -68,11 +68,11 @@ jobs:
       - name: Clippy
         run: cargo clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
       - name: Test
-        run: cargo test -p xenosite-forest
+        run: make test-rust
       - name: PyO3
         run: |
           cargo clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
-          cargo test -p xenosite-forest --features python
+          make test-rust-python
       - name: WASM
         run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
 
