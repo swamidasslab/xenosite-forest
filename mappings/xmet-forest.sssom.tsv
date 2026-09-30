@@ -4,7 +4,8 @@
 #  xmet: https://xenosite.org/ontology/xmet#
 #  skos: http://www.w3.org/2004/02/skos/core#
 #  semapv: https://w3id.org/semapv/
-# Object CURIEs use xf: path form (Rule, Rule/pattern, or catalog/ruleset name).
+# Object CURIEs use xf: path form (Rule, Rule/pattern, or catalog name).
+# No two-letter catalog abbreviations (SO/UO/CJ/…).
 # always_with: pipe-separated XMET descriptor CURIEs disambiguating multi-pattern homes.
 subject_id	predicate_id	object_id	mapping_justification	subject_label	object_label	always_with
 xmet:4000001	skos:relatedMatch	xf:PhaseOne	semapv:ManualMappingCuration	phase I	PhaseOne	
@@ -54,8 +55,6 @@ xmet:4000107	skos:exactMatch	xf:SulfurReduction/sulfoxide	semapv:ManualMappingCu
 xmet:4000108	skos:exactMatch	xf:SulfurReduction/disulfide	semapv:ManualMappingCuration	disulfide reduction	disulfide	
 xmet:4000288	skos:exactMatch	xf:ReductiveDehalogenation/cleave	semapv:ManualMappingCuration	reductive C–halogen cleavage	cleave	
 xmet:4000289	skos:exactMatch	xf:ReductiveDehalogenation/alkene	semapv:ManualMappingCuration	reductive dehalogenation to alkene	alkene	
-xmet:4000006	skos:relatedMatch	xf:Dehydrogenation	semapv:ManualMappingCuration	dehydrogenation	Dehydrogenation	
-xmet:4000007	skos:relatedMatch	xf:Hydrolysis	semapv:ManualMappingCuration	hydrolysis	Hydrolysis	
 xmet:4000008	skos:relatedMatch	xf:Reduction	semapv:ManualMappingCuration	reduction	Reduction	
 xmet:4000291	skos:exactMatch	xf:Hydroxylation/h	semapv:ManualMappingCuration	methine hydroxylation	h	
 xmet:4000292	skos:exactMatch	xf:Hydroxylation/h2	semapv:ManualMappingCuration	methyl or methylene hydroxylation	h2	
@@ -144,3 +143,13 @@ xmet:4000336	skos:exactMatch	xf:NDealkylation/quaternary_alcohol	semapv:ManualMa
 xmet:4000337	skos:exactMatch	xf:NDealkylation/hemiaminal	semapv:ManualMappingCuration	N-hemiaminal collapse dealkylation	hemiaminal	xmet:4000399|xmet:4000259
 xmet:4000186	skos:exactMatch	xf:Tautomerization/tautomer_h	semapv:ManualMappingCuration	tautomerization	tautomer_h	
 xmet:4000186	skos:exactMatch	xf:Tautomerization/path_partner	semapv:ManualMappingCuration	tautomerization	path_partner	
+xmet:4000330	skos:exactMatch	xf:QuinoneFormation/dealkylate_cumulated	semapv:ManualMappingCuration	dealkylative quinoid endpoint	dealkylate_cumulated	xmet:4000256
+xmet:4000336	skos:exactMatch	xf:Dealkylation/quaternary_alcohol_n	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_n	xmet:4000398
+xmet:4000336	skos:exactMatch	xf:Dealkylation/quaternary_alcohol_nitro	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_nitro	xmet:4000398|xmet:4000418
+xmet:4000336	skos:exactMatch	xf:NDealkylation/quaternary_alcohol_nitro	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_nitro	xmet:4000398|xmet:4000418
+xmet:4000305	skos:exactMatch	xf:Dehydration/beta_elimination_acid	semapv:ManualMappingCuration	beta-elimination	beta_elimination_acid	
+xmet:4000419	skos:exactMatch	xf:Dehydration/nitroso	semapv:ManualMappingCuration	nitroso oxo-leave	nitroso	
+xmet:4000420	skos:exactMatch	xf:Dehydration/nitro	semapv:ManualMappingCuration	nitro oxo-leave	nitro	
+xmet:4000091	skos:exactMatch	xf:Hydrogenation/alkene_cumulene	semapv:ManualMappingCuration	alkene hydrogenation	alkene_cumulene	
+xmet:4000421	skos:exactMatch	xf:OxygenReduction/nitroso	semapv:ManualMappingCuration	nitroso N=O reduction	nitroso	
+xmet:4000422	skos:exactMatch	xf:OxygenReduction/nitro	semapv:ManualMappingCuration	nitro N=O reduction	nitro	
