@@ -2,6 +2,13 @@
 
 ## 2026-09-29
 
+- **Step::apply pair replay vs atom-orbit expansion.** Anthraquinone +
+  Hydrogenation plan site `[6,7]` failed `apply_forest` (CI proptest seed
+  `9695d3dc…`): expanding each end into atom orbits (`6↔14`, `7↔15`) made
+  `accepted.len()==4`, so `pair_matches_wanted`'s `len==2` gate never fired.
+  Pair match now uses the plan site only. Regression:
+  `anthraquinone_hydrogenation_plan_replays` + persisted fuzz seed.
+
 - **Pathway displays: StepPlan + Maybe + outer→leaf paths.** `StepPlan.maybe()` /
   `PathOutcome.maybe()` expose cleavage bags; notebook marks SOM (coral) vs
   Maybe (blue) with atom labels on every mol. Emission/`hops` path captions

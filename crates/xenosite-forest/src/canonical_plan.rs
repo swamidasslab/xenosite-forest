@@ -161,18 +161,16 @@ impl Step {
         let forest = ForestMol::wrap_preserving_labels(mol.clone());
         let gens = forest.atom_bond_generators();
         let n = mol.atom_count();
-        let mut accepted = wanted.clone();
-        for &w in &wanted {
-            for i in crate::orbits::atom_orbit_with_gens(gens.as_ref(), n, w) {
-                accepted.insert(i);
-            }
-        }
         let mut products = Vec::new();
         let mut seen = HashSet::new();
         for c in rule.candidates(&forest) {
             let c = c?;
             let c = if c.is_pair() {
-                if !pair_matches_wanted(mol, &c, &accepted) {
+                // Match the plan site (`wanted`). Do not union each end's atom
+                // orbit first: on symmetric mols that set grows past len 2
+                // (anthraquinone 6↔14, 7↔15) and pair_matches_wanted's len==2
+                // gate never fires, so carbonyl pair replay returns empty.
+                if !pair_matches_wanted(mol, &c, &wanted) {
                     continue;
                 }
                 c
@@ -195,7 +193,7 @@ impl Step {
                 std::rc::Rc::new(forest.copy_mol()),
                 &endpoints,
             )? {
-                if !pair_matches_wanted(mol, &pair, &accepted) {
+                if !pair_matches_wanted(mol, &pair, &wanted) {
                     continue;
                 }
                 for p in pair.materialize_mols()? {
