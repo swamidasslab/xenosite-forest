@@ -2,6 +2,10 @@
 # Pushing a tag always creates the git tag; this workflow refuses to publish
 # a GitHub Release / PyPI upload unless the suite is green.
 #
+# Version comes from the tag. scripts/set_release_version.py rewrites
+# Cargo.toml / Cargo.lock / js/package.json before builds; the changelog job
+# commits those bumps onto the default branch with CHANGELOG.md.
+#
 # PyPI uses Trusted Publishing (OIDC) — no API token secret. One-time setup:
 #   1. GitHub → Settings → Environments → create "pypi"
 #   2. PyPI → Publishing → add pending trusted publisher:
@@ -40,6 +44,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Set package version from tag
+        run: python3 scripts/set_release_version.py
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -53,7 +59,7 @@ jobs:
         run: uv sync --extra rdkit --extra network --group dev
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
-      - name: Require Cargo version matches tag
+      - name: Require built package version matches tag
         run: |
           set -euo pipefail
           TAG_VER="${GITHUB_REF_NAME#v}"
@@ -87,6 +93,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set package version from tag
+        run: python scripts/set_release_version.py
       - name: Build manylinux wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -118,6 +126,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set package version from tag
+        run: python scripts/set_release_version.py
       - name: Build musllinux wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -149,6 +159,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set package version from tag
+        run: python scripts/set_release_version.py
       - name: Build macOS wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -182,6 +194,8 @@ jobs:
         with:
           python-version: "3.12"
           architecture: ${{ matrix.platform.python_arch }}
+      - name: Set package version from tag
+        run: python scripts/set_release_version.py
       - name: Build Windows wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -204,6 +218,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set package version from tag
+        run: python scripts/set_release_version.py
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -225,6 +241,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: Set package version from tag
+        run: python3 scripts/set_release_version.py
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.88.0"
@@ -250,12 +268,6 @@ jobs:
           npm test
           npm run build:ts
           npm run build:copy-wasm
-      - name: Version from tag
-        working-directory: js
-        run: |
-          VER="${GITHUB_REF_NAME#v}"
-          echo "Publishing JS version $VER"
-          npm version "$VER" --no-git-tag-version --allow-same-version
       - name: Retarget package name for GitHub Packages
         working-directory: js
         run: |
@@ -291,7 +303,9 @@ jobs:
       - name: Version without v prefix
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Compile CHANGELOG.md from towncrier fragments
+      - name: Set package version from tag
+        run: python3 scripts/set_release_version.py
+      - name: Compile CHANGELOG.md and commit version bump
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -302,14 +316,15 @@ jobs:
           else
             uvx towncrier build --yes --version "$VERSION"
           fi
-          git add CHANGELOG.md changelog.d
+          git add CHANGELOG.md changelog.d \
+            crates/xenosite-forest/Cargo.toml Cargo.lock js/package.json
           if git diff --cached --quiet; then
-            echo "No changelog changes to commit"
+            echo "No release housekeeping changes to commit"
             exit 0
           fi
-          git commit -m "Update CHANGELOG.md for ${GITHUB_REF_NAME}."
+          git commit -m "Release ${GITHUB_REF_NAME}: changelog + package versions."
           git push origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}" || \
-            echo "::warning::Could not fast-forward default branch with CHANGELOG.md."
+            echo "::warning::Could not fast-forward default branch with release housekeeping."
 
   publish:
     needs: [linux, musllinux, macos, windows, sdist]

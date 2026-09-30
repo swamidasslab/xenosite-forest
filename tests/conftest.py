@@ -41,6 +41,24 @@ settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "default"))
 collect_ignore_glob: list[str] = []
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--parity-focused",
+        action="store_true",
+        default=False,
+        help=(
+            "Shrink native↔Rust rule_parity_fuzz to CoverIntent cases only "
+            "(same as XENOSITE_PARITY_FULL=0). Default remains full cartesian."
+        ),
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # Set before collection so rule_parity_corpus.parity_param_cases sees it.
+    if config.getoption("--parity-focused"):
+        os.environ["XENOSITE_PARITY_FULL"] = "0"
+
+
 @pytest.fixture(autouse=True)
 def _formula_delta_mismatch_must_be_zero(request: pytest.FixtureRequest):
     """Every test: formula_delta_mismatch collector stays empty.

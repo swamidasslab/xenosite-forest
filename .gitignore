@@ -1,3 +1,4 @@
+.envrc
 # Caches and virtualenvs
 .venv/
 # Multi-version bench matrices — use `uv run --python 3.X` instead.

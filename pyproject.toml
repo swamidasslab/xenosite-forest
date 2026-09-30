@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "xenosite-forest"
-# Version from crates/xenosite-forest/Cargo.toml (maturin). Tag releases as vX.Y.Z
-# matching that Cargo version (release CI asserts equality).
+# Version from crates/xenosite-forest/Cargo.toml (maturin). Tag releases as
+# vX.Y.Z; release CI rewrites Cargo.toml from the tag before building.
 dynamic = ["version"]
 description = "Metabolic Forest: enumerate metabolite structures from reaction rules"
 readme = "README.md"

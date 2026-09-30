@@ -1,9 +1,11 @@
 # Release
 
 One package: ``xenosite-forest`` is a maturin mixed wheel (Python under
-``src/xenosite`` + Rust extension ``xenosite.forest._rust``). The wheel version is
-``crates/xenosite-forest/Cargo.toml`` ``package.version``. Tag releases as
-``vX.Y.Z`` with that Cargo version set to ``X.Y.Z`` on the tagged commit.
+``src/xenosite`` + Rust extension ``xenosite.forest._rust``). The published
+version is the ``vX.Y.Z`` git tag. Release CI rewrites
+``crates/xenosite-forest/Cargo.toml`` (plus ``Cargo.lock`` and
+``js/package.json``) from that tag before building; you do not bump Cargo by
+hand.
 
 Do not run ``towncrier build`` locally for a real release (Protect main blocks
 direct pushes; the tag workflow compiles fragments, or open a changelog PR).
@@ -24,11 +26,13 @@ Local editable install (builds the extension):
 uv sync --extra rdkit --extra network --group dev
 ```
 
+Between releases, ``Cargo.toml`` may still show the last cut until the next
+tag’s housekeeping commit lands; that is fine for development.
+
 ## Cut a release
 
-1. Set ``version = "X.Y.Z"`` in ``crates/xenosite-forest/Cargo.toml``.
-2. Merge to ``main`` with fragments committed.
-3. Tag and push:
+1. Merge to ``main`` with fragments committed.
+2. Tag and push:
 
 ```bash
 git tag -a v0.8.1 -m "0.8.1"
@@ -36,12 +40,45 @@ git push origin v0.8.1
 ```
 
 Pushing `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml):
-tests, platform wheels (manylinux / musllinux / macOS / Windows, x86_64 +
-aarch64), sdist, GitHub Release, PyPI upload, and towncrier compiling
-`CHANGELOG.md` onto the default branch when the branch ruleset allows.
+[`scripts/set_release_version.py`](../scripts/set_release_version.py) sets
+package versions from the tag, then tests, platform wheels (manylinux /
+musllinux / macOS / Windows, x86_64 + aarch64), sdist, GitHub Release, PyPI
+upload, JS publish, and a housekeeping commit on the default branch
+(`CHANGELOG.md` + Cargo/JS versions) when the branch ruleset allows.
 
 Wheels are built **only** on that tag workflow — not on PR or push to
-`main` (`test.yml` runs pytest / rust / lint only).
+`main`. CI profile:
+
+| Trigger | What runs |
+|---|---|
+| PR | Lint only (ruff / pyright / rustfmt / clippy / WASM compile) |
+| `main` | Single Python 3.12: `make test-python-smoke` + `make test-rust-smoke` + JS |
+| `v*` tag | Full `make test-python` on 3.11–3.14; publish blocked on fail |
+
+Local defaults are unchanged: `make test` / `make test-python` / `make test-rust`
+still run the whole suite. Smoke is opt-in (`make test-python-smoke` /
+`make test-rust-smoke` / `make test-smoke`). `test-rust-smoke` omits the
+`ms1_apply_fuzz` integration binary (full suite on tags / `make test-rust`
+still runs it).
+
+### Main smoke contents
+
+**Include**
+
+- Full Rust crate: `make test-rust` and `make test-rust-python`
+- Python product door: `tests/forest/rust/`
+- Thin native↔Rust parity: `test_rule_parity_pairs.py`,
+  `test_rule_parity_fuzz.py` with ``XENOSITE_PARITY_FULL=0`` /
+  ``pytest --parity-focused`` (CoverIntent corpus only), and
+  `test_rust_parity_coverage.py` (coverage-substrate product sets)
+- JS wrapper: `npm test` (tsc + API smoke)
+
+**Exclude (still on tag full suite)**
+
+- Entire `tests/forest/legacy/`
+- Native-only RDKit suites (goldens, Hypothesis fuzz, CLI, ported archives,
+  `test_canonical_plan`, native↔legacy `test_parity.py`, …)
+- Full rule×mol cartesian parity (`XENOSITE_PARITY_FULL=1`, the default)
 
 ## Forest ↔ XMET SSSOM snapshot
 

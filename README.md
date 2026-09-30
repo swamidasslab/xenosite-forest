@@ -159,7 +159,13 @@ make test-python                      # pytest tests/forest only
 make test-rust                        # cargo test -p xenosite-forest
 ```
 
-Versioning is the ``package.version`` in [`crates/xenosite-forest/Cargo.toml`](crates/xenosite-forest/Cargo.toml) (maturin). Tag a release as `vX.Y.Z` matching that Cargo version. Read it at runtime as `xenosite.forest.__version__`. User-facing notes go in [`changelog.d/`](changelog.d/); the tag workflow compiles them into `CHANGELOG.md`. See [docs/release.md](docs/release.md).
+Versioning is the ``vX.Y.Z`` git tag. Release CI rewrites
+[`crates/xenosite-forest/Cargo.toml`](crates/xenosite-forest/Cargo.toml) from
+the tag before building (maturin). Read it at runtime as
+`xenosite.forest.__version__`. User-facing notes go in
+[`changelog.d/`](changelog.d/); the tag workflow compiles them into
+`CHANGELOG.md` and commits the Cargo/JS version bump. See
+[docs/release.md](docs/release.md).
 
 Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/swamidasslab/xenosite-forest/blob/main/.github/workflows/release.yml): tests must pass, then platform wheels (manylinux / musllinux / macOS / Windows, x86_64 + aarch64) and an sdist are published to GitHub Releases and PyPI. A red tag workflow means do not treat that tag as released.
 

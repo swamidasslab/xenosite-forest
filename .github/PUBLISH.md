@@ -2,10 +2,10 @@
 
 ## Python (PyPI)
 
-Tag `vX.Y.Z` matching `crates/xenosite-forest/Cargo.toml`. Workflow
-[`release.yml`](workflows/release.yml) runs tests, builds manylinux / musllinux /
-macOS / Windows wheels (x86_64 + aarch64) + sdist, then publishes to PyPI via
-Trusted Publishing (OIDC, environment `pypi`).
+Tag `vX.Y.Z`. Workflow [`release.yml`](workflows/release.yml) sets
+`crates/xenosite-forest/Cargo.toml` from the tag, runs tests, builds manylinux /
+musllinux / macOS / Windows wheels (x86_64 + aarch64) + sdist, then publishes to
+PyPI via Trusted Publishing (OIDC, environment `pypi`).
 
 ## JavaScript (GitHub Packages)
 

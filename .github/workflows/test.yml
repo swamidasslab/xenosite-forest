@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+# PRs: lint only (ruff / pyright / rustfmt / clippy / WASM compile).
+# Main: fast smoke — single Python 3.12, make test-python-smoke,
+# make test-rust-smoke (no ms1_apply_fuzz), full cargo --features python + JS.
+# Tags: release.yml runs the full multi-Python suite and blocks publish on fail.
+# Defaults (make test / make test-python) stay the whole suite locally.
+# If Protect main required `pytest (3.x)`, switch PR required checks to `lint`
+# (and optionally `rust`); main check name is plain `pytest`.
+
 jobs:
-  # Job name must stay ``pytest`` — Protect main requires ``pytest (3.11)`` … ``(3.14)``.
   pytest:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # pynauty sdist configures nauty with CFLAGS='-O4 -fPIC', which lets
     # nauty add -march=native. GHA runners differ; a uv-cached native wheel
@@ -17,17 +25,13 @@ jobs:
     env:
       CC: "gcc -march=x86-64 -mtune=generic"
       CXX: "g++ -march=x86-64 -mtune=generic"
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           cache-suffix: portable-x86-64
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -38,16 +42,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .hypothesis
-          key: hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('tests/forest/native/test_bfs_fuzz.py', 'uv.lock') }}
+          key: hypothesis-${{ runner.os }}-py3.12-${{ hashFiles('tests/forest/native/test_bfs_fuzz.py', 'uv.lock') }}
           restore-keys: |
-            hypothesis-${{ runner.os }}-py${{ matrix.python-version }}-
+            hypothesis-${{ runner.os }}-py3.12-
             hypothesis-${{ runner.os }}-
       - name: Install package (RDKit extras; maturin builds the Rust extension)
         run: uv sync --extra rdkit --extra network --group dev
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
-      - name: Full forest suite (public stub + native + legacy)
-        run: make test-python
+      - name: Product-door smoke (rust wrapper + focused parity)
+        run: make test-python-smoke
 
   rust:
     runs-on: ubuntu-latest
@@ -67,16 +71,19 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
-      - name: Test
-        run: make test-rust
-      - name: PyO3
-        run: |
-          cargo clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
-          make test-rust-python
+      - name: Clippy (python feature)
+        run: cargo clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
       - name: WASM
         run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
+      - name: Test
+        if: github.event_name != 'pull_request'
+        run: make test-rust-smoke
+      - name: PyO3 tests
+        if: github.event_name != 'pull_request'
+        run: make test-rust-python
 
   js:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
