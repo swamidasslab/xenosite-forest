@@ -31,33 +31,49 @@ fn indent(level: usize) -> String {
     "  ".repeat(level)
 }
 
-/// Tab-indented RuleSet / pattern hierarchy.
+/// Indented RuleSet / pattern hierarchy (full tree — catalogs are browsed whole).
 pub fn format_ruleset(set: &RuleSet) -> String {
     let mut lines = Vec::new();
     format_ruleset_into(set, 0, &mut lines);
-    truncate_display(&lines.join("\n"))
+    lines.join("\n")
 }
 
 fn format_ruleset_into(set: &RuleSet, level: usize, lines: &mut Vec<String>) {
     let pad = indent(level);
-    let title = match &set.name {
-        Some(n) => format!("{pad}{n}"),
-        None => format!("{pad}(unnamed)"),
-    };
     let n_pat = set.patterns().len();
     let n_mem = set.members().len();
-    lines.push(format!("{title}  [{n_mem} members, {n_pat} patterns]"));
-    for member in set.members() {
-        match member {
-            RuleMember::Pattern(p) => {
-                let smarts = if p.smarts.len() > 48 {
-                    format!("{}…", &p.smarts[..47])
-                } else {
-                    p.smarts.clone()
-                };
-                lines.push(format!("{}  {}  {}", indent(level), p.name, smarts));
+    match &set.name {
+        Some(n) => {
+            lines.push(format!("{pad}{n}  [{n_mem} members, {n_pat} patterns]"));
+            for member in set.members() {
+                match member {
+                    RuleMember::Pattern(p) => {
+                        let smarts = if p.smarts.len() > 48 {
+                            format!("{}…", &p.smarts[..47])
+                        } else {
+                            p.smarts.clone()
+                        };
+                        lines.push(format!("{}  {}  {}", indent(level), p.name, smarts));
+                    }
+                    RuleMember::Set(child) => format_ruleset_into(child, level + 1, lines),
+                }
             }
-            RuleMember::Set(child) => format_ruleset_into(child, level + 1, lines),
+        }
+        // Unnamed composite (e.g. phase_one()): print named members at this level.
+        None => {
+            for member in set.members() {
+                match member {
+                    RuleMember::Pattern(p) => {
+                        let smarts = if p.smarts.len() > 48 {
+                            format!("{}…", &p.smarts[..47])
+                        } else {
+                            p.smarts.clone()
+                        };
+                        lines.push(format!("{pad}{}  {}", p.name, smarts));
+                    }
+                    RuleMember::Set(child) => format_ruleset_into(child, level, lines),
+                }
+            }
         }
     }
 }
@@ -285,7 +301,8 @@ pub fn format_emission(em: &Emission) -> String {
         .rule_path
         .iter()
         .rev() // outer→leaf for display (PhaseOne/QuinoneFormation)
-        .map(|p| p.as_deref().unwrap_or("?"))
+        .filter_map(|p| p.as_deref())
+        .filter(|p| *p != "Default")
         .collect::<Vec<_>>()
         .join("/");
     truncate_display(&format!(

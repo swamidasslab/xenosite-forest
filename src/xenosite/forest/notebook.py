@@ -5,9 +5,8 @@ Attaches ``_repr_html_`` on Rust types after the extension loads. Text
 drawings and light markup do not pull into the extension.
 
 PathOutcome / PartialOutcome lead with **StepPlan** (elementary steps + Maybe
-bags). Mol drawings always show atom labels (ForestMol tags when available,
-else atom indices). SOM sites are one highlight color; Maybe formation /
-span sites are another.
+bags). Mol drawings omit atom numbers (RDKit cannot show ForestMol trace
+labels correctly). SOM / Maybe are color highlights only.
 """
 
 from __future__ import annotations
@@ -21,9 +20,9 @@ _MAX_HOPS = 8
 _SVG_W = 240
 _SVG_H = 160
 
-# RDKit highlightAtomColors are 0–1 RGB tuples.
+# RDKit highlightAtomColors are 0–1 RGB tuples (optional alpha).
 _COLOR_SOM = (0.95, 0.35, 0.2)  # coral — applied site
-_COLOR_MAYBE = (0.25, 0.45, 0.95)  # blue — Maybe bag / span
+_COLOR_MAYBE = (0.25, 0.45, 0.95, 0.30)  # translucent blue — full Maybe bag
 
 
 def _esc(s: Any) -> str:
@@ -45,10 +44,16 @@ def _mol_svg(
     *,
     som: list[int] | None = None,
     maybe: list[int] | None = None,
+    site_kind: str | None = None,
     tags: list[int | None] | None = None,
     born_cutoff: int | None = None,
-    label_indices: bool = True,
 ) -> str | None:
+    """Draw ``smiles`` with SOM / Maybe highlights. No atom numbers.
+
+    ``tags`` / ``born_cutoff`` are accepted for call-site compatibility but
+    unused — RDKit atom notes cannot carry ForestMol trace labels reliably.
+    """
+    del tags, born_cutoff  # numbering off
     Chem, rdMolDraw2D = _try_rdkit()
     if Chem is None or rdMolDraw2D is None:
         return None
@@ -56,36 +61,47 @@ def _mol_svg(
     if mol is None:
         return None
     n = mol.GetNumAtoms()
-    if tags is not None:
-        for i, tag in enumerate(tags):
-            if i >= n:
-                break
-            if tag is None:
-                if label_indices:
-                    mol.GetAtomWithIdx(i).SetProp("atomNote", str(i))
-                continue
-            note = str(tag)
-            if born_cutoff is not None and tag >= born_cutoff:
-                note = f"{tag}*"
-            mol.GetAtomWithIdx(i).SetProp("atomNote", note)
-    elif label_indices:
-        for i in range(n):
-            mol.GetAtomWithIdx(i).SetProp("atomNote", str(i))
 
     som_l = [i for i in (som or []) if 0 <= i < n]
     maybe_l = [i for i in (maybe or []) if 0 <= i < n and i not in som_l]
-    highlight = som_l + maybe_l
-    colors = {i: _COLOR_SOM for i in som_l}
-    colors.update({i: _COLOR_MAYBE for i in maybe_l})
+
+    highlight_atoms = list(som_l)
+    atom_colors = {i: _COLOR_SOM for i in som_l}
+    # Maybe: all bag atoms, translucent so they do not obscure the drawing.
+    for i in maybe_l:
+        highlight_atoms.append(i)
+        atom_colors[i] = _COLOR_MAYBE
+
+    highlight_bonds: list[int] = []
+    bond_colors: dict[int, Any] = {}
+    kind = (site_kind or "atom").lower()
+    if kind in ("bond", "directed_bond") and len(som_l) >= 2:
+        for a, b in zip(som_l[::2], som_l[1::2], strict=False):
+            bond = mol.GetBondBetweenAtoms(int(a), int(b))
+            if bond is None and len(som_l) == 2:
+                bond = mol.GetBondBetweenAtoms(int(som_l[0]), int(som_l[1]))
+            if bond is not None:
+                bi = bond.GetIdx()
+                highlight_bonds.append(bi)
+                bond_colors[bi] = _COLOR_SOM
+        # Bond sites: prefer bond highlight; keep endpoint atoms lightly if needed.
+        if highlight_bonds:
+            highlight_atoms = [i for i in highlight_atoms if i not in som_l] + list(som_l)
+    elif kind == "atom_pair":
+        # Pair ends: atom highlights only (not the intervening path as a bond).
+        pass
 
     drawer = rdMolDraw2D.MolDraw2DSVG(_SVG_W, _SVG_H)
     opts = drawer.drawOptions()
     opts.addAtomIndices = False
-    if highlight:
+    opts.addStereoAnnotation = False
+    if highlight_atoms or highlight_bonds:
         drawer.DrawMolecule(
             mol,
-            highlightAtoms=highlight,
-            highlightAtomColors=colors,
+            highlightAtoms=highlight_atoms or None,
+            highlightAtomColors=atom_colors or None,
+            highlightBonds=highlight_bonds or None,
+            highlightBondColors=bond_colors or None,
         )
     else:
         drawer.DrawMolecule(mol)
@@ -115,23 +131,21 @@ def _sites(site: Any) -> list[int]:
 
 
 def _maybe_atoms(maybe_bags: Sequence[Any]) -> list[int]:
+    """All atoms in Maybe bags (formation site + opens / span_sites)."""
     atoms: list[int] = []
     for bag in maybe_bags or []:
         if isinstance(bag, dict):
-            for key in ("site", "span_sites"):
-                val = bag.get(key)
-                if val is None:
-                    continue
-                if val and isinstance(val[0], (list, tuple, set)):
-                    for span in val:
-                        atoms.extend(_sites(span))
-                else:
-                    atoms.extend(_sites(val))
-            for span in bag.get("opens") or []:
-                atoms.extend(_sites(span))
+            # Prefer span_sites (site + opens); else site + opens separately.
+            spans = bag.get("span_sites")
+            if spans:
+                for span in spans:
+                    atoms.extend(_sites(span))
+            else:
+                atoms.extend(_sites(bag.get("site")))
+                for span in bag.get("opens") or []:
+                    atoms.extend(_sites(span))
         else:
             atoms.extend(_sites(getattr(bag, "site", None)))
-    # stable unique
     seen: set[int] = set()
     out: list[int] = []
     for a in atoms:
@@ -141,6 +155,21 @@ def _maybe_atoms(maybe_bags: Sequence[Any]) -> list[int]:
     return out
 
 
+def _path_parts(path: Any) -> list[str]:
+    """Outer→leaf path segments, omitting empty and the ``Default`` catalog root."""
+    if not path:
+        return []
+    parts: list[str] = []
+    for p in path:
+        if not p:
+            continue
+        s = str(p)
+        if s == "Default":
+            continue
+        parts.append(s)
+    return parts
+
+
 def _rule_path_label(hop: Any) -> str:
     if isinstance(hop, dict):
         path = hop.get("rule_path")
@@ -148,10 +177,9 @@ def _rule_path_label(hop: Any) -> str:
     else:
         path = getattr(hop, "rule_path", None)
         rule = getattr(hop, "rule", None) or getattr(hop, "pattern_name", "?")
-    if path:
-        parts = [p for p in path if p]
-        if parts:
-            return "/".join(str(p) for p in parts)
+    parts = _path_parts(path)
+    if parts:
+        return "/".join(parts)
     return str(rule)
 
 
@@ -161,7 +189,7 @@ def _trace_bits(mol: Any) -> tuple[str, list[int | None], int]:
     bits = (
         f"trace stamp_end={stamp_end} survivors={survivors} "
         f"born={born} untagged={untagged} "
-        f"(born marked with * · coral=SOM · blue=Maybe)"
+        f"(coral=SOM · translucent blue=Maybe)"
     )
     return bits, tags, int(stamp_end)
 
@@ -171,15 +199,15 @@ def _traced_mol_block(
     *,
     som: list[int] | None = None,
     maybe: list[int] | None = None,
+    site_kind: str | None = None,
 ) -> str:
     csmi = mol.csmi
-    trace, tags, stamp_end = _trace_bits(mol)
+    trace, _tags, _stamp_end = _trace_bits(mol)
     svg = _mol_svg(
         csmi,
         som=som,
         maybe=maybe,
-        tags=tags,
-        born_cutoff=stamp_end,
+        site_kind=site_kind,
     )
     parts = [
         f"<div><code>{_esc(csmi)}</code></div>",
@@ -196,16 +224,16 @@ def _panel(
     *,
     som: list[int] | None = None,
     maybe: list[int] | None = None,
+    site_kind: str | None = None,
     tags: list[int | None] | None = None,
     born_cutoff: int | None = None,
 ) -> str:
+    del tags, born_cutoff
     svg = _mol_svg(
         smiles,
         som=som,
         maybe=maybe,
-        tags=tags,
-        born_cutoff=born_cutoff,
-        label_indices=True,
+        site_kind=site_kind,
     )
     body = svg if svg else _pre(smiles)
     return (
@@ -229,8 +257,8 @@ def _legend() -> str:
     return (
         "<div style='font-size:0.8em;margin:0.25em 0'>"
         "<span style='color:#c24'>■</span> SOM / step site &nbsp; "
-        "<span style='color:#247'>■</span> Maybe bag &nbsp; "
-        "atom notes = tags (or indices)"
+        "<span style='color:#247;opacity:0.45'>■</span> Maybe bag (translucent) "
+        "· no atom numbers"
         "</div>"
     )
 
@@ -243,7 +271,8 @@ def _pathway_row(
     final_born: int | None = None,
     maybe_atoms: list[int] | None = None,
 ) -> str:
-    """Horizontal reactant(SOM) → end trail; atom labels on every mol."""
+    """Horizontal reactant(SOM) → end trail. No atom numbers on drawings."""
+    del final_tags, final_born
 
     maybe_atoms = maybe_atoms or []
     if not hops:
@@ -252,8 +281,6 @@ def _pathway_row(
                 "<b>product</b>",
                 final_smiles,
                 maybe=maybe_atoms,
-                tags=final_tags,
-                born_cutoff=final_born,
             )
         return "<div><i>(no hops)</i></div>"
 
@@ -267,11 +294,13 @@ def _pathway_row(
             product = hop.get("product") or ""
             site = _sites(hop.get("site"))
             sides = hop.get("sides") or []
+            site_kind = hop.get("site_kind")
         else:
             reactant = getattr(hop, "reactant", "") or ""
             product = getattr(hop, "product", "") or ""
             site = _sites(getattr(hop, "site", None))
             sides = getattr(hop, "sides", None) or []
+            site_kind = getattr(hop, "site_kind", None)
         # Cleavage hops: Maybe sites belong on the reactant this rule hit.
         hop_maybe = maybe_atoms if sides else ([] if i < len(shown) - 1 else maybe_atoms)
         if i == 0 and maybe_atoms and not hop_maybe:
@@ -285,6 +314,7 @@ def _pathway_row(
                 str(reactant),
                 som=site,
                 maybe=hop_maybe if sides or i == 0 else None,
+                site_kind=site_kind,
             )
         )
         parts.append(_arrow(f"{path_label} @ [{site_s}]"))
@@ -295,8 +325,6 @@ def _pathway_row(
                     "<b>end</b>",
                     str(end),
                     maybe=maybe_atoms,
-                    tags=final_tags,
-                    born_cutoff=final_born,
                 )
             )
     if len(hops) > _MAX_HOPS:
@@ -487,37 +515,31 @@ def _partial_outcome_html(self: Any) -> str:
 
 
 def _emission_html(self: Any) -> str:
-    """SOM on the reactant; products with atom labels, no SOM marks."""
+    """SOM on the reactant by site_kind; products without SOM marks."""
 
-    site = int(self.site)
+    site_atoms = list(getattr(self, "site_atoms", None) or [int(self.site)])
+    site_kind = getattr(self, "site_kind", None)
     reactant = self.reactant
     products = list(self.products())
-    path = list(self.rule_path())
-    # Outer→leaf for display caption.
-    path_s = "/".join(p for p in reversed(path) if p) or self.pattern_name
-    r_tags = list(reactant.atom_tags()) if hasattr(reactant, "atom_tags") else None
-    r_born = int(reactant.trace_counts()[0]) if hasattr(reactant, "trace_counts") else None
+    path_s = "/".join(_path_parts(reversed(list(self.rule_path())))) or self.pattern_name
+    site_s = ",".join(str(s) for s in site_atoms[:6])
     blocks = [
-        f"<div><b>Emission</b> {_esc(self.pattern_name)} site={site}"
+        f"<div><b>Emission</b> {_esc(self.pattern_name)}"
+        f" · { _esc(site_kind or '?') } [{_esc(site_s)}]"
         f" · <code>{_esc(path_s)}</code></div>",
         _legend(),
         "<div style='display:flex;gap:0.5em;flex-wrap:wrap;align-items:flex-start'>",
         _panel(
             "<b>reactant</b> (SOM)",
             reactant.csmi,
-            som=[site],
-            tags=r_tags,
-            born_cutoff=r_born,
+            som=site_atoms,
+            site_kind=site_kind,
         ),
-        _arrow(f"{path_s} @ [{site}]"),
+        _arrow(f"{path_s} @ [{site_s}]"),
     ]
     for i, prod in enumerate(products[:4]):
         smi = prod.csmi if hasattr(prod, "csmi") else self.product_csmis()[i]
-        p_tags = list(prod.atom_tags()) if hasattr(prod, "atom_tags") else None
-        p_born = int(prod.trace_counts()[0]) if hasattr(prod, "trace_counts") else None
-        blocks.append(
-            _panel(f"product {i}", smi, tags=p_tags, born_cutoff=p_born)
-        )
+        blocks.append(_panel(f"product {i}", smi))
     if len(products) > 4:
         blocks.append(f"<div>… (+{len(products) - 4})</div>")
     blocks.append("</div>")
@@ -599,10 +621,6 @@ def _graph_edge_html(self: Any) -> str:
         f"<div><b>GraphEdge</b> {_esc(path)} @ site={site}"
         f" · parent={self.parent_index}→{self.child_index}</div>"
     )
-    p_tags = list(parent.atom_tags())
-    p_born = int(parent.trace_counts()[0])
-    k_tags = list(kept.atom_tags())
-    k_born = int(kept.trace_counts()[0])
     return (
         "<div class='xenosite-graph-edge'>"
         + head
@@ -612,11 +630,9 @@ def _graph_edge_html(self: Any) -> str:
             "<b>parent</b> (SOM)",
             parent.csmi,
             som=[site],
-            tags=p_tags,
-            born_cutoff=p_born,
         )
         + _arrow(f"{path} @ [{site}]")
-        + _panel("<b>kept</b>", kept.csmi, tags=k_tags, born_cutoff=k_born)
+        + _panel("<b>kept</b>", kept.csmi)
         + "</div>"
         + _pre(str(self))
         + "</div>"

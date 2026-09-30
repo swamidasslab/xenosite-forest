@@ -165,8 +165,14 @@ impl PyPathOutcome {
                 d.set_item("sides", s.sides.clone())?;
                 let leaf = s.leaf_rule().unwrap_or("");
                 d.set_item("rule", leaf)?;
-                // Outer→leaf for display (PhaseOne/QuinoneFormation).
-                let path: Vec<Option<String>> = s.rule_path.iter().rev().cloned().collect();
+                // Outer→leaf for display; omit Default catalog root.
+                let path: Vec<Option<String>> = s
+                    .rule_path
+                    .iter()
+                    .rev()
+                    .filter(|p| p.as_deref() != Some("Default"))
+                    .cloned()
+                    .collect();
                 d.set_item("rule_path", path)?;
                 Ok(d.unbind().into_any())
             })
@@ -226,7 +232,13 @@ impl PyPartialPathOutcome {
                 d.set_item("sides", s.sides.clone())?;
                 let leaf = s.leaf_rule().unwrap_or("");
                 d.set_item("rule", leaf)?;
-                let path: Vec<Option<String>> = s.rule_path.iter().rev().cloned().collect();
+                let path: Vec<Option<String>> = s
+                    .rule_path
+                    .iter()
+                    .rev()
+                    .filter(|p| p.as_deref() != Some("Default"))
+                    .cloned()
+                    .collect();
                 d.set_item("rule_path", path)?;
                 Ok(d.unbind().into_any())
             })

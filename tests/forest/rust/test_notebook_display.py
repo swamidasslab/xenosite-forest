@@ -16,6 +16,11 @@ def test_ruleset_str_is_indented_hierarchy():
     text = str(phase_one())
     assert "\n" in text
     assert "Hydroxylation" in text or "members" in text
+    assert "PhaseOne" in text
+    # Full tree (no soft truncate) so siblings after PhaseOne stay visible.
+    assert "QuinoneFormation" in text
+    assert "EpoxideHydration" in text
+    assert "… (truncated)" not in text
 
 
 def test_forest_mol_str_uses_trace_not_steps():
@@ -83,8 +88,16 @@ def test_emission_path_display_is_outer_first():
     path_line = [ln for ln in text.splitlines() if ln.strip().startswith("path:")][0]
     stored = list(emissions[0].rule_path())
     assert stored, "rule_path should be non-empty"
-    expected = "/".join(p for p in reversed(stored) if p)
+    # Display omits the Default catalog root.
+    expected = "/".join(p for p in reversed(stored) if p and p != "Default")
     assert expected in path_line
+    assert "Default/" not in path_line
+    assert emissions[0].site_kind in {
+        "atom",
+        "bond",
+        "directed_bond",
+        "atom_pair",
+    }
 
 
 def test_repr_html_ruleset_and_emission_uses_product_trace():

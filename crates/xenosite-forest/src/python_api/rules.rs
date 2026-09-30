@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 
 use crate::export::EmissionView;
 use crate::mol::Molecule;
-use crate::pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo};
+use crate::pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
 use crate::rules::{
     catalog_names, dealkylation as dealkylation_rs, default_ruleset as default_ruleset_rs,
     dehydrogenation as dehydrogenation_rs, epoxidation as epoxidation_rs,
@@ -28,6 +28,35 @@ fn wrap_emissions(emissions: Vec<Emission>) -> Vec<PyEmission> {
         .collect()
 }
 
+fn site_kind_str(kind: SiteKind) -> &'static str {
+    match kind {
+        SiteKind::Atom => "atom",
+        SiteKind::Bond => "bond",
+        SiteKind::DirectedBond => "directed_bond",
+        SiteKind::AtomPair => "atom_pair",
+    }
+}
+
+/// Look up ``site_kind`` on the leaf rule pattern named by the emission.
+fn site_kind_for_emission(em: &Emission) -> &'static str {
+    let Some(leaf_name) = em.leaf_rule() else {
+        return "atom";
+    };
+    let Some(set) = leaf_rule_rs(leaf_name) else {
+        return "atom";
+    };
+    for pattern in set.patterns() {
+        if pattern.name == em.pattern_name {
+            return site_kind_str(pattern.site_kind);
+        }
+    }
+    // Composite pair names (``left+right``) still come from an AtomPair leaf.
+    if em.site_atoms.len() >= 2 {
+        return "atom_pair";
+    }
+    "atom"
+}
+
 /// One applied metabolize row (Python ``Emission``).
 #[pyclass(name = "Emission", unsendable)]
 pub struct PyEmission {
@@ -44,6 +73,29 @@ impl PyEmission {
     #[getter]
     fn site(&self) -> usize {
         self.inner.site
+    }
+
+    /// Discovery site atoms on the reactant (bond ends / pair ends / atom).
+    #[getter]
+    fn site_atoms(&self) -> Vec<usize> {
+        self.inner.site_atoms.clone()
+    }
+
+    /// From the leaf rule's pattern ``site_kind`` (``atom`` / ``bond`` /
+    /// ``directed_bond`` / ``atom_pair``) — how notebook SOM is drawn.
+    #[getter]
+    fn site_kind(&self) -> &'static str {
+        site_kind_for_emission(&self.inner)
+    }
+
+    /// Trace labels for [`Self::site_atoms`] on the reactant (notebook SOM).
+    #[getter]
+    fn site_tags(&self) -> Vec<u16> {
+        self.inner
+            .site_atoms
+            .iter()
+            .filter_map(|&i| self.inner.reactant.tag_of(i).map(|t| t.get()))
+            .collect()
     }
 
     fn product_csmis(&self) -> Vec<String> {
@@ -143,6 +195,12 @@ impl PyPatternInfo {
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
+    }
+
+    /// ``atom`` / ``bond`` / ``directed_bond`` / ``atom_pair``.
+    #[getter]
+    fn site_kind(&self) -> &'static str {
+        site_kind_str(self.inner.site_kind)
     }
 
     #[getter]
