@@ -10,6 +10,22 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.9.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.9.0) - 2026-09-30
+
+### Added
+
+- Ship platform wheels for the one-package maturin build (manylinux, musllinux,
+  macOS, Windows; x86_64 and aarch64) so ``pip install xenosite-forest`` gets the
+  Rust chematic door by default without a separate native package. ([#rust-wheels](https://github.com/swamidasslab/xenosite-forest/issues/rust-wheels))
+- Forest↔XMET SSSOM embed, xf: resolve, and BoundPattern. ([#sssom-resolve](https://github.com/swamidasslab/xenosite-forest/issues/sssom-resolve))
+
+### Changed
+
+- Depend on crates.io ``chematic`` ≥1.0.27 for caller atom tags and SMILES
+  visit-order helpers. Drop the vendored chematic submodule and local patch.
+  Forest ``Tag`` is chematic's non-zero ``u16`` (``None`` / ``0`` clear). ([#chematic-crates-io](https://github.com/swamidasslab/xenosite-forest/issues/chematic-crates-io))
+
+
 ## [0.8.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.8.0) - 2026-09-28
 
 ### Removed
