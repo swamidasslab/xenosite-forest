@@ -10,6 +10,13 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.10.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.10.0) - 2026-09-30
+
+### Changed
+
+- License is now academic / non-commercial only; commercial use requires a separate agreement. ([#license](https://github.com/swamidasslab/xenosite-forest/issues/license))
+
+
 ## [0.9.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.9.0) - 2026-09-30
 
 ### Added
