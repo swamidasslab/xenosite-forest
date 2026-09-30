@@ -6,10 +6,12 @@
 
 PYTEST ?= uv run pytest
 CARGO_TEST ?= cargo test -p xenosite-forest
-# PyO3 links libpython for ``--features python`` unit tests. Pin to the project
-# interpreter so macOS dyld does not chase a stale @rpath/libpython3.11 from an
-# older build discovery (uv/.venv may be 3.12+ while ``python3`` on PATH differs).
-PYO3_PYTHON ?= $(shell uv run python -c 'import sys; print(sys.executable)')
+# PyO3 links libpython for ``--features python`` unit tests. Prefer the project
+# uv interpreter locally; on CI (no uv in the rust job) fall back to python3
+# from setup-python / PATH so PYO3_PYTHON is never empty.
+PYO3_PYTHON ?= $(shell \
+	(command -v uv >/dev/null 2>&1 && uv run python -c 'import sys; print(sys.executable)') \
+	|| python3 -c 'import sys; print(sys.executable)')
 
 # Product-door smoke paths (Python). Opt-in only — not wired into ``test`` /
 # ``test-python``. Skips native-only and legacy archives; keeps Rust wrapper
