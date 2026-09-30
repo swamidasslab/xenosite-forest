@@ -621,9 +621,5 @@ fn anthraquinone_hydrogenation_plan_replays() {
             break;
         }
     }
-    assert!(
-        any,
-        "plan for {target} must replay; plan={:?}",
-        hit.plan
-    );
+    assert!(any, "plan for {target} must replay; plan={:?}", hit.plan);
 }
