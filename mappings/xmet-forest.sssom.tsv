@@ -9,99 +9,107 @@
 # always_with: pipe-separated XMET descriptor CURIEs disambiguating multi-pattern homes.
 subject_id	predicate_id	object_id	mapping_justification	subject_label	object_label	always_with
 xmet:4000001	skos:relatedMatch	xf:PhaseOne	semapv:ManualMappingCuration	phase I	PhaseOne	
-xmet:4000004	skos:relatedMatch	xf:StableOxygenation	semapv:ManualMappingCuration	stable oxygenation	StableOxygenation	
-xmet:4000005	skos:relatedMatch	xf:UnstableOxygenation	semapv:ManualMappingCuration	unstable oxygenation	UnstableOxygenation	
-xmet:4000012	skos:exactMatch	xf:Hydroxylation	semapv:ManualMappingCuration	hydroxylation	Hydroxylation	
-xmet:4000022	skos:exactMatch	xf:Epoxidation	semapv:ManualMappingCuration	epoxidation	Epoxidation	
+xmet:4000006	skos:relatedMatch	xf:PhaseOne/Dehydrogenation	semapv:ManualMappingCuration	dehydrogenation	Dehydrogenation	
+xmet:4000007	skos:relatedMatch	xf:PhaseOne/Hydrolysis	semapv:ManualMappingCuration	hydrolysis	Hydrolysis	
+xmet:4000004	skos:relatedMatch	xf:PhaseOne/StableOxygenation	semapv:ManualMappingCuration	stable oxygenation	StableOxygenation	
+xmet:4000005	skos:relatedMatch	xf:PhaseOne/UnstableOxygenation	semapv:ManualMappingCuration	unstable oxygenation	UnstableOxygenation	
+xmet:4000012	skos:exactMatch	xf:PhaseOne/StableOxygenation/Hydroxylation	semapv:ManualMappingCuration	hydroxylation	Hydroxylation	
+xmet:4000022	skos:exactMatch	xf:PhaseOne/StableOxygenation/Epoxidation	semapv:ManualMappingCuration	epoxidation	Epoxidation	
 xmet:4000043	skos:exactMatch	xf:NDealkylation	semapv:ManualMappingCuration	N-dealkylation	NDealkylation	
 xmet:4000406	skos:exactMatch	xf:QuinoneFormation	semapv:ManualMappingCuration	conjugated-system remodeling	QuinoneFormation	
 xmet:4000148	skos:exactMatch	xf:Glucuronidation	semapv:ManualMappingCuration	glucuronidation	Glucuronidation	
-xmet:4000006	skos:exactMatch	xf:Dehydrogenation	semapv:ManualMappingCuration	dehydrogenation	Dehydrogenation	
-xmet:4000007	skos:exactMatch	xf:Hydrolysis	semapv:ManualMappingCuration	hydrolysis	Hydrolysis	
-xmet:4000026	skos:exactMatch	xf:NitrogenOxidation	semapv:ManualMappingCuration	nitrogen oxidation	NitrogenOxidation	
-xmet:4000032	skos:exactMatch	xf:SulfurOxidation	semapv:ManualMappingCuration	sulfur oxidation	SulfurOxidation	
-xmet:4000042	skos:exactMatch	xf:Dealkylation	semapv:ManualMappingCuration	dealkylation	Dealkylation	
-xmet:4000051	skos:exactMatch	xf:OxidativeDehalogenation	semapv:ManualMappingCuration	oxidative dehalogenation	OxidativeDehalogenation	
-xmet:4000077	skos:exactMatch	xf:EpoxideOpening	semapv:ManualMappingCuration	epoxide opening	EpoxideOpening	
-xmet:4000087	skos:exactMatch	xf:Dephosphorylation	semapv:ManualMappingCuration	dephosphorylation	Dephosphorylation	
+xmet:4000006	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation	semapv:ManualMappingCuration	dehydrogenation	Dehydrogenation	
+xmet:4000007	skos:exactMatch	xf:PhaseOne/Hydrolysis/Hydrolysis	semapv:ManualMappingCuration	hydrolysis	Hydrolysis	
+xmet:4000026	skos:exactMatch	xf:PhaseOne/StableOxygenation/NitrogenOxidation	semapv:ManualMappingCuration	nitrogen oxidation	NitrogenOxidation	
+xmet:4000032	skos:exactMatch	xf:PhaseOne/StableOxygenation/SulfurOxidation	semapv:ManualMappingCuration	sulfur oxidation	SulfurOxidation	
+xmet:4000042	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation	semapv:ManualMappingCuration	dealkylation	Dealkylation	
+xmet:4000051	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation	semapv:ManualMappingCuration	oxidative dehalogenation	OxidativeDehalogenation	
+xmet:4000077	skos:exactMatch	xf:PhaseOne/Hydrolysis/EpoxideOpening	semapv:ManualMappingCuration	epoxide opening	EpoxideOpening	
+xmet:4000087	skos:exactMatch	xf:PhaseOne/Hydrolysis/Dephosphorylation	semapv:ManualMappingCuration	dephosphorylation	Dephosphorylation	
 xmet:4000089	skos:exactMatch	xf:AzoSplitting	semapv:ManualMappingCuration	azo cleavage	AzoSplitting	
-xmet:4000090	skos:exactMatch	xf:Hydrogenation	semapv:ManualMappingCuration	hydrogenation	Hydrogenation	
-xmet:4000093	skos:exactMatch	xf:NitrogenReduction	semapv:ManualMappingCuration	nitrogen reduction	NitrogenReduction	
+xmet:4000090	skos:exactMatch	xf:PhaseOne/Reduction/Hydrogenation	semapv:ManualMappingCuration	hydrogenation	Hydrogenation	
+xmet:4000093	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction	semapv:ManualMappingCuration	nitrogen reduction	NitrogenReduction	
 xmet:4000100	skos:exactMatch	xf:BenzodioxoleReduction	semapv:ManualMappingCuration	benzodioxole reduction	BenzodioxoleReduction	
-xmet:4000101	skos:exactMatch	xf:OxygenReduction	semapv:ManualMappingCuration	oxygen reduction	OxygenReduction	
-xmet:4000106	skos:exactMatch	xf:SulfurReduction	semapv:ManualMappingCuration	sulfur reduction	SulfurReduction	
-xmet:4000110	skos:exactMatch	xf:ReductiveDehalogenation	semapv:ManualMappingCuration	reductive dehalogenation	ReductiveDehalogenation	
-xmet:4000113	skos:exactMatch	xf:Dehydration	semapv:ManualMappingCuration	dehydration	Dehydration	
+xmet:4000101	skos:exactMatch	xf:PhaseOne/Reduction/OxygenReduction	semapv:ManualMappingCuration	oxygen reduction	OxygenReduction	
+xmet:4000106	skos:exactMatch	xf:PhaseOne/Reduction/SulfurReduction	semapv:ManualMappingCuration	sulfur reduction	SulfurReduction	
+xmet:4000110	skos:exactMatch	xf:PhaseOne/Reduction/ReductiveDehalogenation	semapv:ManualMappingCuration	reductive dehalogenation	ReductiveDehalogenation	
+xmet:4000113	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration	semapv:ManualMappingCuration	dehydration	Dehydration	
 xmet:4000158	skos:exactMatch	xf:Sulfation	semapv:ManualMappingCuration	sulfation	Sulfation	
 xmet:4000163	skos:exactMatch	xf:Acetylation	semapv:ManualMappingCuration	acetylation	Acetylation	
 xmet:4000167	skos:exactMatch	xf:Glutathionation	semapv:ManualMappingCuration	glutathione conjugation	Glutathionation	
+xmet:4000267	skos:relatedMatch	xf:Reactivity	semapv:ManualMappingCuration	adduct formation	Reactivity	
+xmet:4000167	skos:exactMatch	xf:Reactivity/GSH	semapv:ManualMappingCuration	glutathione conjugation	GSH	
+xmet:4000268	skos:exactMatch	xf:Reactivity/Protein	semapv:ManualMappingCuration	protein adduct formation	Protein	
+xmet:4000269	skos:exactMatch	xf:Reactivity/DNA	semapv:ManualMappingCuration	DNA adduct formation	DNA	
+xmet:4000270	skos:exactMatch	xf:Reactivity/Cyanide	semapv:ManualMappingCuration	cyanide conjugation	Cyanide	
+xmet:4000423	skos:exactMatch	xf:GlutathionationNoThiol	semapv:ManualMappingCuration	glutathionation excluding thiol disulfide	GlutathionationNoThiol	
 xmet:4000186	skos:exactMatch	xf:Tautomerization	semapv:ManualMappingCuration	tautomerization	Tautomerization	
 xmet:4000168	skos:exactMatch	xf:Glutathionation/michael	semapv:ManualMappingCuration	Michael glutathionation	michael	
 xmet:4000035	skos:exactMatch	xf:ThiopheneSulfurOxidation	semapv:ManualMappingCuration	thiophene S-oxidation	ThiopheneSulfurOxidation	
 xmet:4000392	skos:exactMatch	xf:EpoxideHydration	semapv:ManualMappingCuration	alkene to vicinal diol pathway	EpoxideHydration	
 xmet:4000096	skos:exactMatch	xf:NitroaromaticReduction	semapv:ManualMappingCuration	nitroaromatic reduction	NitroaromaticReduction	
-xmet:4000290	skos:exactMatch	xf:Epoxidation/epoxide	semapv:ManualMappingCuration	epoxide ring formation	epoxide	
-xmet:4000028	skos:exactMatch	xf:NitrogenOxidation/hydroxylamine	semapv:ManualMappingCuration	hydroxylamine formation	hydroxylamine	
-xmet:4000029	skos:exactMatch	xf:NitrogenOxidation/nitroso	semapv:ManualMappingCuration	nitroso formation	nitroso	
-xmet:4000027	skos:exactMatch	xf:NitrogenOxidation/n_oxide	semapv:ManualMappingCuration	N-oxide formation	n_oxide	
-xmet:4000069	skos:exactMatch	xf:Dehydrogenation/alcohol	semapv:ManualMappingCuration	alcohol oxidation	alcohol	
-xmet:4000216	skos:exactMatch	xf:Dehydrogenation/amine	semapv:ManualMappingCuration	amine dehydrogenation	amine	
-xmet:4000087	skos:exactMatch	xf:Dephosphorylation/phosphate_ester	semapv:ManualMappingCuration	dephosphorylation	phosphate_ester	
-xmet:4000092	skos:exactMatch	xf:Hydrogenation/alkyne	semapv:ManualMappingCuration	alkyne hydrogenation	alkyne	
-xmet:4000091	skos:exactMatch	xf:Hydrogenation/alkene	semapv:ManualMappingCuration	alkene hydrogenation	alkene	
-xmet:4000095	skos:exactMatch	xf:NitrogenReduction/nitro_to_amine	semapv:ManualMappingCuration	nitro to amine reduction	nitro_to_amine	
-xmet:4000105	skos:exactMatch	xf:OxygenReduction/carbonyl	semapv:ManualMappingCuration	carbonyl reduction	carbonyl	
-xmet:4000107	skos:exactMatch	xf:SulfurReduction/sulfoxide	semapv:ManualMappingCuration	sulfoxide reduction	sulfoxide	
-xmet:4000108	skos:exactMatch	xf:SulfurReduction/disulfide	semapv:ManualMappingCuration	disulfide reduction	disulfide	
-xmet:4000288	skos:exactMatch	xf:ReductiveDehalogenation/cleave	semapv:ManualMappingCuration	reductive C–halogen cleavage	cleave	
-xmet:4000289	skos:exactMatch	xf:ReductiveDehalogenation/alkene	semapv:ManualMappingCuration	reductive dehalogenation to alkene	alkene	
-xmet:4000008	skos:relatedMatch	xf:Reduction	semapv:ManualMappingCuration	reduction	Reduction	
-xmet:4000291	skos:exactMatch	xf:Hydroxylation/h	semapv:ManualMappingCuration	methine hydroxylation	h	
-xmet:4000292	skos:exactMatch	xf:Hydroxylation/h2	semapv:ManualMappingCuration	methyl or methylene hydroxylation	h2	
-xmet:4000293	skos:exactMatch	xf:Hydrolysis/cleave	semapv:ManualMappingCuration	hydrolytic bond cleavage	cleave	
-xmet:4000294	skos:exactMatch	xf:Hydrolysis/add_water	semapv:ManualMappingCuration	carbonyl hydration with cleavage	add_water	
-xmet:4000295	skos:exactMatch	xf:EpoxideOpening/hydrate	semapv:ManualMappingCuration	epoxide hydration	hydrate	
-xmet:4000296	skos:exactMatch	xf:EpoxideOpening/rearrange	semapv:ManualMappingCuration	epoxide rearrangement	rearrange	
-xmet:4000297	skos:exactMatch	xf:SulfurOxidation/zwitterion	semapv:ManualMappingCuration	sulfur–oxygen zwitterion formation	zwitterion	
-xmet:4000298	skos:exactMatch	xf:SulfurOxidation/hydroxy	semapv:ManualMappingCuration	sulfenic acid formation	hydroxy	
-xmet:4000299	skos:exactMatch	xf:SulfurOxidation/oxo	semapv:ManualMappingCuration	sulfur oxo formation	oxo	
-xmet:4000300	skos:exactMatch	xf:OxygenReduction/peroxide	semapv:ManualMappingCuration	peroxide reduction	peroxide	
-xmet:4000301	skos:exactMatch	xf:SulfurReduction/thioether	semapv:ManualMappingCuration	thioether C–S or O–S cleavage	thioether	
-xmet:4000302	skos:exactMatch	xf:Dehydrogenation/alkyl	semapv:ManualMappingCuration	alkane dehydrogenation	alkyl	
-xmet:4000303	skos:exactMatch	xf:Dehydrogenation/sulfoxide	semapv:ManualMappingCuration	sulfoxide formation by dehydrogenation	sulfoxide	
-xmet:4000304	skos:exactMatch	xf:Dehydration/alcohol	semapv:ManualMappingCuration	alcohol dehydration	alcohol	
-xmet:4000305	skos:exactMatch	xf:Dehydration/beta_elimination	semapv:ManualMappingCuration	beta-elimination	beta_elimination	
-xmet:4000306	skos:exactMatch	xf:Dehydration/carbonyl	semapv:ManualMappingCuration	carbonyl dehydration	carbonyl	
-xmet:4000307	skos:exactMatch	xf:OxidativeDehalogenation/alcohol	semapv:ManualMappingCuration	oxidative dehalogenation to alcohol	alcohol	
-xmet:4000308	skos:exactMatch	xf:OxidativeDehalogenation/carbonyl	semapv:ManualMappingCuration	oxidative dehalogenation to carbonyl	carbonyl	
-xmet:4000309	skos:exactMatch	xf:OxidativeDehalogenation/carboxylic	semapv:ManualMappingCuration	oxidative dehalogenation to carboxylic acid	carboxylic	
-xmet:4000310	skos:exactMatch	xf:OxidativeDehalogenation/rearrange	semapv:ManualMappingCuration	1,2-halide migration with hydroxylation	rearrange	
-xmet:4000311	skos:exactMatch	xf:OxidativeDehalogenation/gem_carboxylic	semapv:ManualMappingCuration	geminal dihalide to carboxylic acid	gem_carboxylic	
-xmet:4000312	skos:exactMatch	xf:OxidativeDehalogenation/gem_hydrate	semapv:ManualMappingCuration	geminal dihalide to geminal diol	gem_hydrate	
-xmet:4000387	skos:exactMatch	xf:NitrogenReduction/nitro_charged	semapv:ManualMappingCuration	charged nitro N–O cleavage	nitro_charged	
-xmet:4000388	skos:exactMatch	xf:NitrogenReduction/nitro_anion	semapv:ManualMappingCuration	nitro-anion N–O cleavage	nitro_anion	
-xmet:4000389	skos:exactMatch	xf:NitrogenReduction/nitro_neutral	semapv:ManualMappingCuration	neutral nitro N–O cleavage	nitro_neutral	
-xmet:4000390	skos:exactMatch	xf:NitrogenReduction/nitro_both	semapv:ManualMappingCuration	dual nitro N–O cleavage	nitro_both	
-xmet:4000391	skos:exactMatch	xf:NitrogenReduction/nitro_both_any	semapv:ManualMappingCuration	unspecified nitro N–O cleavage	nitro_both_any	
-xmet:4000314	skos:exactMatch	xf:NitrogenReduction/hydroxylamine	semapv:ManualMappingCuration	hydroxylamine N–O cleavage	hydroxylamine	
-xmet:4000315	skos:exactMatch	xf:NitrogenReduction/nitroso	semapv:ManualMappingCuration	nitroso reduction	nitroso	
-xmet:4000344	skos:exactMatch	xf:Dealkylation/methyl_alcohol	semapv:ManualMappingCuration	demethylation	methyl_alcohol	xmet:4000398|xmet:4000241
-xmet:4000344	skos:exactMatch	xf:Dealkylation/methyl_carbonyl	semapv:ManualMappingCuration	demethylation	methyl_carbonyl	xmet:4000399|xmet:4000250
-xmet:4000344	skos:exactMatch	xf:Dealkylation/methyl_carboxylic	semapv:ManualMappingCuration	demethylation	methyl_carboxylic	xmet:4000401|xmet:4000403
-xmet:4000345	skos:exactMatch	xf:Dealkylation/methylene_alcohol	semapv:ManualMappingCuration	methylene dealkylation	methylene_alcohol	xmet:4000398|xmet:4000241
-xmet:4000345	skos:exactMatch	xf:Dealkylation/methylene_carbonyl	semapv:ManualMappingCuration	methylene dealkylation	methylene_carbonyl	xmet:4000399|xmet:4000251
-xmet:4000345	skos:exactMatch	xf:Dealkylation/methylene_carboxylic	semapv:ManualMappingCuration	methylene dealkylation	methylene_carboxylic	xmet:4000401|xmet:4000404
-xmet:4000346	skos:exactMatch	xf:Dealkylation/methine_alcohol	semapv:ManualMappingCuration	methine dealkylation	methine_alcohol	xmet:4000398
-xmet:4000346	skos:exactMatch	xf:Dealkylation/methine_carbonyl	semapv:ManualMappingCuration	methine dealkylation	methine_carbonyl	xmet:4000400
-xmet:4000316	skos:exactMatch	xf:Dealkylation/quaternary_alcohol	semapv:ManualMappingCuration	quaternary C–heteroatom dealkylation	quaternary_alcohol	xmet:4000398
-xmet:4000046	skos:exactMatch	xf:Dealkylation/cc_alcohol	semapv:ManualMappingCuration	C-dealkylation	cc_alcohol	xmet:4000398
-xmet:4000046	skos:exactMatch	xf:Dealkylation/cc_carbonyl	semapv:ManualMappingCuration	C-dealkylation	cc_carbonyl	xmet:4000400
-xmet:4000317	skos:exactMatch	xf:Dealkylation/cc_quaternary_alcohol	semapv:ManualMappingCuration	quaternary C-dealkylation	cc_quaternary_alcohol	xmet:4000398
-xmet:4000318	skos:exactMatch	xf:Dealkylation/hemiaminal	semapv:ManualMappingCuration	hemiaminal collapse dealkylation	hemiaminal	xmet:4000399|xmet:4000259
-xmet:4000319	skos:exactMatch	xf:Dehydrogenation/phenol_end	semapv:ManualMappingCuration	dehydrogenation to phenol	phenol_end	
-xmet:4000320	skos:exactMatch	xf:Dehydrogenation/amine_end	semapv:ManualMappingCuration	dehydrogenation to amine	amine_end	
-xmet:4000321	skos:exactMatch	xf:Dehydrogenation/methide_end	semapv:ManualMappingCuration	dehydrogenation to alkyl methide site	methide_end	
-xmet:4000322	skos:exactMatch	xf:Hydrogenation/path_end	semapv:ManualMappingCuration	conjugated-path hydrogenation	path_end	
+xmet:4000290	skos:exactMatch	xf:PhaseOne/StableOxygenation/Epoxidation/epoxide	semapv:ManualMappingCuration	epoxide ring formation	epoxide	
+xmet:4000028	skos:exactMatch	xf:PhaseOne/StableOxygenation/NitrogenOxidation/hydroxylamine	semapv:ManualMappingCuration	hydroxylamine formation	hydroxylamine	
+xmet:4000029	skos:exactMatch	xf:PhaseOne/StableOxygenation/NitrogenOxidation/nitroso	semapv:ManualMappingCuration	nitroso formation	nitroso	
+xmet:4000027	skos:exactMatch	xf:PhaseOne/StableOxygenation/NitrogenOxidation/n_oxide	semapv:ManualMappingCuration	N-oxide formation	n_oxide	
+xmet:4000069	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/alcohol	semapv:ManualMappingCuration	alcohol oxidation	alcohol	
+xmet:4000216	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/amine	semapv:ManualMappingCuration	amine dehydrogenation	amine	
+xmet:4000087	skos:exactMatch	xf:PhaseOne/Hydrolysis/Dephosphorylation/phosphate_ester	semapv:ManualMappingCuration	dephosphorylation	phosphate_ester	
+xmet:4000092	skos:exactMatch	xf:PhaseOne/Reduction/Hydrogenation/alkyne	semapv:ManualMappingCuration	alkyne hydrogenation	alkyne	
+xmet:4000091	skos:exactMatch	xf:PhaseOne/Reduction/Hydrogenation/alkene	semapv:ManualMappingCuration	alkene hydrogenation	alkene	
+xmet:4000095	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitro_to_amine	semapv:ManualMappingCuration	nitro to amine reduction	nitro_to_amine	
+xmet:4000105	skos:exactMatch	xf:PhaseOne/Reduction/OxygenReduction/carbonyl	semapv:ManualMappingCuration	carbonyl reduction	carbonyl	
+xmet:4000107	skos:exactMatch	xf:PhaseOne/Reduction/SulfurReduction/sulfoxide	semapv:ManualMappingCuration	sulfoxide reduction	sulfoxide	
+xmet:4000108	skos:exactMatch	xf:PhaseOne/Reduction/SulfurReduction/disulfide	semapv:ManualMappingCuration	disulfide reduction	disulfide	
+xmet:4000288	skos:exactMatch	xf:PhaseOne/Reduction/ReductiveDehalogenation/cleave	semapv:ManualMappingCuration	reductive C–halogen cleavage	cleave	
+xmet:4000289	skos:exactMatch	xf:PhaseOne/Reduction/ReductiveDehalogenation/alkene	semapv:ManualMappingCuration	reductive dehalogenation to alkene	alkene	
+xmet:4000008	skos:relatedMatch	xf:PhaseOne/Reduction	semapv:ManualMappingCuration	reduction	Reduction	
+xmet:4000291	skos:exactMatch	xf:PhaseOne/StableOxygenation/Hydroxylation/h	semapv:ManualMappingCuration	methine hydroxylation	h	
+xmet:4000292	skos:exactMatch	xf:PhaseOne/StableOxygenation/Hydroxylation/h2	semapv:ManualMappingCuration	methyl or methylene hydroxylation	h2	
+xmet:4000293	skos:exactMatch	xf:PhaseOne/Hydrolysis/Hydrolysis/cleave	semapv:ManualMappingCuration	hydrolytic bond cleavage	cleave	
+xmet:4000294	skos:exactMatch	xf:PhaseOne/Hydrolysis/Hydrolysis/add_water	semapv:ManualMappingCuration	carbonyl hydration with cleavage	add_water	
+xmet:4000295	skos:exactMatch	xf:PhaseOne/Hydrolysis/EpoxideOpening/hydrate	semapv:ManualMappingCuration	epoxide hydration	hydrate	
+xmet:4000296	skos:exactMatch	xf:PhaseOne/Hydrolysis/EpoxideOpening/rearrange	semapv:ManualMappingCuration	epoxide rearrangement	rearrange	
+xmet:4000297	skos:exactMatch	xf:PhaseOne/StableOxygenation/SulfurOxidation/zwitterion	semapv:ManualMappingCuration	sulfur–oxygen zwitterion formation	zwitterion	
+xmet:4000298	skos:exactMatch	xf:PhaseOne/StableOxygenation/SulfurOxidation/hydroxy	semapv:ManualMappingCuration	sulfenic acid formation	hydroxy	
+xmet:4000299	skos:exactMatch	xf:PhaseOne/StableOxygenation/SulfurOxidation/oxo	semapv:ManualMappingCuration	sulfur oxo formation	oxo	
+xmet:4000300	skos:exactMatch	xf:PhaseOne/Reduction/OxygenReduction/peroxide	semapv:ManualMappingCuration	peroxide reduction	peroxide	
+xmet:4000301	skos:exactMatch	xf:PhaseOne/Reduction/SulfurReduction/thioether	semapv:ManualMappingCuration	thioether C–S or O–S cleavage	thioether	
+xmet:4000302	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/alkyl	semapv:ManualMappingCuration	alkane dehydrogenation	alkyl	
+xmet:4000303	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/sulfoxide	semapv:ManualMappingCuration	sulfoxide formation by dehydrogenation	sulfoxide	
+xmet:4000304	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration/alcohol	semapv:ManualMappingCuration	alcohol dehydration	alcohol	
+xmet:4000305	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration/beta_elimination	semapv:ManualMappingCuration	beta-elimination	beta_elimination	
+xmet:4000306	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration/carbonyl	semapv:ManualMappingCuration	carbonyl dehydration	carbonyl	
+xmet:4000307	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation/alcohol	semapv:ManualMappingCuration	oxidative dehalogenation to alcohol	alcohol	
+xmet:4000308	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation/carbonyl	semapv:ManualMappingCuration	oxidative dehalogenation to carbonyl	carbonyl	
+xmet:4000309	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation/carboxylic	semapv:ManualMappingCuration	oxidative dehalogenation to carboxylic acid	carboxylic	
+xmet:4000310	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation/rearrange	semapv:ManualMappingCuration	1,2-halide migration with hydroxylation	rearrange	
+xmet:4000311	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation/gem_carboxylic	semapv:ManualMappingCuration	geminal dihalide to carboxylic acid	gem_carboxylic	
+xmet:4000312	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/OxidativeDehalogenation/gem_hydrate	semapv:ManualMappingCuration	geminal dihalide to geminal diol	gem_hydrate	
+xmet:4000387	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitro_charged	semapv:ManualMappingCuration	charged nitro N–O cleavage	nitro_charged	
+xmet:4000388	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitro_anion	semapv:ManualMappingCuration	nitro-anion N–O cleavage	nitro_anion	
+xmet:4000389	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitro_neutral	semapv:ManualMappingCuration	neutral nitro N–O cleavage	nitro_neutral	
+xmet:4000390	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitro_both	semapv:ManualMappingCuration	dual nitro N–O cleavage	nitro_both	
+xmet:4000391	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitro_both_any	semapv:ManualMappingCuration	unspecified nitro N–O cleavage	nitro_both_any	
+xmet:4000314	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/hydroxylamine	semapv:ManualMappingCuration	hydroxylamine N–O cleavage	hydroxylamine	
+xmet:4000315	skos:exactMatch	xf:PhaseOne/Reduction/NitrogenReduction/nitroso	semapv:ManualMappingCuration	nitroso reduction	nitroso	
+xmet:4000344	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methyl_alcohol	semapv:ManualMappingCuration	demethylation	methyl_alcohol	xmet:4000398|xmet:4000241
+xmet:4000344	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methyl_carbonyl	semapv:ManualMappingCuration	demethylation	methyl_carbonyl	xmet:4000399|xmet:4000250
+xmet:4000344	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methyl_carboxylic	semapv:ManualMappingCuration	demethylation	methyl_carboxylic	xmet:4000401|xmet:4000403
+xmet:4000345	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methylene_alcohol	semapv:ManualMappingCuration	methylene dealkylation	methylene_alcohol	xmet:4000398|xmet:4000241
+xmet:4000345	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methylene_carbonyl	semapv:ManualMappingCuration	methylene dealkylation	methylene_carbonyl	xmet:4000399|xmet:4000251
+xmet:4000345	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methylene_carboxylic	semapv:ManualMappingCuration	methylene dealkylation	methylene_carboxylic	xmet:4000401|xmet:4000404
+xmet:4000346	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methine_alcohol	semapv:ManualMappingCuration	methine dealkylation	methine_alcohol	xmet:4000398
+xmet:4000346	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/methine_carbonyl	semapv:ManualMappingCuration	methine dealkylation	methine_carbonyl	xmet:4000400
+xmet:4000316	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/quaternary_alcohol	semapv:ManualMappingCuration	quaternary C–heteroatom dealkylation	quaternary_alcohol	xmet:4000398
+xmet:4000046	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/cc_alcohol	semapv:ManualMappingCuration	C-dealkylation	cc_alcohol	xmet:4000398
+xmet:4000046	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/cc_carbonyl	semapv:ManualMappingCuration	C-dealkylation	cc_carbonyl	xmet:4000400
+xmet:4000317	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/cc_quaternary_alcohol	semapv:ManualMappingCuration	quaternary C-dealkylation	cc_quaternary_alcohol	xmet:4000398
+xmet:4000318	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/hemiaminal	semapv:ManualMappingCuration	hemiaminal collapse dealkylation	hemiaminal	xmet:4000399|xmet:4000259
+xmet:4000319	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/phenol_end	semapv:ManualMappingCuration	dehydrogenation to phenol	phenol_end	
+xmet:4000320	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/amine_end	semapv:ManualMappingCuration	dehydrogenation to amine	amine_end	
+xmet:4000321	skos:exactMatch	xf:PhaseOne/Dehydrogenation/Dehydrogenation/methide_end	semapv:ManualMappingCuration	dehydrogenation to alkyl methide site	methide_end	
+xmet:4000322	skos:exactMatch	xf:PhaseOne/Reduction/Hydrogenation/path_end	semapv:ManualMappingCuration	conjugated-path hydrogenation	path_end	
 xmet:4000327	skos:exactMatch	xf:QuinoneFormation/single_to_double	semapv:ManualMappingCuration	hydroxy/amino ring-end dehydrogenation	single_to_double	
 xmet:4000328	skos:exactMatch	xf:QuinoneFormation/add_carbonyl_o	semapv:ManualMappingCuration	aromatic CH to quinoid carbonyl	add_carbonyl_o	
 xmet:4000329	skos:exactMatch	xf:QuinoneFormation/replace_halogen	semapv:ManualMappingCuration	oxidative dehalogenation to quinoid carbonyl	replace_halogen	
@@ -144,12 +152,12 @@ xmet:4000337	skos:exactMatch	xf:NDealkylation/hemiaminal	semapv:ManualMappingCur
 xmet:4000186	skos:exactMatch	xf:Tautomerization/tautomer_h	semapv:ManualMappingCuration	tautomerization	tautomer_h	
 xmet:4000186	skos:exactMatch	xf:Tautomerization/path_partner	semapv:ManualMappingCuration	tautomerization	path_partner	
 xmet:4000330	skos:exactMatch	xf:QuinoneFormation/dealkylate_cumulated	semapv:ManualMappingCuration	dealkylative quinoid endpoint	dealkylate_cumulated	xmet:4000256
-xmet:4000336	skos:exactMatch	xf:Dealkylation/quaternary_alcohol_n	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_n	xmet:4000398
-xmet:4000336	skos:exactMatch	xf:Dealkylation/quaternary_alcohol_nitro	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_nitro	xmet:4000398|xmet:4000418
+xmet:4000336	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/quaternary_alcohol_n	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_n	xmet:4000398
+xmet:4000336	skos:exactMatch	xf:PhaseOne/UnstableOxygenation/Dealkylation/quaternary_alcohol_nitro	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_nitro	xmet:4000398|xmet:4000418
 xmet:4000336	skos:exactMatch	xf:NDealkylation/quaternary_alcohol_nitro	semapv:ManualMappingCuration	N-quaternary dealkylation	quaternary_alcohol_nitro	xmet:4000398|xmet:4000418
-xmet:4000305	skos:exactMatch	xf:Dehydration/beta_elimination_acid	semapv:ManualMappingCuration	beta-elimination	beta_elimination_acid	
-xmet:4000419	skos:exactMatch	xf:Dehydration/nitroso	semapv:ManualMappingCuration	nitroso oxo-leave	nitroso	
-xmet:4000420	skos:exactMatch	xf:Dehydration/nitro	semapv:ManualMappingCuration	nitro oxo-leave	nitro	
-xmet:4000091	skos:exactMatch	xf:Hydrogenation/alkene_cumulene	semapv:ManualMappingCuration	alkene hydrogenation	alkene_cumulene	
-xmet:4000421	skos:exactMatch	xf:OxygenReduction/nitroso	semapv:ManualMappingCuration	nitroso N=O reduction	nitroso	
-xmet:4000422	skos:exactMatch	xf:OxygenReduction/nitro	semapv:ManualMappingCuration	nitro N=O reduction	nitro	
+xmet:4000305	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration/beta_elimination_acid	semapv:ManualMappingCuration	beta-elimination	beta_elimination_acid	
+xmet:4000419	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration/nitroso	semapv:ManualMappingCuration	nitroso oxo-leave	nitroso	
+xmet:4000420	skos:exactMatch	xf:PhaseOne/Reduction/Dehydration/nitro	semapv:ManualMappingCuration	nitro oxo-leave	nitro	
+xmet:4000091	skos:exactMatch	xf:PhaseOne/Reduction/Hydrogenation/alkene_cumulene	semapv:ManualMappingCuration	alkene hydrogenation	alkene_cumulene	
+xmet:4000421	skos:exactMatch	xf:PhaseOne/Reduction/OxygenReduction/nitroso	semapv:ManualMappingCuration	nitroso N=O reduction	nitroso	
+xmet:4000422	skos:exactMatch	xf:PhaseOne/Reduction/OxygenReduction/nitro	semapv:ManualMappingCuration	nitro N=O reduction	nitro	

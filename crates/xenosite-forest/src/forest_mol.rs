@@ -130,6 +130,11 @@ pub struct ForestMol {
     /// `Tag(1..=n)`). Copied through adopt so Index plans can tell root
     /// survivors (`tag.get() < stamp_end`) from minted atoms.
     stamp_end: u16,
+    /// Backup for chematic [`chematic::smiles::CxSmiles::atom_labels`] keyed by
+    /// [`Tag`]. CX free-text labels (`GlcA`, …) live on `CxSmiles`, not on
+    /// [`Molecule`] (`r_groups` is only R/R1…). This map restamps labels into
+    /// a `CxSmiles` when graph edits would otherwise drop CX metadata.
+    cx_labels: BTreeMap<Tag, String>,
     structure: Arc<Mutex<Structure>>,
     kekule: Arc<Mutex<KekuleCache>>,
     pub is_terminal_product: AtomicBool,
@@ -167,6 +172,7 @@ impl ForestMol {
             labels,
             tag_gen: Arc::new(AtomicU16::new(next)),
             stamp_end: next,
+            cx_labels: BTreeMap::new(),
             structure: Arc::new(Mutex::new(Structure::default())),
             kekule: Arc::new(Mutex::new(KekuleCache::default())),
             is_terminal_product: AtomicBool::new(false),
@@ -195,6 +201,7 @@ impl ForestMol {
             labels,
             tag_gen: Arc::new(AtomicU16::new(next)),
             stamp_end: next,
+            cx_labels: BTreeMap::new(),
             structure: Arc::new(Mutex::new(Structure::default())),
             kekule: Arc::new(Mutex::new(KekuleCache::default())),
             is_terminal_product: AtomicBool::new(false),
@@ -233,6 +240,7 @@ impl ForestMol {
             labels,
             tag_gen: Arc::clone(&parent.tag_gen),
             stamp_end: parent.stamp_end,
+            cx_labels: parent.cx_labels.clone(),
             structure: Arc::new(Mutex::new(Structure::default())),
             kekule: Arc::clone(&parent.kekule),
             is_terminal_product: AtomicBool::new(false),
@@ -246,11 +254,20 @@ impl ForestMol {
         let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), next);
         self.tag_gen.store(next, Ordering::Relaxed);
         sync_tags_to_mol(&mut mol, &labels);
+        // Tag identities for survivors are unchanged — CX label backup carries.
+        let alive: std::collections::BTreeSet<_> = labels.iter().flatten().copied().collect();
+        let cx_labels = self
+            .cx_labels
+            .iter()
+            .filter(|(tag, _)| alive.contains(tag))
+            .map(|(t, s)| (*t, s.clone()))
+            .collect();
         Self {
             mol,
             labels,
             tag_gen: Arc::clone(&self.tag_gen),
             stamp_end: self.stamp_end,
+            cx_labels,
             structure: Arc::new(Mutex::new(Structure::default())),
             kekule: Arc::clone(&self.kekule),
             is_terminal_product: AtomicBool::new(false),
@@ -279,6 +296,7 @@ impl ForestMol {
             labels,
             tag_gen: Arc::clone(&self.tag_gen),
             stamp_end: self.stamp_end,
+            cx_labels: self.cx_labels.clone(),
             structure: Arc::new(Mutex::new(Structure::default())),
             kekule: Arc::clone(&self.kekule),
             is_terminal_product: AtomicBool::new(false),
@@ -294,6 +312,38 @@ impl ForestMol {
 
     pub fn tag_of(&self, idx: usize) -> Option<Tag> {
         self.labels.get(idx).copied().flatten()
+    }
+
+    /// CX star label for a tag, if set (backup for chematic `CxSmiles.atom_labels`).
+    pub fn cx_label(&self, tag: Tag) -> Option<&str> {
+        self.cx_labels.get(&tag).map(String::as_str)
+    }
+
+    /// Record a CX star label keyed by atom tag (not stored on the chematic mol).
+    pub fn set_cx_label(&mut self, tag: Tag, label: impl Into<String>) {
+        self.cx_labels.insert(tag, label.into());
+    }
+
+    /// Project tag-keyed star labels into chematic [`CxSmiles::atom_labels`] and write.
+    pub fn write_cxsmiles(&self) -> String {
+        use chematic::smiles::{CxSmiles, write_cxsmiles};
+        let n = self.mol.atom_count();
+        let mut atom_labels = vec![None; n];
+        for i in 0..n {
+            if let Some(tag) = self.tag_of(i)
+                && let Some(lab) = self.cx_labels.get(&tag)
+            {
+                atom_labels[i] = Some(lab.clone());
+            }
+        }
+        let cx = CxSmiles {
+            mol: self.mol.clone(),
+            atom_labels,
+            atom_props: Vec::new(),
+            atom_radicals: vec![None; n],
+            wavy_bonds: Vec::new(),
+        };
+        write_cxsmiles(&cx)
     }
 
     /// First born-atom tag id at the root stamp (`n+1` after `Tag(1..=n)`).
@@ -336,6 +386,7 @@ impl ForestMol {
             labels: self.labels.clone(),
             tag_gen: Arc::clone(&self.tag_gen),
             stamp_end: self.stamp_end,
+            cx_labels: self.cx_labels.clone(),
             structure: Arc::clone(&self.structure),
             kekule: Arc::clone(&self.kekule),
             is_terminal_product: AtomicBool::new(self.is_terminal_product.load(Ordering::Relaxed)),

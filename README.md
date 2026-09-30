@@ -171,4 +171,6 @@ Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/swa
 
 ## License
 
-MIT. See [LICENSE](https://github.com/swamidasslab/xenosite-forest/blob/main/LICENSE).
+Academic / non-commercial only. Free for educational and academic research
+use; commercial use requires a separate license. See
+[LICENSE](https://github.com/swamidasslab/xenosite-forest/blob/main/LICENSE).

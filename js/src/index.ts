@@ -26,6 +26,7 @@ import {
   quinone_formation as wasmQuinoneFormation,
   random_path as wasmRandomPath,
   random_path_with_options as wasmRandomPathWithOptions,
+  reactivity as wasmReactivity,
 } from "./wasm/xenosite_forest.js";
 
 export { ForestMol, Formula, PatternInfo, RuleSet };
@@ -149,6 +150,11 @@ export function randomPath(
 export function PhaseOne(): RuleSet {
   requireReady();
   return wasmPhaseOne();
+}
+
+export function Reactivity(): RuleSet {
+  requireReady();
+  return wasmReactivity();
 }
 
 export function Epoxidation(): RuleSet {

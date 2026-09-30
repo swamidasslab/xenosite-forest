@@ -5,6 +5,9 @@ Port of ``tests/forest/test_rule_parity_fuzz.py`` from tag
 (C1). Site-bag equality is omitted until ForestMol exposes ranks again; C18
 asserted both.
 
+Conjugation leaves compare **star** products (native default ``as_star=True``,
+Rust always collapses). Full-adduct native (``as_star=False``) is inventory-only.
+
 C18's 29 ``ProductParityXfail`` rows stay ``xfail(strict=True)``. New gaps
 outside that set are hard fails — that is the HEAD vs baseline delta.
 """
@@ -22,7 +25,6 @@ from xenosite.forest.native import rules as native_rules
 from xenosite.forest.native.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.forest.native.rules import ReactionRule
 
-from .pattern_info_inventory import instantiate_rule
 from .rule_parity_corpus import (
     C18_OPEN_PRODUCT_XFAIL_COUNT,
     parity_full_enabled,
@@ -81,7 +83,9 @@ def _rust_products(rule_name: str, smiles: str) -> set[str]:
     found: set[str] = set()
     for emission in leaf_rule(rule_name).metabolize(mol):
         for csmi_raw in emission.product_csmis():
-            for piece in str(csmi_raw).split("."):
+            # product_csmis may be CXSMILES (`*OCC |$SO3;;$|`); compare graph only.
+            bare = str(csmi_raw).split("|", 1)[0].strip()
+            for piece in bare.split("."):
                 csmi = _rdkit_csmi(piece)
                 if csmi is None:
                     continue
@@ -91,8 +95,10 @@ def _rust_products(rule_name: str, smiles: str) -> set[str]:
 
 def _assert_product_parity(rule_name: str, smiles: str) -> None:
     cls = getattr(native_rules, rule_name)
-    # Conjugation rules default as_star=True (*OCC); C18 parity used full adducts.
-    rule = instantiate_rule(cls)
+    # Conjugation target is star products (*OCC / CX labels). Rust always
+    # collapses; native defaults as_star=True — do not force as_star=False
+    # (that path is inventory-only via instantiate_rule).
+    rule = cls()
     native = _native_products(rule, smiles)
     rust = _rust_products(rule_name, smiles)
     only_native = native - rust

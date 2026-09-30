@@ -13,7 +13,7 @@ authors:
   - family-names: Swamidass
     given-names: S. Joshua
     email: swamidass@gmail.com
-license: MIT
+license: "LicenseRef-Academic-NonCommercial"
 repository-code: https://github.com/swamidasslab/xenosite-forest
 url: https://xenosite.org
 preferred-citation:

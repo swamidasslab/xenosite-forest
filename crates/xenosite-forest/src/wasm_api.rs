@@ -26,6 +26,7 @@ use crate::rules::{
     epoxide_opening as epoxide_opening_rs, hydrolysis as hydrolysis_rs,
     hydroxylation as hydroxylation_rs, n_dealkylation as n_dealkylation_rs,
     phase_one as phase_one_rs, quinone_formation as quinone_formation_rs,
+    reactivity as reactivity_rs,
 };
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 use crate::{canon_smiles, hydroxylate, parse_mol};
@@ -536,6 +537,11 @@ fn wrap_ruleset(inner: RuleSet) -> JsRuleSet {
 #[wasm_bindgen]
 pub fn phase_one() -> JsRuleSet {
     wrap_ruleset(phase_one_rs())
+}
+
+#[wasm_bindgen]
+pub fn reactivity() -> JsRuleSet {
+    wrap_ruleset(reactivity_rs())
 }
 
 #[wasm_bindgen]

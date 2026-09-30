@@ -95,8 +95,9 @@ impl When {
 }
 
 /// Known element symbols, longest first (for bag strings like ``Cl``, ``Br``).
+/// ``*`` is the conjugation-collapse wildcard (star adducts).
 const ELEMENT_SYMBOLS: &[&str] = &[
-    "At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H", "+", "-",
+    "At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H", "+", "-", "*",
 ];
 
 /// Parse an ``adds`` / ``removes`` bag (``"OO"``, ``"HH"``, ``"Cl"``, ``"OH"``)
@@ -591,10 +592,20 @@ impl Emission {
     ///
     /// Prefer keeping [`Self::products`] as [`crate::ForestMol`] so tags and
     /// caches stay continuous. Do not re-parse these strings into ForestMol.
+    ///
+    /// Conjugation / reactivity stars are emitted as CXSMILES with the
+    /// hardcoded conjugate `atomLabel` (GlcA, GSH, …) so Python/JS frontends
+    /// get labeled `*` without wrapper logic.
     pub fn product_csmis(&self) -> Vec<String> {
+        let label = self
+            .leaf_rule()
+            .and_then(crate::star_conjugate::conjugate_star_label);
         self.products
             .iter()
-            .map(|p| p.csmi().as_ref().to_string())
+            .map(|p| match label {
+                Some(_) if p.mol().atoms().any(|(_, a)| a.wildcard) => p.write_cxsmiles(),
+                _ => p.csmi().as_ref().to_string(),
+            })
             .collect()
     }
 }

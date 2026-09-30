@@ -76,13 +76,19 @@ pub fn molecule_formula(mol: &Molecule) -> Formula {
     let mut positive = 0i32;
     let mut negative = 0i32;
     for (idx, atom) in mol.atoms() {
-        let z = atom.element.atomic_number();
         let c = i32::from(atom.charge);
         if c > 0 {
             positive += c;
         } else if c < 0 {
             negative += -c;
         }
+        // Conjugation collapse marks adducts as `*`; do not count the
+        // placeholder element (chematic uses C) or its hydrogens.
+        if atom.wildcard {
+            *counts.entry("*".to_string()).or_insert(0) += 1;
+            continue;
+        }
+        let z = atom.element.atomic_number();
         if z == 1 {
             *counts.entry("H".to_string()).or_insert(0) += 1;
             continue;

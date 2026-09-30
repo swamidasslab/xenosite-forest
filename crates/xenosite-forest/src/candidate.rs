@@ -330,9 +330,18 @@ impl DeferredSite {
             return Ok(None);
         }
         // Effect-formula soft check deferred while chasing product parity.
+        let star_label = self
+            .leaf_rule()
+            .and_then(crate::star_conjugate::conjugate_star_label);
         let products = mols
             .into_iter()
-            .map(|piece| self.mol.from_edit_product(piece))
+            .map(|piece| {
+                let product = self.mol.from_edit_product(piece);
+                match star_label {
+                    Some(label) => crate::star_conjugate::collapse_conjugate_to_star(&product, label),
+                    None => product,
+                }
+            })
             .collect::<Vec<_>>();
         Ok(Some(Emission {
             site: self.site,

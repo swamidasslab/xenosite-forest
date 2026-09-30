@@ -15,6 +15,7 @@ use crate::rules::{
     hydroxylation as hydroxylation_rs, leaf_rule as leaf_rule_rs,
     n_dealkylation as n_dealkylation_rs, phase_one as phase_one_rs,
     product_graph_ruleset as product_graph_ruleset_rs, quinone_formation as quinone_formation_rs,
+    reactivity as reactivity_rs,
 };
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
@@ -705,6 +706,11 @@ fn wrap_ruleset(inner: RuleSet) -> PyRuleSet {
 #[pyfunction]
 pub fn phase_one() -> PyRuleSet {
     wrap_ruleset(phase_one_rs())
+}
+
+#[pyfunction]
+pub fn reactivity() -> PyRuleSet {
+    wrap_ruleset(reactivity_rs())
 }
 
 /// Look up a sealed leaf by catalog name (`LEAF_CTORS`).

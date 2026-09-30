@@ -5,7 +5,7 @@ Consult this file before changing `find_path` behavior, and again when a search 
 Follow `.cursor/rules/data-not-branches.mdc`. Prefer a generic decision that reads `PatternInfo` over a special case in the search.
 `leave_count` and `breaks_ring` on `Effect` are that data: the same `cleaves` bit, with the leaving piece named or open, and ring opening on the bond.
 
-Follow `.cursor/rules/never-skip-tests.mdc`. Do not soft-skip failing spec cases inside a green test. Track known deviations with `#[ignore]` / pytest xfail so progression is visible. **Conjugation adduct** Effect-formula accuracy (`Acetylation` / `Sulfation` / `Glucuronidation` / `Glutathionation`) is the only current carve-out — xfail in `catalog_adduct_effect_and_atom_diff_match_materialized_products` until those bags are refactored (not published). Status: approved (process).
+Follow `.cursor/rules/never-skip-tests.mdc`. Do not soft-skip failing spec cases inside a green test. Track known deviations with `#[ignore]` / pytest xfail so progression is visible.
 
 **Leaf example substrates.** Short site_kind / emit list: `LEAF_EXAMPLE_SUBSTRATES` beside `LEAF_CTORS` in `crates/xenosite-forest/src/rules.rs` (`seal_leaf` → `RuleSet::example_substrates`; native `_example_substrates`). Do **not** grow this table for PatternInfo / When coverage.
 

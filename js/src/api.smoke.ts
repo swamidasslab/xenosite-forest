@@ -5,6 +5,7 @@
 import {
   ForestMol,
   PhaseOne,
+  Reactivity,
   ensureInit,
   findPath,
   randomPath,
@@ -57,6 +58,26 @@ if (!rows[0]!.products?.length) {
   throw new Error("metabolize row missing products");
 }
 
+const react = Reactivity();
+const epoxide = new ForestMol("C1OC1c1ccccc1");
+const conj = react.metabolize(epoxide) as Array<{
+  pattern_name: string;
+  products: string[];
+}>;
+if (!Array.isArray(conj) || conj.length < 1) {
+  throw new Error("Reactivity.metabolize returned no rows");
+}
+const cx = conj.flatMap((r) => r.products ?? []).find((p) => p.includes("*"));
+if (!cx) {
+  throw new Error("Reactivity products missing *");
+}
+if (!cx.includes("|")) {
+  throw new Error(`expected CXSMILES block, got ${cx}`);
+}
+if (!["GSH", "Protein", "DNA", "Cyanide"].some((lab) => cx.includes(lab))) {
+  throw new Error(`expected conjugate atomLabel in ${cx}`);
+}
+
 const walk = randomPath("c1ccccc1", 1, { maxSteps: 1 });
 if (!walk.smiles || !Array.isArray(walk.path) || walk.path.length < 1) {
   throw new Error("randomPath missing smiles/path");
@@ -65,4 +86,6 @@ if (!Array.isArray(walk.steps)) {
   throw new Error("randomPath missing steps");
 }
 
-console.log("ok: ForestMol, findPath, PhaseOne.metabolize, randomPath");
+console.log(
+  "ok: ForestMol, findPath, PhaseOne.metabolize, Reactivity CX stars, randomPath"
+);

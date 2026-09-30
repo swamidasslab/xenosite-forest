@@ -43,6 +43,7 @@ pub mod rules;
 pub mod ruleset;
 pub mod smarts;
 pub mod smirks;
+pub mod star_conjugate;
 pub mod stream;
 pub mod substrate_library;
 pub mod unique_edit;
@@ -155,8 +156,9 @@ pub use product_graph::{
 };
 pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
-    LEAF_CTORS, LEAF_EXAMPLE_SUBSTRATES, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset,
-    epoxide_hydration, leaf_rule, phase_one, product_graph_ruleset, reduction, resolve_root,
+    LEAF_CTORS, LEAF_EXAMPLE_SUBSTRATES, ROOT_CATALOGS, all_rules, catalog_names, cyanide,
+    default_ruleset, dna, epoxide_hydration, glutathionation, glutathionation_no_thiol, gsh,
+    leaf_rule, phase_one, product_graph_ruleset, protein, reactivity, reduction, resolve_root,
     seal_leaf, stable_oxygenation, unstable_oxygenation,
 };
 pub use ruleset::{

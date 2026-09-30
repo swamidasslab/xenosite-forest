@@ -2,6 +2,50 @@
 
 ## 2026-09-30
 
+- **Product parity targets stars.** Native↔Rust leaf fuzz instantiates
+  conjugation with default `as_star=True` (not inventory's `as_star=False`).
+  Rust `product_csmis` CX block stripped before RDKit CSMI compare. Reactivity
+  / NoThiol rust-only leaves get `parity_exception`. Public `__all__` includes
+  `reactivity`.
+
+- **Star labels are tag-keyed, not CxSmiles-on-ForestMol.** Do not store a
+  chematic `CxSmiles` blob on `ForestMol`. Labels live in
+  `ForestMol.cx_labels: Tag → String`; emit projects into
+  `CxSmiles.atom_labels` only in `write_cxsmiles`. Collapse (multi-atom
+  adduct → `*`) is separate from labeling (`set_cx_label` on the star tag).
+  Grafting a C then collapsing just to attach a label was a mistaken test
+  fixture — use `Atom::wildcard()` + `set_cx_label`. Note: conjugation SMARTS
+  currently miss substrates that already contain `*` (chained conjugation via
+  metabolize not covered yet).
+
+- **Conjugation Effect bags = star stoichiometry.** Adduct leaves declare
+  `*` (± H / leaving group) instead of full peptide/sugar formulas.
+  `molecule_formula` counts wildcards as `*`; catalog Effect gate uses
+  `apply()` (collapsed products). Un-ignored
+  `catalog_adduct_effect_and_atom_diff_match_materialized_products`. Added
+  tertiary epoxide/aziridine coverage substrates (`CC1(C)OC1`, `CC1(C)NC1`).
+
+- **Conjugation star + CX labels.** Adduct leaves collapse newly tagged
+  atoms to `*` (`set_wildcard`); `product_csmis` emits CXSMILES with hardcoded
+  atomLabels (`Ac` / `SO3` / `GlcA` / `GSH` / `Protein` / `DNA` / `Cyanide`).
+  Python/JS metabolize already use `product_csmis` — no wrapper CX logic.
+
+- **SSSOM PhaseOne nesting.** Five Rainbow colors and their member
+  rules/patterns now use `xf:PhaseOne/<Color>/…` (DH/HD leaf paths double the
+  color name). Reactivity heads already nested as `xf:Reactivity/<Head>`.
+  QF / EH / NDealkylation / conjugations stay top-level. Synced living SSSOM
+  in xenosite-xmet; every `xf:` object_id resolves.
+
+- **Reactivity → existing `xmet:4000267`.** Do not mint a parallel Reactivity
+  home; `xf:Reactivity` is `skos:relatedMatch` to adduct formation
+  (`4000267`). NoThiol mint is `4000423` (parent `4000167`, related_to
+  `4000267`); next mint `4000424`.
+
+- **License → academic / non-commercial.** Replaced MIT with an academic
+  software license (use/modify/share among academic & nonprofit researchers
+  only; commercial contact `swamidass@gmail.com`). Updated README, PyPI
+  classifier, CITATION.cff, Cargo `license-file`, and JS package metadata.
+
 - **Merged origin/main into CI/CD branch.** Auto-merge clean. Dropped our
   anthraquinone Hydrogenation plan-replay xfail — `0db161e` already fixed
   `Step::apply` pair replay; keep their `anthraquinone_hydrogenation_plan_replays`

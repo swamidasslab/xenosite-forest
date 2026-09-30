@@ -22,13 +22,18 @@ use crate::pattern::{Edit, Effect, PatternInfo, SiteKind, compose_delta_formula}
 use crate::rules::{LEAF_EXAMPLE_SUBSTRATES, catalog_names, leaf_rule};
 use crate::substrate_library::coverage_candidates;
 
-/// Conjugation adducts — not publicly published; Effect bags still unfinished.
-/// Tracked as xfail: [`catalog_adduct_effect_and_atom_diff_match_materialized_products`].
+/// Conjugation / reactivity adducts — products collapse to chematic `*`.
+/// Effect bags declare star stoichiometry (see [`crate::star_conjugate`]).
 const ADDUCT_LEAVES: &[&str] = &[
     "Acetylation",
     "Sulfation",
     "Glucuronidation",
     "Glutathionation",
+    "GlutathionationNoThiol",
+    "GSH",
+    "Protein",
+    "DNA",
+    "Cyanide",
 ];
 
 fn expected_delta(effect: &Effect) -> BTreeMap<String, i32> {
@@ -327,6 +332,20 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
                     // coverage (resolution on SMARTS hit, not product emit).
                     continue;
                 }
+                // Conjugation adducts collapse to `*` on apply; formula gate
+                // must see the same products.
+                let pieces: Vec<_> = match crate::star_conjugate::conjugate_star_label(name) {
+                    Some(label) => pieces
+                        .into_iter()
+                        .map(|piece| {
+                            let product = parent.from_edit_product(piece);
+                            crate::star_conjugate::collapse_conjugate_to_star(&product, label)
+                                .mol()
+                                .clone()
+                        })
+                        .collect(),
+                    None => pieces,
+                };
                 hits += 1;
                 if let Some(detail) =
                     check_effect_delta_formula(parent.mol(), &c.effect, &pieces, &c.pattern_name)
@@ -418,9 +437,7 @@ fn catalog_effect_and_atom_diff_match_materialized_products() {
 }
 
 /// Same Effect/atom_diff + coverage gate for conjugation adducts only.
-/// `#[ignore]` = xfail until adduct Effect bags are refactored (not published).
 #[test]
-#[ignore = "xfail: adduct Effect bags unfinished / not published; remove ignore when refactor seals formula Effects"]
 fn catalog_adduct_effect_and_atom_diff_match_materialized_products() {
     let (hits, misses) = effect_atom_diff_accuracy(ADDUCT_LEAVES);
     assert!(

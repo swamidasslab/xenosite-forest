@@ -234,4 +234,66 @@ mod tests {
             Resolved::Rule(_) => panic!("expected BoundPattern"),
         }
     }
+
+    #[test]
+    fn resolve_reactivity_catalog_and_heads() {
+        let cat = resolve("xf:Reactivity").expect("Reactivity");
+        match cat {
+            Resolved::Rule(r) => {
+                assert_eq!(r.name.as_deref(), Some("Reactivity"));
+                assert!(r.is_catalog());
+            }
+            Resolved::Pattern(_) => panic!("expected RuleSet"),
+        }
+        for head in ["GSH", "Protein", "DNA", "Cyanide"] {
+            let nested = resolve(&format!("xf:Reactivity/{head}")).expect(head);
+            match nested {
+                Resolved::Rule(r) => assert_eq!(r.name.as_deref(), Some(head)),
+                Resolved::Pattern(_) => panic!("expected leaf RuleSet under Reactivity"),
+            }
+            let top = resolve(&format!("xf:{head}")).expect("top-level leaf");
+            match top {
+                Resolved::Rule(r) => assert_eq!(r.name.as_deref(), Some(head)),
+                Resolved::Pattern(_) => panic!("expected leaf"),
+            }
+        }
+        let no_thiol = resolve("xf:GlutathionationNoThiol").expect("NoThiol");
+        match no_thiol {
+            Resolved::Rule(r) => {
+                assert_eq!(r.name.as_deref(), Some("GlutathionationNoThiol"));
+                assert!(!r.patterns().iter().any(|p| p.name == "thiol"));
+            }
+            Resolved::Pattern(_) => panic!("expected RuleSet"),
+        }
+    }
+
+    #[test]
+    fn resolve_phase_one_colors_and_rules() {
+        for id in [
+            "xf:PhaseOne/StableOxygenation",
+            "xf:PhaseOne/StableOxygenation/Hydroxylation",
+            "xf:PhaseOne/StableOxygenation/Hydroxylation/h",
+            "xf:PhaseOne/UnstableOxygenation/Dealkylation/methyl_alcohol",
+            "xf:PhaseOne/Dehydrogenation",
+            "xf:PhaseOne/Dehydrogenation/Dehydrogenation",
+            "xf:PhaseOne/Dehydrogenation/Dehydrogenation/alcohol",
+            "xf:PhaseOne/Hydrolysis/Hydrolysis",
+            "xf:PhaseOne/Hydrolysis/Dephosphorylation",
+            "xf:PhaseOne/Reduction/Hydrogenation",
+            "xf:StableOxygenation/Hydroxylation",
+        ] {
+            resolve(id).unwrap_or_else(|e| panic!("{id}: {e}"));
+        }
+    }
+
+    #[test]
+    fn every_sssom_xf_object_resolves() {
+        for row in parse_forest_xmet_sssom() {
+            if !row.object_id.starts_with("xf:") {
+                continue;
+            }
+            resolve(&row.object_id)
+                .unwrap_or_else(|e| panic!("{}: {e}", row.object_id));
+        }
+    }
 }

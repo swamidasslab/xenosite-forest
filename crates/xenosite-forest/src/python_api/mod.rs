@@ -27,7 +27,7 @@ pub use rules::{
     PyBoundPattern, PyEmission, PyPatternInfo, PyRuleSet, dealkylation, default_ruleset,
     dehydrogenation, epoxidation, epoxide_opening, expand_iri_py, forest_xmet_sssom, hydrolysis,
     hydroxylation, leaf_rule, n_dealkylation, phase_one, product_graph_ruleset, quinone_formation,
-    resolve_py, to_curie_py,
+    reactivity, resolve_py, to_curie_py,
 };
 pub use walk::{PyRandomPathOutcome, random_path};
 
@@ -57,6 +57,7 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(normalize_tautomer, m)?)?;
     m.add_function(wrap_pyfunction!(random_path, m)?)?;
     m.add_function(wrap_pyfunction!(phase_one, m)?)?;
+    m.add_function(wrap_pyfunction!(reactivity, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_rule, m)?)?;
     m.add_function(wrap_pyfunction!(epoxidation, m)?)?;
     m.add_function(wrap_pyfunction!(quinone_formation, m)?)?;

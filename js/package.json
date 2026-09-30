@@ -3,7 +3,7 @@
   "version": "0.9.0",
   "description": "Metabolic Forest — chematic Phase I search and rules (JS/WASM)",
   "type": "module",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "S. Joshua Swamidass <swamidass@gmail.com>",
   "homepage": "https://github.com/swamidasslab/xenosite-forest",
   "bugs": {
@@ -40,7 +40,8 @@
     "dist/**/*.map",
     "dist/**/*.wasm",
     "!dist/**/*.smoke.*",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build:wasm": "../scripts/build_wasm.sh",

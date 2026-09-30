@@ -17,7 +17,7 @@ Do **not** hide known failures with skips, allowlists, soft continues, or
      is deleted when fixed.
    - Rust: dedicated test with
      `#[ignore = "xfail: …why; remove ignore when fixed"]` that still
-     asserts (see `chematic_features`, adduct Effect accuracy). Do **not**
+     asserts (see `chematic_features`). Do **not**
      `#[ignore]` a broken assertion on the main green gate without a
      separate asserting xfail test.
 3. Say **why** in the xfail/ignore reason and **when** to remove the mark.
@@ -42,13 +42,7 @@ allowed.
   **`pytest.xfail` / `@pytest.mark.xfail`**, never **`skip`**. Report as
   xfailed, not skipped.
 
-## Current xfail carve-out
-
-Conjugation adduct leaves (`Acetylation`, `Sulfation`, `Glucuronidation`,
-`Glutathionation`) are the only Effect-formula accuracy cases known to need
-this branch until those Effects are refactored (not published yet) —
-`catalog_adduct_effect_and_atom_diff_match_materialized_products`. Do not
-add other soft-skips or xfails without an explicit reason (and preferably
+Do not add soft-skips or xfails without an explicit reason (and preferably
 `docs/forest/HEURISTICS.md`).
 
 ## Example

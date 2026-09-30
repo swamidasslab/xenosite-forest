@@ -43,10 +43,13 @@ Predict head → forest:
 | Predict head | Forest |
 | --- | --- |
 | `ugt` | `Glucuronidation(star_label="GlcA")` or `CJ.Glucuronidation` |
-| `reactivity.gsh` | `Glutathionation(star_label="GSH")` |
-| `reactivity.protein` | `Glutathionation(star_label="Protein")` (star-only) |
-| `reactivity.dna` | `Glutathionation(include_thiol=False, star_label="DNA")` or `GlutathionationNoThiol` |
-| `reactivity.cyanide` | `Glutathionation(include_thiol=False, star_label="Cyanide")` (label is `Cyanide`, not `CN`) |
+| `reactivity.gsh` | `GSH` / `xf:Reactivity/GSH` (or `Glutathionation` + `star_label="GSH"`) |
+| `reactivity.protein` | `Protein` / `xf:Reactivity/Protein` (star-only) |
+| `reactivity.dna` | `DNA` / `xf:Reactivity/DNA` (or `GlutathionationNoThiol`, `star_label="DNA"`) |
+| `reactivity.cyanide` | `Cyanide` / `xf:Reactivity/Cyanide` (`star_label="Cyanide"`, not `CN`) |
+
+Catalog: `resolve("xf:Reactivity")` nests GSH / Protein / DNA / Cyanide. Thiol
+disulfide SMARTS only on GSH / Protein / Glutathionation.
 
 Predict’s older adapter ([`conjugates.py`](../../xenosite-predict/src/xenosite/predict/conjugates.py)) can drop once it calls these options. Forest keeps AtomTracker on star products; `mol_to_cxsmiles` copies before stripping props so tracing is unchanged.
 

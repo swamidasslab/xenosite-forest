@@ -41,6 +41,11 @@ fn embed_round_trip() {
 /// This is the gate for **dangling xf: references** in the mapping file
 /// (object_id as CURIE or absolute IRI). Inventory coverage the other way
 /// (catalog → SSSOM) is [`inventory_fully_covered_in_sssom`].
+///
+/// Nested catalogs (`xf:PhaseOne/…`, `xf:Reactivity/…`) resolve to Rule
+/// sets for intermediate segments and BoundPattern only for the leaf
+/// pattern tip. [`BoundPattern::curie`] stays `xf:<Leaf>/<pattern>` (short
+/// leaf path), not the full catalog CURIE.
 #[test]
 fn all_sssom_objects_resolve() {
     let rows = parse_forest_xmet_sssom();
@@ -52,28 +57,15 @@ fn all_sssom_objects_resolve() {
         let expanded = xenosite_forest::expand_iri(id);
         for form in [id.as_str(), expanded.as_str()] {
             match resolve(form) {
-                Ok(Resolved::Rule(r)) => {
-                    if id.contains('/') {
-                        failures.push(format!(
-                            "{form}: expected BoundPattern, got Rule {:?}",
-                            r.name
-                        ));
-                    }
-                }
+                Ok(Resolved::Rule(_)) => {}
                 Ok(Resolved::Pattern(bp)) => {
-                    if !id.contains('/') {
+                    let local = id.strip_prefix("xf:").unwrap_or(id);
+                    let tip = local.rsplit('/').next().unwrap_or(local);
+                    if bp.name() != tip {
                         failures.push(format!(
-                            "{form}: expected Rule, got BoundPattern {}",
+                            "{form}: pattern tip mismatch {} vs {tip}",
                             bp.name()
                         ));
-                    } else {
-                        let expect = id.strip_prefix("xf:").unwrap_or(id);
-                        if bp.curie() != format!("xf:{expect}") {
-                            failures.push(format!(
-                                "{form}: curie mismatch {} vs xf:{expect}",
-                                bp.curie()
-                            ));
-                        }
                     }
                 }
                 Err(e) => failures.push(format!("{form}: {e}")),
@@ -109,10 +101,15 @@ fn patterns_nest_under_rule() {
         let Some(rest) = id.strip_prefix("xf:") else {
             continue;
         };
-        let Some((rule, pat)) = rest.split_once('/') else {
+        // Only pattern tips (resolve → BoundPattern) need a leaf parent.
+        let Ok(Resolved::Pattern(bp)) = resolve(id) else {
             continue;
         };
-        let parent = format!("xf:{rule}");
+        let Some((parent_path, pat)) = rest.rsplit_once('/') else {
+            failures.push(format!("{id}: pattern without parent path"));
+            continue;
+        };
+        let parent = format!("xf:{parent_path}");
         if !objects.contains(&parent) {
             // Parent may still resolve as a registered leaf without its own row.
             if resolve(&parent).is_err() {
@@ -138,6 +135,7 @@ fn patterns_nest_under_rule() {
             (Ok(Resolved::Pattern(a)), Some(Resolved::Pattern(b))) => {
                 assert_eq!(a.name(), b.name());
                 assert_eq!(a.rule_name(), b.rule_name());
+                assert_eq!(a.name(), bp.name());
             }
             (a, b) => failures.push(format!("{id}: path≡index mismatch {a:?} vs {b:?}")),
         }

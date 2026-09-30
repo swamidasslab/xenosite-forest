@@ -43,6 +43,7 @@ __all__ = [
     "RuleSet",
     "BoundPattern",
     "phase_one",
+    "reactivity",
     "default_ruleset",
     "product_graph_ruleset",
     "leaf_rule",
@@ -119,6 +120,10 @@ def product_graph_into(*args: Any, **kwargs: Any) -> None:
 
 def phase_one() -> Any:
     return load().phase_one()
+
+
+def reactivity() -> Any:
+    return load().reactivity()
 
 
 def default_ruleset() -> Any:

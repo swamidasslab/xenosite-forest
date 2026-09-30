@@ -157,10 +157,6 @@ fn finish_mismatch(
     actual: BTreeMap<String, i32>,
     n_products: usize,
 ) -> Option<FormulaDeltaMismatch> {
-    // Star conjugates use dummy ``*`` atoms — bag stoichiometry ≠ mol formula.
-    if expected.contains_key("*") || actual.contains_key("*") {
-        return None;
-    }
     // Open leave (cleaves, empty leave_formula) with unexplained heavy loss:
     // annotation incomplete, not a sealed-delta bug.
     if effect.cleaves

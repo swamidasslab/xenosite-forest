@@ -1,21 +1,47 @@
-MIT License
+Academic Software License (Non-Commercial)
 
 Copyright (c) 2026 S. Joshua Swamidass
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Academic or nonprofit researchers are permitted to use this Software (as
+defined below) subject to Paragraphs 1–4:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. The copyright holder hereby grants to you free of charge, so long as you
+   are an academic or nonprofit researcher, a nonexclusive license under the
+   copyright ownership interest in this software and any derivative works
+   made by you thereof (collectively, the "Software") to use, copy, and make
+   derivative works of the Software solely for educational or academic
+   research purposes, and to distribute such Software free of charge to other
+   academic or nonprofit researchers for their educational or academic
+   research purposes, in all cases subject to the terms of this Academic
+   Software License. Except as granted herein, all rights are reserved by the
+   copyright holder, including the right to pursue patent protection of the
+   Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. Any distribution of copies of this Software — including any derivative
+   works made by you thereof — must include a copy of this license (including
+   the copyright notice above), and be made subject to the terms of this
+   Academic Software License. Failure by you to adhere to the requirements in
+   Paragraphs 1 and 2 will result in immediate termination of the license
+   granted to you pursuant to this Academic Software License effective as of
+   the date you first used the Software.
+
+3. IN NO EVENT WILL THE COPYRIGHT HOLDER BE LIABLE TO ANY ENTITY OR PERSON
+   FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,
+   INCLUDING LOST PROFITS, ARISING OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+   THE COPYRIGHT HOLDER HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   THE COPYRIGHT HOLDER SPECIFICALLY DISCLAIMS ANY AND ALL WARRANTIES,
+   EXPRESS AND IMPLIED, INCLUDING, BUT NOT LIMITED TO, ANY IMPLIED WARRANTIES
+   OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE SOFTWARE IS
+   PROVIDED "AS IS." THE COPYRIGHT HOLDER HAS NO OBLIGATION TO PROVIDE
+   MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS OF THIS
+   SOFTWARE.
+
+4. Any academic or scholarly publication arising from the use of this
+   Software or any derivative works thereof will include an acknowledgment
+   that the Software was created by Tyler B. Hughes, Na Le Dang, Ayush Kumar,
+   Noah R. Flynn, and S. Joshua Swamidass, and will cite the Metabolic Forest
+   paper (Hughes et al., J. Chem. Inf. Model. 2020, DOI:
+   10.1021/acs.jcim.0c00360).
+
+Commercial use is not permitted under this license. Commercial entities, or
+anyone seeking a commercial license, please contact swamidass@gmail.com.

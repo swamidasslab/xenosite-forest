@@ -39,6 +39,7 @@ from xenosite.forest import (  # noqa: F401 — import gap gate
     product_graph_ruleset,
     quinone_formation,
     random_path,
+    reactivity,
     resolve,
     to_curie,
 )
@@ -72,6 +73,7 @@ def test_public_allowlist():
         "RuleSet",
         "BoundPattern",
         "phase_one",
+        "reactivity",
         "default_ruleset",
         "product_graph_ruleset",
         "leaf_rule",

@@ -28,6 +28,7 @@ Metabolic Forest groups 24 reaction rules into eight rulesets: the five Rainbow 
 | `QuinoneFormationRS` | `QF` (`QuinoneFormation`) | Quinone / quinone-imine / quinone-methide |
 | `ConjugationRS` | `CJ` (`Conjugation`) | Phase II conjugations (default: bare `*` adducts) |
 | `GlutathionationNoThiolRS` | `GlutathionationNoThiol` | Glutathionation without substrate-thiol SMARTS |
+| `Reactivity` | `Reactivity` | XenoSite multitask heads: `GSH` / `Protein` / `DNA` / `Cyanide` |
 | `TautomerizationRS` | `TT` (`Tautomerization`) | Tautomerization |
 | `Bioactivation` | `BA` (`BioactivationPathways`) | Four common bioactivation routes |
 | `ThiopheneSulfurOxidationRS` | `TSO` (`ThiopheneSulfurOxidation`) | Thiophene S-oxidation alone |

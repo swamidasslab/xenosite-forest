@@ -14,12 +14,20 @@ and `include_bytes!` embeds it. Runtime API decompresses once (`OnceLock`).
 Object IDs are path segments:
 
 - Catalog / leaf: `xf:Tautomerization`, `xf:PhaseOne`
-- Pattern: `xf:Tautomerization/tautomer_h` → [`BoundPattern`](../../crates/xenosite-forest/src/bound_pattern.rs)
+- Nested catalog: `xf:PhaseOne/StableOxygenation`, `xf:Reactivity/Cyanide`
+- Nested leaf / pattern: `xf:PhaseOne/StableOxygenation/Hydroxylation/h`
+- Standalone leaf (not under PhaseOne): `xf:Tautomerization/tautomer_h` →
+  [`BoundPattern`](../../crates/xenosite-forest/src/bound_pattern.rs)
 
 Locked mapping policy: prefer long `xf:` names that `resolve()`. Rainbow
-short codes (`CJ`/`SO`/…) do not ship. Phase-color catalogs that exist in
-Rust (`StableOxygenation`, `UnstableOxygenation`, `Reduction`) may appear;
-`Conjugation` is deferred until that catalog is correct.
+short codes (`CJ`/`SO`/…) do not ship. The five PhaseOne color catalogs and
+their member rules/patterns nest under `xf:PhaseOne/…` (SO / UO / DH / HD /
+RD). DH/HD colors wrap a same-named leaf, so leaf CURIEs are
+`xf:PhaseOne/Dehydrogenation/Dehydrogenation` (and likewise for Hydrolysis).
+`Reactivity` nests `GSH` / `Protein` / `DNA` / `Cyanide`. `Conjugation` as a
+Phase II catalog is deferred until that catalog is correct. Top-level
+`LEAF_CTORS` / color roots still resolve for short paths; SSSOM prefers the
+nested catalog form.
 
 ## Resolve
 

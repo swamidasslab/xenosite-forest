@@ -25,7 +25,6 @@ All items below target the **Rust** door (`crates/xenosite-forest` +
 - Validate walk-history residual bags on MetX hard misses
 - find_path: mapping argument between target and reactant
 - StepSequence / StepPlan / PathOutcome sampling doors
-- Preserve text labels on stars; conjugation normalize; Reactivity ruleset
 - XMET SSSOM / chemist-home lint; Conjugation catalog when Phase II settles
 
 ## Later

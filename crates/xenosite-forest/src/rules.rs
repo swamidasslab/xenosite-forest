@@ -1985,9 +1985,9 @@ pub fn acetylation() -> RuleSet {
                 SiteKind::Atom,
                 vec![1],
                 Effect {
-                    // Chematic keeps hetero H; acetyl is +C2H3O net → bag CCOHH.
-                    adds: Some("CCOHH".into()),
-                    removes: None,
+                    // Collapse to `*`; hetero H is lost on attachment.
+                    adds: Some("*".into()),
+                    removes: Some("H".into()),
                     cleaves: false,
                     methide: false,
                     dearomatizes: false,
@@ -2013,9 +2013,8 @@ pub fn sulfation() -> RuleSet {
                     SiteKind::Atom,
                     vec![2],
                     Effect {
-                        // Chematic keeps alcohol H; sulfate is +SO3 net.
-                        adds: Some("SOOO".into()),
-                        removes: None,
+                        adds: Some("*".into()),
+                        removes: Some("H".into()),
                         cleaves: false,
                         methide: false,
                         dearomatizes: false,
@@ -2030,8 +2029,9 @@ pub fn sulfation() -> RuleSet {
                     SiteKind::Atom,
                     vec![4],
                     Effect {
-                        adds: Some("CSO".into()),
-                        removes: None,
+                        // Star + lose epoxide O (and one H) on aromatization rewrite.
+                        adds: Some("*".into()),
+                        removes: Some("HO".into()),
                         cleaves: false,
                         methide: false,
                         dearomatizes: false,
@@ -2058,9 +2058,8 @@ pub fn glucuronidation() -> RuleSet {
                     SiteKind::Atom,
                     vec![1],
                     Effect {
-                        // Chematic keeps alcohol H; glucuronide is +C6H8O6 net.
-                        adds: Some("CCCCCCOOOOOOHHHHHHHH".into()),
-                        removes: None,
+                        adds: Some("*".into()),
+                        removes: Some("H".into()),
                         cleaves: false,
                         methide: false,
                         dearomatizes: false,
@@ -2075,8 +2074,8 @@ pub fn glucuronidation() -> RuleSet {
                     SiteKind::Atom,
                     vec![1],
                     Effect {
-                        adds: Some("CCCCCCOOOOOO".into()),
-                        removes: None,
+                        adds: Some("*".into()),
+                        removes: Some("H".into()),
                         cleaves: false,
                         methide: false,
                         dearomatizes: false,
@@ -2090,223 +2089,228 @@ pub fn glucuronidation() -> RuleSet {
     )
 }
 
-/// `Glutathionation` from Python `xenosite.forest.rules`.
-pub fn glutathionation() -> RuleSet {
-    seal_leaf(
-        "Glutathionation",
-        RuleSet::new(
-            Some("Glutathionation".into()),
-            [
-                smirks_row(
-                    "epoxide_ch",
-                    "[#6H1:1]1[#8:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "epoxide_ch2",
-                    "[#6H2:1]1[#8:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "epoxide_c",
-                    "[#6H0:1]([!#1:4])1[#8:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1]([*:4])[*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "halide",
-                    "[#6:1][#9,#17,#35,#53:2]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "thiol",
-                    "[#16h1:1]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: Some("H".into()),
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "alkene",
-                    "[#6H2:1]=[#6:2]>>C(CC(=O)N[C@@H](CS([*:1]-[*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "michael",
-                    "[#6H1:1]=[#6:2][#6:3]=[#8,#7:4]>>C(CC(=O)N[C@@H](CS([*:1][*:2]=[*:3][*:4]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "carbonyl",
-                    "[#6;H1,H2:1]=[#8:2]>>C(CC(=O)N[C@@H](CS([*:1]([*:2])))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "aziridine_ch",
-                    "[#6H1:1]1[#7:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "aziridine_ch2",
-                    "[#6H2:1]1[#7:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "aziridine_c",
-                    "[#6H0:1]([!#1:4])1[#7:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1]([*:4])[*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "mesylate",
-                    "[#6:1][#8:2]S(=O)(=O)>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-                smirks_row(
-                    "isocyanate",
-                    "[#7:1]=[#6:2]=[#8,#16:3]>>C(CC(=O)N[C@@H](CS([*:2](=[*:3])[*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
-                    SiteKind::Atom,
-                    vec![1],
-                    Effect {
-                        adds: Some("CCCCCCCCCCNNNOOOOOOS".into()),
-                        removes: None,
-                        cleaves: false,
-                        methide: false,
-                        dearomatizes: false,
-                        leave_count: None,
-                        partner: None,
-                        ..Default::default()
-                    },
-                ),
-            ],
+/// Star-adduct bag shared by glutathionation / reactivity leaves (addition).
+fn gsh_add_effect() -> Effect {
+    Effect {
+        adds: Some("*H".into()),
+        removes: None,
+        cleaves: false,
+        methide: false,
+        dearomatizes: false,
+        leave_count: None,
+        partner: None,
+        ..Default::default()
+    }
+}
+
+fn gsh_replace_h_effect() -> Effect {
+    Effect {
+        adds: Some("*".into()),
+        removes: Some("H".into()),
+        cleaves: false,
+        methide: false,
+        dearomatizes: false,
+        leave_count: None,
+        partner: None,
+        ..Default::default()
+    }
+}
+
+fn gsh_halide_effect() -> Effect {
+    Effect {
+        adds: Some("*".into()),
+        removes: None,
+        cleaves: false,
+        methide: false,
+        dearomatizes: false,
+        leave_count: None,
+        partner: None,
+        ..Default::default()
+    }
+}
+
+fn gsh_mesylate_effect() -> Effect {
+    Effect {
+        // Leave mesylate CH3SO3 (O–S(=O)2–Me).
+        adds: Some("*".into()),
+        removes: Some("CHHHOOOS".into()),
+        cleaves: false,
+        methide: false,
+        dearomatizes: false,
+        leave_count: None,
+        partner: None,
+        ..Default::default()
+    }
+}
+
+/// Electrophile SMARTS for GSH / protein / DNA / cyanide trapping.
+///
+/// `include_thiol`: substrate-thiol disulfide (GSH / protein only). DNA and
+/// cyanide drop that arm — same split as legacy `GlutathionationNoThiol` and
+/// xenosite-predict's reactivity heads.
+fn glutathionation_patterns(include_thiol: bool) -> Vec<PatternInfo> {
+    let mut patterns = vec![
+        smirks_row(
+            "epoxide_ch",
+            "[#6H1:1]1[#8:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
         ),
+        smirks_row(
+            "epoxide_ch2",
+            "[#6H2:1]1[#8:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "epoxide_c",
+            "[#6H0:1]([!#1:4])1[#8:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1]([*:4])[*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "halide",
+            "[#6:1][#9,#17,#35,#53:2]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_halide_effect(),
+        )
+        .with_possibilities(halide_remove_branches_z(2, gsh_halide_effect(), HALIDE_Z_NO_AT)),
+        smirks_row(
+            "alkene",
+            "[#6H2:1]=[#6:2]>>C(CC(=O)N[C@@H](CS([*:1]-[*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "michael",
+            "[#6H1:1]=[#6:2][#6:3]=[#8,#7:4]>>C(CC(=O)N[C@@H](CS([*:1][*:2]=[*:3][*:4]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "carbonyl",
+            "[#6;H1,H2:1]=[#8:2]>>C(CC(=O)N[C@@H](CS([*:1]([*:2])))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "aziridine_ch",
+            "[#6H1:1]1[#7:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "aziridine_ch2",
+            "[#6H2:1]1[#7:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1][*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "aziridine_c",
+            "[#6H0:1]([!#1:4])1[#7:2][#6:3]1>>C(CC(=O)N[C@@H](CS([*:1]([*:4])[*:3][*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+        smirks_row(
+            "mesylate",
+            "[#6:1][#8:2]S(=O)(=O)>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_mesylate_effect(),
+        ),
+        smirks_row(
+            "isocyanate",
+            "[#7:1]=[#6:2]=[#8,#16:3]>>C(CC(=O)N[C@@H](CS([*:2](=[*:3])[*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+            SiteKind::Atom,
+            vec![1],
+            gsh_add_effect(),
+        ),
+    ];
+    if include_thiol {
+        // Insert after halide so order matches the legacy Glutathionation list.
+        patterns.insert(
+            4,
+            smirks_row(
+                "thiol",
+                "[#16h1:1]>>C(CC(=O)N[C@@H](CS([*:1]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+                SiteKind::Atom,
+                vec![1],
+                gsh_replace_h_effect(),
+            ),
+        );
+    }
+    patterns
+}
+
+fn glutathionation_leaf(name: &'static str, include_thiol: bool) -> RuleSet {
+    seal_leaf(
+        name,
+        RuleSet::new(
+            Some(name.into()),
+            glutathionation_patterns(include_thiol),
+        ),
+    )
+}
+
+/// Reactivity / NoThiol leaves have no native ``ReactionRule`` twin — only
+/// [`glutathionation`] is paired for product parity.
+fn reactivity_leaf(name: &'static str, include_thiol: bool) -> RuleSet {
+    glutathionation_leaf(name, include_thiol).with_parity_exception(
+        "reactivity / NoThiol head; native twin is Glutathionation (+ star_label), not a same-named leaf",
+    )
+}
+
+/// Phase II `Glutathionation` (with substrate-thiol disulfide).
+pub fn glutathionation() -> RuleSet {
+    glutathionation_leaf("Glutathionation", true)
+}
+
+/// Same electrophiles as [`glutathionation`] without substrate-thiol SMARTS.
+///
+/// Legacy / predict name for DNA and cyanide trapping chemistry.
+pub fn glutathionation_no_thiol() -> RuleSet {
+    reactivity_leaf("GlutathionationNoThiol", false)
+}
+
+/// Reactivity head: GSH trapping (thiol included). Predict `reactivity.gsh`.
+pub fn gsh() -> RuleSet {
+    reactivity_leaf("GSH", true)
+}
+
+/// Reactivity head: protein adduct sites (thiol included; star-only later).
+/// Predict `reactivity.protein`.
+pub fn protein() -> RuleSet {
+    reactivity_leaf("Protein", true)
+}
+
+/// Reactivity head: DNA adduct sites (no thiol). Predict `reactivity.dna`.
+pub fn dna() -> RuleSet {
+    reactivity_leaf("DNA", false)
+}
+
+/// Reactivity head: cyanide trapping (no thiol). Predict `reactivity.cyanide`.
+pub fn cyanide() -> RuleSet {
+    reactivity_leaf("Cyanide", false)
+}
+
+/// XenoSite multitask reactivity catalog: GSH / Protein / DNA / Cyanide.
+///
+/// Predict currently hacks these from `Glutathionation` +
+/// `GlutathionationNoThiol` plus star labels; this is the named Forest door.
+pub fn reactivity() -> RuleSet {
+    RuleSet::compose(
+        Some("Reactivity".into()),
+        [gsh(), protein(), dna(), cyanide()],
     )
 }
 
@@ -2410,6 +2414,11 @@ pub fn all_rules() -> RuleSet {
             sulfation(),
             glucuronidation(),
             glutathionation(),
+            glutathionation_no_thiol(),
+            gsh(),
+            protein(),
+            dna(),
+            cyanide(),
         ],
     )
 }
@@ -2481,6 +2490,11 @@ pub const LEAF_CTORS: &[(&str, fn() -> RuleSet)] = &[
     ("Sulfation", sulfation),
     ("Glucuronidation", glucuronidation),
     ("Glutathionation", glutathionation),
+    ("GlutathionationNoThiol", glutathionation_no_thiol),
+    ("GSH", gsh),
+    ("Protein", protein),
+    ("DNA", dna),
+    ("Cyanide", cyanide),
 ];
 
 /// Short example substrates for site_kind / emit smoke (native
@@ -2524,6 +2538,11 @@ pub const LEAF_EXAMPLE_SUBSTRATES: &[(&str, &[&str])] = &[
     ("Sulfation", &["CCO", "Oc1ccccc1"]),
     ("Glucuronidation", &["CCO", "Oc1ccccc1"]),
     ("Glutathionation", &["C=C", "C1OC1"]),
+    ("GlutathionationNoThiol", &["C=C", "C1OC1"]),
+    ("GSH", &["C=C", "C1OC1", "CCS"]),
+    ("Protein", &["C=C", "C1OC1", "CCS"]),
+    ("DNA", &["C=C", "C1OC1"]),
+    ("Cyanide", &["C=C", "C1OC1"]),
 ];
 
 /// Attach [`LEAF_EXAMPLE_SUBSTRATES`] onto a leaf [`RuleSet`].
@@ -2546,6 +2565,7 @@ pub const ROOT_CATALOGS: &[(&str, fn() -> RuleSet)] = &[
     ("StableOxygenation", stable_oxygenation),
     ("UnstableOxygenation", unstable_oxygenation),
     ("Reduction", reduction),
+    ("Reactivity", reactivity),
 ];
 
 /// Resolve a top-level SSSOM / IRI first segment to a Rust [`RuleSet`].
@@ -2589,6 +2609,11 @@ pub fn catalog_names() -> &'static [&'static str] {
         "Sulfation",
         "Glucuronidation",
         "Glutathionation",
+        "GlutathionationNoThiol",
+        "GSH",
+        "Protein",
+        "DNA",
+        "Cyanide",
     ];
     debug_assert_eq!(NAMES.len(), LEAF_CTORS.len());
     NAMES
@@ -2732,8 +2757,33 @@ mod tests {
 
     #[test]
     fn all_rules_registers_every_leaf() {
-        assert_eq!(all_rules().members().len(), 28);
-        assert_eq!(catalog_names().len(), 28);
+        assert_eq!(all_rules().members().len(), 33);
+        assert_eq!(catalog_names().len(), 33);
+    }
+
+    #[test]
+    fn reactivity_nests_gsh_protein_dna_cyanide() {
+        let set = reactivity();
+        assert_eq!(set.name.as_deref(), Some("Reactivity"));
+        assert_eq!(set.members().len(), 4);
+        let names: Vec<_> = set
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.as_deref().unwrap_or("?").to_string(),
+                crate::ruleset::RuleMember::Pattern(_) => "?".into(),
+            })
+            .collect();
+        assert_eq!(names, ["GSH", "Protein", "DNA", "Cyanide"]);
+        assert!(gsh().patterns().iter().any(|p| p.name == "thiol"));
+        assert!(protein().patterns().iter().any(|p| p.name == "thiol"));
+        assert!(!dna().patterns().iter().any(|p| p.name == "thiol"));
+        assert!(!cyanide().patterns().iter().any(|p| p.name == "thiol"));
+        assert_eq!(
+            dna().patterns().len(),
+            glutathionation_no_thiol().patterns().len()
+        );
+        assert_eq!(gsh().patterns().len(), glutathionation().patterns().len());
     }
 
     #[test]
