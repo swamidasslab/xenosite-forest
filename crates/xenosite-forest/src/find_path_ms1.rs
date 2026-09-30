@@ -575,10 +575,12 @@ mod tests {
             let Ok(Some(em)) = cand.apply() else {
                 continue;
             };
-            for child in &em.products {
-                let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).unwrap();
-                out.push((child.csmi().as_ref().to_string(), mz));
-            }
+            // First product is the MS1 continue side (leave fragments follow).
+            let Some(child) = em.products.first() else {
+                continue;
+            };
+            let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).unwrap();
+            out.push((child.csmi().as_ref().to_string(), mz));
         }
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out.dedup_by(|a, b| a.0 == b.0);
