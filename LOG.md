@@ -2,6 +2,64 @@
 
 ## 2026-09-29
 
+- **Step::apply pair replay vs atom-orbit expansion.** Anthraquinone +
+  Hydrogenation plan site `[6,7]` failed `apply_forest` (CI proptest seed
+  `9695d3dc…`): expanding each end into atom orbits (`6↔14`, `7↔15`) made
+  `accepted.len()==4`, so `pair_matches_wanted`'s `len==2` gate never fired.
+  Pair match now uses the plan site only. Regression:
+  `anthraquinone_hydrogenation_plan_replays` + persisted fuzz seed.
+
+- **Pathway displays: StepPlan + Maybe + outer→leaf paths.** `StepPlan.maybe()` /
+  `PathOutcome.maybe()` expose cleavage bags; notebook marks SOM (coral) vs
+  Maybe (blue) with atom labels on every mol. Emission/`hops` path captions
+  join **outer→leaf** (`PhaseOne/QuinoneFormation`); stored `rule_path` stays
+  leaf-first.
+
+- **Pathway notebook displays.** PathOutcome / PartialOutcome / Emission /
+  GraphEdge / RandomPath draw **reactant→product** hops with SOM on the mol
+  the rule was applied to (`PathStep.reactant`, `Emission.reactant`,
+  `GraphEdge.parent_mol`). Final tagged mol + StepPlan sit under a details
+  fold. Gate: `make test` **9320 passed, 64 xfailed** (pre-pathway polish).
+
+- **Notebook displays — finished.** Remaining HTML surfaces use ForestMol
+  tracing: `GraphNode` / `GraphEdge` (kept mol + SOM), `PartialOutcome`,
+  `BoundPattern`, `PathCounters`. Rust `__str__` for those plus `PatternInfo`;
+  `StepPlan.linearizations()` (capped) and expand in text/HTML when
+  `n_lin ≤ 4`. Tutorial notebook cells print scalars then **end with a handle**
+  so IPython shows `_repr_html_`.
+
+- **GIL release via Arc.** `ForestMol` caches: `Rc`/`RefCell`/`Cell` → `Arc`/`Mutex`/`Atomic`
+  (same sharing, no ForestMol copies). `Python::detach` (GIL release) on `find_path` /
+  `find_path_partial` / `random_path` / `product_graph_*` / filter-free `metabolize`
+  (`network=` locks `Arc<Mutex>` inside the closure). Pyclasses remain `unsendable`.
+  Gate: `make test` **9311 passed, 64 xfailed**; `make test-rust-python` green.
+
+- **Notebook displays.** Rust truncated `__str__` for RuleSet tree, ForestMol **tag
+  trace** (survivors/born/stamp_end), MetabolicNetwork summary, StepPlan
+  (`n_linearizations`), Emission, PathOutcome. Python `notebook.py` installs
+  `_repr_html_` (RDKit SVG with tag notes; PathOutcome = traced mol + StepPlan,
+  not hop dumps).
+
+- **PyO3 handle API port — finished.** Split `python_api` into `mol` / `rules` / `path` /
+  `walk` (+ existing `common` / `plan` / `graph`). `GraphNode`/`GraphEdge`: `sealed` /
+  `expanded`, mutable attrs (`[]` / `get_attr` / `set_attr`), `.to_dict()`. Gate:
+  `make test` **9311 passed, 64 xfailed**; `make test-rust-python` green. Still deferred:
+  `step_plan_between` → yield paths.
+
+- **`step_plan_between` enriched (not wired yet).** Backward-BFS path reconstruction; hops carry optional elementary `plan` / `site_atoms` / `discarded_sides`. **`find_path` / BFS still yield plans from walk accumulation** — switch later.
+
+- **Phase 2 graph views + module split.** `python_api/{common,plan,graph}.rs`; `GraphNode` / `GraphEdge` on `MetabolicNetwork` (`net[i]`, `inbound_edge`); tests `test_network_graph_views.py`.
+
+- **Phase 2 docs + tutorial.** Added `notebooks/forest_product_door.ipynb` (APAP/NAPQI, terbinafine, eugenol BFS, shared network, metabolize, random_path) and `test_tutorial_snippets.py` smoke. RUST.md: tutorial link, phase-2 backlog (module split, graph views, GIL blocked on `Send`).
+
+- **BFS API names.** Python `product_graph` → `product_graph_bfs`; default rules `product_graph_ruleset()` (QF + EH + PhaseOne core, no Tautomer). `network=` kept; long-runtime warning in docstring.
+
+- **PyO3 handle API port — gate.** `make test` / `tests/forest`: **9301 passed, 64 xfailed** (was 9300/64 pre-port). Parity helpers use `Emission.product_csmis()`; rust gates use pyclass fields / `.to_dict()`.
+
+- **PyO3 handle API port — shipped.** Product `find_path` / `find_path_partial` / `random_path` / `metabolize` return pyclasses; `.to_dict()` via `export` + `pythonize`. Single graph: BFS `product_graph` → `MetabolicNetwork` (no `ProductGraph` struct). Stub: `mol.py` RDKit bridge, expanded `__all__`. See `docs/forest/RUST.md` handle-first table.
+
+- **PyO3 handle API port — baseline (pre-port).** `make test`: 9300 passed, 64 xfailed (~72s). Gate for pyclass product door + graph schema work.
+
 - **`apply_n_bench` → `examples/`.** Ran release bench across Phase I leaves /
   ApplyN pools; green (no API breaks). Pending MS1 directory emptied of
   parked sources; CCS SOx→OH→DH plan-replay xfail still deferred.

@@ -59,6 +59,26 @@ def emits_product(rule, reactant: str, product: str) -> bool:
     return canon(product) in product_smiles(rule, reactant)
 
 
+def rust_leaf_products_canon(leaf: str, smiles: str) -> set[str] | None:
+    """Canonical product set from Rust ``leaf_rule(...).metabolize`` emissions."""
+
+    from xenosite.forest import leaf_rule, load
+
+    ext = load()
+    try:
+        mol = ext.ForestMol(smiles)
+    except Exception:
+        return None
+    found: set[str] = set()
+    for emission in leaf_rule(leaf).metabolize(mol):
+        for csmi in emission.product_csmis():
+            for piece in str(csmi).split("."):
+                c = canon(piece)
+                if c:
+                    found.add(c)
+    return found
+
+
 def find_phaseone(
     reactant: str,
     product: str,

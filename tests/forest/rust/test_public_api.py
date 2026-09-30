@@ -11,19 +11,36 @@ import importlib
 import pytest
 
 from xenosite.forest import (  # noqa: F401 — import gap gate
-    Default,
-    Epoxidation,
-    EpoxideOpening,
+    BoundPattern,
+    Emission,
+    ForestMol,
     MetabolicNetwork,
-    NDealkylation,
-    PhaseOne,
-    QuinoneFormation,
+    PartialOutcome,
+    PathCounters,
+    PathOutcome,
+    RandomPathOutcome,
+    RuleSet,
+    StepPlan,
     __version__,
     available,
+    default_ruleset,
+    epoxidation,
+    epoxide_opening,
+    expand_iri,
     find_path,
     find_path_partial,
+    forest_xmet_sssom,
+    leaf_rule,
+    n_dealkylation,
     normalize_tautomer,
+    phase_one,
+    product_graph_bfs,
+    product_graph_into,
+    product_graph_ruleset,
+    quinone_formation,
     random_path,
+    resolve,
+    to_curie,
 )
 
 
@@ -41,47 +58,64 @@ def test_public_allowlist():
         "find_path",
         "find_path_partial",
         "normalize_tautomer",
-        "MetabolicNetwork",
         "random_path",
-        "PhaseOne",
-        "Default",
-        "Epoxidation",
-        "QuinoneFormation",
-        "EpoxideOpening",
-        "NDealkylation",
+        "product_graph_bfs",
+        "product_graph_into",
+        "MetabolicNetwork",
+        "ForestMol",
+        "PathOutcome",
+        "PathCounters",
+        "PartialOutcome",
+        "RandomPathOutcome",
+        "Emission",
+        "StepPlan",
+        "RuleSet",
+        "BoundPattern",
+        "phase_one",
+        "default_ruleset",
+        "product_graph_ruleset",
+        "leaf_rule",
+        "epoxidation",
+        "quinone_formation",
+        "epoxide_opening",
+        "n_dealkylation",
+        "hydroxylation",
+        "dehydrogenation",
+        "dealkylation",
+        "hydrolysis",
         "resolve",
         "forest_xmet_sssom",
         "expand_iri",
         "to_curie",
-        "BoundPattern",
-        "RuleSet",
     ]
     for name in forest.__all__:
         assert hasattr(forest, name), name
 
 
-def test_ruleset_factories_callable_from_stub():
-    """Factories are reachable via the public stub (extension may be absent)."""
+def test_product_graph_ruleset_includes_qf_eh_not_tautomer():
+    rs = product_graph_ruleset()
+    assert rs.name == "ProductGraph"
+    assert len(rs) == 3
+    assert "QuinoneFormation" in rs
+    assert "EpoxideHydration" in rs
+    assert "PhaseOne" in rs
+    assert "Tautomerization" not in rs
 
+
+def test_ruleset_factories_callable_from_stub():
     assert callable(find_path)
     assert callable(find_path_partial)
     assert callable(normalize_tautomer)
     assert callable(random_path)
+    assert callable(product_graph_bfs)
+    assert callable(product_graph_into)
     assert callable(available)
-    assert callable(PhaseOne)
-    assert callable(Default)
-    assert callable(Epoxidation)
-    assert callable(QuinoneFormation)
-    assert callable(EpoxideOpening)
-    assert callable(NDealkylation)
+    assert callable(phase_one)
+    assert callable(default_ruleset)
+    assert callable(product_graph_ruleset)
+    assert callable(epoxidation)
+    assert callable(quinone_formation)
+    assert callable(epoxide_opening)
+    assert callable(n_dealkylation)
     assert MetabolicNetwork is not None
     assert isinstance(__version__, str)
-
-
-def test_sssom_exports_callable_from_stub():
-    import xenosite.forest as forest
-
-    assert callable(forest.resolve)
-    assert callable(forest.forest_xmet_sssom)
-    assert callable(forest.expand_iri)
-    assert callable(forest.to_curie)

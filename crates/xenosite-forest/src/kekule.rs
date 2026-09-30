@@ -6,7 +6,7 @@
 //! - assigns **one** conjugated component (other systems stay aromatic)
 //! - fills **on demand** when a match names a bond in that system
 //! - stores **assignment maps**, not baked mols
-//! - lives on [`crate::forest_mol::ForestMol`] as one `Rc` for a copy tree: the first
+//! - lives on [`crate::forest_mol::ForestMol`] as one `Arc` for a copy tree: the first
 //!   relative to fill a key shares it with every relative whose system
 //!   still matches. An edit that changes kekulization of a system misses
 //!   that key and starts a new bag.
@@ -36,9 +36,8 @@
 //! `product` / `edit_copy`. Overlay resolves tags → indexes on the mol being
 //! stamped.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use chematic::core::BondOrder;
 use chematic::perception::find_sssr;
@@ -523,7 +522,7 @@ fn order_code(order: BondOrder) -> Option<u8> {
 ///
 /// **Tag-keyed, not index-keyed.** `atoms` and `shape` bond endpoints are
 /// [`Tag`]s (cheatic `Atom.tag`). Indexes would break reuse after rewrite or
-/// canonical reorder; tags survive on the ForestMol copy-tree `Rc` cache.
+/// canonical reorder; tags survive on the ForestMol copy-tree `Arc` cache.
 ///
 /// An edit that changes aromatic flags or bond orders inside the system is a
 /// new key, so that bag is not reused. An edit elsewhere leaves this key
@@ -664,7 +663,7 @@ impl SystemKekule {
     }
 
     /// Semantic identity of cached writings (assignments, by_order, charge
-    /// magnitudes), not `Rc` pointer equality.
+    /// magnitudes), not `Arc` pointer equality.
     pub fn semantically_eq(&self, other: &Self) -> bool {
         self.assignments == other.assignments
             && self.by_order == other.by_order
@@ -720,12 +719,12 @@ impl SystemKekule {
     }
 }
 
-/// Shared forest-level map. One `Rc` per copy tree.
+/// Shared forest-level map. One `Arc` per copy tree.
 ///
 /// Keys and stored writings are tag-keyed ([`SystemKey`], [`SystemKekule`]).
 #[derive(Clone, Debug, Default)]
 pub struct KekuleCache {
-    systems: BTreeMap<SystemKey, Rc<RefCell<SystemKekule>>>,
+    systems: BTreeMap<SystemKey, Arc<Mutex<SystemKekule>>>,
 }
 
 impl KekuleCache {
@@ -736,18 +735,23 @@ impl KekuleCache {
     pub fn assignment_count(&self) -> usize {
         self.systems
             .values()
-            .map(|slot| slot.borrow().assignments.len())
+            .map(|slot| {
+                slot.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .assignments
+                    .len()
+            })
             .sum()
     }
 
-    pub fn slot(&mut self, key: SystemKey) -> Rc<RefCell<SystemKekule>> {
+    pub fn slot(&mut self, key: SystemKey) -> Arc<Mutex<SystemKekule>> {
         self.systems
             .entry(key)
-            .or_insert_with(|| Rc::new(RefCell::new(SystemKekule::default())))
+            .or_insert_with(|| Arc::new(Mutex::new(SystemKekule::default())))
             .clone()
     }
 
-    pub fn get(&self, key: &SystemKey) -> Option<Rc<RefCell<SystemKekule>>> {
+    pub fn get(&self, key: &SystemKey) -> Option<Arc<Mutex<SystemKekule>>> {
         self.systems.get(key).cloned()
     }
 
@@ -757,7 +761,7 @@ impl KekuleCache {
     }
 
     /// Fill (or reuse) the bag for `graph`'s [`SystemKey`].
-    pub fn ensure_graph(&mut self, mol: &Molecule, graph: &PiGraph) -> Rc<RefCell<SystemKekule>> {
+    pub fn ensure_graph(&mut self, mol: &Molecule, graph: &PiGraph) -> Arc<Mutex<SystemKekule>> {
         let key = graph.system_key(mol);
         let slot = self.slot(key);
         fill_slot(mol, &graph.atoms, &graph.bonds, &slot);
@@ -1240,13 +1244,16 @@ fn fill_slot(
     mol: &Molecule,
     atoms: &BTreeSet<usize>,
     bonds: &BTreeSet<(usize, usize)>,
-    slot: &RefCell<SystemKekule>,
+    slot: &Mutex<SystemKekule>,
 ) {
-    if slot.borrow().is_filled() {
-        return;
+    {
+        let bag = slot.lock().unwrap_or_else(|e| e.into_inner());
+        if bag.is_filled() {
+            return;
+        }
     }
     let config = KekuleConfig::for_parents();
-    let mut bag = slot.borrow_mut();
+    let mut bag = slot.lock().unwrap_or_else(|e| e.into_inner());
     let mut seen = BTreeSet::new();
     for &seed in bonds {
         let Some(bond_orders) = match_assignment(mol, atoms, bonds, seed, &config) else {
@@ -1303,7 +1310,7 @@ pub fn ensure_kekule_parents(
     left: usize,
     right: usize,
     cache: &mut KekuleCache,
-) -> Rc<RefCell<SystemKekule>> {
+) -> Arc<Mutex<SystemKekule>> {
     let (_key, graph) = system_of(mol, left, right);
     cache.ensure_graph(mol, &graph)
 }
@@ -1318,7 +1325,7 @@ pub fn parent_for_bond(
 ) -> Option<Molecule> {
     let (key, _) = system_of(mol, left, right);
     let slot = cache.get(&key)?;
-    let bag = slot.borrow();
+    let bag = slot.lock().unwrap_or_else(|e| e.into_inner());
     let ta = tag_of(mol, left)?;
     let tb = tag_of(mol, right)?;
     let index = *bag.by_order.get(&(tag_bond_key(ta, tb), order))?;
@@ -1353,7 +1360,8 @@ pub fn parents_for_ends(
         let key = graph.system_key(mol);
         let slot = cache.ensure_graph(mol, &graph);
         let parents = slot
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .assignments
             .iter()
             .filter_map(|assignment| {
@@ -1375,7 +1383,8 @@ pub fn parents_for_ends(
         let _ = cache.ensure_graph(mol, &end_g);
     }
     let mut parents: Vec<Molecule> = start_slot
-        .borrow()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
         .assignments
         .iter()
         .filter_map(|assignment| {
@@ -1391,7 +1400,8 @@ pub fn parents_for_ends(
         let end_slot = cache.get(&end_key).expect("end system filled");
         parents.extend(
             end_slot
-                .borrow()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
                 .assignments
                 .iter()
                 .filter_map(|assignment| {
@@ -1448,9 +1458,15 @@ pub fn kekule_forms(mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         }
         let key = aromatic.system_key(mol);
         let slot = cache.ensure_graph(mol, &aromatic);
-        forms.extend(slot.borrow().assignments.iter().filter_map(|assignment| {
-            overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
-        }));
+        forms.extend(
+            slot.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .assignments
+                .iter()
+                .filter_map(|assignment| {
+                    overlay_tagged(mol, &key.atoms, assignment, &KekuleConfig::for_parents())
+                }),
+        );
     }
     if forms.is_empty() {
         Ok(vec![mol.clone()])
@@ -1546,9 +1562,9 @@ mod tests {
         let seed = *bonds.iter().next().expect("ring bond");
         parent.ensure_kekule(seed.0, seed.1);
         let kekule_rc = parent.kekule();
-        let cache = kekule_rc.borrow();
+        let cache = kekule_rc.lock().unwrap_or_else(|e| e.into_inner());
         let slot = cache.get(&key).expect("filled");
-        let asg = &slot.borrow().assignments[0];
+        let asg = &slot.lock().unwrap_or_else(|e| e.into_inner()).assignments[0];
         for &(ta, tb) in asg.keys() {
             assert!(parent.index_of(ta).is_some() && parent.index_of(tb).is_some());
         }
@@ -1829,14 +1845,21 @@ mod tests {
 
         let mut cache = KekuleCache::default();
         let slot = cache.ensure_graph(&mol, &parent);
-        let n = slot.borrow().assignments.len();
+        let n = slot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .assignments
+            .len();
         assert!(n >= 2);
         // Forced double on any ring bond → derived bag is a non-empty subset.
         let (a, b) = *parent.bonds.iter().next().unwrap();
         let ta = tag_of(&mol, a).unwrap();
         let tb = tag_of(&mol, b).unwrap();
         let forced = BTreeSet::from([tag_bond_key(ta, tb)]);
-        let derived = slot.borrow().with_forced_doubles(&forced);
+        let derived = slot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .with_forced_doubles(&forced);
         assert!(!derived.assignments.is_empty());
         assert!(derived.assignments.len() <= n);
 
@@ -1949,10 +1972,31 @@ mod tests {
         assert!(sibling.shares_kekule(&parent));
         assert!(!child.shares_structure(&parent));
 
-        assert_eq!(parent.kekule().borrow().assignment_count(), 0);
+        assert_eq!(
+            parent
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .assignment_count(),
+            0
+        );
         sibling.ensure_kekule(bond_a, nbr);
-        assert_eq!(parent.kekule().borrow().assignment_count(), 2);
-        assert_eq!(child.kekule().borrow().assignment_count(), 2);
+        assert_eq!(
+            parent
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .assignment_count(),
+            2
+        );
+        assert_eq!(
+            child
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .assignment_count(),
+            2
+        );
 
         let parent_edited_key = {
             let (atoms, bonds) = conjugated_component(parent.mol(), other);
@@ -1964,7 +2008,11 @@ mod tests {
             SystemKey::of(child.mol(), &atoms, &bonds)
         };
         assert_ne!(parent_edited_key, child_edited_key);
-        let systems_before = child.kekule().borrow().system_count();
+        let systems_before = child
+            .kekule()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .system_count();
         let start = other_atom(child.mol(), &sys_a);
         let seed = *conjugated_component(child.mol(), start)
             .1
@@ -1972,7 +2020,14 @@ mod tests {
             .next()
             .unwrap();
         child.ensure_kekule(seed.0, seed.1);
-        assert!(child.kekule().borrow().system_count() > systems_before);
+        assert!(
+            child
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .system_count()
+                > systems_before
+        );
     }
 
     fn other_atom(mol: &Molecule, sys_a: &BTreeSet<usize>) -> usize {
@@ -1982,7 +2037,7 @@ mod tests {
     }
 
     #[test]
-    fn product_shares_kekule_rc_not_structure() {
+    fn product_shares_kekule_arc_not_structure() {
         let parent = ForestMol::parse("c1ccccc1").unwrap();
         let _ = parent.csmi();
         let child = parent.edit_copy();
@@ -2060,7 +2115,7 @@ mod tests {
 
     #[test]
     fn shared_kekule_bag_matches_fresh_fill_after_edit_copy() {
-        // edit_copy shares the Kekulé Rc. Untouched systems' cached
+        // edit_copy shares the Kekulé Arc. Untouched systems' cached
         // assignments must equal a fresh fill on the same mol (tag-keyed).
         let parent = ForestMol::parse("c1ccc(-c2ccccc2)cc1").unwrap();
         let (atoms, bonds) = conjugated_component(parent.mol(), 0);
@@ -2069,10 +2124,12 @@ mod tests {
         let key = SystemKey::of(parent.mol(), &atoms, &bonds);
         let shared = parent
             .kekule()
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .get(&key)
             .expect("parent bag")
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .clone();
 
         let child = parent.edit_copy();
@@ -2080,7 +2137,12 @@ mod tests {
         // Fresh cache on the same chemistry must match the shared bag.
         let mut fresh = KekuleCache::default();
         ensure_kekule_parents(child.mol(), seed.0, seed.1, &mut fresh);
-        let fresh_bag = fresh.get(&key).expect("fresh bag").borrow().clone();
+        let fresh_bag = fresh
+            .get(&key)
+            .expect("fresh bag")
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         assert!(
             shared.semantically_eq(&fresh_bag),
             "shared cache after edit_copy must match fresh fill"
@@ -2108,8 +2170,18 @@ mod tests {
             }
             let graph = PiGraph::new(comp_atoms, comp_bonds);
             fresh.ensure_graph(mol, &graph);
-            let shared_bag = shared.get(&key).expect("shared slot").borrow().clone();
-            let fresh_bag = fresh.get(&key).expect("fresh slot").borrow().clone();
+            let shared_bag = shared
+                .get(&key)
+                .expect("shared slot")
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            let fresh_bag = fresh
+                .get(&key)
+                .expect("fresh slot")
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             assert!(
                 shared_bag.is_filled(),
                 "shared bag for {key:?} should be filled"
@@ -2132,11 +2204,21 @@ mod tests {
         let (_a1, b1) = conjugated_component(parent.mol(), other);
         let seed1 = *b1.iter().next().unwrap();
         parent.ensure_kekule(seed1.0, seed1.1);
-        assert!(parent.kekule().borrow().system_count() >= 2);
+        assert!(
+            parent
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .system_count()
+                >= 2
+        );
 
         let child = parent.edit_copy();
         assert!(child.shares_kekule(&parent));
-        assert_shared_keys_match_fresh(child.mol(), &child.kekule().borrow());
+        assert_shared_keys_match_fresh(
+            child.mol(),
+            &child.kekule().lock().unwrap_or_else(|e| e.into_inner()),
+        );
     }
 
     #[test]
@@ -2154,10 +2236,12 @@ mod tests {
         let key_a = SystemKey::of(parent.mol(), &sys_a, &bonds_a);
         let bag_a_before = parent
             .kekule()
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .get(&key_a)
             .unwrap()
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .clone();
 
         let (mut chem, oxygen) = parent
@@ -2172,14 +2256,21 @@ mod tests {
         // topology (resolve on parent mol — child indexes may shift for O only).
         let mut fresh = KekuleCache::default();
         ensure_kekule_parents(parent.mol(), seed_a.0, seed_a.1, &mut fresh);
-        let fresh_a = fresh.get(&key_a).unwrap().borrow().clone();
+        let fresh_a = fresh
+            .get(&key_a)
+            .unwrap()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         assert!(bag_a_before.semantically_eq(&fresh_a));
         let shared_a = child
             .kekule()
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .get(&key_a)
-            .expect("untouched ring A still in shared Rc")
-            .borrow()
+            .expect("untouched ring A still in shared Arc")
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .clone();
         assert!(
             shared_a.semantically_eq(&fresh_a),
@@ -2199,7 +2290,10 @@ mod tests {
             parent.ensure_kekule(seed.0, seed.1);
             let child = parent.edit_copy();
             assert!(child.shares_kekule(&parent), "{smi}");
-            assert_shared_keys_match_fresh(child.mol(), &child.kekule().borrow());
+            assert_shared_keys_match_fresh(
+                child.mol(),
+                &child.kekule().lock().unwrap_or_else(|e| e.into_inner()),
+            );
         }
     }
 
@@ -2218,13 +2312,26 @@ mod tests {
 
         let mut fresh = KekuleCache::default();
         ensure_kekule_parents(parent.mol(), seed.0, seed.1, &mut fresh);
-        let fresh_bag = fresh.get(&key).unwrap().borrow().clone();
+        let fresh_bag = fresh
+            .get(&key)
+            .unwrap()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         for (label, fm) in [
             ("copy", &copied),
             ("edit_copy", &edited),
             ("parent", &parent),
         ] {
-            let bag = fm.kekule().borrow().get(&key).unwrap().borrow().clone();
+            let bag = fm
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&key)
+                .unwrap()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             assert!(
                 bag.semantically_eq(&fresh_bag),
                 "{label} bag must match fresh fill"
@@ -2234,7 +2341,7 @@ mod tests {
 
     #[test]
     fn product_that_breaks_system_misses_parent_key() {
-        // Hydroxylate a ring carbon → new structure; shared Rc still holds the
+        // Hydroxylate a ring carbon → new structure; shared Arc still holds the
         // old key, but a fresh fill on the product builds its own bag.
         use crate::rules::hydroxylation;
         let parent = ForestMol::parse("c1ccccc1").unwrap();
@@ -2244,10 +2351,12 @@ mod tests {
         let parent_key = SystemKey::of(parent.mol(), &atoms, &bonds);
         let parent_bag = parent
             .kekule()
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .get(&parent_key)
             .unwrap()
-            .borrow()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
             .clone();
 
         let set = hydroxylation();
@@ -2263,12 +2372,25 @@ mod tests {
             let cseed = *cbonds.iter().next().unwrap();
             ensure_kekule_parents(child.mol(), cseed.0, cseed.1, &mut fresh);
             let ckey = SystemKey::of(child.mol(), &catoms, &cbonds);
-            let fresh_bag = fresh.get(&ckey).unwrap().borrow().clone();
+            let fresh_bag = fresh
+                .get(&ckey)
+                .unwrap()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             // If the parent key still resolves on the child (tags survive),
             // shared bag must match fresh for that key; otherwise keys differ.
-            if let Some(shared_slot) = child.kekule().borrow().get(&ckey) {
+            if let Some(shared_slot) = child
+                .kekule()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&ckey)
+            {
                 assert!(
-                    shared_slot.borrow().semantically_eq(&fresh_bag),
+                    shared_slot
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .semantically_eq(&fresh_bag),
                     "child shared bag for live key must match fresh"
                 );
             }
