@@ -44,7 +44,8 @@ Pushing `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release
 package versions from the tag, then tests, platform wheels (manylinux /
 musllinux / macOS / Windows, x86_64 + aarch64), sdist, GitHub Release, PyPI
 upload, JS publish, and a housekeeping commit on the default branch
-(`CHANGELOG.md` + Cargo/JS versions) when the branch ruleset allows.
+(`CHANGELOG.md` + Cargo/JS versions). That push needs repo secret
+`RELEASE_PUSH_TOKEN` (see [`.github/PUBLISH.md`](../.github/PUBLISH.md)).
 
 Wheels are built **only** on that tag workflow — not on PR or push to
 `main`. CI profile:

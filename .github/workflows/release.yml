@@ -6,6 +6,12 @@
 # Cargo.toml / Cargo.lock / js/package.json before builds; the changelog job
 # commits those bumps onto the default branch with CHANGELOG.md.
 #
+# Protect main blocks GITHUB_TOKEN pushes. One-time: create a classic PAT
+# (or fine-grained: Contents R/W on this repo) for an account that can bypass
+# Protect main, then:
+#   gh secret set RELEASE_PUSH_TOKEN --repo swamidasslab/xenosite-forest
+# The changelog job checks out + pushes with that secret. See .github/PUBLISH.md.
+#
 # PyPI uses Trusted Publishing (OIDC) — no API token secret. One-time setup:
 #   1. GitHub → Settings → Environments → create "pypi"
 #   2. PyPI → Publishing → add pending trusted publisher:
@@ -297,9 +303,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Require RELEASE_PUSH_TOKEN
+        env:
+          HAS_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::Set repo secret RELEASE_PUSH_TOKEN (PAT that can bypass Protect main). See .github/PUBLISH.md"
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Bypass Protect main: PAT of a ruleset-bypass user (not GITHUB_TOKEN).
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
       - name: Version without v prefix
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -323,8 +339,7 @@ jobs:
             exit 0
           fi
           git commit -m "Release ${GITHUB_REF_NAME}: changelog + package versions."
-          git push origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}" || \
-            echo "::warning::Could not fast-forward default branch with release housekeeping."
+          git push origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}"
 
   publish:
     needs: [linux, musllinux, macos, windows, sdist]
