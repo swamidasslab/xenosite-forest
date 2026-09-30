@@ -110,7 +110,7 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
             ProductParityXfail('Dealkylation', 'C18 P1/P3: olsalazine Dealk ring-open extras'),
             ProductParityXfail('Dehydration', 'C18 P1: Py ketene-like junk; Rust refuse'),
             ProductParityXfail('Dehydrogenation', 'C18 P3: olsalazine linked-π DH — defer'),
-            ProductParityXfail('Hydrogenation', 'C18 P3: olsalazine no generic path across azo — defer'),
+            ProductParityXfail('Hydrogenation', 'C18 P3: olsalazine azo — no generic H; defer'),
             ProductParityXfail('QuinoneFormation', 'C18 P3: olsalazine cross-azo QF — defer'),
         ),
     ),
@@ -275,8 +275,8 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
             CoverIntent('QuinoneFormation', 'iminium', 0, None),
         ),
         (
-            ProductParityXfail('Dealkylation', 'C18 P1: nitro charge form — normalize to [N+](=O)[O-] in Rust'),
-            ProductParityXfail('Hydrogenation', 'C18 P2: nitro out of generic H → NitrogenReduction'),
+            ProductParityXfail('Dealkylation', 'C18 P1: nitro charge → [N+](=O)[O-] in Rust'),
+            ProductParityXfail('Hydrogenation', 'C18 P2: nitro → NitrogenReduction, not H'),
         ),
     ),
     ParityEntry(
@@ -434,7 +434,7 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
             CoverIntent('NitrogenReduction', 'nitroso', 0, None),
         ),
         (
-            ProductParityXfail('Dealkylation', 'C18 P1: nitrosobenzene ring-open extras (Rust-ahead)'),
+            ProductParityXfail('Dealkylation', 'C18 P1: nitrosobenzene ring-open (Rust-ahead)'),
         ),
     ),
     ParityEntry(
@@ -595,7 +595,7 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
             CoverIntent('Sulfation', 'epoxide_methyl_sulfone', 0, None),
         ),
         (
-            ProductParityXfail('QuinoneFormation', 'C18 P3: benzene-oxide QF until quinonoid contract — defer'),
+            ProductParityXfail('QuinoneFormation', 'C18 P3: benzene-oxide QF; defer'),
         ),
     ),
     ParityEntry(
@@ -632,7 +632,7 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         (
             ProductParityXfail('Dealkylation', 'C18 P1: SMx C–N cleavage Rust-ahead'),
             ProductParityXfail('NDealkylation', 'C18 P1: SMx C–N cleavage Rust-ahead'),
-            ProductParityXfail('NitrogenReduction', 'C18 P2: isoxazole tautomer canon (Rust, not sanitize)'),
+            ProductParityXfail('NitrogenReduction', 'C18 P2: isoxazole tautomer canon (Rust)'),
         ),
     ),
     ParityEntry('CSC', ()),
@@ -703,14 +703,14 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         'c1ccc(N(C)c2ccccc2)cc1',
         (),
         (
-            ProductParityXfail('QuinoneFormation', 'C18 P1: Ph2NMe enumerate Me and Ph carbon leaves'),
+            ProductParityXfail('QuinoneFormation', 'C18 P1: Ph2NMe Me and Ph carbon leaves'),
         ),
     ),
     ParityEntry(
         'c1ccc2c(c1)Nc1ccccc1C2',
         (),
         (
-            ProductParityXfail('Dehydrogenation', 'C18 P1: dihydroacridine→acridine under DH (Rust-ahead)'),
+            ProductParityXfail('Dehydrogenation', 'C18 P1: dihydroacridine→acridine (Rust-ahead)'),
             ProductParityXfail('QuinoneFormation', 'C18 P2: acridine is DH-only, not QF'),
         ),
     ),
@@ -724,7 +724,7 @@ PARITY_CORPUS: tuple[ParityEntry, ...] = (
         (),
         (
             ProductParityXfail('Dealkylation', 'C18 P1: cinnoline ring-open keep N=N (not NN)'),
-            ProductParityXfail('Hydrogenation', 'C18 P3: cinnoline multi-ring H — defer (P1 owns ring-open N=N)'),
+            ProductParityXfail('Hydrogenation', 'C18 P3: cinnoline multi-ring H; defer'),
             ProductParityXfail('NDealkylation', 'C18 P1: cinnoline ring-open N=N'),
             ProductParityXfail('QuinoneFormation', 'C18 P3: cinnoline multi-ring QF — defer'),
         ),

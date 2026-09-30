@@ -153,7 +153,10 @@ mod tests {
         let before = stamp(&mut mol);
         let frags = mol.fragments();
         assert_eq!(frags.len(), 2);
-        let kept: usize = frags.iter().map(|f| tags_of(f).iter().filter(|t| t.is_some()).count()).sum();
+        let kept: usize = frags
+            .iter()
+            .map(|f| tags_of(f).iter().filter(|t| t.is_some()).count())
+            .sum();
         assert_eq!(kept, before.iter().filter(|t| t.is_some()).count());
     }
 

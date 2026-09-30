@@ -151,7 +151,9 @@ fn lift_matches_mcs_dehydrogenation_hydroquinone() {
     let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
     let parent_diff = atom_diff(parent.mol(), &target);
     let pairs = dehydrogenation()
-        .candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair())).collect::<Result<Vec<_>, _>>()
+        .candidates(&parent)
+        .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+        .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!pairs.is_empty());
     let pair = &pairs[0];
@@ -281,7 +283,8 @@ fn lift_matches_mcs_quinone_formation_ends() {
     let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
     let parent_diff = atom_diff(parent.mol(), &target);
     let pairs = quinone_formation()
-        .candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair()))
+        .candidates(&parent)
+        .filter(|c| matches!(c, Ok(s) if s.is_pair()))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!pairs.is_empty());
@@ -446,7 +449,8 @@ fn one_hop_phase_one_lift_matches_mcs_on_eugenol() {
     }
     // Pair door separately.
     let pairs: Vec<_> = set
-        .candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair()))
+        .candidates(&parent)
+        .filter(|c| matches!(c, Ok(s) if s.is_pair()))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     for pair in &pairs {
@@ -727,5 +731,3 @@ fn try_atom_diff_refuses_shrink_without_cleave_door() {
         try_lift_cleaved_child(&parent, &parent_diff, &child, &target).expect("cleavage lift");
     assert_eq!(cleaved.cost(), atom_diff(child.mol(), &target).cost());
 }
-
-

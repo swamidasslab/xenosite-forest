@@ -88,10 +88,7 @@ pub fn normalize_tautomer<M: IntoForestMol>(mol: M) -> Result<NormalizedTautomer
     } else {
         parent.from_edit_product(picked)
     };
-    Ok(NormalizedTautomer {
-        mol,
-        changed: true,
-    })
+    Ok(NormalizedTautomer { mol, changed: true })
 }
 
 #[cfg(test)]
@@ -118,7 +115,10 @@ mod tests {
     fn pass_through_when_already_canonical() {
         let out = normalize_tautomer("CCO").unwrap();
         assert!(!out.changed);
-        assert_eq!(out.mol.csmi().as_ref(), as_forest_mol("CCO").unwrap().csmi().as_ref());
+        assert_eq!(
+            out.mol.csmi().as_ref(),
+            as_forest_mol("CCO").unwrap().csmi().as_ref()
+        );
     }
 
     #[test]
@@ -256,11 +256,7 @@ mod tests {
         let picked = chematic_tautomer_pick(parent.mol());
         assert_eq!(picked.atom_count(), want.len());
         for (i, tag) in want.iter().enumerate() {
-            assert_eq!(
-                get_label(&picked, atom_idx(i)),
-                *tag,
-                "index {i}"
-            );
+            assert_eq!(get_label(&picked, atom_idx(i)), *tag, "index {i}");
         }
     }
 
@@ -269,9 +265,6 @@ mod tests {
         let mol = as_forest_mol("[NH3+]CC(=O)[O-]").unwrap();
         let picked = chematic_tautomer_pick(mol.mol());
         let via_api = normalize_tautomer(&mol).unwrap();
-        assert_eq!(
-            canon_smiles(&picked).as_str(),
-            via_api.mol.csmi().as_ref()
-        );
+        assert_eq!(canon_smiles(&picked).as_str(), via_api.mol.csmi().as_ref());
     }
 }

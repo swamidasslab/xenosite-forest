@@ -91,9 +91,7 @@ impl MetabolicNetwork {
                 && h.products == hop.products
         });
         if !already {
-            self.nodes[child_i]
-                .via
-                .push((parent_csmi.to_string(), hop));
+            self.nodes[child_i].via.push((parent_csmi.to_string(), hop));
         }
     }
 
@@ -145,13 +143,7 @@ impl MetabolicNetwork {
     /// Parent CSMIs of a node.
     pub fn parents(&self, csmi: &str) -> Vec<&str> {
         self.index_of(csmi)
-            .map(|i| {
-                self.nodes[i]
-                    .via
-                    .iter()
-                    .map(|(p, _)| p.as_str())
-                    .collect()
-            })
+            .map(|i| self.nodes[i].via.iter().map(|(p, _)| p.as_str()).collect())
             .unwrap_or_default()
     }
 
@@ -181,7 +173,11 @@ impl MetabolicNetwork {
     }
 
     /// Structured residual of `csmi` vs `target`.
-    pub fn missed(&self, csmi: &str, target: &str) -> Result<Option<AtomDiffResidual>, ForestError> {
+    pub fn missed(
+        &self,
+        csmi: &str,
+        target: &str,
+    ) -> Result<Option<AtomDiffResidual>, ForestError> {
         if self.index_of(csmi).is_none() {
             return Ok(None);
         }
@@ -261,7 +257,16 @@ mod tests {
         net.record_hop(
             "CCO",
             "CCO",
-            hop_from_parts("Hydroxylation", "h", 0, vec![0], vec![], vec![], vec!["CCO".into()], false),
+            hop_from_parts(
+                "Hydroxylation",
+                "h",
+                0,
+                vec![0],
+                vec![],
+                vec![],
+                vec!["CCO".into()],
+                false,
+            ),
         );
         assert!(net.reaches("CCO"));
         assert_eq!(net.n_nodes(), 1);

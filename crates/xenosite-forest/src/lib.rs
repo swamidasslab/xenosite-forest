@@ -15,9 +15,9 @@ pub mod atom_tracker;
 pub mod bound_pattern;
 pub mod candidate;
 pub mod canonical_plan;
+pub mod chematic_features;
 pub mod chematic_tags;
 pub mod chematic_vendor;
-pub mod chematic_features;
 pub mod cleavage_graph;
 pub mod find_path;
 pub mod forest;
@@ -89,23 +89,23 @@ pub use cleavage_graph::{
     fold_cleavage_arms,
 };
 pub use find_path::{
-    FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
-    MatchScoreSpec, OpenFindPath, PathCounters, PathOutcome, PartialOutcome, FindPathPartialResult, PathStep, diversity_penalty,
-    find_path, find_path_partial, find_path_with_network, find_path_default, find_path_diff, find_path_with, find_path_with_filters,
-    hop_match_add_score, hop_match_product_score, hop_match_score, log_close_term,
-    log_improve_term, neg_log1p_score,
+    FindPath, FindPathConfig, FindPathFilters, FindPathPartialResult, HeapScoreMode, MatchCombine,
+    MatchMetric, MatchScoreSpec, OpenFindPath, PartialOutcome, PathCounters, PathOutcome, PathStep,
+    diversity_penalty, find_path, find_path_default, find_path_diff, find_path_partial,
+    find_path_with, find_path_with_filters, find_path_with_network, hop_match_add_score,
+    hop_match_product_score, hop_match_score, log_close_term, log_improve_term, neg_log1p_score,
 };
 pub use forest::{
-    Formula, Structure, formula_delta, formula_heavy_l1, formula_l1, molecule_formula,
-    CHARGE_MINUS, CHARGE_PLUS, is_charge_key,
+    CHARGE_MINUS, CHARGE_PLUS, Formula, Structure, formula_delta, formula_heavy_l1, formula_l1,
+    is_charge_key, molecule_formula,
 };
 pub use forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
 pub use labels::Tag;
 pub use mapping::{
-    Resolved, SssomRow, XF_PREFIX, XMET_PREFIX, expand_iri, forest_xmet_sssom, forest_xmet_sssom_gz,
-    parse_forest_xmet_sssom, resolve, to_curie, xf_path_segments,
+    Resolved, SssomRow, XF_PREFIX, XMET_PREFIX, expand_iri, forest_xmet_sssom,
+    forest_xmet_sssom_gz, parse_forest_xmet_sssom, resolve, to_curie, xf_path_segments,
 };
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
@@ -142,8 +142,8 @@ pub use product_graph::{
 pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
     LEAF_CTORS, LEAF_EXAMPLE_SUBSTRATES, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset,
-    epoxide_hydration, leaf_rule, phase_one, reduction, resolve_root, seal_leaf, stable_oxygenation,
-    unstable_oxygenation,
+    epoxide_hydration, leaf_rule, phase_one, reduction, resolve_root, seal_leaf,
+    stable_oxygenation, unstable_oxygenation,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,

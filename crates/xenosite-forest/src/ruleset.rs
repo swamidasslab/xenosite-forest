@@ -200,9 +200,7 @@ impl RuleSet {
 
     /// `true` when this set has nested [`RuleMember::Set`] children (a catalog).
     pub fn is_catalog(&self) -> bool {
-        self.members
-            .iter()
-            .any(|m| matches!(m, RuleMember::Set(_)))
+        self.members.iter().any(|m| matches!(m, RuleMember::Set(_)))
     }
 
     /// Direct member count (nested sets count as one each; leaf patterns as one each).
@@ -501,8 +499,7 @@ fn cleave_oxygenate(
         RingOpenOxygenate::Hemiaminal => {
             // Map 3 is the reactant OH oxygen; promote O–C to O=C (no new atom).
             let oxygen = *mapped.get(&3)?;
-            let (oh_bond_idx, oh_bond) =
-                product.bond_between(atom_idx(oxygen), atom_idx(left))?;
+            let (oh_bond_idx, oh_bond) = product.bond_between(atom_idx(oxygen), atom_idx(left))?;
             match oh_bond.order {
                 BondOrder::Single | BondOrder::Aromatic => {}
                 _ => return None,
@@ -533,11 +530,7 @@ fn cleave_oxygenate(
     if frags.is_empty() && accept_product(&product) {
         frags.push(product);
     }
-    if frags.is_empty() {
-        None
-    } else {
-        Some(frags)
-    }
+    if frags.is_empty() { None } else { Some(frags) }
 }
 
 fn atoms_share_ring(mol: &Molecule, left: usize, right: usize) -> bool {
@@ -600,8 +593,8 @@ pub(crate) fn apply_edit_mols(
     // Aromatic alkene/alkyne SMIRKS can rematerialize the reactant (pyrrole /
     // thiophene H). Refuse identity — same gate as pair path_end.
     let parent_csmi = canon_smiles(mol);
-    let o_leave = pattern.effect.cleaves
-        && pattern.effect.leave_formula == crate::pattern::leave_o();
+    let o_leave =
+        pattern.effect.cleaves && pattern.effect.leave_formula == crate::pattern::leave_o();
     Ok(products
         .into_iter()
         .filter(|p| canon_smiles(p) != parent_csmi)
@@ -657,8 +650,7 @@ pub(crate) fn apply_edit_mols_raw(
                 let prefer_graph = mapped_bond_in_ring(&work, mapped, mode)
                     || matches!(
                         mode,
-                        RingOpenOxygenate::HydrolysisAddWater
-                            | RingOpenOxygenate::HydrolysisCleave
+                        RingOpenOxygenate::HydrolysisAddWater | RingOpenOxygenate::HydrolysisCleave
                     );
                 if prefer_graph {
                     if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
@@ -711,10 +703,7 @@ pub(crate) fn apply_edit_mols_raw(
 ///
 /// Returns the aromatized heavy fragment plus a methane leave piece — matching
 /// Python's catechol + C split for benzodioxole reduction.
-fn remove_mapped_ch2_leave(
-    mol: &Molecule,
-    mapped: &BTreeMap<u16, usize>,
-) -> Option<Vec<Molecule>> {
+fn remove_mapped_ch2_leave(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Option<Vec<Molecule>> {
     use chematic::core::Element;
     let mut leave_idx: Option<usize> = None;
     for &idx in mapped.values() {
@@ -985,10 +974,7 @@ mod tests {
         assert_eq!(with_dedup.len(), 1);
         assert_eq!(with_dedup[0].leaf_rule(), Some("OverlapOhA"));
         assert_eq!(with_dedup[0].namespace(), vec!["OverlapOhA", "OverlapSet"]);
-        assert_eq!(
-            canon_set(with_dedup[0].product_csmis()),
-            canon_set(["CCO"])
-        );
+        assert_eq!(canon_set(with_dedup[0].product_csmis()), canon_set(["CCO"]));
 
         let without = set
             .metabolize(&mol, accept_all_rules, accept_all_sites, false)

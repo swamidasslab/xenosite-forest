@@ -22,8 +22,8 @@ use crate::ForestError;
 use crate::candidate::Candidate;
 use crate::canonical_plan::{CanonicalStep, CleavageSide, Deps, Maybe, as_deps};
 use crate::forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
-use crate::metabolic_network::{MetabolicNetwork, hop_from_parts, tags_for_atoms};
 use crate::labels::Tag;
+use crate::metabolic_network::{MetabolicNetwork, hop_from_parts, tags_for_atoms};
 use crate::pattern::{CleaveFoldKey, CleaveSideSig, PatternInfo, SiteInfo};
 use crate::rules::default_ruleset;
 use crate::ruleset::RuleSet;
@@ -1362,8 +1362,6 @@ where
     })
 }
 
-
-
 /// Search for exact paths; if the budget is exhausted without filling `max_paths`,
 /// also return up to `max_paths` closest non-exact reaches (end-of-search flush).
 pub fn find_path_partial<'a, 'b, 'g, R, T, K>(
@@ -1383,7 +1381,8 @@ where
     let max_paths = config.max_paths;
     // Seal anti-retread is always on; early-stop on sealed-basin count is opt-in
     // via `stop_after_sealed_basins` (calibrate on +GSH — premature stop hurts closest).
-    let mut iter = find_path_with_network(reactant, target, ruleset, counters, config, network, keep)?;
+    let mut iter =
+        find_path_with_network(reactant, target, ruleset, counters, config, network, keep)?;
     let exact = iter.by_ref().collect::<Result<Vec<_>, _>>()?;
     let mut partials = std::mem::take(&mut iter.search.closest);
     // Prefer exact: if exact filled max_paths, drop partials.
@@ -1562,11 +1561,8 @@ impl<'g> PathSearch<'g> {
     }
 
     fn residual_class_sealed(&self, diff: &crate::atom_diff::AtomDiff, mol: &ForestMol) -> bool {
-        let residual = crate::atom_diff::residual_from_diff(
-            diff,
-            Some(mol.mol()),
-            Some(self.target.mol()),
-        );
+        let residual =
+            crate::atom_diff::residual_from_diff(diff, Some(mol.mol()), Some(self.target.mol()));
         self.sealed_classes.contains(&residual.class_key())
     }
 
@@ -1644,21 +1640,38 @@ impl<'g> PathSearch<'g> {
                 true
             }
         } else {
-            closer(parent_ha, child_ha, self.target.heavy_atom_count(), target_hit)
+            closer(
+                parent_ha,
+                child_ha,
+                self.target.heavy_atom_count(),
+                target_hit,
+            )
         };
         if !allow {
-            return EnqueueOutcome { target_hit: false, enqueued: false };
+            return EnqueueOutcome {
+                target_hit: false,
+                enqueued: false,
+            };
         }
         if let Some(ends) = emission.dh_ends {
             if !dh_product_ends_match_target(&walk.mol, &kept, ends, self.target.mol()) {
-                return EnqueueOutcome { target_hit: false, enqueued: false };
+                return EnqueueOutcome {
+                    target_hit: false,
+                    enqueued: false,
+                };
             }
         }
         if repeats_ancestor(&walk.ancestors, &kept) {
-            return EnqueueOutcome { target_hit: false, enqueued: false };
+            return EnqueueOutcome {
+                target_hit: false,
+                enqueued: false,
+            };
         }
         if already_seen(&self.seen, &kept) && !target_hit {
-            return EnqueueOutcome { target_hit: false, enqueued: false };
+            return EnqueueOutcome {
+                target_hit: false,
+                enqueued: false,
+            };
         }
         if kept.stable_csmi_key().is_none() {
             *unstable_csmi += 1;
@@ -2046,7 +2059,10 @@ struct Expand<'a> {
 }
 
 impl<'a> Expand<'a> {
-    fn new<K>(counters: &'a mut PathCounters, input: ExpandInput<'a, K>) -> Result<Self, ForestError>
+    fn new<K>(
+        counters: &'a mut PathCounters,
+        input: ExpandInput<'a, K>,
+    ) -> Result<Self, ForestError>
     where
         K: Fn(&Candidate) -> bool,
     {
@@ -2117,12 +2133,9 @@ impl<'a> Expand<'a> {
         let site_atoms: BTreeSet<usize> = site.site_atoms().into_iter().collect();
         let site_progress = self
             .diff
-            .map(|d| {
-                site.site_h_progress_on(d, self.target)
-            })
+            .map(|d| site.site_h_progress_on(d, self.target))
             .unwrap_or(0);
-        let dh_ends = if site.is_pair()
-            && crate::atom_diff::is_dehydrogenation_effect(&site.effect)
+        let dh_ends = if site.is_pair() && crate::atom_diff::is_dehydrogenation_effect(&site.effect)
         {
             site.end_atoms()
         } else {
@@ -2879,10 +2892,7 @@ mod tests {
             Err(e) => e,
             Ok(_) => panic!("invert + changed target must NotImplemented"),
         };
-        assert!(
-            matches!(err, ForestError::NotImplemented(_)),
-            "got {err:?}"
-        );
+        assert!(matches!(err, ForestError::NotImplemented(_)), "got {err:?}");
     }
 
     #[test]
@@ -3008,10 +3018,14 @@ mod tests {
             ..FindPathConfig::default()
         };
         let rules = hydroxylation();
-        let out = find_path_partial("CC", "CCO", &rules, &mut counters, cfg, None, |_| true)
-            .unwrap();
+        let out =
+            find_path_partial("CC", "CCO", &rules, &mut counters, cfg, None, |_| true).unwrap();
         assert_eq!(out.exact.len(), 1);
-        assert!(out.partials.is_empty(), "exact filled max_paths: {:?}", out.partials);
+        assert!(
+            out.partials.is_empty(),
+            "exact filled max_paths: {:?}",
+            out.partials
+        );
     }
 
     fn hop_cost_gain_is_parent_minus_child() {

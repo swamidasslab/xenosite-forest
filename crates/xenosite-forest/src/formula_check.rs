@@ -52,11 +52,7 @@ fn sum_formulas(mols: &[Molecule]) -> Formula {
             }
         }
     }
-    Formula {
-        counts,
-        charge: 0,
-    }
-    .with_charge_units(positive, negative)
+    Formula { counts, charge: 0 }.with_charge_units(positive, negative)
 }
 
 /// Expected net for multi-fragment cleavage: junction bags only.
@@ -121,9 +117,7 @@ pub fn check_effect_delta_formula(
     // Multiple non-cleaving products are alternative full outcomes, not fragments.
     if !effect.cleaves {
         for product in products {
-            if let Some(detail) =
-                check_single_delta(&parent_f, effect, product, pattern_name)
-            {
+            if let Some(detail) = check_single_delta(&parent_f, effect, product, pattern_name) {
                 return Some(detail);
             }
         }
@@ -178,11 +172,7 @@ fn finish_mismatch(
     }
     // Ring-retained leave: named leave still on the single product (e.g.
     // isoxazole N–O open). Incomplete leave vs fragment split — skip.
-    if effect.cleaves
-        && !effect.leave_formula.is_empty()
-        && n_products == 1
-        && actual.is_empty()
-    {
+    if effect.cleaves && !effect.leave_formula.is_empty() && n_products == 1 && actual.is_empty() {
         let leave_as_delta: BTreeMap<String, i32> = effect
             .leave_formula
             .iter()
@@ -298,16 +288,13 @@ mod tests {
         let enol_b = parse_mol("OC1=CCCCC1").unwrap();
         let effect = Effect::default().sealed();
         assert!(
-            check_effect_delta_formula(&parent, &effect, &[enol_a, enol_b], "tautomer")
-                .is_none(),
+            check_effect_delta_formula(&parent, &effect, &[enol_a, enol_b], "tautomer").is_none(),
             "summing alternatives as cleavage would false-positive"
         );
         // One bad alternative still reports mismatch.
         let bad = parse_mol("CCO").unwrap();
         let enol = parse_mol("OC1=CCCCC1").unwrap();
-        assert!(
-            check_effect_delta_formula(&parent, &effect, &[enol, bad], "tautomer").is_some()
-        );
+        assert!(check_effect_delta_formula(&parent, &effect, &[enol, bad], "tautomer").is_some());
     }
 
     #[test]
@@ -323,19 +310,6 @@ mod tests {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(test)]
 mod alkene_probe {
     use super::*;
@@ -347,21 +321,35 @@ mod alkene_probe {
     #[test]
     fn alkene_patterns_do_not_duplicate_site_product() {
         // Two patterns must not match the same site to yield the same product.
-        let substrates = ["C=C", "c1ccccc1", "C=C=O", "C=Cc1ccccc1", "CC=C", "c1ccc:C(:c1)=C=O"];
+        let substrates = [
+            "C=C",
+            "c1ccccc1",
+            "C=C=O",
+            "C=Cc1ccccc1",
+            "CC=C",
+            "c1ccc:C(:c1)=C=O",
+        ];
         let mut dups = Vec::new();
         for smi in substrates {
-            let Ok(parent) = ForestMol::parse(smi) else { continue };
+            let Ok(parent) = ForestMol::parse(smi) else {
+                continue;
+            };
             let mut by_key: BTreeMap<(Vec<usize>, String), Vec<String>> = BTreeMap::new();
             for site in hydrogenation().candidates(&parent).filter_map(Result::ok) {
                 if !site.pattern_name().starts_with("alkene") {
                     continue;
                 }
-                let Ok(pieces) = site.materialize_mols() else { continue };
+                let Ok(pieces) = site.materialize_mols() else {
+                    continue;
+                };
                 let mut atoms = site.site_atoms();
                 atoms.sort_unstable();
                 for p in pieces {
                     let key = (atoms.clone(), canon_smiles(&p));
-                    by_key.entry(key).or_default().push(site.pattern_name().to_string());
+                    by_key
+                        .entry(key)
+                        .or_default()
+                        .push(site.pattern_name().to_string());
                 }
             }
             for ((atoms, prod), names) in by_key {
@@ -369,7 +357,9 @@ mod alkene_probe {
                 u.sort();
                 u.dedup();
                 if u.len() > 1 {
-                    dups.push(format!("{smi} atoms={atoms:?} product={prod} patterns={u:?}"));
+                    dups.push(format!(
+                        "{smi} atoms={atoms:?} product={prod} patterns={u:?}"
+                    ));
                 }
             }
         }
@@ -390,7 +380,9 @@ mod alkene_probe {
                     continue;
                 }
                 saw = true;
-                let Ok(pieces) = site.materialize_mols() else { continue };
+                let Ok(pieces) = site.materialize_mols() else {
+                    continue;
+                };
                 if pieces.is_empty() {
                     continue;
                 }

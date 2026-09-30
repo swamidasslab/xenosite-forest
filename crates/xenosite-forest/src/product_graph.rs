@@ -222,7 +222,10 @@ pub fn product_layer(
         }
     }
 
-    for pair in ruleset.candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair())) {
+    for pair in ruleset
+        .candidates(&parent)
+        .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+    {
         let pair = pair?;
         if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
             if !pair.could_help_on(diff, Some(t)) {

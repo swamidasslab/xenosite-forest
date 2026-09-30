@@ -93,11 +93,7 @@ pub fn molecule_formula(mol: &Molecule) -> Formula {
             *counts.entry("H".to_string()).or_insert(0) += hydrogens;
         }
     }
-    Formula {
-        counts,
-        charge: 0,
-    }
-    .with_charge_units(positive, negative)
+    Formula { counts, charge: 0 }.with_charge_units(positive, negative)
 }
 
 /// Change in element counts (and charge) from ``before`` to ``after``.

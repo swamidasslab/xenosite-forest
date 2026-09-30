@@ -392,10 +392,7 @@ impl DeferredSite {
 
     /// Elementary plan for this site (cached generators on the discovery ForestMol).
     pub fn identity_plan(&self) -> Vec<Step> {
-        self.identity_plan_with_gens(
-            &self.mol.atom_bond_generators(),
-            self.mol().atom_count(),
-        )
+        self.identity_plan_with_gens(&self.mol.atom_bond_generators(), self.mol().atom_count())
     }
 
     /// Like [`Self::identity_plan`], reusing supplied generators.

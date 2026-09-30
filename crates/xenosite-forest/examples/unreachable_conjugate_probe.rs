@@ -95,8 +95,7 @@ fn main() {
 
     let bp_r = "COc1ccc(-c2ccc(OC)c(OC)c2)cc1OC";
     let bp_oh = "Oc1ccc(-c2ccc(O)c(O)c2)cc1O";
-    let bp_gsh =
-        "N[C@@H](CCC(=O)N[C@@H](CSc1c(O)ccc(-c2ccc(O)c(O)c2)c1O)C(=O)NCC(=O)O)C(=O)O";
+    let bp_gsh = "N[C@@H](CCC(=O)N[C@@H](CSc1c(O)ccc(-c2ccc(O)c(O)c2)c1O)C(=O)NCC(=O)O)C(=O)O";
 
     println!("=== find_path (exact-only) ===");
     run_exact("CTRL tetraMeO-BP→tetraOH", bp_r, bp_oh, config);

@@ -1,9 +1,7 @@
 //! Path search on MetX misses with call-site stereo strip (no lib change).
-use std::time::{Duration, Instant};
 use chematic::chem::remove_stereo;
-use xenosite_forest::{
-    FindPathConfig, PathCounters, as_forest_mol, find_path_partial, phase_one,
-};
+use std::time::{Duration, Instant};
+use xenosite_forest::{FindPathConfig, PathCounters, as_forest_mol, find_path_partial, phase_one};
 
 fn nostereo(s: &str) -> String {
     let fm = as_forest_mol(s).unwrap();

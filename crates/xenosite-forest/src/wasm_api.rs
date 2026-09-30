@@ -153,7 +153,7 @@ pub fn forest_canon_smiles(smiles: &str) -> Result<String, JsValue> {
 /// Thin helper kept for demos; not part of the Python public stub.
 #[wasm_bindgen(js_name = forest_hydroxylate)]
 pub fn forest_hydroxylate(smiles: &str) -> Result<String, JsValue> {
-    let mol = parse_mol(smiles).map_err(js_err)?;
+    let mol = Held::parse(smiles).map_err(js_err)?;
     let products = hydroxylate(&mol).map_err(js_err)?;
     Ok(products.join("\n"))
 }

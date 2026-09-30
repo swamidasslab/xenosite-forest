@@ -68,8 +68,12 @@ pub fn coverage_candidates() -> &'static [&'static str] {
     static CANDIDATES: OnceLock<Vec<&'static str>> = OnceLock::new();
     CANDIDATES
         .get_or_init(|| {
-            let mut out = Vec::with_capacity(substrate_library().len() + pattern_substrates().len());
-            for &s in substrate_library().iter().chain(pattern_substrates().iter()) {
+            let mut out =
+                Vec::with_capacity(substrate_library().len() + pattern_substrates().len());
+            for &s in substrate_library()
+                .iter()
+                .chain(pattern_substrates().iter())
+            {
                 if !out.contains(&s) {
                     out.push(s);
                 }
