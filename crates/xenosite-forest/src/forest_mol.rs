@@ -127,6 +127,10 @@ pub struct ForestMol {
     mol: Molecule,
     labels: Vec<Option<Tag>>,
     tag_gen: Rc<Cell<u16>>,
+    /// First tag id reserved for born atoms at root stamp (`n+1` after
+    /// `Tag(1..=n)`). Copied through adopt so Index plans can tell root
+    /// survivors (`tag.get() < stamp_end`) from minted atoms.
+    stamp_end: u16,
     structure: Rc<RefCell<Structure>>,
     kekule: Rc<RefCell<KekuleCache>>,
     pub is_terminal_product: Cell<bool>,
@@ -157,6 +161,35 @@ impl ForestMol {
             mol,
             labels,
             tag_gen: Rc::new(Cell::new(next)),
+            stamp_end: next,
+            structure: Rc::new(RefCell::new(Structure::default())),
+            kekule: Rc::new(RefCell::new(KekuleCache::default())),
+            is_terminal_product: Cell::new(false),
+        }
+    }
+
+    /// Wrap a mol without restamping when chematic tags are already present.
+    ///
+    /// [`crate::canonical_plan::Step::apply`] must not destroy parent tags —
+    /// plan Index replay composes [`AtomTracker::src_to_new`] across hops.
+    pub(crate) fn wrap_preserving_labels(mol: Molecule) -> Self {
+        let n = mol.atom_count();
+        let labels: Vec<Option<Tag>> = (0..n).map(|i| get_label(&mol, atom_idx(i))).collect();
+        if labels.iter().all(|t| t.is_none()) {
+            return Self::new(mol);
+        }
+        let next = labels
+            .iter()
+            .flatten()
+            .map(|t| t.get())
+            .max()
+            .map(|m| m.saturating_add(1))
+            .unwrap_or(1);
+        Self {
+            mol,
+            labels,
+            tag_gen: Rc::new(Cell::new(next)),
+            stamp_end: next,
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::new(RefCell::new(KekuleCache::default())),
             is_terminal_product: Cell::new(false),
@@ -194,6 +227,7 @@ impl ForestMol {
             mol,
             labels,
             tag_gen: Rc::clone(&parent.tag_gen),
+            stamp_end: parent.stamp_end,
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&parent.kekule),
             is_terminal_product: Cell::new(false),
@@ -211,6 +245,7 @@ impl ForestMol {
             mol,
             labels,
             tag_gen: Rc::clone(&self.tag_gen),
+            stamp_end: self.stamp_end,
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&self.kekule),
             is_terminal_product: Cell::new(false),
@@ -244,6 +279,7 @@ impl ForestMol {
             mol,
             labels,
             tag_gen: Rc::clone(&self.tag_gen),
+            stamp_end: self.stamp_end,
             structure: Rc::new(RefCell::new(Structure::default())),
             kekule: Rc::clone(&self.kekule),
             is_terminal_product: Cell::new(false),
@@ -259,6 +295,21 @@ impl ForestMol {
 
     pub fn tag_of(&self, idx: usize) -> Option<Tag> {
         self.labels.get(idx).copied().flatten()
+    }
+
+    /// First born-atom tag id at the root stamp (`n+1` after `Tag(1..=n)`).
+    pub fn stamp_end(&self) -> u16 {
+        self.stamp_end
+    }
+
+    /// Chematic index on the stamped root for a survivor tag, if any.
+    pub fn stamp_origin_index(&self, tag: Tag) -> Option<usize> {
+        let raw = tag.get();
+        if raw < self.stamp_end {
+            Some((raw as usize).saturating_sub(1))
+        } else {
+            None
+        }
     }
 
     pub fn index_of(&self, tag: Tag) -> Option<usize> {
@@ -285,6 +336,7 @@ impl ForestMol {
             mol: self.mol.clone(),
             labels: self.labels.clone(),
             tag_gen: Rc::clone(&self.tag_gen),
+            stamp_end: self.stamp_end,
             structure: Rc::clone(&self.structure),
             kekule: Rc::clone(&self.kekule),
             is_terminal_product: Cell::new(self.is_terminal_product.get()),

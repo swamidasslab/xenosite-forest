@@ -2,14 +2,37 @@
 
 ## 2026-09-29
 
+- **`enforce_charged_h0` in-place.** SMILES reparse (`[SH+]`→`[S+]`) dropped
+  all parent tags on SulfurOxidation; set explicit H0 via `preserving::` instead.
+  Edit-helper tag matrix green. MS1 plan emit: use `Candidate::elementary_plan`
+  only (no pair branch in `find_path_ms1`).
+
+- **`ms1_apply_fuzz` green.** Moved to `tests/`; smile-gated same-product dedup
+  (isobar regioisomers may share plans). Corpus: drop BzdRed+OH (non-monotonic
+  mz-closer) and anisole Dealk+DH (no DH sites); `max_paths=128` for dimethoxy
+  Dealk×2 (rank ~118 under broad OR). Empty regression file. Still parked:
+  `apply_n_bench.rs`.
+
+- **`find_path_ms1` → `src/`.** Wired onto HEAD DeferredSite + ApplyN: `candidates(&ForestMol)`,
+  `materialize_mols()` / field access, `elementary_plan` + `site_atoms` identity for alcohol DH,
+  smile-gated yield dedup (sulfur hydroxy/oxo isobars), plan-replay asserts via `apply_forest`.
+  Unit tests: 31 passed, 1 ignored xfail (multi-hop Index/cleavage apply_forest replay).
+  Still pending: `ms1_apply_fuzz.rs`, `apply_n_bench.rs`. No commit.
+
+- **Surgical ApplyN port (Index + DeferredSite).** Not a blind MS1 merge: ported
+  `ApplyN` / emit / `Deps::with_apply_n` onto HEAD `PlanAtom::Index` and
+  `DeferredSite` (remap helper mutates site/mapped/info.site; Step orbits are
+  atom indices). Tags track sites across `adopt_product` for emit; plans keep
+  stable start indices. Next was `find_path_ms1` (wired same day — see above).
+
 - **deferred-site → main (local).** Merged as `c6394ca` in wheels worktree; origin/main waits on PR #40 CI. CI fixes (wasm ForestMol hydroxylate, rustfmt/ruff/clippy) pushed to `chore/deferred-site`.
-- **MS1 merge on `chore/merge-find-path-ms1`.** Blind tip merge too conflicted. Ported `mass.rs` (10 tests) onto DeferredSite. `find_path_ms1` still needs `ApplyN` on HEAD `canonical_plan`.
+- **MS1 merge on `chore/merge-find-path-ms1`.** Blind tip merge too conflicted. Ported `mass.rs` (10 tests) onto DeferredSite. Merged `origin/chore/deferred-site` into this branch (`c4f4872`; keep mass re-exports). Orbit `unordered_site_combinations*` + benzene OH×2 combo test green. Next: surgical `ApplyN` on Index/`DeferredSite` `canonical_plan`, then `find_path_ms1`.
 
 - **MetX nostereo call-site + tautomer ±.** `metx_hard_cases` strips stereo on
   R/P before search (no lib canon change). Same budget 200/1.5s:
-  - nostereo + tautnorm=**off**: hits=**1268** / misses=175 / t/o=41 / 154.7s
+    - nostereo + tautnorm=**off**: hits=**1268** / misses=175 / t/o=41 / 154.7s
     (`artifacts/metx_hard_scan_nostereo.out`)
-  - nostereo + tautnorm=**on**: hits=**1121** / misses=322 / t/o=49 / 230.8s
+    - nostereo + tautnorm=**on**: hits=**1121** / misses=322 / t/o=49 / 230.8s
     (`artifacts/metx_hard_scan_nostereo_tautnorm.out`)
   Prior stereo-on: off 902 / on 809. Nostereo recovers ~366 exact hits off.
   Thrash filter (miss, bill≥200, rcost≥3, dearomatize|O|extra): **5** off /

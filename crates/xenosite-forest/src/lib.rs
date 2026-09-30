@@ -20,6 +20,7 @@ pub mod chematic_tags;
 pub mod chematic_vendor;
 pub mod cleavage_graph;
 pub mod find_path;
+pub mod find_path_ms1;
 pub mod forest;
 pub mod forest_mol;
 pub mod formula_check;
@@ -77,8 +78,10 @@ pub use atom_tracker::{AtomTracker, tags_agree_elements};
 pub use bound_pattern::BoundPattern;
 pub use candidate::{Candidate, DeferredSite, ParentRef};
 pub use canonical_plan::{
-    CanonicalPlanFn, CanonicalStep, CleavageSide, Deps, Linearization, Maybe, PlanAtom, Step,
-    StepSequence, align_deps_indices, as_deps, bind_deps, canonical_dependency_edges,
+    ApplyN, ApplyNEmitStats, ApplyNProduct, CanonicalPlanFn, CanonicalStep, CleavageSide, Deps,
+    Linearization, Maybe, PlanAtom, Step, StepSequence, align_deps_indices,
+    apply_n_distinct_products, apply_n_emit_products, apply_n_n_distinct_products, as_deps,
+    bind_deps, canonical_dependency_edges, eligible_sites_for_apply_n,
     epoxide_hydration_canonical_plan, identity_canonical_plan, identity_plan,
     identity_plan_with_orbit, plan_for_leaf, quinone_canonical_plan, steps_for_leaf,
     transitive_closure_masks,
@@ -95,6 +98,9 @@ pub use find_path::{
     diversity_penalty, find_path, find_path_default, find_path_diff, find_path_partial,
     find_path_with, find_path_with_filters, find_path_with_network, hop_match_add_score,
     hop_match_product_score, hop_match_score, log_close_term, log_improve_term, neg_log1p_score,
+};
+pub use find_path_ms1::{
+    Ms1Config, find_path_ms1, find_path_ms1_default, predicted_mz_after_delta,
 };
 pub use forest::{
     CHARGE_MINUS, CHARGE_PLUS, Formula, Structure, formula_delta, formula_heavy_l1, formula_l1,

@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use crate::ForestError;
 use crate::ForestMol;
-use crate::canonical_plan::{Step, identity_plan_with_orbit};
+use crate::canonical_plan::{Step, identity_plan_on_forest};
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
 use crate::ruleset::apply_edit_mols;
@@ -407,10 +407,10 @@ impl DeferredSite {
             .to_string();
         if self.pair.is_some() {
             let atoms = self.site_atoms();
-            identity_plan_with_orbit(rule, atoms.clone(), atoms)
+            identity_plan_on_forest(rule, &self.mol, atoms.clone(), atoms)
         } else {
             let orbit = crate::orbits::atom_orbit_with_gens(generators, n_atoms, self.site);
-            identity_plan_with_orbit(rule, [self.site], orbit)
+            identity_plan_on_forest(rule, &self.mol, [self.site], orbit)
         }
     }
 }

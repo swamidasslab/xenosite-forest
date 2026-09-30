@@ -705,6 +705,7 @@ pub(crate) fn apply_edit_mols_raw(
 /// Python's catechol + C split for benzodioxole reduction.
 fn remove_mapped_ch2_leave(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Option<Vec<Molecule>> {
     use chematic::core::Element;
+    use crate::chematic_tags::{get_label, set_label};
     let mut leave_idx: Option<usize> = None;
     for &idx in mapped.values() {
         let atom = mol.atom(atom_idx(idx));
@@ -721,12 +722,17 @@ fn remove_mapped_ch2_leave(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Opt
         }
     }
     let leave_idx = leave_idx?;
+    // Excised methylene tag: parse_mol("C") is a new graph — carry the label
+    // by hand (indices renumber; cannot index-restamp from the parent).
+    let leave_tag = get_label(mol, atom_idx(leave_idx));
     let (product, _remap) = mol.with_atom_removed(atom_idx(leave_idx));
-    let product = crate::mol::aromatize(&product);
+    // Index-stable on the keep piece (same order as post-removal).
+    let product = crate::chematic_tags::preserving::aromatize(&product);
     if !accept_product(&product) {
         return None;
     }
-    let leave = crate::mol::parse_mol("C").ok()?;
+    let mut leave = crate::mol::parse_mol("C").ok()?;
+    set_label(&mut leave, atom_idx(0), leave_tag);
     if !accept_product(&leave) {
         return None;
     }
@@ -1107,5 +1113,224 @@ mod tests {
         assert!(refuse.is_empty());
         let products = cands[0].apply().unwrap().unwrap().product_csmis();
         assert_eq!(canon_of(&products[0]).unwrap(), canon_of("CCO").unwrap());
+    }
+
+    /// Cleavage keep/leave pieces must carry parent chematic tags for survivors.
+    ///
+    /// Indices may renumber to 0..n; labels must ride on the atoms (or be
+    /// placed explicitly on a rebuilt leave piece).
+    #[test]
+    fn o_dealk_anisole_fragments_preserve_parent_tags() {
+        use crate::atom_tracker::AtomTracker;
+        use crate::chematic_tags::get_label;
+        use crate::mol::atom_idx;
+        use std::collections::HashSet;
+
+        let parent = ForestMol::parse("COc1ccccc1").unwrap();
+        let parent_tags: Vec<_> = (0..parent.mol().atom_count())
+            .map(|i| {
+                (
+                    AtomTracker::tag_of(parent.mol(), i).expect("stamped"),
+                    parent.mol().atom(atom_idx(i)).element.atomic_number(),
+                )
+            })
+            .collect();
+        assert_eq!(parent_tags.len(), 8, "anisole C7H8O heavy count");
+
+        let set = o_dealkylation();
+        let cand = set
+            .candidates(&parent)
+            .find(|c| {
+                c.as_ref()
+                    .is_ok_and(|c| c.pattern_name() == "O-Me" || c.effect.cleaves)
+            })
+            .expect("O-dealk candidate")
+            .unwrap();
+
+        let raw = cand.materialize_mols().unwrap();
+        assert!(
+            raw.len() >= 2,
+            "expect keep+leave fragments, got {}",
+            raw.len()
+        );
+
+        let mut seen_on_raw: HashSet<_> = HashSet::new();
+        for frag in &raw {
+            for i in 0..frag.atom_count() {
+                if let Some(tag) = get_label(frag, atom_idx(i)) {
+                    assert!(
+                        seen_on_raw.insert(tag),
+                        "tag {tag:?} duplicated across raw fragments"
+                    );
+                }
+            }
+        }
+        let missing_raw: Vec<_> = parent_tags
+            .iter()
+            .filter(|(t, _)| !seen_on_raw.contains(t))
+            .collect();
+        assert!(
+            missing_raw.is_empty(),
+            "parent tags missing on raw cleave fragments: {missing_raw:?}; raw tag counts={}; frags={}",
+            seen_on_raw.len(),
+            raw.len()
+        );
+
+        let emission = cand.apply().unwrap().expect("emission");
+        let mut seen_adopted: HashSet<_> = HashSet::new();
+        for prod in &emission.products {
+            for i in 0..prod.mol().atom_count() {
+                if let Some(tag) = prod.tag_of(i) {
+                    assert!(
+                        seen_adopted.insert(tag),
+                        "tag {tag:?} duplicated across adopted products"
+                    );
+                }
+            }
+        }
+        let missing_adopted: Vec<_> = parent_tags
+            .iter()
+            .filter(|(t, _)| !seen_adopted.contains(t))
+            .collect();
+        assert!(
+            missing_adopted.is_empty(),
+            "parent tags missing after adopt: {missing_adopted:?}"
+        );
+    }
+
+    /// Every parent tag must appear on some raw materialize piece (indices may
+    /// renumber; born atoms may be untagged). Covers the main edit helpers
+    /// through [`DeferredSite::materialize_mols`].
+    #[test]
+    fn edit_helpers_preserve_parent_tags_on_materialize() {
+        use crate::atom_tracker::{AtomTracker, tags_agree_elements};
+        use crate::chematic_tags::get_label;
+        use crate::mol::atom_idx;
+        use crate::rules::{
+            benzodioxole_reduction, dehydrogenation, epoxidation, hydrolysis,
+            n_dealkylation, oxidative_dehalogenation, sulfur_oxidation,
+        };
+        use std::collections::HashSet;
+
+        fn assert_parent_tags_survive(parent: &ForestMol, products: &[Molecule], label: &str) {
+            let parent_tags: HashSet<_> = (0..parent.mol().atom_count())
+                .filter_map(|i| AtomTracker::tag_of(parent.mol(), i))
+                .collect();
+            assert!(!parent_tags.is_empty(), "{label}: parent untagged");
+            assert!(!products.is_empty(), "{label}: no products");
+
+            let mut seen = HashSet::new();
+            for frag in products {
+                for i in 0..frag.atom_count() {
+                    if let Some(tag) = get_label(frag, atom_idx(i)) {
+                        assert!(
+                            seen.insert(tag),
+                            "{label}: tag {tag:?} duplicated across products"
+                        );
+                    }
+                }
+                assert!(
+                    tags_agree_elements(parent.mol(), frag),
+                    "{label}: element mismatch for a surviving tag"
+                );
+            }
+            let missing: Vec<_> = parent_tags.difference(&seen).copied().collect();
+            assert!(
+                missing.is_empty(),
+                "{label}: parent tags missing on products: {missing:?} (seen={seen:?})"
+            );
+        }
+
+        // (name, smiles, ruleset factory, optional candidate filter)
+        type Filter = fn(&crate::candidate::DeferredSite) -> bool;
+        let cases: &[(&str, &str, fn() -> RuleSet, Option<Filter>)] = &[
+            ("add_hydroxyl", "CC", hydroxylation, None),
+            ("smirks_epoxidation", "C=C", epoxidation, None),
+            ("smirks_sulfur_ox", "CCS", sulfur_oxidation, None),
+            (
+                "cleave_oxygenate_o_dealk",
+                "COc1ccccc1",
+                o_dealkylation,
+                Some(|c| c.effect.cleaves),
+            ),
+            (
+                "remove_mapped_ch2_leave",
+                "c1ccc2c(c1)OCO2",
+                benzodioxole_reduction,
+                None,
+            ),
+            (
+                "n_dealkylation",
+                "CN(C)c1ccccc1",
+                n_dealkylation,
+                Some(|c| c.effect.cleaves),
+            ),
+            (
+                "hydrolysis",
+                "CC(=O)OC",
+                hydrolysis,
+                Some(|c| c.effect.cleaves),
+            ),
+            (
+                "oxidative_dehalogenation",
+                "Clc1ccccc1",
+                oxidative_dehalogenation,
+                None,
+            ),
+            // Non-pair alcohol DH (SMIRKS / atom site) — pair path is a separate xfail.
+            (
+                "dehydrogenation_alcohol",
+                "CCO",
+                dehydrogenation,
+                Some(|c| !c.is_pair()),
+            ),
+        ];
+
+        for &(name, smiles, make_set, filter) in cases {
+            let parent = ForestMol::parse(smiles).unwrap();
+            let set = make_set();
+            let cand = set
+                .candidates(&parent)
+                .find(|c| {
+                    c.as_ref()
+                        .is_ok_and(|c| filter.map(|f| f(c)).unwrap_or(true))
+                })
+                .unwrap_or_else(|| panic!("{name}: no candidate on {smiles}"))
+                .unwrap();
+            let products = cand
+                .materialize_mols()
+                .unwrap_or_else(|e| panic!("{name}: materialize {e}"));
+            assert_parent_tags_survive(&parent, &products, name);
+        }
+    }
+
+    /// Benzodioxole CH₂ leave: keep catechol must retain parent O/aryl tags.
+    #[test]
+    fn benzodioxole_ch2_leave_preserves_parent_tags_on_keep() {
+        use crate::chematic_tags::get_label;
+        use crate::mol::atom_idx;
+        use crate::rules::benzodioxole_reduction;
+
+        let parent = ForestMol::parse("c1ccc2c(c1)OCO2").unwrap();
+        let set = benzodioxole_reduction();
+        let cand = set
+            .candidates(&parent)
+            .next()
+            .expect("bzd candidate")
+            .unwrap();
+
+        let raw = cand.materialize_mols().unwrap();
+        assert!(!raw.is_empty(), "expected bzd products");
+        let keep = raw.iter().max_by_key(|f| f.atom_count()).unwrap();
+
+        let untagged_keep: Vec<_> = (0..keep.atom_count())
+            .filter(|&i| get_label(keep, atom_idx(i)).is_none())
+            .collect();
+        assert!(
+            untagged_keep.is_empty(),
+            "keep fragment has untagged atoms {untagged_keep:?} on {} atoms — \
+             labels dropped in remove_mapped_ch2_leave/aromatize",
+            keep.atom_count()
+        );
     }
 }

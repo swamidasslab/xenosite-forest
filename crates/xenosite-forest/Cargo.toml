@@ -54,7 +54,8 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
-proptest = "1.11"
+# `std` required for FileFailurePersistence (proptest-regressions/).
+proptest = { version = "1.11", features = ["std"] }
 rayon = "1.10"
 
 # Newer rustc emits bulk-memory / saturating float ops; enable all features for
