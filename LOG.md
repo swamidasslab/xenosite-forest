@@ -2,35 +2,20 @@
 
 ## 2026-09-30
 
-- **MS1 anthraquinone Hydrogenation plan-replay xfail.** Proptest shrunk
-  `fuzz_apply_product_recoverable_by_ms1` to anthraquinone + Hydrogenation:
-  mass hit found, emitted plan does not `apply_forest`. Dedicated
-  `anthraquinone_hydrogenation_ms1_plan_replay_xfail` (`#[ignore]` asserting);
-  dropped that mol from one-hop fuzz corpus; cleared regression seed.
-  `make test-rust-smoke` / main CI omit `ms1_apply_fuzz`; full `make test-rust`
-  and tag suite still run it.
+- **Merged origin/main into CI/CD branch.** Auto-merge clean. Dropped our
+  anthraquinone Hydrogenation plan-replay xfail — `0db161e` already fixed
+  `Step::apply` pair replay; keep their `anthraquinone_hydrogenation_plan_replays`
+  regression. Restored anthraquinone in one-hop fuzz corpus.
 
 - **CI smoke profile (opt-in).** Added `make test-python-smoke` /
-  `make test-smoke`: `tests/forest/rust` + pairs + focused
-  `rule_parity_fuzz` (`XENOSITE_PARITY_FULL=0` / `--parity-focused`) +
-  `test_rust_parity_coverage`. Defaults (`make test` / `test-python`)
-  unchanged. Main CI calls smoke on 3.12; tags keep full multi-Python
-  suite. Collect ~2.6k pytest vs ~9k full; fuzz alone 4188→132 focused.
-
-- **CI: main pytest is 3.12-only.** Dropped the 3.11–3.14 matrix from
-  `test.yml` on main for a faster smoke. Tag `release.yml` still runs the
-  full Python matrix and blocks publish on fail.
-
-- **CI: no tests on PR branches.** `test.yml` keeps lint (ruff/pyright +
-  rustfmt/clippy/WASM) on pull_request; pytest, cargo test, and JS smokes
-  run only on push to `main`. Tag releases still run tests in `release.yml`
-  and refuse to publish on fail. Update Protect main required checks away
-  from `pytest (3.x)` on PRs if those were blocking merges.
+  `make test-smoke` / `make test-rust-smoke`: rust wrapper + focused
+  parity; smoke omits `ms1_apply_fuzz`. Defaults unchanged. Main CI:
+  3.12 smoke; tags keep full multi-Python suite. `PYO3_PYTHON` pinned for
+  `test-rust-python`.
 
 - **Release: Cargo bump from tag.** Tagging `vX.Y.Z` is enough; CI runs
-  `scripts/set_release_version.py` to rewrite Cargo.toml / Cargo.lock /
-  js/package.json before wheels, and the changelog job commits those bumps
-  onto main with `CHANGELOG.md`. No manual Cargo version edit before cut.
+  `scripts/set_release_version.py` before wheels; changelog job commits
+  version bumps onto main.
 
 ## 2026-09-29
 
