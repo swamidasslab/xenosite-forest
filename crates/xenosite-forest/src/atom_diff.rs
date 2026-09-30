@@ -1317,11 +1317,6 @@ pub fn pattern_could_help_mol(
     true
 }
 
-#[allow(dead_code)] // retained for MS1 / site-bag helpers
-fn site_atoms(candidate: &Candidate) -> Vec<usize> {
-    candidate.site_atoms()
-}
-
 fn leaving_heavy_counts(mol: &Molecule, atoms: &[usize]) -> Option<(usize, usize)> {
     if atoms.len() != 2 {
         return None;

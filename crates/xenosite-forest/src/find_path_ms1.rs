@@ -397,23 +397,12 @@ mod tests {
     use crate::canonical_plan::ApplyN;
     use crate::forest::molecule_formula;
     use crate::mass::{Ms1Adduct, mz_of, mz_of_mol, mz_within};
-    use crate::mol::{canon_of, canon_smiles, parse_mol};
+    use crate::mol::{canon_of, parse_mol};
     use crate::rules::{
         dealkylation, dehydrogenation, epoxidation, epoxide_hydration, epoxide_opening,
         hydroxylation, nitrogen_oxidation, phase_one, sulfur_oxidation,
     };
     use crate::ruleset::RuleSet;
-
-    /// [M+H]⁺ after CSMI round-trip (matches hit / adopt sanitization).
-    ///
-    /// Raw `Step::apply` molecules can keep pre-aromatic H counts; scoring the
-    /// re-parsed CSMI aligns plan-replay mass with `ForestMol` products.
-    #[allow(dead_code)]
-    fn mz_of_sanitized(mol: &crate::mol::Molecule, adduct: Ms1Adduct) -> Option<f64> {
-        let csmi = canon_smiles(mol);
-        let parsed = ForestMol::parse(&csmi).ok()?;
-        mz_of_mol(parsed.mol(), adduct)
-    }
 
     /// Emitted hits must not include redundant plans for the **same** product
     /// (exact linearizations, or same-product skeleton twins). Distinct isobar

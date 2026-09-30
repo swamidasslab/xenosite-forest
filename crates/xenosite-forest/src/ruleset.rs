@@ -571,19 +571,6 @@ fn mapped_bond_in_ring(
     atoms_share_ring(mol, left, right)
 }
 
-/// Same as [`apply_edit_mols`], returning product CSMIs.
-#[allow(dead_code)] // retained for ApplyN / MS1 emit
-pub(crate) fn apply_edit_for_candidate(
-    mol: &Molecule,
-    pattern: &PatternInfo,
-    mapped: &BTreeMap<u16, usize>,
-) -> Result<Vec<String>, ForestError> {
-    Ok(apply_edit_mols(mol, pattern, mapped)?
-        .iter()
-        .map(canon_smiles)
-        .collect())
-}
-
 /// Apply a pattern edit at a mapped site, keeping chematic products (tags intact).
 pub(crate) fn apply_edit_mols(
     mol: &Molecule,

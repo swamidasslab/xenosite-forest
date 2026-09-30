@@ -382,7 +382,7 @@ pub fn product_graph(
     let mut index: BTreeMap<String, usize> = BTreeMap::new();
     index.insert(root_csmi, 0);
 
-    // Queue carries ForestMol for tag continuity through adopt_product.
+    // Queue carries ForestMol for tag continuity through from_edit_product.
     let mut queue: VecDeque<(usize, usize, ForestMol)> = VecDeque::new();
     let mut scheduled: BTreeSet<usize> = BTreeSet::new();
     queue.push_back((0, 0, root));

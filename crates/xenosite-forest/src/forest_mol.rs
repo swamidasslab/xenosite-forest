@@ -264,12 +264,6 @@ impl ForestMol {
         self.from_apply(normalized, &src_to_new)
     }
 
-    /// Soft rename — prefer creation via apply / [`Self::from_edit_product`].
-    #[deprecated(note = "edit doors stamp products; use DeferredSite::apply")]
-    pub fn adopt_product(&self, product: Molecule) -> Self {
-        self.from_edit_product(product)
-    }
-
     /// Same tags after a permutation: `old_at_new[new] = old`.
     pub fn after_permute(&self, mol: &Molecule, old_at_new: &[usize]) -> Self {
         let mut mol = mol.clone();

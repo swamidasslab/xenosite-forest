@@ -16,7 +16,7 @@ use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 use xenosite_forest::mass::{Ms1Adduct, mz_abs_error, mz_of_mol, mz_within};
 use xenosite_forest::{
-    ApplyN, ForestMol, Ms1Config, PathCounters, PathOutcome, canon_smiles, find_path_ms1, leaf_rule,
+    ApplyN, ForestMol, Ms1Config, PathCounters, PathOutcome, find_path_ms1, leaf_rule,
 };
 
 fn fuzz_config(default_cases: u32) -> ProptestConfig {
@@ -120,14 +120,6 @@ fn products_from_apply(reactant: &str, leaf: &str) -> Vec<(String, f64)> {
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out.dedup_by(|a, b| a.0 == b.0);
     out
-}
-
-/// [M+H]⁺ after CSMI round-trip (matches hit / adopt sanitization).
-#[allow(dead_code)]
-fn mz_of_sanitized(mol: &xenosite_forest::mol::Molecule, adduct: Ms1Adduct) -> Option<f64> {
-    let csmi = canon_smiles(mol);
-    let parsed = ForestMol::parse(&csmi).ok()?;
-    mz_of_mol(parsed.mol(), adduct)
 }
 
 /// Every emitted hit's product(s) must satisfy the target m/z.
