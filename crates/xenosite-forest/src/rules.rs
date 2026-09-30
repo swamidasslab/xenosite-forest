@@ -2324,11 +2324,7 @@ fn dh_phase_one() -> RuleSet {
 fn hd_phase_one() -> RuleSet {
     RuleSet::compose(
         Some("Hydrolysis".into()),
-        [
-            dephosphorylation(),
-            epoxide_opening(),
-            hydrolysis(),
-        ],
+        [dephosphorylation(), epoxide_opening(), hydrolysis()],
     )
 }
 
@@ -2353,11 +2349,7 @@ fn phase_one_core() -> RuleSet {
 pub fn phase_one() -> RuleSet {
     RuleSet::compose(
         None,
-        [
-            phase_one_core(),
-            quinone_formation(),
-            epoxide_hydration(),
-        ],
+        [phase_one_core(), quinone_formation(), epoxide_hydration()],
     )
 }
 
@@ -2713,8 +2705,11 @@ mod tests {
             crate::ruleset::RuleMember::Set(s) => s,
             crate::ruleset::RuleMember::Pattern(_) => panic!("expected PhaseOne nest"),
         };
-        assert_eq!(phase.members().len(), 5, "PhaseOne core is five color groups");
-        let color_names: Vec<_> = phase
+        assert_eq!(
+            phase.members().len(),
+            5,
+            "PhaseOne core is five color groups"
+        );        let color_names: Vec<_> = phase
             .members()
             .iter()
             .map(|m| match m {

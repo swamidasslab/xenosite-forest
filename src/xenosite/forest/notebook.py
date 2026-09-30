@@ -21,7 +21,7 @@ _SVG_W = 240
 _SVG_H = 160
 
 # RDKit highlightAtomColors are 0–1 RGB tuples (optional alpha).
-_COLOR_SOM = (0.95, 0.35, 0.2)  # coral — applied site
+_COLOR_SOM = (0.95, 0.35, 0.2, 1.0)  # coral — applied site
 _COLOR_MAYBE = (0.25, 0.45, 0.95, 0.30)  # translucent blue — full Maybe bag
 
 
