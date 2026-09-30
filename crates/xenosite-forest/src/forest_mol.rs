@@ -16,9 +16,9 @@
 //! [`ForestMol::with_new_trace`] only when a caller wants a
 //! disconnected tag tree.
 
-use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+use std::sync::{Arc, Mutex};
 
 use crate::atom_tracker::AtomTracker;
 use crate::chematic_tags::{get_label, set_label};
@@ -122,18 +122,23 @@ fn normalize_tagged_product(product: &Molecule) -> Result<Molecule, ForestError>
 }
 
 /// Owned molecule. Parse installs empty caches, filled on demand.
-#[derive(Clone)]
 pub struct ForestMol {
     mol: Molecule,
     labels: Vec<Option<Tag>>,
-    tag_gen: Rc<Cell<u16>>,
+    tag_gen: Arc<AtomicU16>,
     /// First tag id reserved for born atoms at root stamp (`n+1` after
     /// `Tag(1..=n)`). Copied through adopt so Index plans can tell root
     /// survivors (`tag.get() < stamp_end`) from minted atoms.
     stamp_end: u16,
-    structure: Rc<RefCell<Structure>>,
-    kekule: Rc<RefCell<KekuleCache>>,
-    pub is_terminal_product: Cell<bool>,
+    structure: Arc<Mutex<Structure>>,
+    kekule: Arc<Mutex<KekuleCache>>,
+    pub is_terminal_product: AtomicBool,
+}
+
+impl Clone for ForestMol {
+    fn clone(&self) -> Self {
+        self.copy_mol()
+    }
 }
 
 impl std::fmt::Debug for ForestMol {
@@ -160,11 +165,11 @@ impl ForestMol {
         Self {
             mol,
             labels,
-            tag_gen: Rc::new(Cell::new(next)),
+            tag_gen: Arc::new(AtomicU16::new(next)),
             stamp_end: next,
-            structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::new(RefCell::new(KekuleCache::default())),
-            is_terminal_product: Cell::new(false),
+            structure: Arc::new(Mutex::new(Structure::default())),
+            kekule: Arc::new(Mutex::new(KekuleCache::default())),
+            is_terminal_product: AtomicBool::new(false),
         }
     }
 
@@ -188,11 +193,11 @@ impl ForestMol {
         Self {
             mol,
             labels,
-            tag_gen: Rc::new(Cell::new(next)),
+            tag_gen: Arc::new(AtomicU16::new(next)),
             stamp_end: next,
-            structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::new(RefCell::new(KekuleCache::default())),
-            is_terminal_product: Cell::new(false),
+            structure: Arc::new(Mutex::new(Structure::default())),
+            kekule: Arc::new(Mutex::new(KekuleCache::default())),
+            is_terminal_product: AtomicBool::new(false),
         }
     }
 
@@ -210,7 +215,7 @@ impl ForestMol {
         self.with_new_trace()
     }
 
-    /// Product of an edit: new structure bag, **same** kekulé cache `Rc`.
+    /// Product of an edit: new structure bag, **same** kekulé cache `Arc`.
     ///
     /// Indexes of atoms that still exist are assumed stable (clone / append).
     /// SMIRKS apply that rewrites indexes must use [`Self::from_apply`].
@@ -219,36 +224,36 @@ impl ForestMol {
     /// is a new [`crate::kekule::SystemKey`] and starts an empty bag.
     pub fn product(mol: Molecule, parent: &Self) -> Self {
         let mut mol = mol;
-        let next = parent.tag_gen.get();
+        let next = parent.tag_gen.load(Ordering::Relaxed);
         let (labels, next) = labels::remap_index_stable(&parent.labels, mol.atom_count(), next);
-        parent.tag_gen.set(next);
+        parent.tag_gen.store(next, Ordering::Relaxed);
         sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
-            tag_gen: Rc::clone(&parent.tag_gen),
+            tag_gen: Arc::clone(&parent.tag_gen),
             stamp_end: parent.stamp_end,
-            structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::clone(&parent.kekule),
-            is_terminal_product: Cell::new(false),
+            structure: Arc::new(Mutex::new(Structure::default())),
+            kekule: Arc::clone(&parent.kekule),
+            is_terminal_product: AtomicBool::new(false),
         }
     }
 
     /// Product of a reindexing apply. `src_to_new[src] = Some(dst)` or `None`.
     pub fn from_apply(&self, mol: Molecule, src_to_new: &[Option<usize>]) -> Self {
         let mut mol = mol;
-        let next = self.tag_gen.get();
+        let next = self.tag_gen.load(Ordering::Relaxed);
         let (labels, next) = labels::remap_apply(&self.labels, src_to_new, mol.atom_count(), next);
-        self.tag_gen.set(next);
+        self.tag_gen.store(next, Ordering::Relaxed);
         sync_tags_to_mol(&mut mol, &labels);
         Self {
             mol,
             labels,
-            tag_gen: Rc::clone(&self.tag_gen),
+            tag_gen: Arc::clone(&self.tag_gen),
             stamp_end: self.stamp_end,
-            structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::clone(&self.kekule),
-            is_terminal_product: Cell::new(false),
+            structure: Arc::new(Mutex::new(Structure::default())),
+            kekule: Arc::clone(&self.kekule),
+            is_terminal_product: AtomicBool::new(false),
         }
     }
 
@@ -272,11 +277,11 @@ impl ForestMol {
         Self {
             mol,
             labels,
-            tag_gen: Rc::clone(&self.tag_gen),
+            tag_gen: Arc::clone(&self.tag_gen),
             stamp_end: self.stamp_end,
-            structure: Rc::new(RefCell::new(Structure::default())),
-            kekule: Rc::clone(&self.kekule),
-            is_terminal_product: Cell::new(false),
+            structure: Arc::new(Mutex::new(Structure::default())),
+            kekule: Arc::clone(&self.kekule),
+            is_terminal_product: AtomicBool::new(false),
         }
     }
 
@@ -311,7 +316,7 @@ impl ForestMol {
     }
 
     pub fn shares_tag_gen(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.tag_gen, &other.tag_gen)
+        Arc::ptr_eq(&self.tag_gen, &other.tag_gen)
     }
 
     /// Chematic tautomer pick adopted with Forest tracing (same as
@@ -329,41 +334,41 @@ impl ForestMol {
         Self {
             mol: self.mol.clone(),
             labels: self.labels.clone(),
-            tag_gen: Rc::clone(&self.tag_gen),
+            tag_gen: Arc::clone(&self.tag_gen),
             stamp_end: self.stamp_end,
-            structure: Rc::clone(&self.structure),
-            kekule: Rc::clone(&self.kekule),
-            is_terminal_product: Cell::new(self.is_terminal_product.get()),
+            structure: Arc::clone(&self.structure),
+            kekule: Arc::clone(&self.kekule),
+            is_terminal_product: AtomicBool::new(self.is_terminal_product.load(Ordering::Relaxed)),
         }
     }
 
-    /// Chemistry clone ready to edit: new structure bag, shared kekulé `Rc`.
+    /// Chemistry clone ready to edit: new structure bag, shared kekulé `Arc`.
     pub fn edit_copy(&self) -> Self {
         Self::product(self.mol.clone(), self)
     }
 
     pub fn shares_structure(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.structure, &other.structure)
+        Arc::ptr_eq(&self.structure, &other.structure)
     }
 
     pub fn shares_kekule(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.kekule, &other.kekule)
+        Arc::ptr_eq(&self.kekule, &other.kekule)
     }
 
-    pub fn kekule(&self) -> Rc<RefCell<KekuleCache>> {
-        Rc::clone(&self.kekule)
+    pub fn kekule(&self) -> Arc<Mutex<KekuleCache>> {
+        Arc::clone(&self.kekule)
     }
 
     pub fn clear_structure(&self) {
-        *self.structure.borrow_mut() = Structure::default();
+        *self.structure.lock().unwrap_or_else(|e| e.into_inner()) = Structure::default();
     }
 
-    pub fn csmi(&self) -> Rc<str> {
-        let mut cache = self.structure.borrow_mut();
+    pub fn csmi(&self) -> Arc<str> {
+        let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if cache.csmi.is_none() {
-            cache.csmi = Some(Rc::from(canon_smiles(&self.mol)));
+            cache.csmi = Some(Arc::from(canon_smiles(&self.mol)));
         }
-        Rc::clone(cache.csmi.as_ref().expect("csmi filled"))
+        Arc::clone(cache.csmi.as_ref().expect("csmi filled"))
     }
 
     /// Fail-closed identity for `find_path` / `unique_csmi` (Chematic docs).
@@ -371,46 +376,46 @@ impl ForestMol {
     /// **Can return `None`.** Do not treat that as empty SMILES or fall back to
     /// [`Self::csmi`] for dedup — skip CSMI collapse for this molecule. Display
     /// spelling remains [`Self::csmi`].
-    pub fn stable_csmi_key(&self) -> Option<Rc<str>> {
-        let mut cache = self.structure.borrow_mut();
+    pub fn stable_csmi_key(&self) -> Option<Arc<str>> {
+        let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if cache.stable_csmi.is_none() {
-            cache.stable_csmi = Some(stable_csmi_key(&self.mol).map(Rc::from));
+            cache.stable_csmi = Some(stable_csmi_key(&self.mol).map(Arc::from));
         }
         cache
             .stable_csmi
             .as_ref()
             .expect("stable_csmi filled")
             .as_ref()
-            .map(Rc::clone)
+            .map(Arc::clone)
     }
 
-    pub fn formula(&self) -> Rc<Formula> {
-        let mut cache = self.structure.borrow_mut();
+    pub fn formula(&self) -> Arc<Formula> {
+        let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if cache.formula.is_none() {
-            cache.formula = Some(Rc::new(molecule_formula(&self.mol)));
+            cache.formula = Some(Arc::new(molecule_formula(&self.mol)));
         }
-        Rc::clone(cache.formula.as_ref().expect("formula filled"))
+        Arc::clone(cache.formula.as_ref().expect("formula filled"))
     }
 
-    pub fn topol_equiv(&self) -> Rc<Vec<usize>> {
-        let mut cache = self.structure.borrow_mut();
+    pub fn topol_equiv(&self) -> Arc<Vec<usize>> {
+        let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if cache.topol_equiv.is_none() {
-            cache.topol_equiv = Some(Rc::new(ranks(&self.mol)));
+            cache.topol_equiv = Some(Arc::new(ranks(&self.mol)));
         }
-        Rc::clone(cache.topol_equiv.as_ref().expect("topol_equiv filled"))
+        Arc::clone(cache.topol_equiv.as_ref().expect("topol_equiv filled"))
     }
 
     /// Atom+bond automorphism generators (canonaut), cached on the structure bag.
     ///
     /// Shared by [`Self::copy_mol`]; invalidated on edit (new structure bag).
     /// Site pair orbits and future GraphTree / step-plan orbits should reuse this.
-    pub fn atom_bond_generators(&self) -> Rc<Vec<crate::orbits::AtomBondGenerator>> {
-        let mut cache = self.structure.borrow_mut();
+    pub fn atom_bond_generators(&self) -> Arc<Vec<crate::orbits::AtomBondGenerator>> {
+        let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if cache.atom_bond_generators.is_none() {
             cache.atom_bond_generators =
-                Some(Rc::new(crate::orbits::atom_bond_generators(&self.mol)));
+                Some(Arc::new(crate::orbits::atom_bond_generators(&self.mol)));
         }
-        Rc::clone(
+        Arc::clone(
             cache
                 .atom_bond_generators
                 .as_ref()
@@ -440,15 +445,15 @@ impl ForestMol {
     pub fn smarts_matches(
         &self,
         smarts: &str,
-    ) -> Result<Rc<Vec<BTreeMap<u16, usize>>>, ForestError> {
-        let mut cache = self.structure.borrow_mut();
+    ) -> Result<Arc<Vec<BTreeMap<u16, usize>>>, ForestError> {
+        let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if !cache.smarts_matches.contains_key(smarts) {
             let hits = smarts_matches(&self.mol, smarts)?;
             cache
                 .smarts_matches
-                .insert(smarts.to_string(), Rc::new(hits));
+                .insert(smarts.to_string(), Arc::new(hits));
         }
-        Ok(Rc::clone(
+        Ok(Arc::clone(
             cache
                 .smarts_matches
                 .get(smarts)
@@ -458,7 +463,7 @@ impl ForestMol {
 
     /// Kekulize the system containing this bond. Shared with relatives.
     pub fn ensure_kekule(&self, left: usize, right: usize) {
-        let mut cache = self.kekule.borrow_mut();
+        let mut cache = self.kekule.lock().unwrap_or_else(|e| e.into_inner());
         ensure_kekule_parents(&self.mol, left, right, &mut cache);
     }
 
@@ -467,7 +472,7 @@ impl ForestMol {
         mapped: &BTreeMap<u16, usize>,
         smirks: &str,
     ) -> Result<Molecule, ForestError> {
-        let mut cache = self.kekule.borrow_mut();
+        let mut cache = self.kekule.lock().unwrap_or_else(|e| e.into_inner());
         crate::kekule::reactant_parent(&self.mol, mapped, smirks, &mut cache)
     }
 }
@@ -480,23 +485,23 @@ mod tests {
     #[test]
     fn parse_has_caches_empty_until_read() {
         let mol = ForestMol::parse("CC").unwrap();
-        assert!(mol.structure.borrow().csmi.is_none());
+        assert!(mol.structure.lock().unwrap().csmi.is_none());
         let _ = mol.csmi();
-        assert!(mol.structure.borrow().csmi.is_some());
+        assert!(mol.structure.lock().unwrap().csmi.is_some());
     }
 
     #[test]
     fn cached_answers_are_the_same_object() {
         let mol = ForestMol::parse("CCC").unwrap();
-        assert!(Rc::ptr_eq(&mol.topol_equiv(), &mol.topol_equiv()));
-        assert!(Rc::ptr_eq(&mol.csmi(), &mol.csmi()));
+        assert!(Arc::ptr_eq(&mol.topol_equiv(), &mol.topol_equiv()));
+        assert!(Arc::ptr_eq(&mol.csmi(), &mol.csmi()));
         let smarts = "[C:1][C:2]";
-        assert!(Rc::ptr_eq(
+        assert!(Arc::ptr_eq(
             &mol.smarts_matches(smarts).unwrap(),
             &mol.smarts_matches(smarts).unwrap()
         ));
-        assert!(Rc::ptr_eq(&mol.formula(), &mol.formula()));
-        assert!(Rc::ptr_eq(
+        assert!(Arc::ptr_eq(&mol.formula(), &mol.formula()));
+        assert!(Arc::ptr_eq(
             &mol.atom_bond_generators(),
             &mol.atom_bond_generators()
         ));
@@ -507,16 +512,16 @@ mod tests {
         let parent = ForestMol::parse("c1ccccc1").unwrap();
         let gens = parent.atom_bond_generators();
         let copied = parent.copy_mol();
-        assert!(Rc::ptr_eq(&gens, &copied.atom_bond_generators()));
+        assert!(Arc::ptr_eq(&gens, &copied.atom_bond_generators()));
         assert_eq!(
             parent.atom_pair_orbit_id(0, 1),
             crate::orbits::atom_pair_orbit_id(parent.mol(), 0, 1)
         );
         let edited = parent.edit_copy();
         assert!(!edited.shares_structure(&parent));
-        assert!(edited.structure.borrow().atom_bond_generators.is_none());
+        assert!(edited.structure.lock().unwrap().atom_bond_generators.is_none());
         let edited_gens = edited.atom_bond_generators();
-        assert!(!Rc::ptr_eq(&gens, &edited_gens));
+        assert!(!Arc::ptr_eq(&gens, &edited_gens));
     }
 
     #[test]
@@ -549,9 +554,9 @@ mod tests {
         let product = ForestMol::new(parent.mol().clone());
         assert!(!product.shares_structure(&parent));
         assert!(!product.shares_kekule(&parent));
-        assert!(product.structure.borrow().csmi.is_none());
+        assert!(product.structure.lock().unwrap().csmi.is_none());
         assert_eq!(product.csmi().as_ref(), parent_csmi.as_ref());
-        assert!(!Rc::ptr_eq(&product.csmi(), &parent_csmi));
+        assert!(!Arc::ptr_eq(&product.csmi(), &parent_csmi));
     }
 
     #[test]
@@ -561,24 +566,24 @@ mod tests {
         let copied = parent.copy_mol();
         assert!(copied.shares_structure(&parent));
         assert!(copied.shares_kekule(&parent));
-        assert!(Rc::ptr_eq(&copied.csmi(), &parent.csmi()));
+        assert!(Arc::ptr_eq(&copied.csmi(), &parent.csmi()));
         let edited = parent.edit_copy();
         assert!(!edited.shares_structure(&parent));
         assert!(edited.shares_kekule(&parent));
         let _ = edited.csmi();
-        assert!(!Rc::ptr_eq(&edited.csmi(), &parent.csmi()));
+        assert!(!Arc::ptr_eq(&edited.csmi(), &parent.csmi()));
     }
 
     #[test]
-    fn clear_structure_drops_csmi_keeps_kekule_rc() {
+    fn clear_structure_drops_csmi_keeps_kekule_arc() {
         let mol = ForestMol::parse("CC").unwrap();
         let first = mol.csmi();
         let kekule = mol.kekule();
         mol.clear_structure();
-        assert!(mol.structure.borrow().csmi.is_none());
-        assert!(Rc::ptr_eq(&kekule, &mol.kekule()));
+        assert!(mol.structure.lock().unwrap().csmi.is_none());
+        assert!(Arc::ptr_eq(&kekule, &mol.kekule()));
         let second = mol.csmi();
         assert_eq!(first.as_ref(), second.as_ref());
-        assert!(!Rc::ptr_eq(&first, &second));
+        assert!(!Arc::ptr_eq(&first, &second));
     }
 }

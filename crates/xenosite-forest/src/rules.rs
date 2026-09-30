@@ -2362,6 +2362,19 @@ pub fn default_ruleset() -> RuleSet {
     )
 }
 
+/// Default [`product_graph`](crate::product_graph::product_graph) rules: same nesting as
+/// [`default_ruleset`] but **without** Tautomerization (BFS can explode on tautomers).
+pub fn product_graph_ruleset() -> RuleSet {
+    RuleSet::compose(
+        Some("ProductGraph".into()),
+        [
+            quinone_formation(),
+            epoxide_hydration(),
+            phase_one_core(),
+        ],
+    )
+}
+
 /// Every ported leaf rule as one nested catalog.
 pub fn all_rules() -> RuleSet {
     RuleSet::compose(
@@ -2601,6 +2614,30 @@ mod tests {
             set.members().iter().all(|m| matches!(m, crate::ruleset::RuleMember::Set(s) if s.name.as_deref() != Some("Tautomerization"))),
             "Tautomerization must not be in PhaseOne"
         );
+    }
+
+    #[test]
+    fn product_graph_ruleset_has_qf_eh_phase_one_no_tautomer() {
+        let set = product_graph_ruleset();
+        assert_eq!(set.members().len(), 3);
+        assert_eq!(set.name.as_deref(), Some("ProductGraph"));
+        let names: Vec<_> = set
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.clone(),
+                crate::ruleset::RuleMember::Pattern(_) => None,
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                Some("QuinoneFormation".into()),
+                Some("EpoxideHydration".into()),
+                Some("PhaseOne".into()),
+            ]
+        );
+        assert!(!set.contains_name("Tautomerization"));
     }
 
     #[test]

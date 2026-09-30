@@ -255,6 +255,7 @@ pub fn find_path_ms1(
             found.push(PathOutcome {
                 steps: walk.steps,
                 plan,
+                mol: walk.mol,
                 smiles,
             });
             continue;

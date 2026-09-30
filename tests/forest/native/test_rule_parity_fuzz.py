@@ -79,8 +79,8 @@ def _rust_products(rule_name: str, smiles: str) -> set[str]:
     ext = load()
     mol = ext.ForestMol(smiles)
     found: set[str] = set()
-    for _pattern, _site, product_csmis, _path in leaf_rule(rule_name).metabolize(mol):
-        for csmi_raw in product_csmis:
+    for emission in leaf_rule(rule_name).metabolize(mol):
+        for csmi_raw in emission.product_csmis():
             for piece in str(csmi_raw).split("."):
                 csmi = _rdkit_csmi(piece)
                 if csmi is None:

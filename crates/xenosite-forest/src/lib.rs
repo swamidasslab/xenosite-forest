@@ -53,6 +53,9 @@ mod lift_mcs_correctness;
 #[cfg(test)]
 mod pattern_info_catalog;
 
+#[cfg(feature = "export")]
+pub mod export;
+
 #[cfg(all(feature = "python", not(target_arch = "wasm32")))]
 mod python_api;
 
@@ -147,13 +150,14 @@ pub use pattern::{
     merge_delta_formula, named_leave_formula, site_map_aromatic,
 };
 pub use product_graph::{
-    ProductChild, ProductGraph, ProductGraphConfig, ProductGraphStats, ProductHop, ProductNode,
-    product_graph, product_graph_stats, product_layer,
+    ProductChild, ProductGraphConfig, ProductGraphStats, ProductHop, product_graph,
+    product_graph_into, product_graph_stats, product_layer,
 };
 pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_path_with};
 pub use rules::{
     LEAF_CTORS, LEAF_EXAMPLE_SUBSTRATES, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset,
-    epoxide_hydration, leaf_rule, phase_one, reduction, resolve_root, seal_leaf,
+    epoxide_hydration, leaf_rule, phase_one, product_graph_ruleset, reduction, resolve_root,
+    seal_leaf,
     stable_oxygenation, unstable_oxygenation,
 };
 pub use ruleset::{

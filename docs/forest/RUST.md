@@ -31,15 +31,15 @@ Aromaticity is chematic’s RDKit-parity engine (`apply_aromaticity_rdkit_parity
 Python hangs `_forest` on a foreign RDKit `Mol` and mints `xf` on every read. Rust does not need that. [`ForestMol`](../../crates/xenosite-forest/src/forest_mol.rs) **is** the object:
 
 - Owns a chematic `Molecule`.
-- Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Rc<RefCell<Structure>>`, filled on first read.
+- Structure answers (`csmi`, formula, ranks, SMARTS) live on the object as `Arc<Mutex<Structure>>`, filled on first read.
 - **Dedup key ≠ display CSMI.** Chematic docs: canonical SMILES is not always a safe identity key. [`stable_csmi_key`](../../crates/xenosite-forest/src/mol.rs) / `ForestMol::stable_csmi_key` wrap fail-closed `canonical_smiles_stable_key()` — **can return `None` / null** (coupled E/Z, non-idempotent spelling, …). That is not an error: do not unwrap or substitute `csmi`. `find_path` `seen` and metabolize `unique_csmi` index only `Some` keys; `None` products are still explored/yielded without CSMI collapse (`PathCounters::unstable_csmi_key`). Display / target compare still use `csmi` / `canon_of`.
-- Kekulé assignments live on the same object as `Rc<RefCell<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
+- Kekulé assignments live on the same object as `Arc<Mutex<KekuleCache>>`, keyed by system atom set plus a fingerprint of aromatic/bond shape.
 - Tags (`Tag`) are a sidecar parallel to atom index, not `atom_map` and not on chematic `Atom`. `from_apply` remaps them when a correspondence is supplied. Chematic's public apply/write do not return that map (see [Atom identity](#atom-identity-chematic-has-no-public-correspondence)).
-- `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Rc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
+- `copy_mol` shares both caches. `edit_copy` / `product` (after an edit) start a **new** structure bag and **keep** the kekulé `Arc`. The first relative to fill a system shares it with every relative whose key still matches. An edit that changes kekulization of a system is a new key and an empty bag.
 - Structure bag also caches **atom+bond automorphism generators** (`atom_bond_generators`) for site / higher-order (plan) orbits. Same share/invalidate rules as `csmi` / ranks.
 - Unique-edit still emits one representative site. The collapsed primary-map **orbit** is passed on `SiteInfo` / `Candidate` / `Emission` / `PathStep` (`orbit` / `site_orbit`) so multiplicity is visible and plans can compare site classes (`same_site_orbit`) without re-emitting equivalents.
 - Each elementary [`Step`](../../crates/xenosite-forest/src/canonical_plan.rs) can carry the **automorphism orbit** of its site (`Step.orbit`), filled from atom+bond generators (ForestMol cache when available). Unique-edit orbits and generator orbits are related but not the same record: unique-edit is SMARTS-class collapse; `Step.orbit` is group action on atoms. Site-pair unique-edit in `pair_edit` reuses one generator run per `pair_candidates` call.
-- `clear_structure` drops `csmi`/stable_csmi/formula/SMARTS/generators, not the kekulé `Rc`.
+- `clear_structure` drops `csmi`/stable_csmi/formula/SMARTS/generators, not the kekulé `Arc`.
 
 There is no `has_forest`, no `wipe_forest`, and no `xf()` facade.
 
@@ -58,6 +58,37 @@ Exposes `ForestMol` / `RuleSet` / `metabolize`, plus **`xenosite_forest.find_pat
 ``xenosite.forest.find_path``. The RDKit walk at
 ``xenosite.forest.native.find_path`` is **feature-frozen** reference code.
 
+### Handle-first Python API (product door)
+
+Default returns are **Rust-backed pyclasses**, not dicts:
+
+| Python | Rust payload | Notes |
+|--------|--------------|--------|
+| `PathOutcome` | `PathOutcome` | `.mol` tagged `ForestMol`; `.plan` → `StepPlan`; `.to_dict()` export only |
+| `PathCounters` | `PathCounters` | Search billing counters |
+| `RandomPathOutcome` | `RandomPathOutcome` | Seeded walk |
+| `Emission` | `Emission` | `RuleSet.metabolize` / `BoundPattern.metabolize` |
+| `MetabolicNetwork` | `Arc<Mutex<MetabolicNetwork>>` | One graph type; BFS via `product_graph_bfs` (`network=` optional) or `product_graph_into`; search via `find_path(..., network=)`; `net[i]` → `GraphNode`, `inbound_edge(j)` → `GraphEdge` |
+| `GraphNode` / `GraphEdge` | view into shared graph | Indexed node/edge handles; `.mol` / `.kept_mol` are `ForestMol`; mutable `attrs` (`get_attr` / `[]`, well-known `sealed` / `expanded`); `.to_dict()` merges spine + attrs |
+
+Python `product_graph_bfs` defaults to **`product_graph_ruleset()`** — QuinoneFormation, EpoxideHydration, and Phase I core (same shape as **`default_ruleset()`** minus Tautomerization). **`find_path`** uses **`default_ruleset()`** (includes Tautomerization). BFS can run a long time — use `target=` when possible.
+
+Marshalling is **opt-in** via `.to_dict()` (Serde views in `crates/xenosite-forest/src/export/`).
+Do not re-parse CSMI at the boundary when a handle already carries `ForestMol`.
+
+**Tutorial:** [notebooks/forest_product_door.ipynb](../../notebooks/forest_product_door.ipynb)
+(APAP→NAPQI, terbinafine dealkylation, shared `MetabolicNetwork`, BFS, metabolize).
+Smoke: `pytest tests/forest/rust/test_tutorial_snippets.py`.
+
+**Phase 2 (done):** `python_api/{common,mol,rules,plan,graph,path,walk}.rs`; `GraphNode` /
+`GraphEdge` views + attrs; `ForestMol` caches are `Arc`/`Mutex`/`Atomic` so search is
+`Send` — `Python::detach` (GIL release) on `find_path` / `find_path_partial` / `random_path` /
+`product_graph_*` / filter-free `metabolize` (including `network=`). Pyclasses stay
+`unsendable`. Deferred: wire `step_plan_between` into find_path/BFS yields.
+
+Public `ForestMol` in ``xenosite.forest`` is a thin Python subclass (``mol.py``) for lazy
+RDKit ``to_rdkit()`` / RDKit ``__init__`` (`[rdkit]` extra). Atom tags are **not** round-tripped to RDKit.
+
 ```rust
 #[pyclass(name = "ForestMol", unsendable)]
 pub struct PyForestMol {
@@ -68,7 +99,7 @@ pub struct PyForestMol {
 
 - `#[pyclass]` makes a Python type whose instance **is** that struct.
 - `#[new]` is `__init__`. `#[getter]` is a Python property. `#[pymethods]` are methods.
-- `unsendable`: `RefCell` cache + chematic mol are not `Send`.
+- `unsendable`: pyclasses stay pinned to one Python thread; engine `ForestMol` is `Send`/`Sync` (Arc caches) so search can release the GIL.
 - Nested wrap: `Formula` is its own `#[pyclass]`.
 - Returning a fresh `String` would allocate a new Python `str` each time and break `is`. The wrapper intern/caches `Py<PyString>`.
 
