@@ -1,0 +1,20 @@
+---
+description: Run project tests via Makefile recipes (Rust + Python)
+alwaysApply: true
+---
+
+# Test via Makefile
+
+When running this repo’s tests, use the Makefile — do not invent ad-hoc
+`cargo test` / `pytest` command lines for the full suites.
+
+| Goal | Recipe |
+|------|--------|
+| Both languages (default) | `make test` |
+| Rust only | `make test-rust` |
+| Rust + `python` feature | `make test-rust-python` |
+| Python forest suite | `make test-python` |
+
+These mirror `.github/workflows/test.yml`. Narrow filters (`cargo test --lib foo`,
+`pytest path::test`) are fine for debugging a single failure; put the full
+suite back through `make` when checking green.

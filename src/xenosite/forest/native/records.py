@@ -215,6 +215,7 @@ class Effect(TypedDict, total=False):
     breaks_ring: bool
     dearomatizes: bool
     methide: bool
+    exclusive_partner: bool
     needs: str
     partner: str
     partner_h: int

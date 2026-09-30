@@ -1,0 +1,15 @@
+# Phase I SMARTS-family probes (named).
+# Why: collectively hit QuinoneFormation / Dehydrogenation query + reaction
+# SMARTS (legacy test_phase1_steps + formula-hint Phase I coverage). Not a
+# find_path gold set — only reactants. Format: id<TAB>smiles
+# Expand when a new Phase I SMARTS family is mute on this list.
+# Prefer also listing the SMILES in coverage_substrates.txt so catalog/parity see it.
+
+phenol	Oc1ccccc1
+benzene	c1ccccc1
+chlorobenzene	Clc1ccccc1
+dimethylaniline	CN(C)c1ccccc1
+anisole	COc1ccccc1
+apap	CC(=O)Nc1ccc(O)cc1
+ethanol	CCO
+dimethyl_sulfanol	CS(O)C

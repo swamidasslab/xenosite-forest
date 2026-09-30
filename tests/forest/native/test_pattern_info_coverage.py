@@ -39,97 +39,9 @@ from .pattern_info_inventory import (
     possibility_key,
     when_key,
 )
-from .substrate_library import SUBSTRATE_LIBRARY
+from .substrate_library import COVERAGE_CANDIDATES
 
-# Extra substrates beyond SUBSTRATE_LIBRARY that hit rare OR branches
-# (At / I geminal dihalides, hemiaminals, aziridines, arene oxide, etc.).
-_PATTERN_SUBSTRATES: tuple[str, ...] = (
-    "OCN",
-    "OCOC",
-    "OCS",
-    "OC(C)N(C)C",
-    "NC(O)C",
-    "OCSC",
-    "O=CC=Cc1ccccc1",
-    "N=CC=Cc1ccccc1",
-    "CC=CC=N",
-    "CC1CN1",
-    "CC1CN1C",
-    "c1ccccc1C1CN1",
-    "ClC1CN1",
-    "O=Nc1ccccc1",
-    "CCN=O",
-    "COO",
-    "COOC",
-    "CS(=O)O",
-    "CS(O)=O",
-    "C1=CC2OC2C=C1",
-    "CF",
-    "CCl",
-    "CBr",
-    "CI",
-    "CCF",
-    "CCCl",
-    "CCBr",
-    "CCI",
-    "CC(F)C",
-    "CC(Cl)C",
-    "CC(Br)C",
-    "CC(I)C",
-    "FC(F)F",
-    "ClCCl",
-    "BrCBr",
-    "ICI",
-    "ClC(Cl)Cl",
-    "IC(I)C",
-    "IC(Cl)C",
-    "ClC(I)Cl",
-    "ClCC=C",
-    "BrCC=C",
-    "ICC=C",
-    "[At]CC=C",
-    "CC[At]",
-    "[At]CC",
-    "[At]C(C)C",
-    "[At]Cc1ccccc1",
-    "[At]C[At]",
-    "[At]C(Cl)[At]",
-    "ClC([At])Cl",
-    "[At]C([At])C",
-    "[At]CI",
-    "c1ccccc1F",
-    "c1ccccc1Cl",
-    "c1ccccc1Br",
-    "c1ccccc1I",
-    "Fc1ccc(O)cc1",
-    "Clc1ccc(O)cc1",
-    "Brc1ccc(O)cc1",
-    "Ic1ccc(O)cc1",
-    "ClCc1ccccc1",
-    "BrCc1ccccc1",
-    "ICc1ccccc1",
-    "FCc1ccccc1",
-    "CNc1ccccc1",
-    "CSc1ccccc1",
-    "CCOc1ccccc1",
-    "CCNc1ccccc1",
-    "CCSc1ccccc1",
-    "CS",
-    "c1ccccc1S",
-    "CCN(C)C",
-    "CC(=O)NC",
-    "CC(=O)SC",
-    "CC(=S)OC",
-    "CC(=S)NC",
-    "CNc1ccc(O)cc1",
-    "CN(C)c1ccc(O)cc1",
-    "CCCC",
-    "S=C=Nc1ccccc1",
-)
-
-_CANDIDATES: tuple[str, ...] = tuple(
-    dict.fromkeys((*SUBSTRATE_LIBRARY, *_PATTERN_SUBSTRATES))
-)
+_CANDIDATES: tuple[str, ...] = COVERAGE_CANDIDATES
 
 # (rule, pattern_name, poss_index) -> reason. Unreachable with current SMARTS.
 _UNREACHABLE: dict[tuple[str, str, int], str] = {}
@@ -328,8 +240,8 @@ def _build_cases():
                     id=case_id,
                     marks=pytest.mark.xfail(
                         reason=(
-                            "no covering mol in substrate library + "
-                            "_PATTERN_SUBSTRATES; add a substrate or "
+                            "no covering mol in coverage_substrates.txt "
+                            "(tests/data/coverage_substrates.txt); add a substrate or "
                             "record an _UNREACHABLE gap"
                         ),
                         strict=True,

@@ -16,11 +16,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
 use crate::ForestError;
-use crate::atom_diff::{AtomDiff, atom_diff, candidate_could_help, pair_could_help};
+use crate::ForestMol;
+use crate::atom_diff::{AtomDiff, atom_diff};
 use crate::canonical_plan::{CleavageSide, Maybe};
-use crate::forest_mol::ForestMol;
 use crate::mol::{Molecule, canon_of};
-use crate::pair_edit::PairCandidate;
 use crate::pattern::{CleaveFoldKey, CleaveSideSig};
 use crate::ruleset::RuleSet;
 
@@ -282,7 +281,7 @@ fn split_usable(
 /// [`CleavageOr::fragments`]. When `config.target` is set, a split is kept if
 /// at least one fragment is worth expanding; both CSMIs stay on the Or either way.
 pub fn cleavage_layer(
-    mol: &Molecule,
+    mol: &ForestMol,
     ruleset: &RuleSet,
     config: &CleavageGraphConfig,
 ) -> Result<CleavageLayer, ForestError> {
@@ -299,7 +298,7 @@ pub fn cleavage_layer(
             .filter(|(_, a)| a.element.atomic_number() > 1)
             .count()
     });
-    let parent_diff = target_mol.as_ref().map(|t| atom_diff(mol, t));
+    let parent_diff = target_mol.as_ref().map(|t| atom_diff(mol.mol(), t));
 
     let mut raw: Vec<CleavageArm> = Vec::new();
 
@@ -309,17 +308,17 @@ pub fn cleavage_layer(
             continue;
         }
         if let Some(diff) = &parent_diff {
-            if !candidate_could_help(&c, diff) {
+            if !c.could_help(diff) {
                 continue;
             }
         }
-        let Some(emission) = c.emit(mol)? else {
+        let Some(emission) = c.emit()? else {
             continue;
         };
         if !emission.cleaves {
             continue;
         }
-        let products = sorted_fragments(&emission.products);
+        let products = sorted_fragments(&emission.product_csmis());
         if !split_usable(
             &products,
             parent_diff.as_ref(),
@@ -344,18 +343,18 @@ pub fn cleavage_layer(
         });
     }
 
-    for pair in ruleset.pair_candidates(mol) {
+    for pair in ruleset.candidates(mol).filter(|c| matches!(c, Ok(s) if s.is_pair())) {
         let pair = pair?;
         if !pair.effect.cleaves {
             continue;
         }
         if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair_could_help(&pair, diff, mol, t) {
+            if !pair.could_help_on(diff, Some(t)) {
                 continue;
             }
         }
         push_pair_arm(
-            mol,
+            mol.mol(),
             &pair,
             parent_diff.as_ref(),
             target_mol.as_ref(),
@@ -369,18 +368,18 @@ pub fn cleavage_layer(
 }
 
 fn push_pair_arm(
-    mol: &Molecule,
-    pair: &PairCandidate,
+    _mol: &Molecule,
+    pair: &crate::candidate::DeferredSite,
     parent_diff: Option<&AtomDiff>,
     target_mol: Option<&Molecule>,
     target_csmi: Option<&str>,
     target_ha: Option<usize>,
     raw: &mut Vec<CleavageArm>,
 ) -> Result<(), ForestError> {
-    let Some(emission) = pair.emit(mol)? else {
+    let Some(emission) = pair.emit()? else {
         return Ok(());
     };
-    let products = sorted_fragments(&emission.products);
+    let products = sorted_fragments(&emission.product_csmis());
     if !split_usable(&products, parent_diff, target_mol, target_csmi, target_ha) {
         return Ok(());
     }
@@ -401,7 +400,7 @@ fn push_pair_arm(
     Ok(())
 }
 
-fn pair_cleave_side_sig(pair: &PairCandidate) -> CleaveSideSig {
+fn pair_cleave_side_sig(pair: &crate::candidate::DeferredSite) -> CleaveSideSig {
     let left = pair.left.cleave_side_sig();
     let right = pair.right.cleave_side_sig();
     if left == right {
@@ -454,8 +453,8 @@ pub fn cleavage_product_graph(
             continue;
         }
         let parent_csmi = nodes[ni].csmi.clone();
-        let parent_mol = crate::mol::parse_mol(&parent_csmi)?;
-        let parent_diff = target_mol.as_ref().map(|t| atom_diff(&parent_mol, t));
+        let parent_mol = ForestMol::parse(&parent_csmi)?;
+        let parent_diff = target_mol.as_ref().map(|t| atom_diff(parent_mol.mol(), t));
         let layer = cleavage_layer(&parent_mol, ruleset, config)?;
 
         for or in layer.products {
@@ -561,7 +560,7 @@ pub struct CleavageSeedHop {
 /// seed, not as separate seeds.
 ///
 /// `start` must already be a tagged [`ForestMol`] (same object the search will
-/// walk). Child products are [`ForestMol::adopt_product`] — no SMILES round-trip.
+/// walk). Child products are [`ForestMol::from_edit_product`] — no SMILES round-trip.
 /// Child diffs **lift** the parent MCS after cleavage
 /// ([`crate::atom_diff::atom_diff_after_cleavage`]) when that already shows a
 /// cost drop; otherwise one MCS.
@@ -602,21 +601,21 @@ pub fn cleavage_first_seeds(
 
         let mut expandable: Vec<(ForestMol, AtomDiff, CleavageArm)> = Vec::new();
 
-        for c in ruleset.candidates(parent.mol.mol()) {
+        for c in ruleset.candidates(&parent.mol) {
             let c = c?;
             if !c.pattern.effect.cleaves {
                 continue;
             }
-            if !candidate_could_help(&c, &parent.diff) {
+            if !c.could_help(&parent.diff) {
                 continue;
             }
-            let pieces = c.materialize_mols(parent.mol.mol())?;
+            let pieces = c.materialize_mols()?;
             if pieces.len() < 2 {
                 continue;
             }
             let mut adopted: Vec<ForestMol> = pieces
                 .into_iter()
-                .map(|p| parent.mol.adopt_product(p))
+                .map(|p| parent.mol.from_edit_product(p))
                 .collect();
             adopted.sort_by_key(|m| m.csmi().as_ref().to_string());
             let products: Vec<String> = adopted
@@ -669,21 +668,21 @@ pub fn cleavage_first_seeds(
             }
         }
 
-        for pair in ruleset.pair_candidates(parent.mol.mol()) {
+        for pair in ruleset.candidates(&parent.mol).filter(|c| matches!(c, Ok(s) if s.is_pair())) {
             let pair = pair?;
             if !pair.effect.cleaves {
                 continue;
             }
-            if !pair_could_help(&pair, &parent.diff, parent.mol.mol(), target_mol) {
+            if !pair.could_help_on(&parent.diff, Some(target_mol)) {
                 continue;
             }
-            let pieces = pair.materialize_mols(parent.mol.mol())?;
+            let pieces = pair.materialize_mols()?;
             if pieces.len() < 2 {
                 continue;
             }
             let mut adopted: Vec<ForestMol> = pieces
                 .into_iter()
-                .map(|p| parent.mol.adopt_product(p))
+                .map(|p| parent.mol.from_edit_product(p))
                 .collect();
             adopted.sort_by_key(|m| m.csmi().as_ref().to_string());
             let products: Vec<String> = adopted
@@ -815,7 +814,7 @@ pub fn cleavage_graph_stats(
         target: target.map(|t| t.to_string()),
         ..CleavageGraphConfig::default()
     };
-    let start_mol = crate::mol::parse_mol(start)?;
+    let start_mol = ForestMol::parse(start)?;
     let layer = cleavage_layer(&start_mol, ruleset, &config)?;
     let graph = cleavage_product_graph(start, ruleset, &config)?;
     Ok((
@@ -839,7 +838,7 @@ mod tests {
 
     #[test]
     fn anisole_keeps_both_cleavage_fragments() {
-        let mol = crate::mol::parse_mol("COc1ccccc1").unwrap();
+        let mol = ForestMol::parse("COc1ccccc1").unwrap();
         let dealk = leaf_rule("Dealkylation").expect("Dealkylation");
         let layer = cleavage_layer(
             &mol,
@@ -863,7 +862,7 @@ mod tests {
 
     #[test]
     fn choose_continuation_puts_other_side_in_maybe() {
-        let mol = crate::mol::parse_mol("COc1ccc(OC)cc1").unwrap();
+        let mol = ForestMol::parse("COc1ccc(OC)cc1").unwrap();
         let layer = cleavage_layer(
             &mol,
             &phase_one(),
@@ -929,7 +928,7 @@ mod tests {
 
     #[test]
     fn skip_non_cleaving_patterns() {
-        let mol = crate::mol::parse_mol("c1ccccc1").unwrap();
+        let mol = ForestMol::parse("c1ccccc1").unwrap();
         let layer = cleavage_layer(
             &mol,
             &crate::hydroxylation::hydroxylation(),

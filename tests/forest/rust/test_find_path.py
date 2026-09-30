@@ -6,7 +6,9 @@ Requires the ``xenosite.forest._rust`` extension (no skip).
 
 from __future__ import annotations
 
-from xenosite.forest import PhaseOne, available, find_path
+import pytest
+
+from xenosite.forest import PhaseOne, available, find_path, normalize_tautomer
 
 assert available(), (
     "xenosite.forest._rust extension required for tests/forest/rust; "
@@ -40,6 +42,48 @@ def test_find_path_timeout_zero():
     hits, counters = find_path("CC", "CCO", timeout=0.0)
     assert counters["timed_out"] is True
     assert hits == []
+
+
+def test_normalize_tautomer_enol_keto_agree():
+    enol, changed_e = normalize_tautomer("OC=C")
+    keto, changed_k = normalize_tautomer("CC=O")
+    assert changed_e
+    assert not changed_k
+    assert enol.csmi == keto.csmi
+
+
+def test_forest_mol_normalize_tautomer_method():
+    keto, _ = normalize_tautomer("CC=O")
+    again, changed = keto.normalize_tautomer()
+    assert not changed
+    assert again.csmi == keto.csmi
+
+
+def test_find_path_normalize_tautomer_enol_keto():
+    # Emit is normalized space — judge against normalized target CSMI.
+    want, _ = normalize_tautomer("CC=O")
+    hits, _ = find_path(
+        "OC=C",
+        "CC=O",
+        max_paths=1,
+        max_nodes=50,
+        normalize_tautomer=True,
+    )
+    assert len(hits) == 1
+    assert hits[0]["steps"] == []
+    assert hits[0]["smiles"] == want.csmi
+
+
+def test_find_path_invert_target_tautomer_not_implemented():
+    with pytest.raises(Exception, match="invert_target_tautomer|not implemented"):
+        find_path(
+            "CC=O",
+            "OC=C",
+            max_paths=1,
+            max_nodes=50,
+            normalize_tautomer=True,
+            invert_target_tautomer=True,
+        )
 
 
 def test_phase_one_factory_from_stub():

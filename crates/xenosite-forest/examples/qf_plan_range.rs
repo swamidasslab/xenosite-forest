@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use xenosite_forest::rules::quinone_formation;
-use xenosite_forest::{accept_all_rules, accept_all_sites, canon_of, parse_mol};
+use xenosite_forest::{ForestMol, accept_all_rules, accept_all_sites};
 
 fn plan_key(plan: &[xenosite_forest::Step]) -> String {
     plan.iter()
@@ -23,7 +23,7 @@ fn plan_rules(plan: &[xenosite_forest::Step]) -> String {
 
 fn probe(smi: &str) {
     let set = quinone_formation();
-    let mol = parse_mol(smi).unwrap();
+    let mol = ForestMol::parse(smi).unwrap();
     let emissions: Vec<_> = set
         .metabolize(&mol, accept_all_rules, accept_all_sites, true)
         .filter_map(|r| r.ok())
@@ -39,7 +39,7 @@ fn probe(smi: &str) {
             plan_key(&e.plan)
         );
         by_shape.entry(shape).or_default().insert(detail);
-        let products: Vec<_> = e.products.iter().filter_map(|p| canon_of(p).ok()).collect();
+        let products = e.product_csmis();
         println!(
             "  [{}] {}  products={products:?}",
             e.pattern_name,

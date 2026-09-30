@@ -35,8 +35,13 @@ src/xenosite/forest/_version.py
 # Local mailbox between agents. Not a release artifact.
 agent-exchange/
 
-# Local data (never ship)
+# Living SSSOM is uncompressed TSV under mappings/; build.rs gzips to OUT_DIR.
+mappings/**/*.gz
+*.sssom.tsv.gz
+
+# Local data (never ship). Keep tests/data/ — shared coverage SoT fixtures.
 data/
+!tests/data/
 _api
 .cenv
 .devcontainer

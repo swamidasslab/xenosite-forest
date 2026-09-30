@@ -62,6 +62,7 @@ from xenosite.forest.native.rdkitutil import (
     parent_for_bond,
     parents_for_ends,
     reaction_from_smirks,
+    refuse_dearomatized_ketene,
     resonance_bond_maps,
     run_reactants,
     rw_copy,
@@ -155,6 +156,11 @@ class ReactionRule:
     # Internal SMILES guaranteed to yield metabolites (site_kind meta-test).
     # TODO: expand so examples cover all patterns/whens on this rule.
     _example_substrates: tuple[str, ...] = ()
+    # Cross-language parity excuse (class data). ``None`` ⇒ must have a
+    # same-named Rust ``leaf_rule`` and match products under the parity fuzz.
+    # Non-empty string ⇒ unpaired or intentionally divergent; tests read this
+    # attribute and do not hardcode exception name lists.
+    rust_parity_exception: str | None = None
 
     def _clear_atom_maps(self, mol: Mol) -> Mol:
         for atom in mol.GetAtoms():
@@ -337,6 +343,22 @@ class ReactionRule:
                 products.extend(pieces)
             if not products:
                 continue
+
+            # O-leave cleavage: refuse fully dearomatized ketenes (benzoic →
+            # O=C=C1CCCCC1). Matches Rust accept_o_leave_product. Drop the
+            # whole emission when a heavy piece is refused (not just the leave).
+            leave = (info.get("options") or {}).get("leave_formula") or {}
+            if leave.get("O") == 1 and not any(
+                k != "O" and v for k, v in leave.items()
+            ):
+
+                def _heavy(p):
+                    return sum(1 for a in p.GetAtoms() if a.GetAtomicNum() > 1) > 1
+
+                if any(
+                    _heavy(p) and refuse_dearomatized_ketene(mol, p) for p in products
+                ):
+                    continue
 
             for p in products:
                 p.xf.sanitize()
@@ -622,6 +644,7 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
         "breaks_ring": False,
         "dearomatizes": False,
         "methide": False,
+        "exclusive_partner": False,
         "needs": "",
     }
     if not isinstance(value, dict):
@@ -647,6 +670,9 @@ def _as_effect(value: Effect | Mapping[str, EffectField] | None) -> Effect:
     methide = value.get("methide")
     if isinstance(methide, bool):
         effect["methide"] = methide
+    exclusive_partner = value.get("exclusive_partner")
+    if isinstance(exclusive_partner, bool):
+        effect["exclusive_partner"] = exclusive_partner
     needs = value.get("needs")
     if isinstance(needs, str):
         effect["needs"] = needs
@@ -802,6 +828,7 @@ _EFFECT_DEFAULTS: Effect = {
     "breaks_ring": False,
     "dearomatizes": False,
     "methide": False,
+    "exclusive_partner": False,
     "needs": "",
 }
 
@@ -1067,6 +1094,9 @@ def merge_effects(
         "cleaves": bool(left.get("cleaves") or right.get("cleaves")),
         "dearomatizes": bool(can and system_aromatic),
         "methide": bool(left.get("methide") or right.get("methide")),
+        "exclusive_partner": bool(
+            left.get("exclusive_partner") or right.get("exclusive_partner")
+        ),
         "needs": needs,
     }
 
@@ -2079,6 +2109,42 @@ def _site_atoms(mapped: Mapping[int, int], info: PatternInfo) -> int | None:
     return mapped[key]
 
 
+def _exclusive_partner_atoms(
+    mapped: Mapping[int, int], info: PatternInfo, effect: Effect
+) -> frozenset[int]:
+    """Non-site mapped atoms when ``exclusive_partner`` is set on the effect.
+
+    Empty when the bit is off — methide alkyl and other chemistry that does
+    not consume an exclusive heteroatom partner stay out of the gate.
+    """
+
+    if not effect.get("exclusive_partner"):
+        return frozenset()
+    site = _site_atoms(mapped, info)
+    if site is None:
+        return frozenset()
+    return frozenset(idx for idx in mapped.values() if idx != site)
+
+
+def _shared_exclusive_partner(
+    map1: Mapping[int, int],
+    info1: PatternInfo,
+    end1: Effect,
+    map2: Mapping[int, int],
+    info2: PatternInfo,
+    end2: Effect,
+) -> bool:
+    """True when an exclusive partner atom appears on the other end's map."""
+
+    exclusive1 = _exclusive_partner_atoms(map1, info1, end1)
+    exclusive2 = _exclusive_partner_atoms(map2, info2, end2)
+    if not exclusive1 and not exclusive2:
+        return False
+    other1 = frozenset(map2.values())
+    other2 = frozenset(map1.values())
+    return bool(exclusive1 & other1) or bool(exclusive2 & other2)
+
+
 def _kekule_cache(mol: Mol) -> KekuleParents:
     """The dict the resonance rules store. Helpers never touch ``_forest``."""
 
@@ -2163,7 +2229,15 @@ def _reactant_parent(
     parent = parent_for_bond(cache, left, right, order)
     # No assignment with that order (charged rings, awkward systems): keep the
     # aromatic parent so the site is not dropped.
-    return mol if parent is None else parent
+    if parent is None:
+        return mol
+    # Prefer aromatic parent when every Kekulé writing raises |charge|
+    # (isocyanate N=C=O → O=C[N-]Ar). Closed-shell prefer (C10 / C16 leave).
+    parent_mag = sum(abs(a.GetFormalCharge()) for a in parent.GetAtoms())
+    mol_mag = sum(abs(a.GetFormalCharge()) for a in mol.GetAtoms())
+    if parent_mag > mol_mag:
+        return mol
+    return parent
 
 
 class ResonanceRule(SmirksReactionRule):
@@ -2425,6 +2499,12 @@ class ResonancePairRule(ResonanceRule):
                     site = frozenset((site_a, site_b))
                     end1 = resolve_effect(mol, map1, info1)
                     end2 = resolve_effect(mol, map2, info2)
+                    # Bridging N/O (and similar): ends that declare
+                    # exclusive_partner must not share that partner atom.
+                    if _shared_exclusive_partner(
+                        map1, info1, end1, map2, info2, end2
+                    ):
+                        continue
                     # Both ends may be methide. A para-quinodimethane is two
                     # alkyl single-to-double ends. The one-side skip was wrong.
                     preview: PairSiteInfo = {
@@ -2839,6 +2919,7 @@ class QuinoneFormation(ResonancePairRule):
                     ),
                     removes="H",
                     dearomatizes=True,
+                    exclusive_partner=True,
                 ),
                 *branches(
                     (
@@ -2881,6 +2962,7 @@ class QuinoneFormation(ResonancePairRule):
                     adds="O",
                     dearomatizes=True,
                     removes_partner=True,
+                    exclusive_partner=True,
                 ),
                 edit="replace_halogen",
                 site_map=1,
@@ -2892,6 +2974,7 @@ class QuinoneFormation(ResonancePairRule):
             describe(
                 partner="N",
                 dearomatizes=True,
+                exclusive_partner=True,
                 edit="iminium",
                 site_map=1,
                 skip_same_rings=True,
@@ -2899,12 +2982,13 @@ class QuinoneFormation(ResonancePairRule):
             ),
         ),
         (
-            Smarts("[#6R:1][#7,#8:2][#6:3]"),
+            Smarts("[#6R:1]~[#7,#8:2]~[#6:3]"),
             describe(
                 *branches(
                     ({"map": 2, "z": 7}, {"map": 2, "z": 8}),
                     cleaves=True,
                     dearomatizes=True,
+                    exclusive_partner=True,
                 ),
                 edit="dealkylate",
                 site_map=1,
@@ -3486,7 +3570,7 @@ class TautomerRule(ResonancePairRule):
     sites_on = "atom_pairs"
     site_kind: RuleSiteKind = "atom_pair"
     _example_substrates: tuple[str, ...] = ()
-
+    rust_parity_exception = "design stub; not ported to Rust"
 
     name = "TautomerRule"
     longname = "Tautomerization"
@@ -3644,7 +3728,7 @@ class ReductiveDehalogenation(SmirksReactionRule):
             ),
         ),
         (
-            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#6:3]>>[*:1].[*:2]=[*:3]"),
+            Smirks("[#9,#17,#35,#53,#85:1]-[#6:2]-[#6;!a:3]>>[*:1].[*:2]=[*:3]"),
             describe(
                 *branches(
                     _whens(1, _HALIDE),
@@ -3976,7 +4060,10 @@ class ConjugationRule(SmirksReactionRule):
     sites_on = "atoms"
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO',)
-
+    rust_parity_exception = (
+        "base conjugation container; leaf ports are Acetylation / "
+        "Sulfation / Glucuronidation / Glutathionation"
+    )
 
     is_terminal_rule: bool = True
     as_star: bool = True
@@ -4051,6 +4138,7 @@ class Acetylation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Nc1ccccc1')
+    rust_parity_exception = None
 
 
 class Sulfation(ConjugationRule):
@@ -4062,6 +4150,7 @@ class Sulfation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
+    rust_parity_exception = None
 
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
@@ -4098,6 +4187,7 @@ class Glucuronidation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('CCO', 'Oc1ccccc1')
+    rust_parity_exception = None
 
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (
@@ -4143,6 +4233,7 @@ class Glutathionation(ConjugationRule):
     """
     site_kind: RuleSiteKind = "atom"
     _example_substrates: tuple[str, ...] = ('C=C', 'C1OC1')
+    rust_parity_exception = None
 
     smirks: tuple[tuple[Smirks, PatternInfo], ...] = (
         (

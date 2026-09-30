@@ -154,8 +154,9 @@ A machine-readable citation is also in [`CITATION.cff`](https://github.com/swami
 git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
 uv sync --extra network --group dev   # maturin builds the Rust extension
-uv run pytest -n auto
-uv run pytest --cov=xenosite.forest
+make test                             # Rust + Python (see Makefile)
+make test-python                      # pytest tests/forest only
+make test-rust                        # cargo test -p xenosite-forest
 ```
 
 Versioning is the ``package.version`` in [`crates/xenosite-forest/Cargo.toml`](crates/xenosite-forest/Cargo.toml) (maturin). Tag a release as `vX.Y.Z` matching that Cargo version. Read it at runtime as `xenosite.forest.__version__`. User-facing notes go in [`changelog.d/`](changelog.d/); the tag workflow compiles them into `CHANGELOG.md`. See [docs/release.md](docs/release.md).

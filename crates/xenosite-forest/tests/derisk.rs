@@ -33,9 +33,10 @@ fn anisole_dealkylation_pattern_matches_methyl() {
 #[test]
 fn unique_edit_plus_hydroxylate_are_the_public_door() {
     let mol = parse_mol("c1ccccc1").unwrap();
+    let forest = ForestMol::parse("c1ccccc1").unwrap();
     assert_eq!(unique_atom_sites(&mol, "[#6h1:1]").unwrap().len(), 1);
     assert_eq!(
-        hydroxylate(&mol)
+        hydroxylate(&forest)
             .unwrap()
             .into_iter()
             .map(|s| canon_of(&s).unwrap())
@@ -47,7 +48,7 @@ fn unique_edit_plus_hydroxylate_are_the_public_door() {
 
 #[test]
 fn hydroquinone_pair_edit_is_nonempty() {
-    let mol = parse_mol("Oc1ccc(O)cc1").unwrap();
+    let mol = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
     assert!(!dehydrogenate_hydroquinone(&mol).unwrap().is_empty());
 }
 
@@ -67,7 +68,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
     let set = RuleSet::compose(Some("probe".into()), [hydroxylation(), o_dealkylation()]);
     assert_eq!(set.members().len(), 2);
     assert_eq!(set.patterns().len(), 3);
-    let mol = parse_mol("COc1ccccc1").unwrap();
+    let mol = ForestMol::parse("COc1ccccc1").unwrap();
     let only_cleave = |_m: &Molecule, _r: &RuleSet, p: &PatternInfo| p.effect.cleaves;
     let emissions = set
         .metabolize(&mol, only_cleave, accept_all_sites, true)
@@ -81,7 +82,7 @@ fn ruleset_compose_and_closures_are_the_public_door() {
         emissions[0]
             .products
             .iter()
-            .any(|s| canon_of(s).unwrap() == phenol)
+            .any(|p| canon_of(p.csmi().as_ref()).unwrap() == phenol)
     );
     let unfiltered = set
         .metabolize(&mol, accept_all_rules, accept_all_sites, true)

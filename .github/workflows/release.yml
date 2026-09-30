@@ -69,7 +69,7 @@ jobs:
               ;;
           esac
       - name: Full forest suite (public stub + native + legacy)
-        run: uv run pytest tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+        run: make test-python
 
   linux:
     needs: test

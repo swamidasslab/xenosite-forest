@@ -1,0 +1,69 @@
+---
+description: Never skip or silently allowlist failing tests; xfail deferred failures
+alwaysApply: true
+---
+
+# Never skip failing tests
+
+Do **not** hide known failures with skips, allowlists, soft continues, or
+“expected gap” sets that let the suite go green while assertions are false.
+
+## Required
+
+1. Keep the assertion (same check as the real gate).
+2. Mark the known-bad slice as **xfail**:
+   - Python: `@pytest.mark.xfail(..., strict=True)` (or `pytest.xfail(...)`).
+     Prefer **`strict=True`** so unexpected *passes* fail CI and the xfail
+     is deleted when fixed.
+   - Rust: dedicated test with
+     `#[ignore = "xfail: …why; remove ignore when fixed"]` that still
+     asserts (see `chematic_features`, adduct Effect accuracy). Do **not**
+     `#[ignore]` a broken assertion on the main green gate without a
+     separate asserting xfail test.
+3. Say **why** in the xfail/ignore reason and **when** to remove the mark.
+
+Silent skips inside a passing test (`if known_bad { continue; }`) are not
+allowed.
+
+## Forbidden
+
+- `pytest.mark.skip` / `skipif` / `importorskip` to park a product bug
+- Allowlists / soft filters that `continue` past failing IDs so the assert
+  never sees them
+- Empty “gap” lists that exist so authors can silence coverage later without
+  an xfail
+- Catching assertion failures and treating them as success
+
+## Allowed (narrow)
+
+- Hard **fail** when a required tool is missing (extension not built, no
+  sibling checkout) — that is not hiding a bug.
+- If the environment truly cannot run the test and a hard fail is too noisy:
+  **`pytest.xfail` / `@pytest.mark.xfail`**, never **`skip`**. Report as
+  xfailed, not skipped.
+
+## Current xfail carve-out
+
+Conjugation adduct leaves (`Acetylation`, `Sulfation`, `Glucuronidation`,
+`Glutathionation`) are the only Effect-formula accuracy cases known to need
+this branch until those Effects are refactored (not published yet) —
+`catalog_adduct_effect_and_atom_diff_match_materialized_products`. Do not
+add other soft-skips or xfails without an explicit reason (and preferably
+`docs/forest/HEURISTICS.md`).
+
+## Example
+
+```python
+# ❌ BAD — silent green while defs still mention Forest
+if subject in KNOWN_OFFENDERS:
+    continue
+assert not mentions_forest(block)
+
+# ✅ GOOD — visible xfail until upstream xmet.yaml is cleaned
+@pytest.mark.xfail(
+    reason="tagger xmet.yaml chemist homes still mention Forest",
+    strict=True,
+)
+def test_chemist_definitions_omit_forest_mentions():
+    assert not any_mapped_chemist_mentions_forest()
+```

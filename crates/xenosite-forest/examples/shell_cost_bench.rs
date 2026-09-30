@@ -380,10 +380,13 @@ fn eval_suite(
         let mut scored: Vec<(f64, bool, Vec<usize>)> = Vec::new();
 
         for c in set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
         {
+            if c.is_pair() {
+                continue;
+            }
             let leave_n = c.pattern.effect.leave_count.map(|n| n as usize);
             let site = site_atoms_cand(&c);
             let mapped: Vec<usize> = c.mapped.values().copied().collect();
@@ -399,13 +402,12 @@ fn eval_suite(
             let gate = candidate_could_help_on(&c, &ad, Some(parent.mol()), Some(&rb));
             let dear = c.pattern.effect.dearomatizes;
             let (rank_cost, dropped, atoms) = if proj {
-                let Ok(pieces) = c.materialize_mols(parent.mol()) else {
+                let Ok(Some(em)) = c.apply() else {
                     continue;
                 };
-                if pieces.is_empty() {
+                let Some(child) = em.products.into_iter().next() else {
                     continue;
-                }
-                let child = parent.adopt_product(pieces[0].clone());
+                };
                 let edit = edit_shells(&parent, &child);
                 let (atoms, leave_only) = if c.pattern.effect.cleaves || mode.leave {
                     leave_debt(&site, &expanded, leave_n, Some(&edit))
@@ -479,9 +481,11 @@ fn eval_suite(
         }
 
         for p in set
-            .pair_candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
+            .into_iter()
+            .filter(|p| p.is_pair())
         {
             let mut atoms = p.plan_site_atoms();
             atoms.sort_unstable();
@@ -489,13 +493,12 @@ fn eval_suite(
             let gate = pair_could_help(&p, &ad, parent.mol(), &rb);
             let dear = p.effect.dearomatizes;
             let (rank_cost, dropped, atoms) = if proj {
-                let Ok(pieces) = p.materialize_mols(parent.mol()) else {
+                let Ok(Some(em)) = p.apply() else {
                     continue;
                 };
-                if pieces.is_empty() {
+                let Some(child) = em.products.into_iter().next() else {
                     continue;
-                }
-                let child = parent.adopt_product(pieces[0].clone());
+                };
                 let edit = edit_shells(&parent, &child);
                 let before = residual(
                     mode,

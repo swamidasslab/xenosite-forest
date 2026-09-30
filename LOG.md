@@ -1,6 +1,258 @@
 # Lab log
 
+## 2026-09-29
+
+- **MetX nostereo call-site + tautomer ±.** `metx_hard_cases` strips stereo on
+  R/P before search (no lib canon change). Same budget 200/1.5s:
+  - nostereo + tautnorm=**off**: hits=**1268** / misses=175 / t/o=41 / 154.7s
+    (`artifacts/metx_hard_scan_nostereo.out`)
+  - nostereo + tautnorm=**on**: hits=**1121** / misses=322 / t/o=49 / 230.8s
+    (`artifacts/metx_hard_scan_nostereo_tautnorm.out`)
+  Prior stereo-on: off 902 / on 809. Nostereo recovers ~366 exact hits off.
+  Thrash filter (miss, bill≥200, rcost≥3, dearomatize|O|extra): **5** off /
+  **6** on — `00138` S-ox saturate (ΔH+10), chromenone trio `00197–199`
+  (ΔH+10), amphetamine `00055` (ΔH+6); tautnorm adds `01270` leflunomide.
+  TSVs: `metx_hard_{misses,thrash}_nostereo{,_tautnorm}.tsv`.
+
+- **MetX Phase I `find_path_partial` + tautomer normalize (rayon).** Example
+  `metx_hard_cases` parallelizes with rayon; CLI `normalize_tautomer` defaults
+  **on** (pass `0` for as-is). Scan @200 nodes / 1.5s / tautnorm=**on**:
+  runnable=1443 **hits=809** misses=634 partial_flush=622 partial_cost0=0
+  timed_out=58 wall=168.6s (`artifacts/metx_hard_scan_tautnorm.out`). Prior
+  baseline without tautnorm was ~871–873 hits / ~790–900s serial — tautnorm
+  *lowered* exact hit rate on this corpus. Paired baseline tautnorm=**off**
+  same HEAD: **hits=902** / misses=541 / timed_out=57 / wall=248.6s
+  (`artifacts/metx_hard_scan_no_tautnorm.out`). Misses:
+  `artifacts/metx_hard_misses_tautnorm.tsv`.
+
+- **Alkene patterns mutually exclusive.** `alkene` + `alkene_aliphatic` both
+  hit the same aromatic sites (chemic `C`/`!a` matched aromatics). Collapsed
+  to one `alkene` `[#6X3:1]=,:[#6X3:2]` (+HH) and disjoint `alkene_cumulene`
+  `[#6:1]=[#6X2:2]=[#8,#7,#16]` (+H). Unit test:
+  `alkene_patterns_do_not_duplicate_site_product`. Lib still 372p / 0f / 9x.
+
+- **Lift/MCS + multipath green.** Root cause for HQ tag loss:
+  `kekule::with_atom_explicit_h` rebuilt via `MoleculeBuilder` without
+  `copy_atom_tags_from` — fixed. Chematic xfails kept as trackers.
+  Multipath alkene H:2 vs H:1: fulvene-ketone intermediate `c1ccc:C(:c1)=C=O`
+  nets +H on cumulene saturate; split Hydrogenation alkene SMARTS into
+  `alkene` (a–a +HH), `alkene_aliphatic` (X3=X3 +HH), `alkene_cumulene`
+  (=C=X +H). Coverage: `C=C=O`. `cargo test -p xenosite-forest --lib`:
+  371 passed / 0 failed / 9 ignored.
+
+- **Tag-preserving wrappers + unit tests (desired behavior / xfail).** Chematic
+  `with_atom_*` / `fragments` / raw aromatize keep caller tags on this chematic.
+  `kekule::with_atom_explicit_h` rebuilds via `MoleculeBuilder` **without**
+  `copy_atom_tags_from` → drops all tags (xfail). ResonancePair HQ materialize
+  still yields untagged products (xfail) even with `preserving::` on aromatic
+  mutators and valence fill — more droppers remain. Prefer wrappers over
+  SMIRKS/index remapping. Suite: `chematic_tags::` 12 pass / 2 ignored xfail.
+
+- **Catalog Effect formula gate green.** Declared Keep-H bags now match
+  materialized products on `coverage_substrates.txt` (non-adduct leaves).
+  Fixes: SOx zwitterion/hydroxy When on S–H vs thioether vs hetaryl; ODH
+  rearrange aromatic OHH; QF cumulated dealkylate SMARTS split; Dealk/NDealk
+  nitro quaternary_alcohol SMARTS; dehyd β-elim X4/X3 + aromatic map-3 When;
+  dehyd/OR nitro vs nitroso SMARTS splits; NR hydroxylamine requires `#8H1`.
+  `make test-python`: 9282 passed / 64 xfailed / 0 unexpected. `cargo test
+  --lib`: 350 passed / 7 failed (lift/MCS/find_path/atom_diff — next).
+
+- **Product parity gate closed.** `make test-python`: 9282 passed, 64 xfailed
+  (C18 corpus), 0 unexpected. Soft `accept_pair_product` iminium carve-out
+  stays transitional (HEURISTICS); fix emit later, not more refuse branches.
+- **Catalog / Rust next.** Dearomatizes capability green (H alkene + SOx hydroxy
+  `dearomatizes=true`). Effect formula mismatches cut ~1848→~182 (alcohol/ODH
+  OHH bags, dehyd/RDH +HH for HX/H2O leave, tautomer formula-conservation on
+  path-flip, QF At When dropped). `make test-rust --lib`: 15→10 fails (catalog
+  Effect residual + lift/MCS/find_path multipath). Anisole find_path green.
+
+- **`make test-python` green for product parity:** 9282 passed, 64 xfailed (C18
+  corpus), 0 unexpected fails. Fixes: `accept_pair_product` on pair materialize
+  (H path-end iminium junk); `normalize_hetaryl_s_o_hydroxy` on SOx `hydroxy`
+  (thiophene → RDKit `O[SH]1CCCC1`); `nitrogen_bonded_sulfinic_hydroxy_sulfur`
+  refuse (sulfonamide H junk). Rebuild extension after Rust edits (`maturin
+  develop`).
+- **`make test-rust`:** 342 passed, 15 failed (PatternInfo catalog, find_path,
+  lift/MCS) — deferred until catalog/Effect gate after parity.
+
+- **Restored parity pairing metadata (C18 harness).** Rust `RuleSet.parity_exception`
+  + `with_parity_exception` on `EpoxideHydration` / `Tautomerization`; PyO3
+  `RuleSet.catalog_names()`, `.leaf()`, `.parity_exception`; native
+  `rust_parity_exception` on `ReactionRule` + conjugation leaves; ported
+  `rule_parity_pairs.py` / `test_rule_parity_pairs.py`; fuzz uses
+  `paired_rule_names()` (26 leaves) instead of a hardcoded tuple.
+
+- **C18 parity port in progress (sole priority).** Brought onto HEAD:
+  C18 `smirks.rs` (specialize / charged-H0 / organic variants), C18
+  `valence.rs` refuse gates + closed-shell H fill, C18 `ruleset` ring-open
+  oxygenate / CH2-leave / hydrolysis graph-edit apply path, `bond_order_sums`
+  / `with_atom_explicit_h`, zwitterion Effect bags `O+-`, conjugation Effect
+  bags matching chematic H (no false `removes=H`), parity harness
+  `as_star=False` like C18. Corpus fuzz vs C18 (4186p/29x/0f): HEAD now
+  **3826 passed / 26 xfailed / 336 failed / 6 errors** (was 3630/26/532).
+  Still to port: C18 `pair_edit` + remaining rule chemistry — unexpected
+  fails → 0 before PatternInfo coverage.
+
+- **HEAD vs C18 product-parity fuzz (same corpus).** Restored harness as
+  `tests/forest/native/test_rule_parity_fuzz.py` + `rule_parity_corpus.py`
+  (product-set only; site bags need ForestMol.ranks). C18 worktree:
+  **4186 passed / 29 xfailed / 0 failed**. HEAD: **3630 passed / 26 xfailed /
+  532 failed / 5 errors**. Of the C18 29: 26 still fail, **3 now pass**
+  (benzene-oxide / dihydroacridine DH, cinnoline QF) — those XPASS under
+  `strict=True`. ~529 new product gaps outside the annotated set (biggest:
+  Dealkylation 124, conjugation adducts, QF, SulfurOxidation, NOx).
+
+- **C18 baseline verified in worktree.** Checkout
+  `/Users/swamidass/Workspaces/xenosite/xenosite-metabolite-c18-baseline`
+  at `a814b83` (tag `py-rust-parity-c18-baseline` + 2 annotation commits).
+  Chematic: `vendor/chematic` @ `v1.0.21` +
+  `patches/chematic-v1.0.21-atom-tag-visit-order.patch` (same delta as
+  `swamidass/chematic` branch `cursor/atom-tag-visit-order-fffe`).
+  `pytest tests/forest/test_rule_parity_fuzz.py`: **4186 passed, 29 xfailed,
+  0 failed**. NitrogenOxidation tertiary N-oxides match native (`CN(C)C` →
+  `[N+](C)(C)(C)[O-]`). On HEAD (chematic crates.io **1.0.27**), same
+  `n_oxide` SMARTS candidates but `apply_edit` returns **empty** — mute is
+  chematic apply, not missing pattern / Keep-H. Restoring emit needs a
+  chematic fix or pin, not another SMARTS edit.
+
+- **find_path `normalize_tautomer` default off.** Door stays; default is
+  `false` again so search / coverage / parity match the pre-normalize
+  baseline (given forms as-is). Opt in when both ends should share a
+  chematic preferred form. Python + WASM kwargs follow.
+
+- **Native↔Rust product drift: bisect vs C18.** Alignment was achieved on
+  tag `py-rust-parity-c18-baseline` (branch `cursor/find-path-ms1-7f58`),
+  **not merged into main**. Merge-base with HEAD: `e2edd82`. HEAD-only since
+  then that changes emit: `2f05de4` (Keep H + materialize drops H-disagreeing
+  products). C18-only (~50 chematic/Kekulé/refuse commits + nitroso
+  `removes=HH`) never landed on main. Adjudication: missing C18 chemistry =
+  **regression vs achieved alignment**; Keep H gate = **progression** (Effect
+  contract) that surfaces SMIRKS/Effect gaps native still hides by stripping H;
+  nitroso bag on HEAD missing C18 `removes=HH` = **Effect regression**.
+
+- **Coverage SoT → `tests/data/`.** `coverage_substrates.txt` shared by Rust
+  `include_str!` and Python loaders. Native↔Rust product parity over that
+  pool: `test_rust_parity_coverage.py` (leaf by catalog name via `leaf_rule`,
+  not `xf:` short codes).
+
+- **MeOPhOH→hydroxyQ xfail.** `find_path_mcs_fallback_zero_meophoh_hydroxyq` ignored: QF product CSMI (`OC1=CC(=O)C(=CC1=O)O`) not unified with target `O=C1C=C(O)C(=O)C(O)=C1`; find_path does not accept the cost-0 hop. Mid suite keeps other cases.
+
+- **Coverage substrates centralized (Rust SoT).** Pool lives in
+  `tests/data/coverage_substrates.txt` (`[library]` /
+  `[pattern]`); `substrate_library.rs` `include_str!` →
+  `coverage_candidates()`. Catalog PatternInfo/When/Effect tests scan that
+  pool. Leaf `LEAF_EXAMPLE_SUBSTRATES` stays the short site_kind list only.
+  Native `substrate_library.py` thin-loads the same file; `_PATTERN_SUBSTRATES`
+  removed from `test_pattern_info_coverage.py`.
+
+- **Leaf example substrates on RuleSet.** `LEAF_EXAMPLE_SUBSTRATES` beside
+  `LEAF_CTORS`; `seal_leaf` → `RuleSet::example_substrates` (native
+  `_example_substrates` parity). Not used for PatternInfo/When coverage.
+
+- **Formula charge units.** `Formula.counts` carries formal charge under
+  ``"+"`` / ``"-"`` (strictly positive magnitudes; zwitterions keep both).
+  Net signed charge stays on `Formula.charge`. `formula_l1` includes those
+  keys (atom_diff / MatchScore formula distance); `formula_heavy_l1` skips
+  them. Bag strings may use ``+`` / ``-`` tokens.
+
+- **could_help T/H tighten.** `scope_could_help`: formula-neutral +
+  `path_ends` require both ΔH>0 and ΔH<0 (tautomer redistribute). Adds-H
+  requires primary-site H-need; partner-extend only when site has O/N.
+  Tacrine→7-OH bill ~200 (was ~700 crossed). Tests beside OR/hydrogenation.
+- **Never skip tests — xfail.** Rule `.cursor/rules/never-skip-tests.mdc`:
+  no soft-`continue` of failing spec cases; track with `#[ignore]` /
+  pytest xfail. Conjugation adduct Effect-formula accuracy is the only
+  current carve-out (`catalog_adduct_effect_and_atom_diff_…`, ignored).
+  Main gate `catalog_effect_and_atom_diff_match_materialized_products`
+  covers all other LEAF_CTORS (incl. H). Removed open-leave soft-skip
+  from that test.
+- **Effect accuracy fixes (keep-H).** `formula_check` keeps H. Dealkylation:
+  hetero open-leave `!R` (no epoxide C–X); C–C aliphatic `!@` (no arene/
+  epoxide C–C atom-dup); `cc_alcohol` bag `OHH`. Non-cleaving
+  `Candidate::materialize_mols` drops products that disagree with sealed
+  Effect. Epoxidation stays +O (aromatic H-lose products filtered).
+
+- **Tautomer normalize door.** `normalize_tautomer` = chematic
+  `normalize_zwitterion` → `remove_hydrogens` → `canonical_tautomer`, then
+  Forest adopt via `ForestMol::product` (index-stable) /
+  `from_edit_product`. Chematic rebuilds drop caller tags on all three
+  stages; `chematic_tautomer_pick` snapshots survivor tags and restamps
+  once at the end (DRY begin/end — no per-stage wraps). Upstream probe
+  `chematic_features` (ignored) asserts tags survive chem rebuilds —
+  drop Forest restamp when those pass. `find_path`
+  defaults `normalize_tautomer: true` (once on reactant/target). Emit stays
+  in normalized space (`invert_target_tautomer` default false). Opt-in invert
+  when the target changed → `ForestError::NotImplemented` until conjugated
+  H-delta + iso remap. Prefer `ForestMol::normalize_tautomer()` when judging
+  expected targets. Free `normalize_tautomer` and the ForestMol method share
+  one door. Chematic `chem` feature enabled. Fixtures from chematic-chem
+  tautomer/zwitterion corpora.
+
+- **Forest↔XMET SSSOM embed + resolve.** Living SoT
+  `mappings/xmet-forest.sssom.tsv` (uncompressed only; `.gitignore` blocks
+  `mappings/**/*.gz`). `build.rs` gzips to `OUT_DIR`; `forest_xmet_sssom()` /
+  `resolve` / `BoundPattern` in Rust with Python + WASM wraps. Coverage:
+  `tests/sssom_coverage.rs` (resolve-all, inventory, nest — no short-code
+  allowlist). Docs: `docs/forest/MAPPING.md` + release snapshot checklist.
+- **Short-code SSSOM cleanup.** Dropped `xf:CJ` rows (conjugation not ready).
+  Remapped `SO`/`UO`/`RD` → `StableOxygenation` / `UnstableOxygenation` /
+  `Reduction` catalogs (new `ROOT_CATALOGS`); `DH`/`HD` → existing
+  `Dehydrogenation` / `Hydrolysis` leaves. Removed `SSSOM_ROOT_ALLOWLIST`.
+- **XMET chemist-def audit (suggestions only, no SSSOM remaps).** Tautomerization
+  home `xmet:4000186` prose is Forest-free and fits leaf semantics; both new
+  pattern rows currently share that home (mint `keto–enol` /
+  `imine–enamine` children `4000187`/`4000188` or always_with later). **29**
+  mapped `4000xxx` concepts still mention Forest/Rainbow identity in
+  def/synonyms (QF endpoints, GSH patterns, demethylation alwaysWith notes,
+  …) — allowlisted in `test_xmet_definition_lint.py` until tagger
+  `xmet.yaml` patches strip engine language. Hydrolysis chemist text is
+  Rainbow-framed and Forest-free; scope vs Forest `Hydrolysis` leaf still a
+  soft semantic note (epoxide opening is separate under isoredox).
+
+- **Tacrine imine→amine fixed.** Root cause: after tautomer `flip_path`,
+  bracket H on `[nH]` stayed set, so the flipped amine failed
+  `accept_product` (valence) and only quinoids survived; find_path then
+  repaired via DH `amine` (3 steps, bill ~1593). Clear
+  `hydrogen_count` on flipped path atoms for tautomer (RDKit SanitizeMol
+  analogue). Now imine↔amine both emit; find_path is tautomer+`h` (2
+  steps, bill ~740). Dropped tautomer `search_bias=-1` (demote did not
+  help). Still open: cut remaining fanout bill.
+
+- **Default find_path ruleset.** Tautomerization moved out of PhaseOne.
+  `default_ruleset` / Python `Default()` is QuinoneFormation +
+  EpoxideHydration + Tautomerization + PhaseOne core (16 leaves; QF/EH not
+  duplicated). Public `PhaseOne()` stays QF + EH + those 16. Rust/Python/WASM
+  `find_path` / `find_path_partial` use Default; `random_path` still defaults
+  to PhaseOne.
+
+- **Tautomerization ported to Rust.** ResonancePair endpoints:
+  `tautomer_extend` + `tautomer_far`; materialize extends path by H-donor
+  (map 2) and reuses `flip_path`. `PatternInfo.chain_conjugate` widens
+  conjugated systems across aliphatic polyene C–C (biaryl still split).
+  Unit: cyclohexanone↔enol, long-range `ClCC=CC=CC=CC=CO`↔ketone, tacrine
+  amine↔imine. Formula-check: non-cleaving multi-product alternatives
+  checked per piece (`formula_check`).
+
+- **MetX miss diagnosis (sample):** (1) **DB garbage targets** — BIOTID00198/00138 labeled aliphatic OH / S-ox but products are fully saturated (+10 H) while only +O in heavy formula; search thrashs (bill ~1600/840) because `could_help` stays true on aromatics. (2) **Tautomer** — tacrine→7-OH MetX amino form misses (bill 177); same OH on imine tautomer hits in 1 step (bill 3). (3) **Wrong atom class** — N-OH-IQ: `hydroxylamine` fires on exocyclic `=N` → `=NO` (diff cost→0 vs target!) but CSMI ≠ ring `N–OH` target; search stops cold (bill 3). (4) **Rule gap** — leflunomide isoxazole N–O open has no PhaseOne cleavage; bill 149 on unrelated edits. (5) **Purine demethyl** — real caffeine→theobromine still misses (bill 16); demethyl hops only cut cost 16→11 (MCS/tautomer on xanthine). MetX caffeine product itself is wrong (loses N, not Me).
+
+- **MetXBioDB Phase I hard-case scan** (`metx_hard_cases` @200 nodes / 1.5s). TSV: `artifacts/metx_phase1_pairs.tsv` (1446 InChI→SMILES). Runnable **1443**; **873 hits / 570 misses / 48 timed_out**; wall **792s**. Artifact: `artifacts/metx_hard_scan200.out`, misses `artifacts/metx_hard_misses.tsv`. Highest-bill misses: butoxy-chromenone OH isomers **~1580–1624** (`extra_target_heavies`+`needs_oxygen`); 2-acetylbenzothiophene S-ox **842**; methoxy-amphetamine ArOH **263**. Timeout cluster = large peptides/macrocycles (cyclosporine, taxol, docetaxel, valspodar) — root often still cost 4–6 but expand explodes. Good fail-fast / bag-history cases: chromenone OH thrash (small residual, huge bill); S-ox / arene-epoxide with cleavage leftover; caffeine→theobromine multipath-ish miss.
+
+- **Hard constraint idea (not tuning):** distinguish *thought resolvable* (`could_help_on` / any-slice gate) from *actually resolved* (which residual bags shrank on the hop). Walk history can mark **invariant leftovers** — bags present at an ancestor, never reduced along the walk, still present at seal (e.g. GSH `n_extra` from root on +GSH). Soft early-stop on sealed-basin count hurt closest (cost 92 vs 80); anti-retread on full cost class only cut tetraMeO **438→353**. Next validate on real cases before coding: (1) +GSH — invariant `n_extra`/`conjugation_sized_o` from root, closest = pre-conjugate shell; (2) reachable CTRLs — no invariant leftover, no spurious seal; (3) dual-endpoint / multipath — two different residual classes must not collapse into one seal; (4) false-promise hops — `could_help` true but bag never shrinks. Search guide: rework near last ancestor where addressable cost still dropped; do not retread the long prefix that only fixed addressable bags while invariant leftover sat untouched. Ruleset-level: if no rule formula delta can cover a bag, exact is impossible (schema fact, not GSH special case).
+
+- **Seal + hard anti-retread (no early-stop by default).** Zero-enqueue expand seals residual class; refuse re-enqueue of that class. `stop_after_sealed_basins` opt-in (auto-`max_paths` hurt closest: tetraMeO stopped at cost 92). Anti-retread @800: tetraMeO+GSH **438→353**; MeOPhOH+GSH **710→697**; eugenol+GSH flat **365**. Partials still flush cost=80 conjugation leftover. Artifact: `artifacts/unreachable_partial_gsh_800_antiretread.out`. Boost unhelped-residual candidates still open.
+
+- **+GSH partial measure** (`unreachable_conjugate_probe` @800 release, `artifacts/unreachable_partial_gsh_800.out`). Exact-only bills unchanged (tetraMeO+GSH **438 / 12.6s**, eugenol+GSH **365**, MeOPhOH+GSH **710**). `find_path_partial` same bills (no seal yet) but flushes **2 closest** with `cost=80` and cats `extra_target_heavies` / `conjugation_sized_o` / `large_formula_gap` — pre-GSH improved shells, not the conjugate. CTRL reachable still exact-only (partials=0 when exact fills).
+
+- Scrubbed pair-specific `could_help` / H-progress branches: `residual_resolvable`, Expand filter, and emit progress all go through `candidate_could_help_on` / `candidate_site_h_progress`; `pair_could_help` / `pair_site_h_progress` are thin aliases.
+- Peeled child enqueue into `PathSearch` (shared heap/seen/network). `find_path_with_network` + `find_path_partial` (end-of-search closest flush). `MetabolicNetwork` records hops; `AtomDiffResidual` shared with `missed`. Python: `find_path_partial`, `MetabolicNetwork`, `network=` on both doors.
+
 ## 2026-09-28
+
+- **Unreachable = many improving PhaseOne edits + leftover conjugate.** Not OH-specific. Controls cheap; same reactant→product+GSH thrashs under atom_diff until the frontier dies (often before `max_nodes`). Release probe `unreachable_conjugate_probe` @800: tetraMeO-BP→tetraOH **bill 27 / 0.06s** vs +GSH **438 / 12.6s**; MeOPhOH→hydroxyQ **71 / 0.03s** vs +GSH **710 / 1.2s**; eugenol **32** vs +GSH **365**. Artifact: `artifacts/unreachable_improve_plus_gsh_800.out`. Partial must report closest (pre-GSH) and later fail-fast — today it pays the full improving fanout then stalls.
+
+- **find_path_bench after DeferredSite/ForestMol (`eb5ccdb`) vs `artifacts/bench_find_path_rust_{mid,larger}.out` (same day ~17:41, pre-unify).** Release, filter-only, `log-neg-pc`, best-of-5. Mid atom_diff: total wall **0.666→0.141s** (~4.7×); billed **~1067→134** (~8×). MeOPhOH **899→71** bill, **0.450→0.033s**. Eugenol **89→32**, 2-MeO-naph **62→17**. Larger: wall **0.242→0.162s**; bill **~113→40**. Lazy vs eager identical on these sets. Artifacts: `artifacts/bench_find_path_rust_{mid,larger}_post_deferred.out`, `*_eager_post_deferred.out`. Verdict: refactor **helped** — fewer edits/nodes (tagged ForestMol path, no CSMI rematerialize in expand) not just clock noise. Still measure conjugation/timeout hard set before plateau work.
+
+- **Expand unified on DeferredSite.** `find_path::Expand` no longer walks a separate pair DFS (`PairFrame` / `emit_pair` / `load_leaf_pairs`). One filter+sort over `RuleSet::candidates`, one `emit_site` that calls `site_atoms` / `elementary_plan` / `cleave_side_sig` (pair ends into plan hooks). ~260 lines out of `find_path.rs`. Metabolize dropped its plan overlay — `DeferredSite::apply` already sets `elementary_plan`. Next lever for `find_path_partial`: keep search loop thin; put more of the child-enqueue branching into objects beside Expand.
 
 - **JS/WASM door + GitHub Packages.** Expanded `wasm_api` to match the Python public surface (`find_path` + timeout/`timed_out`, `random_path`, factories, structured `metabolize`). Package `js/` (`@xenosite/forest` → publish `@swamidasslab/forest`). Node smokes via `tsx`. Same `v*` tag publishes npm to GH Packages alongside PyPI wheels. Build: `./scripts/build_wasm.sh` (put `--target web` before `--features` — wasm-pack 0.15 quirk). serde-wasm-bindgen uses `json_compatible()` so Maps are not empty `{}` under JSON.stringify.
 

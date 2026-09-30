@@ -133,38 +133,23 @@ fn bfs_keep_if_drop(reactant: &str, target: &str, max_nodes: usize) -> Option<us
         }
         expanded += 1;
 
-        let mol = parent.mol();
-        for c in set.candidates(mol).collect::<Result<Vec<_>, _>>().unwrap() {
-            let atoms = site_atoms_cand(&c);
-            let Ok(pieces) = c.materialize_mols(mol) else {
-                continue;
-            };
-            for piece in pieces {
-                let child = parent.adopt_product(piece);
-                if !residual_drops(&parent, &child, &goal, &atoms) {
-                    continue;
-                }
-                let key = child
-                    .stable_csmi_key()
-                    .unwrap_or_else(|| child.csmi().clone());
-                if seen.insert(key) {
-                    q.push_back((child, depth + 1));
-                }
-            }
-        }
-        for p in set
-            .pair_candidates(mol)
+        for c in set
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
         {
-            let mut atoms = p.plan_site_atoms();
-            atoms.sort_unstable();
-            atoms.dedup();
-            let Ok(pieces) = p.materialize_mols(mol) else {
+            let atoms = if c.is_pair() {
+                let mut atoms = c.plan_site_atoms();
+                atoms.sort_unstable();
+                atoms.dedup();
+                atoms
+            } else {
+                site_atoms_cand(&c)
+            };
+            let Ok(Some(em)) = c.apply() else {
                 continue;
             };
-            for piece in pieces {
-                let child = parent.adopt_product(piece);
+            for child in em.products {
                 if !residual_drops(&parent, &child, &goal, &atoms) {
                     continue;
                 }

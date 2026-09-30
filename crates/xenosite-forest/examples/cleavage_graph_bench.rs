@@ -12,7 +12,7 @@ use std::env;
 use std::time::Instant;
 
 use xenosite_forest::{
-    CleavageGraphConfig, cleavage_layer, cleavage_product_graph, parse_mol, phase_one,
+    CleavageGraphConfig, ForestMol, cleavage_layer, cleavage_product_graph, phase_one,
 };
 
 const LARGER: &[(&str, &str, &str)] = &[
@@ -93,7 +93,7 @@ fn main() {
             max_nodes,
             max_depth,
         };
-        let start_mol = parse_mol(start).unwrap();
+        let start_mol = ForestMol::parse(start).unwrap();
         let layer = cleavage_layer(&start_mol, &set, &config).unwrap();
         let graph = cleavage_product_graph(start, &set, &config).unwrap();
         let ms = t0.elapsed().as_secs_f64() * 1e3;
