@@ -50,7 +50,7 @@ def _mol_svg(
     label_indices: bool = True,
 ) -> str | None:
     Chem, rdMolDraw2D = _try_rdkit()
-    if Chem is None:
+    if Chem is None or rdMolDraw2D is None:
         return None
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
