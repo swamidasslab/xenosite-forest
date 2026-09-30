@@ -75,20 +75,20 @@ impl When {
             return false;
         };
         let atom = mol.atom(atom_idx(idx));
-        if let Some(z) = self.z {
-            if atom.element.atomic_number() != z {
-                return false;
-            }
+        if let Some(z) = self.z
+            && atom.element.atomic_number() != z
+        {
+            return false;
         }
-        if let Some(h) = self.h {
-            if mol.implicit_hydrogen_count(atom_idx(idx)) as u8 != h {
-                return false;
-            }
+        if let Some(h) = self.h
+            && mol.implicit_hydrogen_count(atom_idx(idx)) != h
+        {
+            return false;
         }
-        if let Some(want) = self.aromatic {
-            if atom.aromatic != want {
-                return false;
-            }
+        if let Some(want) = self.aromatic
+            && atom.aromatic != want
+        {
+            return false;
         }
         true
     }
@@ -371,22 +371,22 @@ impl PatternInfo {
     ) -> Self {
         let leave = leave.into();
         let keep = keep.into();
-        if self.effect.leave_formula.is_empty() {
-            if let Some(formula) = named_leave_formula(&leave) {
-                self.effect.leave_formula = formula;
-                self.effect = self.effect.reseal_delta();
-            }
+        if self.effect.leave_formula.is_empty()
+            && let Some(formula) = named_leave_formula(&leave)
+        {
+            self.effect.leave_formula = formula;
+            self.effect = self.effect.reseal_delta();
         }
         for arm in &mut self.possibilities {
-            if arm.leave_formula.is_empty() {
-                if let Some(formula) = named_leave_formula(&leave) {
-                    arm.leave_formula = formula.clone();
-                    arm.delta_formula = compose_delta_formula(
-                        arm.adds.as_deref(),
-                        arm.removes.as_deref(),
-                        &arm.leave_formula,
-                    );
-                }
+            if arm.leave_formula.is_empty()
+                && let Some(formula) = named_leave_formula(&leave)
+            {
+                arm.leave_formula = formula.clone();
+                arm.delta_formula = compose_delta_formula(
+                    arm.adds.as_deref(),
+                    arm.removes.as_deref(),
+                    &arm.leave_formula,
+                );
             }
         }
         self.cleave_side_group = Some((leave, keep));
@@ -408,14 +408,13 @@ impl PatternInfo {
     /// not a Kekulé supplier form (flags may be cleared there).
     pub fn resolve_for_match(&self, mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Self {
         let mut out = self.clone();
-        if !out.possibilities.is_empty() {
-            if let Some(arm) = out
+        if !out.possibilities.is_empty()
+            && let Some(arm) = out
                 .possibilities
                 .iter()
                 .find(|e| e.when.as_ref().is_some_and(|w| w.matches(mol, mapped)))
-            {
-                out.effect = arm.clone();
-            }
+        {
+            out.effect = arm.clone();
         }
         if out.effect.dearomatizes {
             out.effect.dearomatizes = site_map_aromatic(mol, mapped, &out.site_map);

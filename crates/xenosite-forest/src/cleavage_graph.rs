@@ -307,10 +307,10 @@ pub fn cleavage_layer(
         if !c.pattern.effect.cleaves {
             continue;
         }
-        if let Some(diff) = &parent_diff {
-            if !c.could_help(diff) {
-                continue;
-            }
+        if let Some(diff) = &parent_diff
+            && !c.could_help(diff)
+        {
+            continue;
         }
         let Some(emission) = c.emit()? else {
             continue;
@@ -351,10 +351,10 @@ pub fn cleavage_layer(
         if !pair.effect.cleaves {
             continue;
         }
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair.could_help_on(diff, Some(t)) {
-                continue;
-            }
+        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol)
+            && !pair.could_help_on(diff, Some(t))
+        {
+            continue;
         }
         push_pair_arm(
             mol.mol(),

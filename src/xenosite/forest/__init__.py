@@ -152,7 +152,6 @@ def MetabolicNetwork() -> Any:
     return load().MetabolicNetwork()
 
 
-
 def random_path(
     reactant: str,
     seed: int,

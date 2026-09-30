@@ -2436,6 +2436,7 @@ pub fn reduction() -> RuleSet {
 }
 
 /// Single SoT for leaf name ↔ constructor (replaces parallel match + name list).
+#[allow(clippy::type_complexity)]
 pub const LEAF_CTORS: &[(&str, fn() -> RuleSet)] = &[
     ("Hydroxylation", hydroxylation),
     ("Dehydrogenation", dehydrogenation),
@@ -2478,6 +2479,7 @@ pub const LEAF_CTORS: &[(&str, fn() -> RuleSet)] = &[
 /// Keep these short and guaranteed to metabolize. Tautomerization / a few
 /// native-empty leaves carry a minimal SMILES so the site_kind seal stays
 /// non-empty.
+#[allow(clippy::type_complexity)]
 pub const LEAF_EXAMPLE_SUBSTRATES: &[(&str, &[&str])] = &[
     ("Hydroxylation", &["CCO", "c1ccccc1"]),
     ("Dehydrogenation", &["CCO", "Oc1ccc(O)cc1"]),
@@ -2520,6 +2522,7 @@ pub fn seal_leaf(name: &'static str, set: RuleSet) -> RuleSet {
 }
 
 /// Top-level catalogs that appear as SSSOM first segments (not leaves).
+#[allow(clippy::type_complexity)]
 pub const ROOT_CATALOGS: &[(&str, fn() -> RuleSet)] = &[
     ("PhaseOne", phase_one),
     ("Default", default_ruleset),
@@ -2586,7 +2589,7 @@ pub fn leaf_rule(name: &str) -> Option<RuleSet> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mol::{canon_of, parse_mol};
+    use crate::mol::canon_of;
     use crate::ruleset::{accept_all_rules, accept_all_sites};
 
     #[test]

@@ -17,10 +17,10 @@ pub fn smarts_matches(
     for embedding in find_matches(&query, mol) {
         let mut mapped = BTreeMap::new();
         for (query_idx, target) in embedding {
-            if let Some(mapno) = query.atoms.get(query_idx).and_then(|atom| atom.atom_map) {
-                if mapno != 0 {
-                    mapped.insert(mapno, atom_usize(target));
-                }
+            if let Some(mapno) = query.atoms.get(query_idx).and_then(|atom| atom.atom_map)
+                && mapno != 0
+            {
+                mapped.insert(mapno, atom_usize(target));
             }
         }
         if mapped.contains_key(&1) {

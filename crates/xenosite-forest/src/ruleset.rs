@@ -236,10 +236,10 @@ impl RuleSet {
     /// Child rule by name (catalog) or bound pattern by name (leaf).
     pub fn get_str(&self, name: &str) -> Option<RuleSet> {
         for member in &self.members {
-            if let RuleMember::Set(set) = member {
-                if set.name.as_deref() == Some(name) {
-                    return Some(set.clone());
-                }
+            if let RuleMember::Set(set) = member
+                && set.name.as_deref() == Some(name)
+            {
+                return Some(set.clone());
             }
         }
         None
@@ -248,13 +248,13 @@ impl RuleSet {
     /// [`BoundPattern`] for a named pattern on this leaf (direct members only).
     pub fn bound_pattern(&self, name: &str) -> Option<crate::bound_pattern::BoundPattern> {
         for member in &self.members {
-            if let RuleMember::Pattern(pattern) = member {
-                if pattern.name == name {
-                    return Some(crate::bound_pattern::BoundPattern::new(
-                        self.clone(),
-                        pattern.clone(),
-                    ));
-                }
+            if let RuleMember::Pattern(pattern) = member
+                && pattern.name == name
+            {
+                return Some(crate::bound_pattern::BoundPattern::new(
+                    self.clone(),
+                    pattern.clone(),
+                ));
             }
         }
         // Also search flat patterns under nested sets? Plan says leaf patterns
@@ -525,7 +525,7 @@ fn cleave_oxygenate(
     let mut frags: Vec<Molecule> = product
         .fragments()
         .into_iter()
-        .filter(|f| accept_product(f))
+        .filter(accept_product)
         .collect();
     if frags.is_empty() && accept_product(&product) {
         frags.push(product);
@@ -572,6 +572,7 @@ fn mapped_bond_in_ring(
 }
 
 /// Same as [`apply_edit_mols`], returning product CSMIs.
+#[allow(dead_code)] // retained for ApplyN / MS1 emit
 pub(crate) fn apply_edit_for_candidate(
     mol: &Molecule,
     pattern: &PatternInfo,
@@ -631,10 +632,9 @@ pub(crate) fn apply_edit_mols_raw(
             // leave carbon on the live mol preserves the ring (catechol).
             if pattern.effect.leave_count == Some(1)
                 && pattern.effect.leave_formula == crate::pattern::leave_ch2()
+                && let Some(products) = remove_mapped_ch2_leave(mol, mapped)
             {
-                if let Some(products) = remove_mapped_ch2_leave(mol, mapped) {
-                    return Ok(products);
-                }
+                return Ok(products);
             }
             let mut cache = crate::kekule::KekuleCache::default();
             let work = crate::kekule::reactant_parent(mol, mapped, smirks, &mut cache)?;
@@ -688,10 +688,10 @@ pub(crate) fn apply_edit_mols_raw(
                 }
                 return Ok(out);
             }
-            if let Some(mode) = mode {
-                if let Some(products) = cleave_oxygenate(&work, mapped, mode) {
-                    return Ok(products);
-                }
+            if let Some(mode) = mode
+                && let Some(products) = cleave_oxygenate(&work, mapped, mode)
+            {
+                return Ok(products);
             }
             Ok(Vec::new())
         }
@@ -762,7 +762,7 @@ pub fn o_dealkylation() -> RuleSet {
 mod tests {
     use super::*;
     use crate::hydroxylation::hydroxylation;
-    use crate::mol::{canon_of, parse_mol};
+    use crate::mol::canon_of;
     use crate::pattern::Effect;
     use std::collections::BTreeSet;
 

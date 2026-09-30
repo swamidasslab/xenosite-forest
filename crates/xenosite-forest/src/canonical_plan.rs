@@ -1006,10 +1006,10 @@ pub fn hydroxylation_then_dehydrogenation(
             "S" => Some(16),
             _ => None,
         };
-        if let Some(z) = atomic_num {
-            if let Some(hetero) = bonded(mol, atom, z) {
-                dh_refs.push(PlanAtom::index(hetero));
-            }
+        if let Some(z) = atomic_num
+            && let Some(hetero) = bonded(mol, atom, z)
+        {
+            dh_refs.push(PlanAtom::index(hetero));
         }
     }
     if dh_refs.is_empty() {

@@ -66,6 +66,7 @@ fn closing_bracket(s: &str, open: usize) -> Result<usize, ForestError> {
         return Err(ForestError::Smirks(format!("expected [ at {open} in {s}")));
     }
     let mut depth = 0_i32;
+    #[allow(clippy::needless_range_loop)]
     for i in open..bytes.len() {
         match bytes[i] {
             b'[' => depth += 1,
@@ -235,7 +236,7 @@ fn specialize_product_wildcards(
                     && inner.as_bytes()[1] == b':'
                     && inner[2..].bytes().all(|b| b.is_ascii_digit());
                 let needs = (inner.starts_with('*') && !plain_star)
-                    || (inner.starts_with('#') && inner.contains(|c: char| c == 'v' || c == ';'));
+                    || (inner.starts_with('#') && inner.contains(['v', ';']));
                 if needs {
                     let a = mol.atom(atom_idx(atom));
                     let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
@@ -288,7 +289,7 @@ fn specialize_product_wildcards(
 /// - Resolve SMARTS bond or-queries (`-,:`, `=,:`) to the live bond order.
 /// - Rewrite product `[*&H0&+:map]`-style wildcards to `[ElH0+:map]`.
 /// - Leave product organic atoms alone when already chematic-clean.
-
+///
 /// Explicit H-count from a SMARTS bracket body (`H2`, `h1`, `H0`, …).
 fn h_count_from_bracket(inner: &str) -> Option<u8> {
     let bytes = inner.as_bytes();
@@ -317,7 +318,7 @@ fn h_count_from_bracket(inner: &str) -> Option<u8> {
             && i + 1 < bytes.len()
             && bytes[i + 1].is_ascii_digit()
         {
-            return Some((bytes[i + 1] - b'0') as u8);
+            return Some(bytes[i + 1] - b'0');
         }
         // Bare `H` / `h` before `:` means H1 (RDKit).
         if (bytes[i] == b'H' || bytes[i] == b'h')
@@ -352,33 +353,33 @@ pub fn specialize_smirks_for_maps(
         if bytes[i] == b'[' {
             let end = closing_bracket(reactant, i)?;
             let bracket = &reactant[i + 1..end];
-            if let Some(mapno) = map_from_bracket(bracket) {
-                if let Some(&atom) = mapped.get(&mapno) {
-                    let a = mol.atom(atom_idx(atom));
-                    let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
-                        ForestError::Smirks(format!("unsupported element for map {mapno}"))
-                    })?;
-                    // Keep H-count when the query constrains H (H0/H1/h2, …)
-                    // so chematic apply still distinguishes [#6H1] vs [#6H2]
-                    // after #→El rewrite. Use the matched atom's H, not the
-                    // first OR branch in the bracket (`#7h1,#7h2` → atom H).
-                    let h = if h_count_from_bracket(bracket).is_some() {
-                        Some(mol.implicit_hydrogen_count(atom_idx(atom)))
-                    } else {
-                        None
-                    };
-                    out.push('[');
-                    out.push_str(sym);
-                    if let Some(h) = h {
-                        out.push('H');
-                        out.push_str(&h.to_string());
-                    }
-                    out.push(':');
-                    out.push_str(&mapno.to_string());
-                    out.push(']');
-                    i = end + 1;
-                    continue;
+            if let Some(mapno) = map_from_bracket(bracket)
+                && let Some(&atom) = mapped.get(&mapno)
+            {
+                let a = mol.atom(atom_idx(atom));
+                let sym = element_symbol(a.element, a.aromatic).ok_or_else(|| {
+                    ForestError::Smirks(format!("unsupported element for map {mapno}"))
+                })?;
+                // Keep H-count when the query constrains H (H0/H1/h2, …)
+                // so chematic apply still distinguishes [#6H1] vs [#6H2]
+                // after #→El rewrite. Use the matched atom's H, not the
+                // first OR branch in the bracket (`#7h1,#7h2` → atom H).
+                let h = if h_count_from_bracket(bracket).is_some() {
+                    Some(mol.implicit_hydrogen_count(atom_idx(atom)))
+                } else {
+                    None
+                };
+                out.push('[');
+                out.push_str(sym);
+                if let Some(h) = h {
+                    out.push('H');
+                    out.push_str(&h.to_string());
                 }
+                out.push(':');
+                out.push_str(&mapno.to_string());
+                out.push(']');
+                i = end + 1;
+                continue;
             }
             out.push_str(&reactant[i..=end]);
             i = end + 1;

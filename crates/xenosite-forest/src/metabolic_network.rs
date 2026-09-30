@@ -216,6 +216,7 @@ pub(crate) fn network_from_nodes(
 }
 
 /// Convert a search emission hop into a network hop.
+#[allow(clippy::too_many_arguments)]
 pub fn hop_from_parts(
     rule: impl Into<String>,
     pattern_name: impl Into<String>,

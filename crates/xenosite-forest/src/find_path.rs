@@ -919,36 +919,36 @@ fn keep_fragments(
     if products.is_empty() {
         return Vec::new();
     }
-    if products.len() >= 2 {
-        if let (Some(pdiff), Some(tmol)) = (parent_diff, target_mol) {
-            let mut kept = Vec::new();
-            for (i, child) in products.iter().enumerate() {
-                let csmi = child.csmi();
-                let is_hit = csmi.as_ref() == target_csmi;
-                if !is_hit && child.heavy_atom_count() < target_ha {
-                    continue;
-                }
-                let child_diff = crate::atom_diff::atom_diff_after_cleavage_tracked(
-                    parent,
-                    pdiff,
-                    child,
-                    tmol,
-                    Some(&mut mcs.fallback),
-                    Some(&mut mcs.rematch),
-                );
-                if is_hit || child_diff.cost() < pdiff.cost() {
-                    let mut sides = Vec::new();
-                    for (j, other) in products.iter().enumerate() {
-                        if j != i && other.csmi().as_ref() != csmi.as_ref() {
-                            sides.push(other.csmi().as_ref().to_string());
-                        }
+    if products.len() >= 2
+        && let (Some(pdiff), Some(tmol)) = (parent_diff, target_mol)
+    {
+        let mut kept = Vec::new();
+        for (i, child) in products.iter().enumerate() {
+            let csmi = child.csmi();
+            let is_hit = csmi.as_ref() == target_csmi;
+            if !is_hit && child.heavy_atom_count() < target_ha {
+                continue;
+            }
+            let child_diff = crate::atom_diff::atom_diff_after_cleavage_tracked(
+                parent,
+                pdiff,
+                child,
+                tmol,
+                Some(&mut mcs.fallback),
+                Some(&mut mcs.rematch),
+            );
+            if is_hit || child_diff.cost() < pdiff.cost() {
+                let mut sides = Vec::new();
+                for (j, other) in products.iter().enumerate() {
+                    if j != i && other.csmi().as_ref() != csmi.as_ref() {
+                        sides.push(other.csmi().as_ref().to_string());
                     }
-                    kept.push((child.clone(), sides, Some(child_diff)));
                 }
+                kept.push((child.clone(), sides, Some(child_diff)));
             }
-            if !kept.is_empty() {
-                return kept;
-            }
+        }
+        if !kept.is_empty() {
+            return kept;
         }
     }
     // Closest fragment by HA/CSMI; still attach a lifted diff when possible so
@@ -1364,13 +1364,13 @@ where
 
 /// Search for exact paths; if the budget is exhausted without filling `max_paths`,
 /// also return up to `max_paths` closest non-exact reaches (end-of-search flush).
-pub fn find_path_partial<'a, 'b, 'g, R, T, K>(
+pub fn find_path_partial<R, T, K>(
     reactant: R,
     target: T,
-    ruleset: &'a RuleSet,
-    counters: &'b mut PathCounters,
+    ruleset: &RuleSet,
+    counters: &mut PathCounters,
     config: FindPathConfig,
-    network: Option<&'g mut MetabolicNetwork>,
+    network: Option<&mut MetabolicNetwork>,
     keep: K,
 ) -> Result<FindPathPartialResult, ForestError>
 where
@@ -1508,12 +1508,12 @@ impl<'g> PathSearch<'g> {
         let smiles = walk.mol.csmi().as_ref().to_string();
         if self.closest.iter().any(|p| p.smiles == smiles) {
             // Keep better residual if we revisit.
-            if let Some(p) = self.closest.iter_mut().find(|p| p.smiles == smiles) {
-                if residual.cost < p.residual.cost {
-                    p.residual = residual;
-                    p.steps = walk.steps.clone();
-                    p.plan = as_deps(walk.plan.clone()).with_maybe(Maybe::new(walk.maybe.clone()));
-                }
+            if let Some(p) = self.closest.iter_mut().find(|p| p.smiles == smiles)
+                && residual.cost < p.residual.cost
+            {
+                p.residual = residual;
+                p.steps = walk.steps.clone();
+                p.plan = as_deps(walk.plan.clone()).with_maybe(Maybe::new(walk.maybe.clone()));
             }
             return;
         }
@@ -1595,6 +1595,7 @@ impl<'g> PathSearch<'g> {
     }
 
     /// Gate + push one kept fragment onto the heap. Returns whether it was a target hit.
+    #[allow(clippy::too_many_arguments)]
     fn try_enqueue_child(
         &mut self,
         walk: &Walk,
@@ -1622,13 +1623,14 @@ impl<'g> PathSearch<'g> {
             child_diff = Some(crate::atom_diff::atom_diff(kept.mol(), self.target.mol()));
         }
         // Hard anti-retread: never enter a sealed residual class (even via a new parent).
-        if let Some(ref cd) = child_diff {
-            if !target_hit && self.residual_class_sealed(cd, &kept) {
-                return EnqueueOutcome {
-                    target_hit: false,
-                    enqueued: false,
-                };
-            }
+        if let Some(ref cd) = child_diff
+            && !target_hit
+            && self.residual_class_sealed(cd, &kept)
+        {
+            return EnqueueOutcome {
+                target_hit: false,
+                enqueued: false,
+            };
         }
 
         let allow = if use_atom_diff {
@@ -1653,13 +1655,13 @@ impl<'g> PathSearch<'g> {
                 enqueued: false,
             };
         }
-        if let Some(ends) = emission.dh_ends {
-            if !dh_product_ends_match_target(&walk.mol, &kept, ends, self.target.mol()) {
-                return EnqueueOutcome {
-                    target_hit: false,
-                    enqueued: false,
-                };
-            }
+        if let Some(ends) = emission.dh_ends
+            && !dh_product_ends_match_target(&walk.mol, &kept, ends, self.target.mol())
+        {
+            return EnqueueOutcome {
+                target_hit: false,
+                enqueued: false,
+            };
         }
         if repeats_ancestor(&walk.ancestors, &kept) {
             return EnqueueOutcome {
@@ -1687,7 +1689,7 @@ impl<'g> PathSearch<'g> {
             &sides,
         );
         let (o_added, o_removed) = child_oxygen_lists(
-            &walk,
+            walk,
             &emission.oxygen_site,
             emission.adds_oxygen,
             emission.removes_oxygen,
@@ -1810,20 +1812,19 @@ where
                 break;
             }
             // Lazy diversity: priority must still equal score + −n (fixed-point).
-            if diversity {
-                if let (HeapScoreMode::Match(_), Some(key)) =
+            if diversity
+                && let (HeapScoreMode::Match(_), Some(key)) =
                     (item.mode, item.diversity_key.clone())
-                {
-                    let n = self.search.diversity_counts.get(&key).copied().unwrap_or(0);
-                    let fresh = item.match_score.saturating_add(diversity_penalty(n));
-                    if fresh != item.match_priority {
-                        item.match_priority = fresh;
-                        self.search.heap.push(item);
-                        self.counters.diversity_repush += 1;
-                        continue;
-                    }
-                    *self.search.diversity_counts.entry(key).or_insert(0) += 1;
+            {
+                let n = self.search.diversity_counts.get(&key).copied().unwrap_or(0);
+                let fresh = item.match_score.saturating_add(diversity_penalty(n));
+                if fresh != item.match_priority {
+                    item.match_priority = fresh;
+                    self.search.heap.push(item);
+                    self.counters.diversity_repush += 1;
+                    continue;
                 }
+                *self.search.diversity_counts.entry(key).or_insert(0) += 1;
             }
             let walk = item.walk;
             let here = walk.mol.csmi();
@@ -1848,12 +1849,11 @@ where
                     Some(ref d) => d.clone(),
                     None => crate::atom_diff::atom_diff(walk.mol.mol(), self.search.target.mol()),
                 };
-                if lazy_closer {
-                    if let Some(pc) = walk.parent_cost {
-                        if !cost_closer(pc, d.cost(), false) {
-                            continue;
-                        }
-                    }
+                if lazy_closer
+                    && let Some(pc) = walk.parent_cost
+                    && !cost_closer(pc, d.cost(), false)
+                {
+                    continue;
                 }
                 Some(d)
             } else {
@@ -1936,10 +1936,10 @@ where
                 };
                 for (kept, sides, lifted_diff) in keeps {
                     let kept_csmi = kept.csmi().as_ref().to_string();
-                    if let Some(key) = &cleave_key {
-                        if !seen_cleave_continues.insert((key.clone(), kept_csmi.clone())) {
-                            continue;
-                        }
+                    if let Some(key) = &cleave_key
+                        && !seen_cleave_continues.insert((key.clone(), kept_csmi.clone()))
+                    {
+                        continue;
                     }
                     let child_diff = if use_atom_diff {
                         lifted_diff.or_else(|| {
@@ -1982,17 +1982,16 @@ where
                 }
             }
             // Local min: expanded but no closer child — seal residual class.
-            if enqueued_from_here == 0 {
-                if let Some(ref d) = diff {
-                    if d.cost() > 0 {
-                        self.search.seal_basin(&walk, d);
-                        if let Some(limit) = self.search.config.stop_after_sealed_basins {
-                            if self.search.sealed_classes.len() >= limit {
-                                self.done = true;
-                                return None;
-                            }
-                        }
-                    }
+            if enqueued_from_here == 0
+                && let Some(ref d) = diff
+                && d.cost() > 0
+            {
+                self.search.seal_basin(&walk, d);
+                if let Some(limit) = self.search.config.stop_after_sealed_basins
+                    && self.search.sealed_classes.len() >= limit
+                {
+                    self.done = true;
+                    return None;
                 }
             }
             self.counters.unstable_csmi_key += unstable_csmi;
@@ -2087,10 +2086,10 @@ impl<'a> Expand<'a> {
             if !keep(&site) {
                 continue;
             }
-            if let Some(d) = diff {
-                if !site.could_help_on(d, Some(target)) {
-                    continue;
-                }
+            if let Some(d) = diff
+                && !site.could_help_on(d, Some(target))
+            {
+                continue;
             }
             deferred.push(site);
         }
@@ -3028,6 +3027,7 @@ mod tests {
         );
     }
 
+    #[allow(dead_code)]
     fn hop_cost_gain_is_parent_minus_child() {
         assert_eq!(hop_cost_gain(Some(5), Some(0)), 5);
         assert_eq!(hop_cost_gain(Some(5), Some(4)), 1);
@@ -3867,7 +3867,12 @@ mod tests {
             removes: Some("OH".into()),
             ..Default::default()
         };
-        assert!(undoes_oxygen_edit(&rem, &alcohol_same, &[oh.clone()], &[]));
+        assert!(undoes_oxygen_edit(
+            &rem,
+            &alcohol_same,
+            std::slice::from_ref(&oh),
+            &[]
+        ));
         assert!(!undoes_oxygen_edit(&rem, &beta, &[oh], &[]));
     }
 }

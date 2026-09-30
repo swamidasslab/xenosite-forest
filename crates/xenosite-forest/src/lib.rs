@@ -107,6 +107,10 @@ pub use mapping::{
     Resolved, SssomRow, XF_PREFIX, XMET_PREFIX, expand_iri, forest_xmet_sssom,
     forest_xmet_sssom_gz, parse_forest_xmet_sssom, resolve, to_curie, xf_path_segments,
 };
+pub use mass::{
+    Ms1Adduct, PROTON_MASS, element_mono_mass, formula_apply_delta, formula_mono_mass,
+    isotope_exact_mass, molecule_mono_mass, mz_abs_error, mz_of, mz_of_mol, mz_within,
+};
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,
     SiteShellCostOpts, SiteShellMismatch, align_shells, aligned_shells_h_closer_no_n2,

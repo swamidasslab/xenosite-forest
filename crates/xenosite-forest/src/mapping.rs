@@ -137,6 +137,7 @@ pub fn parse_forest_xmet_sssom() -> Vec<SssomRow> {
 
 /// Resolved Forest object: a catalog/leaf rule or a pattern bound to its rule.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Resolved {
     Rule(RuleSet),
     Pattern(BoundPattern),

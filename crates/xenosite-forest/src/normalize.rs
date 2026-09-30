@@ -193,10 +193,10 @@ mod tests {
             before, after,
             "index-stable adopt must keep Forest tags: before={before:?} after={after:?}"
         );
-        for i in 0..out.mol.mol().atom_count() {
+        for (i, want) in after.iter().enumerate() {
             assert_eq!(
                 get_label(out.mol.mol(), atom_idx(i)).map(|t| t.get()),
-                after[i]
+                *want
             );
         }
     }

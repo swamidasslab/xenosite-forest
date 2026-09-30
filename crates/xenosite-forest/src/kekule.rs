@@ -1265,18 +1265,18 @@ fn fill_slot(
             .map(|p| p.atoms().map(|(_, a)| a.charge.unsigned_abs() as i32).sum())
             .unwrap_or(0);
         for (key, order) in &tagged {
-            if let Some(code) = order_code(*order) {
-                if code == 1 || code == 2 {
-                    match bag.by_order.get(&(*key, code)) {
-                        None => {
+            if let Some(code) = order_code(*order)
+                && (code == 1 || code == 2)
+            {
+                match bag.by_order.get(&(*key, code)) {
+                    None => {
+                        bag.by_order.insert((*key, code), index);
+                    }
+                    Some(&prev) => {
+                        // Prefer closed-shell overlay (lower |charge|).
+                        let prev_mag = bag.charge_mags.get(prev).copied().unwrap_or(i32::MAX);
+                        if charge_mag < prev_mag {
                             bag.by_order.insert((*key, code), index);
-                        }
-                        Some(&prev) => {
-                            // Prefer closed-shell overlay (lower |charge|).
-                            let prev_mag = bag.charge_mags.get(prev).copied().unwrap_or(i32::MAX);
-                            if charge_mag < prev_mag {
-                                bag.by_order.insert((*key, code), index);
-                            }
                         }
                     }
                 }
@@ -2129,7 +2129,7 @@ mod tests {
         let seed0 = *b0.iter().next().unwrap();
         parent.ensure_kekule(seed0.0, seed0.1);
         let other = other_atom(parent.mol(), &a0);
-        let (a1, b1) = conjugated_component(parent.mol(), other);
+        let (_a1, b1) = conjugated_component(parent.mol(), other);
         let seed1 = *b1.iter().next().unwrap();
         parent.ensure_kekule(seed1.0, seed1.1);
         assert!(parent.kekule().borrow().system_count() >= 2);
@@ -2191,7 +2191,7 @@ mod tests {
     fn naphthalene_and_phenol_edit_copy_match_fresh() {
         for smi in ["c1ccc2ccccc2c1", "Oc1ccccc1", "O=C1C=CC(=O)C=C1"] {
             let parent = ForestMol::parse(smi).unwrap();
-            let (atoms, bonds) = conjugated_component(parent.mol(), 0);
+            let (_atoms, bonds) = conjugated_component(parent.mol(), 0);
             if bonds.is_empty() {
                 continue;
             }

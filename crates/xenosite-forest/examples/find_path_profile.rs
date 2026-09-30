@@ -247,22 +247,21 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
         }
 
         let t0 = Instant::now();
-        let diff = atom_diff(walk.mol.mol(), &target_mol);
+        let diff = atom_diff(walk.mol.mol(), target_mol);
         let cost = diff.cost();
         t.atom_diff += t0.elapsed();
 
-        if lazy {
-            if let Some(pc) = walk.parent_cost {
-                if cost >= pc {
-                    t.rejected += 1;
-                    t.reject += Duration::ZERO; // MCS already in atom_diff
-                    continue;
-                }
-            }
+        if lazy
+            && let Some(pc) = walk.parent_cost
+            && cost >= pc
+        {
+            t.rejected += 1;
+            t.reject += Duration::ZERO; // MCS already in atom_diff
+            continue;
         }
         t.nodes += 1;
 
-        let emissions = expand_timed(&set, &walk.mol, &target_mol, &diff, &mut t);
+        let emissions = expand_timed(&set, &walk.mol, target_mol, &diff, &mut t);
 
         for emission in emissions {
             let t0 = Instant::now();
@@ -280,7 +279,7 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
                 true
             } else if let Some(pc) = walk.parent_cost {
                 let t1 = Instant::now();
-                let child_cost = atom_diff_for_child(&walk.mol, &diff, &kept, &target_mol).cost();
+                let child_cost = atom_diff_for_child(&walk.mol, &diff, &kept, target_mol).cost();
                 t.lift += t1.elapsed();
                 target_hit || child_cost < pc
             } else {

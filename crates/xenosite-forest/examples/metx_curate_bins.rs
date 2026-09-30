@@ -533,11 +533,11 @@ fn main() {
         .map(|r| (r.biot_id.clone(), r.clone()))
         .collect();
     for row in &mut quiet_gap {
-        if let Some(n) = near_by.get(&row.biot_id) {
-            if row.path_to_closest.is_empty() {
-                row.path_to_closest = n.path_to_closest.clone();
-                row.closest_smi = n.closest_smi.clone();
-            }
+        if let Some(n) = near_by.get(&row.biot_id)
+            && row.path_to_closest.is_empty()
+        {
+            row.path_to_closest = n.path_to_closest.clone();
+            row.closest_smi = n.closest_smi.clone();
         }
     }
 
