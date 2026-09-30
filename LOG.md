@@ -2,10 +2,11 @@
 
 ## 2026-09-29
 
-- **`find_path` / `find_path_partial` always return the graph.** Returns
-  `(hits, counters, network)` / `(exact, partials, counters, network)`. Search
-  always records hops; omit `network=` to get a fresh `MetabolicNetwork`, or
-  pass one to extend it. Fixes the prior “only if network=” gap.
+- **Pathway displays: StepPlan + Maybe + outer→leaf paths.** `StepPlan.maybe()` /
+  `PathOutcome.maybe()` expose cleavage bags; notebook marks SOM (coral) vs
+  Maybe (blue) with atom labels on every mol. Emission/`hops` path captions
+  join **outer→leaf** (`PhaseOne/QuinoneFormation`); stored `rule_path` stays
+  leaf-first.
 
 - **Pathway notebook displays.** PathOutcome / PartialOutcome / Emission /
   GraphEdge / RandomPath draw **reactant→product** hops with SOM on the mol

@@ -14,9 +14,8 @@ pub const MAX_CHARS: usize = 3500;
 /// Truncate a multi-line display string; append an ellipsis line if cut.
 pub fn truncate_display(text: &str) -> String {
     let mut out = String::new();
-    let mut lines = 0usize;
-    for line in text.lines() {
-        if lines >= MAX_LINES || out.len() + line.len() + 1 > MAX_CHARS {
+    for (i, line) in text.lines().enumerate() {
+        if i >= MAX_LINES || out.len() + line.len() + 1 > MAX_CHARS {
             out.push_str("… (truncated)");
             return out;
         }
@@ -24,7 +23,6 @@ pub fn truncate_display(text: &str) -> String {
             out.push('\n');
         }
         out.push_str(line);
-        lines += 1;
     }
     out
 }
@@ -181,6 +179,42 @@ pub fn format_step_plan(plan: &Deps) -> String {
             "  (~{n_lin} linearizations; not expanded — use .linearizations())"
         ));
     }
+    let maybe = plan.maybe();
+    if !maybe.is_empty() {
+        lines.push(format!("  maybe: {} bag(s)", maybe.entries.len()));
+        for (i, e) in maybe.entries.iter().take(8).enumerate() {
+            let site: Vec<String> = e.site.iter().map(|a| a.to_string()).collect();
+            let opens: Vec<String> = e
+                .opens
+                .iter()
+                .take(4)
+                .map(|o| {
+                    format!(
+                        "{{{}}}",
+                        o.iter()
+                            .map(|a| a.to_string())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                })
+                .collect();
+            let open_s = if e.opens.is_empty() {
+                String::new()
+            } else if e.opens.len() > 4 {
+                format!(" opens=[{},…]", opens.join(","))
+            } else {
+                format!(" opens=[{}]", opens.join(","))
+            };
+            lines.push(format!(
+                "    [{i}] site={{{}}} side={}{open_s}",
+                site.join(","),
+                e.side
+            ));
+        }
+        if maybe.entries.len() > 8 {
+            lines.push(format!("    … (+{} bags)", maybe.entries.len() - 8));
+        }
+    }
     truncate_display(&lines.join("\n"))
 }
 
@@ -250,6 +284,7 @@ pub fn format_emission(em: &Emission) -> String {
     let path = em
         .rule_path
         .iter()
+        .rev() // outer→leaf for display (PhaseOne/QuinoneFormation)
         .map(|p| p.as_deref().unwrap_or("?"))
         .collect::<Vec<_>>()
         .join("/");

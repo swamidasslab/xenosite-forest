@@ -140,7 +140,7 @@ not needed. Pair ends are internal (`end_candidates` →
 
 Compose the set in Python once (`RuleSet([PatternInfo(...), ...])` or `RuleSet.compose([hydroxylation, dealkylation])`). That copies pattern data into the Rust payload. Later `metabolize(mol)` / `candidates(mol)` passes handles only.
 
-**RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. `unique_csmi` dedups within and across leaves on the flat candidate walk. Filters see the leaf set (resolved from the site's leaf name), not the outer compose container.
+**RuleSet namespaces:** nested sets stay nested (`compose` does not flatten). Each emission carries a leaf-first `rule_path` (emitting rule, then each containing set), matching Python `info["rule"]`. **Display** (`__str__` / notebook captions) joins the path **outer→leaf** (e.g. `PhaseOne/QuinoneFormation`). `unique_csmi` dedups within and across leaves on the flat candidate walk. Filters see the leaf set (resolved from the site's leaf name), not the outer compose container.
 
 **Rule catalog:** every concrete Python reaction rule is a leaf `RuleSet` in
 [`rules.rs`](../../crates/xenosite-forest/src/rules.rs) (`phase_one`,

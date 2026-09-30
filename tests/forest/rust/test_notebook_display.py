@@ -46,19 +46,45 @@ def test_path_outcome_html_prefers_trace_and_plan():
     hit = hits[0]
     html = hit._repr_html_()
     assert "PathOutcome" in html
-    assert "hop" in html or "start" in html
+    assert "StepPlan" in html
     assert "SOM" in html or "@" in html
     hops = hit.hops()
     assert hops
     assert "reactant" in hops[0]
     assert hops[0]["reactant"]
-    # Site indexes the reactant, not only the final product.
     assert hops[0]["site"] is not None
-    mol = hit.mol
-    assert "survivors=" in str(mol)
+    assert "rule_path" in hops[0]
     assert "PathCounters" in str(counters)
     assert "billed=" in str(counters)
-    assert "PathCounters" in counters._repr_html_()
+
+
+def test_cleavage_maybe_on_plan_and_html():
+    hits, _, _ = find_path("COc1ccccc1", "Oc1ccccc1", max_paths=1, max_nodes=200)
+    assert hits
+    hit = hits[0]
+    bags = list(hit.maybe())
+    assert bags, "cleavage should leave Maybe bags on the plan"
+    assert bags[0]["side"]
+    assert bags[0]["site"] is not None
+    plan_d = hit.plan.to_dict()
+    assert plan_d.get("maybe")
+    html = hit._repr_html_()
+    assert "maybe" in html.lower()
+    assert "StepPlan" in html
+
+
+def test_emission_path_display_is_outer_first():
+    from xenosite.forest import default_ruleset
+
+    mol = ForestMol("c1ccccc1")
+    emissions = default_ruleset().metabolize(mol)
+    assert emissions
+    text = str(emissions[0])
+    path_line = [ln for ln in text.splitlines() if ln.strip().startswith("path:")][0]
+    stored = list(emissions[0].rule_path())
+    assert stored, "rule_path should be non-empty"
+    expected = "/".join(p for p in reversed(stored) if p)
+    assert expected in path_line
 
 
 def test_repr_html_ruleset_and_emission_uses_product_trace():

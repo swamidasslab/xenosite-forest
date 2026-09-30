@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from xenosite.forest import MetabolicNetwork, product_graph_bfs
+from xenosite.forest import product_graph_bfs
 
 
 def test_network_indexing_and_inbound_edges():

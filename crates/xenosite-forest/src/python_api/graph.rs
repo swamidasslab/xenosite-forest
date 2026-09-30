@@ -608,10 +608,10 @@ fn rules_for_product_graph(ruleset: Option<&Bound<'_, PyRuleSet>>) -> RuleSet {
 }
 
 fn mark_target_csmi(net: &mut MetabolicNetwork, target: Option<&str>) {
-    if let Some(t) = target {
-        if let Some(i) = net.index_of(t) {
-            net.mark_target(i);
-        }
+    if let Some(t) = target
+        && let Some(i) = net.index_of(t)
+    {
+        net.mark_target(i);
     }
 }
 
@@ -647,7 +647,7 @@ pub fn product_graph_bfs(
         drop(net_py);
         py.detach(|| {
             let mut guard = arc.lock().map_err(|_| NETWORK_LOCK_POISONED.to_string())?;
-            product_graph_into(&mut *guard, &start, &rules, &config).map_err(|e| e.to_string())?;
+            product_graph_into(&mut guard, &start, &rules, &config).map_err(|e| e.to_string())?;
             mark_target_csmi(&mut guard, target.as_deref());
             Ok::<_, String>(())
         })
@@ -694,7 +694,7 @@ pub fn product_graph_into_py(
     let target = target.map(str::to_string);
     py.detach(|| {
         let mut guard = arc.lock().map_err(|_| NETWORK_LOCK_POISONED.to_string())?;
-        product_graph_into(&mut *guard, &start, &rules, &config).map_err(|e| e.to_string())?;
+        product_graph_into(&mut guard, &start, &rules, &config).map_err(|e| e.to_string())?;
         mark_target_csmi(&mut guard, target.as_deref());
         Ok::<_, String>(())
     })

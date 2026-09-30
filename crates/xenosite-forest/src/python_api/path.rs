@@ -144,6 +144,11 @@ impl PyPathOutcome {
         )
     }
 
+    /// Cleavage Maybe bags (same as ``plan.maybe()``).
+    fn maybe(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        super::plan::maybe_to_py(py, self.inner.plan.maybe())
+    }
+
     /// Search hops (pattern / site on reactant / product) for pathway displays.
     fn hops(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let rows: Vec<Py<PyAny>> = self
@@ -160,6 +165,9 @@ impl PyPathOutcome {
                 d.set_item("sides", s.sides.clone())?;
                 let leaf = s.leaf_rule().unwrap_or("");
                 d.set_item("rule", leaf)?;
+                // Outer→leaf for display (PhaseOne/QuinoneFormation).
+                let path: Vec<Option<String>> = s.rule_path.iter().rev().cloned().collect();
+                d.set_item("rule_path", path)?;
                 Ok(d.unbind().into_any())
             })
             .collect::<PyResult<_>>()?;
@@ -218,10 +226,17 @@ impl PyPartialPathOutcome {
                 d.set_item("sides", s.sides.clone())?;
                 let leaf = s.leaf_rule().unwrap_or("");
                 d.set_item("rule", leaf)?;
+                let path: Vec<Option<String>> = s.rule_path.iter().rev().cloned().collect();
+                d.set_item("rule_path", path)?;
                 Ok(d.unbind().into_any())
             })
             .collect::<PyResult<_>>()?;
         Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
+    }
+
+    /// Cleavage Maybe bags (same as ``plan.maybe()``).
+    fn maybe(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        super::plan::maybe_to_py(py, self.inner.plan.maybe())
     }
 
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
