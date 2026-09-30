@@ -352,7 +352,7 @@ class ReactionRule:
                 k != "O" and v for k, v in leave.items()
             ):
 
-                def _heavy(p):
+                def _heavy(p: Mol) -> bool:
                     return sum(1 for a in p.GetAtoms() if a.GetAtomicNum() > 1) > 1
 
                 if any(
