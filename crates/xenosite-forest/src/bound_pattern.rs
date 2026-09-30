@@ -74,10 +74,7 @@ impl BoundPattern {
 
     /// One-pattern view for compose / callers that need a bare [`RuleSet`].
     pub fn as_ruleset(&self) -> RuleSet {
-        RuleSet::new(
-            self.rule.name.clone(),
-            [self.pattern.clone()],
-        )
+        RuleSet::new(self.rule.name.clone(), [self.pattern.clone()])
     }
 
     /// `filter_rules` that accepts only this pattern name, AND-composed with `extra`.
@@ -115,7 +112,11 @@ impl BoundPattern {
         filter_rules: R,
         filter_sites: S,
         unique_csmi: bool,
-    ) -> crate::stream::Metabolize<'a, impl Fn(&Molecule, &RuleSet, &PatternInfo) -> bool + 'a, impl Fn(&Molecule, usize, &SiteInfo) -> bool + 'a>
+    ) -> crate::stream::Metabolize<
+        'a,
+        impl Fn(&Molecule, &RuleSet, &PatternInfo) -> bool + 'a,
+        impl Fn(&Molecule, usize, &SiteInfo) -> bool + 'a,
+    >
     where
         R: Fn(&Molecule, &RuleSet, &PatternInfo) -> bool + 'a,
         S: Fn(&Molecule, usize, &SiteInfo) -> bool + 'a,

@@ -1224,7 +1224,9 @@ mod tests {
         let align = aligned_shells_mol(parent.mol(), &target);
         let map = atom_diff(parent.mol(), &target).mapping;
         let pairs = dehydrogenation()
-            .candidates(&parent).filter(|c| matches!(c, Ok(s) if s.is_pair())).collect::<Result<Vec<_>, _>>()
+            .candidates(&parent)
+            .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let pair = &pairs[0];
         let (a, b) = pair.end_atoms().expect("ends");
@@ -1400,7 +1402,7 @@ mod tests {
         );
     }
 
-        #[test]
+    #[test]
 
     fn open_leave_does_not_flood_ring() {
         // Open leave (leave_count None): methylene dealk on phenetole.
@@ -1478,7 +1480,6 @@ mod tests {
             "cleaving leave should drop residual: {before:.3} → {after:.3} atoms={atoms:?} leave={leave_only:?}"
         );
     }
-
 
     fn aligned_shells_mol(a: &Molecule, b: &Molecule) -> AlignedShells {
         let diff = atom_diff(a, b);

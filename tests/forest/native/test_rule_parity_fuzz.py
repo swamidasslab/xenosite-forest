@@ -23,7 +23,6 @@ from xenosite.forest.native.rdkit_api import MolFromSmiles, MolToSmiles
 from xenosite.forest.native.rules import ReactionRule
 
 from .pattern_info_inventory import instantiate_rule
-from .rule_parity_pairs import paired_rule_names
 from .rule_parity_corpus import (
     C18_OPEN_PRODUCT_XFAIL_COUNT,
     parity_full_enabled,
@@ -33,6 +32,7 @@ from .rule_parity_corpus import (
     product_parity_xfail_cases,
     product_parity_xfail_reason,
 )
+from .rule_parity_pairs import paired_rule_names
 
 # Product parity while chasing C18: Effect/formula soft-check stays off in Rust
 # materialize; do not fail the suite on recorded formula_delta_mismatch.

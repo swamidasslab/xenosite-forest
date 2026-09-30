@@ -13,17 +13,17 @@ use std::rc::Rc;
 use chematic::core::{Atom, BondOrder, Element};
 use chematic::perception::find_sssr;
 
+use crate::ForestMol;
+use crate::chematic_tags::preserving;
+use crate::forest::{formula_delta, molecule_formula};
 use crate::kekule::{
     KekuleConfig, KekuleConstraints, PiGraph, bond_order_sums, conjugated_component_ext,
     kekule_forms, move_charge_with_bonds,
 };
-use crate::forest::{formula_delta, molecule_formula};
-use crate::chematic_tags::preserving;
 use crate::mol::{ForestError, Molecule, atom_idx, atom_usize, canon_smiles};
 use crate::pattern::{Edit, PatternInfo};
 use crate::smarts::smarts_matches;
-use crate::valence::{accept_pair_product, accept_product, fill_closed_shell_h};
-use crate::ForestMol;
+use crate::valence::{accept_pair_product, fill_closed_shell_h};
 
 fn bond_key(a: usize, b: usize) -> (usize, usize) {
     if a < b { (a, b) } else { (b, a) }
@@ -212,10 +212,7 @@ fn residual_pi_graph(
         let b = atom_usize(bond.atom2);
         if keep.contains(&a) && keep.contains(&b) {
             match bond.order {
-                BondOrder::Single
-                | BondOrder::Double
-                | BondOrder::Triple
-                | BondOrder::Aromatic => {
+                BondOrder::Single | BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic => {
                     bonds.insert(if a < b { (a, b) } else { (b, a) });
                 }
                 _ => {}
@@ -524,282 +521,280 @@ fn materialize_pair_constraints(
     map2: &BTreeMap<u16, usize>,
     system: &HashSet<usize>,
 ) -> Result<Vec<Molecule>, ForestError> {
-        let rings = ring_sets(mol);
-        let mut rw = mol.clone();
-        clear_aromatic(&mut rw);
-        demote_aromatic_bonds(&mut rw, system);
-        if !edit_end(&mut rw, map1, left, &rings) {
-            return Ok(Vec::new());
-        }
-        if !edit_end(&mut rw, map2, right, &rings) {
-            return Ok(Vec::new());
-        }
+    let rings = ring_sets(mol);
+    let mut rw = mol.clone();
+    clear_aromatic(&mut rw);
+    demote_aromatic_bonds(&mut rw, system);
+    if !edit_end(&mut rw, map1, left, &rings) {
+        return Ok(Vec::new());
+    }
+    if !edit_end(&mut rw, map2, right, &rings) {
+        return Ok(Vec::new());
+    }
 
-        let saturate = saturate_sites(left, map1)
-            .union(&saturate_sites(right, map2))
-            .copied()
-            .collect::<BTreeSet<_>>();
-        // Emit-path closed-shell settle + charge baseline (perception of
-        // neighbor / bond-sum change — not edit-token names). Kekulé matcher
-        // stays generic; config is the behavior contract.
-        let mut settle = charge_baseline_atoms(mol, &rw);
-        for &a in &settle {
-            fill_closed_shell_h(&mut rw, a);
-        }
-        let residual = residual_pi_graph(mol, system, &saturate);
-        // Parent doubles + cumulated degree (N=C=O central C): needed before
-        // saturate→residual demote so framework edges are not consumed as
-        // styrene-style residual π (else both cumulated doubles fall and H on
-        // PhNCO emits empty / [S-] junk instead of O=CNAr).
-        let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
-        let parent_doubles: BTreeSet<(usize, usize)> = mol
-            .bonds()
-            .filter_map(|(_, bond)| {
-                (bond.order == BondOrder::Double).then(|| {
-                    let a = atom_usize(bond.atom1);
-                    let b = atom_usize(bond.atom2);
-                    *parent_double_deg.entry(a).or_default() += 1;
-                    *parent_double_deg.entry(b).or_default() += 1;
-                    bond_key(a, b)
-                })
+    let saturate = saturate_sites(left, map1)
+        .union(&saturate_sites(right, map2))
+        .copied()
+        .collect::<BTreeSet<_>>();
+    // Emit-path closed-shell settle + charge baseline (perception of
+    // neighbor / bond-sum change — not edit-token names). Kekulé matcher
+    // stays generic; config is the behavior contract.
+    let mut settle = charge_baseline_atoms(mol, &rw);
+    for &a in &settle {
+        fill_closed_shell_h(&mut rw, a);
+    }
+    let residual = residual_pi_graph(mol, system, &saturate);
+    // Parent doubles + cumulated degree (N=C=O central C): needed before
+    // saturate→residual demote so framework edges are not consumed as
+    // styrene-style residual π (else both cumulated doubles fall and H on
+    // PhNCO emits empty / [S-] junk instead of O=CNAr).
+    let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
+    let parent_doubles: BTreeSet<(usize, usize)> = mol
+        .bonds()
+        .filter_map(|(_, bond)| {
+            (bond.order == BondOrder::Double).then(|| {
+                let a = atom_usize(bond.atom1);
+                let b = atom_usize(bond.atom2);
+                *parent_double_deg.entry(a).or_default() += 1;
+                *parent_double_deg.entry(b).or_default() += 1;
+                bond_key(a, b)
             })
-            .collect();
-        let is_cumulated_framework = |a: usize, b: usize| -> bool {
-            let edge = bond_key(a, b);
-            parent_doubles.contains(&edge)
-                && (parent_double_deg.get(&a).copied().unwrap_or(0) >= 2
-                    || parent_double_deg.get(&b).copied().unwrap_or(0) >= 2)
+        })
+        .collect();
+    let is_cumulated_framework = |a: usize, b: usize| -> bool {
+        let edge = bond_key(a, b);
+        parent_doubles.contains(&edge)
+            && (parent_double_deg.get(&a).copied().unwrap_or(0) >= 2
+                || parent_double_deg.get(&b).copied().unwrap_or(0) >= 2)
+    };
+    // Saturate sites consume incident π bonds before residual rematch:
+    // (1) shared saturate–saturate edge (aldehyde C=O, ethene, amide);
+    // (2) saturate→residual edges (styrene vinyl C=C when only the CH2
+    //     end is a path_end — else rematch keeps C=C and mints allenes).
+    //     Skip cumulated framework edges here: shared-edge demote (1) is
+    //     the only way to saturate one half of N=C=O / N=C=S / N=C=N.
+    let mut shared_edge_saturated = false;
+    let demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
+        let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) else {
+            return false;
         };
-        // Saturate sites consume incident π bonds before residual rematch:
-        // (1) shared saturate–saturate edge (aldehyde C=O, ethene, amide);
-        // (2) saturate→residual edges (styrene vinyl C=C when only the CH2
-        //     end is a path_end — else rematch keeps C=C and mints allenes).
-        //     Skip cumulated framework edges here: shared-edge demote (1) is
-        //     the only way to saturate one half of N=C=O / N=C=S / N=C=N.
-        let mut shared_edge_saturated = false;
-        let demote_pi = |rw: &mut Molecule, a: usize, b: usize| -> bool {
-            let Some((bond_idx, bond)) = rw.bond_between(atom_idx(a), atom_idx(b)) else {
-                return false;
-            };
-            if !matches!(
-                bond.order,
-                BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic
-            ) {
-                return false;
-            }
-            rw.set_bond_order(
-                bond_idx,
-                if bond.order == BondOrder::Triple {
-                    BondOrder::Double
-                } else {
-                    BondOrder::Single
-                },
-            );
-            true
-        };
-        if saturate.len() == 2 {
-            let mut ends = saturate.iter().copied();
-            let a = ends.next().unwrap();
-            let b = ends.next().unwrap();
-            if demote_pi(&mut rw, a, b) {
-                shared_edge_saturated = true;
-            }
+        if !matches!(
+            bond.order,
+            BondOrder::Double | BondOrder::Triple | BondOrder::Aromatic
+        ) {
+            return false;
         }
-        let mut residual_pi_saturated = false;
-        for &s in &saturate {
-            let nbrs: Vec<usize> = rw
-                .neighbors(atom_idx(s))
-                .map(|(n, _)| atom_usize(n))
-                .collect();
-            for n in nbrs {
-                if !residual.atoms.contains(&n) {
-                    continue;
-                }
-                if is_cumulated_framework(s, n) {
-                    continue;
-                }
-                if demote_pi(&mut rw, s, n) {
-                    residual_pi_saturated = true;
-                }
-            }
-        }
-        if shared_edge_saturated || residual_pi_saturated {
-            for &atom in &saturate {
-                fill_closed_shell_h(&mut rw, atom);
-            }
-            settle.extend(saturate.iter().copied());
-        }
-        let all_forced = residual.perceive_forced_doubles(&rw);
-        // Cumulated parent doubles (N=C=O: central C has two doubles) cannot
-        // exclusive-seed under one-partner matching — drop those atoms from the
-        // residual (fixed framework). Hetero parent doubles (other quinone C=O)
-        // exclusive-seed; pure C=C rematch freely after blanking residual π.
-        // Edit-new doubles (add_carbonyl O, phenol C=O) remain forced seeds.
-        let mut edit_forced = BTreeSet::new();
-        let mut framework_forced = BTreeSet::new();
-        for &edge in &all_forced {
-            let (a, b) = edge;
-            if is_cumulated_framework(a, b) {
-                // N=C=O: strip from residual (one-partner matching cannot
-                // express cumulated demand).
-                framework_forced.insert(edge);
-            } else if !parent_doubles.contains(&edge) {
-                // Edit-new leaves (add_carbonyl O, phenol C=O): exclusive-seed.
-                edit_forced.insert(edge);
+        rw.set_bond_order(
+            bond_idx,
+            if bond.order == BondOrder::Triple {
+                BondOrder::Double
             } else {
-                // Surviving parent double: exclusive-seed only exocyclic hetero
-                // leaves (degree-1 O/S/N on the edge — quinone C=O, amide).
-                // Ring-embedded C=N / N=N rematch freely like C=C (HEURISTICS).
-                if is_exocyclic_hetero_leaf(&rw, a, b) {
-                    edit_forced.insert(edge);
-                }
-            }
+                BondOrder::Single
+            },
+        );
+        true
+    };
+    if saturate.len() == 2 {
+        let mut ends = saturate.iter().copied();
+        let a = ends.next().unwrap();
+        let b = ends.next().unwrap();
+        if demote_pi(&mut rw, a, b) {
+            shared_edge_saturated = true;
         }
-        let residual_match = residual.after_forced_doubles(&framework_forced);
-        // Blank surviving parent doubles that are not exclusive-seeded (ring
-        // C=C / C=N / N=N) so atom_must_be_matched does not lock them. Skip
-        // edit-forced / exocyclic leaves; forced constraints re-assert them.
-        for &(a, b) in &residual_match.bonds {
-            let edge = bond_key(a, b);
-            if edit_forced.contains(&edge) {
-                continue;
-            }
-            if !parent_doubles.contains(&edge) {
-                continue;
-            }
-            let _ = demote_pi(&mut rw, a, b);
-        }
-        // Empty residual: one-edge path_end (shared π saturated) may emit.
-        // Vacuous keep+keep, or two carbonyl carbons that only demoted
-        // leaf C=O into an empty residual (glyoxal → glycol), refuse.
-        if edit_forced.is_empty() && residual_match.bonds.is_empty() {
-            if shared_edge_saturated {
-                let parent_csmi = canon_smiles(mol);
-                let product_csmi = canon_smiles(&rw);
-                if product_csmi != parent_csmi {
-                    let checked = preserving::aromatize(&rw);
-                    let mut products = Vec::new();
-                    let mut local_csmi = BTreeSet::new();
-                    for frag in checked.fragments() {
-                        if !accept_pair_product(&frag, left, right) {
-                            continue;
-                        }
-                        let smiles = canon_smiles(&frag);
-                        if smiles == parent_csmi {
-                            continue;
-                        }
-                        if local_csmi.insert(smiles) {
-                            products.push(frag);
-                        }
-                    }
-                    return Ok(products);
-                }
-            }
-            return Ok(Vec::new());
-        }
-        let config = KekuleConfig::for_constraints();
-        let constraints = KekuleConstraints::new()
-            .with_forced(edit_forced.clone())
-            .with_saturate(saturate.clone());
-        // Caller already perceived forced doubles — do not double-count from mol.
-        let match_cfg = config.explicit_forced_only();
-        let assignments = residual_match.all_assignments(&rw, &constraints, &match_cfg);
-        if assignments.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Residual aromaticity: cyclic 2-core after dropping demand-consumed
-        // atoms (forced doubles / saturate) — HEURISTICS, not sanitize flags.
-        let arom = residual.after_forced_doubles(&all_forced);
-        let aromatic_core = arom.aromatic_2core_atoms(&rw, &config);
-        if effect.dearomatizes {
-            let edited: HashSet<usize> = system
-                .iter()
-                .copied()
-                .filter(|i| mol.atom(atom_idx(*i)).aromatic)
-                .collect();
-            if !edited.is_empty() && edited.iter().all(|i| aromatic_core.contains(i)) {
-                // Capability claimed dearomatization; whole edited system still aromatic.
-                return Ok(Vec::new());
-            }
-        }
-
-        let mut products = Vec::new();
-        let mut local_csmi = BTreeSet::new();
-        let parent_csmi = canon_smiles(mol);
-        // Charge/H follow parent π bond sums (aromatic = 1.5). Edited-valence
-        // atoms use the post-edit baseline so leave fragments stay closed-shell
-        // (CH4 not [CH5]; phenol O not [OH+]) — no sanitize rescue.
-        let mut before = bond_order_sums(mol);
-        let post_edit = bond_order_sums(&rw);
-        for a in settle {
-            if let Some(&v) = post_edit.get(&a) {
-                before.insert(a, v);
-            }
-        }
-        let was_aromatic: HashSet<usize> = mol
-            .atoms()
-            .filter_map(|(idx, atom)| atom.aromatic.then_some(atom_usize(idx)))
+    }
+    let mut residual_pi_saturated = false;
+    for &s in &saturate {
+        let nbrs: Vec<usize> = rw
+            .neighbors(atom_idx(s))
+            .map(|(n, _)| atom_usize(n))
             .collect();
-        for assignment in assignments {
-            let mut product = rw.clone();
-            for (&(left, right), &order) in &assignment {
-                if let Some((bond_idx, _)) =
-                    product.bond_between(atom_idx(left), atom_idx(right))
-                {
-                    product.set_bond_order(bond_idx, order);
-                }
+        for n in nbrs {
+            if !residual.atoms.contains(&n) {
+                continue;
             }
-            for &atom in &residual.atoms {
-                if product.atom(atom_idx(atom)).aromatic {
-                    product = preserving::with_atom_aromatic(&product, atom_idx(atom), false);
-                }
+            if is_cumulated_framework(s, n) {
+                continue;
             }
-            // Saturate sites + residual π atoms: H from final bond orders.
-            // Early settle fill (pre-rematch, all aromatic→single) can leave H
-            // on a hetero that rematch then doubles — pyridine para H minted
-            // `C1C=CC[NH]=C1` instead of neutral `C1=CCN=CC1`.
-            // Saturate sites: H from final bond orders (closed shell), not a
-            // blind +1 on top of the pre-match settle — that minted [CH3] on
-            // aromatic path_end hydrogenation (benzene → cyclohexadiene).
-            for &atom in &saturate {
+            if demote_pi(&mut rw, s, n) {
+                residual_pi_saturated = true;
+            }
+        }
+    }
+    if shared_edge_saturated || residual_pi_saturated {
+        for &atom in &saturate {
+            fill_closed_shell_h(&mut rw, atom);
+        }
+        settle.extend(saturate.iter().copied());
+    }
+    let all_forced = residual.perceive_forced_doubles(&rw);
+    // Cumulated parent doubles (N=C=O: central C has two doubles) cannot
+    // exclusive-seed under one-partner matching — drop those atoms from the
+    // residual (fixed framework). Hetero parent doubles (other quinone C=O)
+    // exclusive-seed; pure C=C rematch freely after blanking residual π.
+    // Edit-new doubles (add_carbonyl O, phenol C=O) remain forced seeds.
+    let mut edit_forced = BTreeSet::new();
+    let mut framework_forced = BTreeSet::new();
+    for &edge in &all_forced {
+        let (a, b) = edge;
+        if is_cumulated_framework(a, b) {
+            // N=C=O: strip from residual (one-partner matching cannot
+            // express cumulated demand).
+            framework_forced.insert(edge);
+        } else if !parent_doubles.contains(&edge) {
+            // Edit-new leaves (add_carbonyl O, phenol C=O): exclusive-seed.
+            edit_forced.insert(edge);
+        } else {
+            // Surviving parent double: exclusive-seed only exocyclic hetero
+            // leaves (degree-1 O/S/N on the edge — quinone C=O, amide).
+            // Ring-embedded C=N / N=N rematch freely like C=C (HEURISTICS).
+            if is_exocyclic_hetero_leaf(&rw, a, b) {
+                edit_forced.insert(edge);
+            }
+        }
+    }
+    let residual_match = residual.after_forced_doubles(&framework_forced);
+    // Blank surviving parent doubles that are not exclusive-seeded (ring
+    // C=C / C=N / N=N) so atom_must_be_matched does not lock them. Skip
+    // edit-forced / exocyclic leaves; forced constraints re-assert them.
+    for &(a, b) in &residual_match.bonds {
+        let edge = bond_key(a, b);
+        if edit_forced.contains(&edge) {
+            continue;
+        }
+        if !parent_doubles.contains(&edge) {
+            continue;
+        }
+        let _ = demote_pi(&mut rw, a, b);
+    }
+    // Empty residual: one-edge path_end (shared π saturated) may emit.
+    // Vacuous keep+keep, or two carbonyl carbons that only demoted
+    // leaf C=O into an empty residual (glyoxal → glycol), refuse.
+    if edit_forced.is_empty() && residual_match.bonds.is_empty() {
+        if shared_edge_saturated {
+            let parent_csmi = canon_smiles(mol);
+            let product_csmi = canon_smiles(&rw);
+            if product_csmi != parent_csmi {
+                let checked = preserving::aromatize(&rw);
+                let mut products = Vec::new();
+                let mut local_csmi = BTreeSet::new();
+                for frag in checked.fragments() {
+                    if !accept_pair_product(&frag, left, right) {
+                        continue;
+                    }
+                    let smiles = canon_smiles(&frag);
+                    if smiles == parent_csmi {
+                        continue;
+                    }
+                    if local_csmi.insert(smiles) {
+                        products.push(frag);
+                    }
+                }
+                return Ok(products);
+            }
+        }
+        return Ok(Vec::new());
+    }
+    let config = KekuleConfig::for_constraints();
+    let constraints = KekuleConstraints::new()
+        .with_forced(edit_forced.clone())
+        .with_saturate(saturate.clone());
+    // Caller already perceived forced doubles — do not double-count from mol.
+    let match_cfg = config.explicit_forced_only();
+    let assignments = residual_match.all_assignments(&rw, &constraints, &match_cfg);
+    if assignments.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Residual aromaticity: cyclic 2-core after dropping demand-consumed
+    // atoms (forced doubles / saturate) — HEURISTICS, not sanitize flags.
+    let arom = residual.after_forced_doubles(&all_forced);
+    let aromatic_core = arom.aromatic_2core_atoms(&rw, &config);
+    if effect.dearomatizes {
+        let edited: HashSet<usize> = system
+            .iter()
+            .copied()
+            .filter(|i| mol.atom(atom_idx(*i)).aromatic)
+            .collect();
+        if !edited.is_empty() && edited.iter().all(|i| aromatic_core.contains(i)) {
+            // Capability claimed dearomatization; whole edited system still aromatic.
+            return Ok(Vec::new());
+        }
+    }
+
+    let mut products = Vec::new();
+    let mut local_csmi = BTreeSet::new();
+    let parent_csmi = canon_smiles(mol);
+    // Charge/H follow parent π bond sums (aromatic = 1.5). Edited-valence
+    // atoms use the post-edit baseline so leave fragments stay closed-shell
+    // (CH4 not [CH5]; phenol O not [OH+]) — no sanitize rescue.
+    let mut before = bond_order_sums(mol);
+    let post_edit = bond_order_sums(&rw);
+    for a in settle {
+        if let Some(&v) = post_edit.get(&a) {
+            before.insert(a, v);
+        }
+    }
+    let was_aromatic: HashSet<usize> = mol
+        .atoms()
+        .filter_map(|(idx, atom)| atom.aromatic.then_some(atom_usize(idx)))
+        .collect();
+    for assignment in assignments {
+        let mut product = rw.clone();
+        for (&(left, right), &order) in &assignment {
+            if let Some((bond_idx, _)) = product.bond_between(atom_idx(left), atom_idx(right)) {
+                product.set_bond_order(bond_idx, order);
+            }
+        }
+        for &atom in &residual.atoms {
+            if product.atom(atom_idx(atom)).aromatic {
+                product = preserving::with_atom_aromatic(&product, atom_idx(atom), false);
+            }
+        }
+        // Saturate sites + residual π atoms: H from final bond orders.
+        // Early settle fill (pre-rematch, all aromatic→single) can leave H
+        // on a hetero that rematch then doubles — pyridine para H minted
+        // `C1C=CC[NH]=C1` instead of neutral `C1=CCN=CC1`.
+        // Saturate sites: H from final bond orders (closed shell), not a
+        // blind +1 on top of the pre-match settle — that minted [CH3] on
+        // aromatic path_end hydrogenation (benzene → cyclohexadiene).
+        for &atom in &saturate {
+            fill_closed_shell_h(&mut product, atom);
+        }
+        // Residual heteros only: early settle fill (pre-rematch, aromatic→
+        // single) can leave H on N/O that rematch then doubles — pyridine
+        // para H minted `C1C=CC[NH]=C1` instead of neutral `C1=CCN=CC1`.
+        // Carbons stay on move_charge H-travel (aromatic bond-sum delta).
+        for &atom in &residual.atoms {
+            let z = product.atom(atom_idx(atom)).element.atomic_number();
+            if z == 7 || z == 8 {
                 fill_closed_shell_h(&mut product, atom);
             }
-            // Residual heteros only: early settle fill (pre-rematch, aromatic→
-            // single) can leave H on N/O that rematch then doubles — pyridine
-            // para H minted `C1C=CC[NH]=C1` instead of neutral `C1=CCN=CC1`.
-            // Carbons stay on move_charge H-travel (aromatic bond-sum delta).
-            for &atom in &residual.atoms {
-                let z = product.atom(atom_idx(atom)).element.atomic_number();
-                if z == 7 || z == 8 {
-                    fill_closed_shell_h(&mut product, atom);
-                }
+        }
+        move_charge_with_bonds(&mut product, &before, &was_aromatic);
+        reapply_iminium_charges(&mut product, left, right, map1, map2);
+        // Stamp surviving aromatic 2-core; leave the rest localized.
+        for &atom in &aromatic_core {
+            product = preserving::with_atom_aromatic(&product, atom_idx(atom), true);
+        }
+        // Perception finish (RDKit-parity aromaticity). Dearomatize refuse
+        // already used the 2-core gate above — not sanitize flags.
+        let checked = preserving::aromatize(&product);
+        for frag in checked.fragments() {
+            if !accept_pair_product(&frag, left, right) {
+                continue;
             }
-            move_charge_with_bonds(&mut product, &before, &was_aromatic);
-            reapply_iminium_charges(&mut product, left, right, map1, map2);
-            // Stamp surviving aromatic 2-core; leave the rest localized.
-            for &atom in &aromatic_core {
-                product = preserving::with_atom_aromatic(&product, atom_idx(atom), true);
+            let smiles = canon_smiles(&frag);
+            // keep+keep / path rematch must change the molecule — identity
+            // is vacuous (esters, pyrrole, ethene) and not a metabolite.
+            if smiles == parent_csmi {
+                continue;
             }
-            // Perception finish (RDKit-parity aromaticity). Dearomatize refuse
-            // already used the 2-core gate above — not sanitize flags.
-            let checked = preserving::aromatize(&product);
-            for frag in checked.fragments() {
-                if !accept_pair_product(&frag, left, right) {
-                    continue;
-                }
-                let smiles = canon_smiles(&frag);
-                // keep+keep / path rematch must change the molecule — identity
-                // is vacuous (esters, pyrrole, ethene) and not a metabolite.
-                if smiles == parent_csmi {
-                    continue;
-                }
-                if local_csmi.insert(smiles) {
-                    products.push(frag);
-                }
+            if local_csmi.insert(smiles) {
+                products.push(frag);
             }
         }
-        Ok(products)
+    }
+    Ok(products)
 }
 
 /// Native ResonancePairRule: odd bond-count alternating paths, end edits, flip.
@@ -914,14 +909,22 @@ pub(crate) fn materialize_pair_mols(
     let left_h = tautomer_h_donor(map1, left);
     let right_h = tautomer_h_donor(map2, right);
     // PatternInfo edits decide the door: exactly one tautomer_extend + one tautomer_far.
-    let tautomer_anchor_h = match (left_h, right_h, is_tautomer_far(left), is_tautomer_far(right)) {
+    let tautomer_anchor_h = match (
+        left_h,
+        right_h,
+        is_tautomer_far(left),
+        is_tautomer_far(right),
+    ) {
         (Some(h), None, false, true) => Some((map1.get(&1).copied(), h)),
         (None, Some(h), true, false) => Some((map2.get(&1).copied(), h)),
         _ => None,
     };
     let is_tautomer = tautomer_anchor_h.is_some();
     // extend×extend, far×far, or extend paired with a non-far end: not a tautomer site.
-    if (is_tautomer_extend(left) || is_tautomer_extend(right) || is_tautomer_far(left) || is_tautomer_far(right))
+    if (is_tautomer_extend(left)
+        || is_tautomer_extend(right)
+        || is_tautomer_far(left)
+        || is_tautomer_far(right))
         && !is_tautomer
     {
         return Ok(Vec::new());
@@ -1032,7 +1035,10 @@ pub(crate) fn end_candidates(
 ) -> Result<Vec<EndCandidate>, ForestError> {
     let chemistry = mol.mol();
     let mut out = Vec::new();
-    for pattern in endpoints.iter().filter(|p| matches!(p.edit, Edit::PairEndpoint(_))) {
+    for pattern in endpoints
+        .iter()
+        .filter(|p| matches!(p.edit, Edit::PairEndpoint(_)))
+    {
         for mapped in smarts_matches(chemistry, &pattern.smarts)? {
             let Some(&anchor) = mapped.get(&1) else {
                 continue;
@@ -1235,6 +1241,7 @@ mod tests {
     use crate::forest_mol::ForestMol;
     use crate::mol::{atom_usize, canon_of, canon_smiles, parse_mol};
     use crate::rules::{dehydrogenation, quinone_formation};
+    use crate::valence::accept_product;
 
     fn pair_candidates(fm: &ForestMol, endpoints: &[PatternInfo]) -> Vec<DeferredSite> {
         compose_candidates_from_endpoints(Rc::new(fm.copy_mol()), endpoints).unwrap()
@@ -1363,9 +1370,11 @@ mod tests {
         // merge — same as Python resolve_effect + merge_effects. Materialize still
         // emits the quinone from the π constraints.
         let want = canon_of("O=C1C=CC(=O)C=C1").unwrap();
-        assert!(cands.iter().any(|c| {
-            materialize_csmis(c).iter().any(|p| p == &want)
-        }));
+        assert!(
+            cands
+                .iter()
+                .any(|c| { materialize_csmis(c).iter().any(|p| p == &want) })
+        );
     }
 
     #[test]
@@ -1401,8 +1410,14 @@ mod tests {
             c.hop.rule == "QuinoneFormation"
                 && c.hop.cleaves
                 && c.hop.products.len() >= 2
-                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_q)
-                && c.hop.products.iter().any(|p| canon_of(p).unwrap() == want_me)
+                && c.hop
+                    .products
+                    .iter()
+                    .any(|p| canon_of(p).unwrap() == want_q)
+                && c.hop
+                    .products
+                    .iter()
+                    .any(|p| canon_of(p).unwrap() == want_me)
         });
         assert!(
             with_both,
@@ -1414,9 +1429,21 @@ mod tests {
     fn quinone_formation_dealkylates_phenyl_ncx_ahead_of_python() {
         let endpoints = qf_pair_endpoints();
         for (smi, leave, imines) in [
-            ("O=C=Nc1ccccc1", "C=O", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
-            ("S=C=Nc1ccccc1", "C=S", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
-            ("N=C=Nc1ccccc1", "C=N", ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"]),
+            (
+                "O=C=Nc1ccccc1",
+                "C=O",
+                ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"],
+            ),
+            (
+                "S=C=Nc1ccccc1",
+                "C=S",
+                ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"],
+            ),
+            (
+                "N=C=Nc1ccccc1",
+                "C=N",
+                ["N=C1C=CC(=O)C=C1", "N=C1C=CC=CC1=O"],
+            ),
         ] {
             let mol = ForestMol::parse(smi).unwrap();
             let emissions = pair_metabolize(&mol, &endpoints).unwrap();
@@ -1426,7 +1453,10 @@ mod tests {
                 .map(|s| canon_of(&s).unwrap())
                 .collect();
             let want_leave = canon_of(leave).unwrap();
-            assert!(products.contains(&want_leave), "{smi}: missing leave {leave}");
+            assert!(
+                products.contains(&want_leave),
+                "{smi}: missing leave {leave}"
+            );
             for imine in imines {
                 let want = canon_of(imine).unwrap();
                 assert!(products.contains(&want), "{smi}: missing {imine}");
@@ -1448,8 +1478,13 @@ mod tests {
             "iminium",
             "dealkylate",
         ] {
-            let p = by_name.get(name).unwrap_or_else(|| panic!("missing {name}"));
-            assert!(p.effect.exclusive_partner, "{name} should set exclusive_partner");
+            let p = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("missing {name}"));
+            assert!(
+                p.effect.exclusive_partner,
+                "{name} should set exclusive_partner"
+            );
         }
         let methide = by_name.get("methide_end").unwrap();
         assert!(
@@ -1528,7 +1563,10 @@ mod tests {
                 ))
                 .collect::<Vec<_>>()
         );
-        assert!(!cands.is_empty(), "catechol should still emit pair candidates");
+        assert!(
+            !cands.is_empty(),
+            "catechol should still emit pair candidates"
+        );
     }
 
     #[test]
@@ -1539,7 +1577,10 @@ mod tests {
             for c in pair_candidates(&mol, &endpoints) {
                 for p in materialize_csmis(&c) {
                     assert!(!p.contains("[C]"), "{smi}: radical in {p}");
-                    assert!(!p.contains("[CH5]") && !p.contains("[CH6]"), "{smi}: bad methyl {p}");
+                    assert!(
+                        !p.contains("[CH5]") && !p.contains("[CH6]"),
+                        "{smi}: bad methyl {p}"
+                    );
                     assert!(!p.contains("[OH+]"), "{smi}: bad charge {p}");
                 }
             }
@@ -1695,9 +1736,11 @@ mod tests {
             .collect();
         let want = canon_of("CC=C1C=CC=CC1").unwrap();
         let emissions = pair_metabolize(&mol, &endpoints).unwrap();
-        assert!(emissions.iter().any(|e| {
-            e.products.iter().any(|p| canon_of(p).unwrap() == want)
-        }));
+        assert!(
+            emissions
+                .iter()
+                .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == want) })
+        );
     }
 
     #[test]
@@ -1739,7 +1782,10 @@ mod tests {
             .collect();
         let want = canon_of("C1=CCN=CC1").unwrap();
         assert!(got.contains(&want), "got {got:?}");
-        assert!(!got.iter().any(|p| p.contains("[NH+") || p.contains("[nH+]")));
+        assert!(
+            !got.iter()
+                .any(|p| p.contains("[NH+") || p.contains("[nH+]"))
+        );
     }
 
     #[test]
@@ -1774,13 +1820,17 @@ mod tests {
             .collect();
         let emissions = pair_metabolize(&mol, &endpoints).unwrap();
         let glycol = canon_of("OCCO").unwrap();
-        assert!(emissions.iter().all(|e| {
-            e.products.iter().all(|p| canon_of(p).unwrap() != glycol)
-        }));
+        assert!(
+            emissions
+                .iter()
+                .all(|e| { e.products.iter().all(|p| canon_of(p).unwrap() != glycol) })
+        );
         let want = canon_of("OC=CO").unwrap();
-        assert!(emissions.iter().any(|e| {
-            e.products.iter().any(|p| canon_of(p).unwrap() == want)
-        }));
+        assert!(
+            emissions
+                .iter()
+                .any(|e| { e.products.iter().any(|p| canon_of(p).unwrap() == want) })
+        );
     }
 
     #[test]
@@ -1922,7 +1972,6 @@ mod tests {
         );
     }
 
-
     #[test]
     #[ignore = "xfail: formula_delta_mismatch on tautomer multi-product alts until Effect filters re-enabled; remove ignore when green"]
     fn tautomerization_find_path_tacrine_7oh() {
@@ -1968,9 +2017,6 @@ mod tests {
             "DH amine must not repair stuck [nH]; bill={} steps={step_names:?}",
             c.billed()
         );
-        eprintln!(
-            "tacrine→7-OH bill={} steps={step_names:?}",
-            c.billed()
-        );
+        eprintln!("tacrine→7-OH bill={} steps={step_names:?}", c.billed());
     }
 }

@@ -85,7 +85,11 @@ fn main() {
             "or" => oxygen_reduction(),
             _ => continue,
         };
-        for c in set.candidates(&forest).collect::<Result<Vec<_>, _>>().unwrap() {
+        for c in set
+            .candidates(&forest)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+        {
             if kind == "cleave" && !c.pattern.effect.cleaves {
                 continue;
             }

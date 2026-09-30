@@ -1,6 +1,4 @@
-use xenosite_forest::{
-    accept_all_rules, accept_all_sites, as_forest_mol, atom_diff, phase_one,
-};
+use xenosite_forest::{accept_all_rules, accept_all_sites, as_forest_mol, atom_diff, phase_one};
 
 fn main() {
     let set = phase_one();

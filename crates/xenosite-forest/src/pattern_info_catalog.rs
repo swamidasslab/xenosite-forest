@@ -15,8 +15,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::as_forest_mol;
 use crate::ForestMol;
+use crate::as_forest_mol;
 use crate::mol::atom_idx;
 use crate::pattern::{Edit, Effect, PatternInfo, SiteKind, compose_delta_formula};
 use crate::rules::{LEAF_EXAMPLE_SUBSTRATES, catalog_names, leaf_rule};
@@ -328,12 +328,9 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
                     continue;
                 }
                 hits += 1;
-                if let Some(detail) = check_effect_delta_formula(
-                    parent.mol(),
-                    &c.effect,
-                    &pieces,
-                    &c.pattern_name,
-                ) {
+                if let Some(detail) =
+                    check_effect_delta_formula(parent.mol(), &c.effect, &pieces, &c.pattern_name)
+                {
                     misses.push(format!(
                         "{name}/{} on {smi}: formula mismatch declared {:?} observed {:?}",
                         c.pattern_name, detail.declared, detail.observed
@@ -347,14 +344,7 @@ fn effect_atom_diff_accuracy(leaves: &[&str]) -> (usize, Vec<String>) {
                             *counts.entry(el).or_insert(0) += n;
                         }
                     }
-                    formula_delta(
-                        &parent_f,
-                        &crate::forest::Formula {
-                            counts,
-                            charge: 0,
-                        },
-                    )
-                    .counts
+                    formula_delta(&parent_f, &crate::forest::Formula { counts, charge: 0 }).counts
                 } else {
                     formula_delta(&parent_f, &molecule_formula(&pieces[0])).counts
                 };
@@ -483,7 +473,3 @@ fn catalog_resolve_dearomatizes_on_aromatic_probes() {
         }
     }
 }
-
-
-
-

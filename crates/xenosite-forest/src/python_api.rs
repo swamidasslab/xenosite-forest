@@ -331,7 +331,9 @@ impl PyBoundPattern {
                 .get(index)
                 .map(|inner| PyBoundPattern { inner })
                 .ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyIndexError, _>("BoundPattern index out of range")
+                    PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                        "BoundPattern index out of range",
+                    )
                 });
         }
         let name: String = key.extract()?;
@@ -421,9 +423,7 @@ fn metabolize_with_python_bound(
                     },
                 )?;
                 let mol = py_mol.bind(py);
-                cb.bind(py)
-                    .call1((mol, rule, info))?
-                    .extract::<bool>()
+                cb.bind(py).call1((mol, rule, info))?.extract::<bool>()
             }),
             &err,
         )
@@ -438,9 +438,7 @@ fn metabolize_with_python_bound(
         take_bool(
             Python::attach(|py| {
                 let mol = py_mol.bind(py);
-                cb.bind(py)
-                    .call1((mol, site, info.site))?
-                    .extract::<bool>()
+                cb.bind(py).call1((mol, site, info.site))?.extract::<bool>()
             }),
             &err,
         )
@@ -543,7 +541,9 @@ impl PyRuleSet {
                 let index = index as usize;
                 if self.inner.is_catalog() {
                     let child = self.inner.get(index).ok_or_else(|| {
-                        PyErr::new::<pyo3::exceptions::PyIndexError, _>("RuleSet index out of range")
+                        PyErr::new::<pyo3::exceptions::PyIndexError, _>(
+                            "RuleSet index out of range",
+                        )
                     })?;
                     return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
                 }
@@ -786,7 +786,10 @@ fn find_path(
             .collect_all()
             .map_err(py_err)?,
     };
-    Ok((path_outcome_dicts(py, &hits)?, counters_dict(py, &counters)?))
+    Ok((
+        path_outcome_dicts(py, &hits)?,
+        counters_dict(py, &counters)?,
+    ))
 }
 
 /// Explored metabolic network (reactant root + hops). Mutated by search when
@@ -1197,9 +1200,7 @@ fn forest_xmet_sssom() -> String {
 #[pyo3(name = "resolve")]
 fn resolve_py(id: &str) -> PyResult<Py<PyAny>> {
     Python::attach(|py| match crate::mapping::resolve(id).map_err(py_err)? {
-        crate::mapping::Resolved::Rule(inner) => {
-            Ok(Py::new(py, PyRuleSet { inner })?.into_any())
-        }
+        crate::mapping::Resolved::Rule(inner) => Ok(Py::new(py, PyRuleSet { inner })?.into_any()),
         crate::mapping::Resolved::Pattern(inner) => {
             Ok(Py::new(py, PyBoundPattern { inner })?.into_any())
         }

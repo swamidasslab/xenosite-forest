@@ -12,12 +12,11 @@
 //! Reactant and product are stereo-stripped at the call site before search /
 //! CSMI compare (enantiomers and E/Z match). No library canon change.
 
-
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use chematic::chem::remove_stereo;
@@ -264,10 +263,7 @@ fn main() {
     let hits = runnable.iter().filter(|r| r.hit).count();
     let misses: Vec<&RowOut> = runnable.iter().copied().filter(|r| !r.hit).collect();
     let timed = runnable.iter().filter(|r| r.timed_out).count();
-    let partial_only = runnable
-        .iter()
-        .filter(|r| !r.hit && r.has_partial)
-        .count();
+    let partial_only = runnable.iter().filter(|r| !r.hit && r.has_partial).count();
     let partial_zero = runnable
         .iter()
         .filter(|r| !r.hit && r.has_partial && r.residual_cost == Some(0))
@@ -291,14 +287,27 @@ fn main() {
     hard.sort_by(|a, b| {
         b.bill
             .cmp(&a.bill)
-            .then(b.residual_cost.unwrap_or(0).cmp(&a.residual_cost.unwrap_or(0)))
+            .then(
+                b.residual_cost
+                    .unwrap_or(0)
+                    .cmp(&a.residual_cost.unwrap_or(0)),
+            )
             .then(b.secs.partial_cmp(&a.secs).unwrap())
     });
 
     println!("\n=== top 40 hard misses (by bill, then residual cost) ===");
     println!(
         "{:<14} {:>5} {:>6} {:>5} {:>5} {:>6} {:<4} {:>4} {:>3} {}",
-        "biot_id", "bill", "secs", "nodes", "edits", "r_cost", "t/o", "root", "xtr", "name / reaction"
+        "biot_id",
+        "bill",
+        "secs",
+        "nodes",
+        "edits",
+        "r_cost",
+        "t/o",
+        "root",
+        "xtr",
+        "name / reaction"
     );
     for r in hard.iter().take(40) {
         let rcost = r.residual_cost.unwrap_or(0);
@@ -322,13 +331,20 @@ fn main() {
             r.pair.reaction_type
         );
         if !r.residual_cats.is_empty() {
-            println!("               cats={:?} closest={:?}", r.residual_cats, r.closest_smi);
+            println!(
+                "               cats={:?} closest={:?}",
+                r.residual_cats, r.closest_smi
+            );
         }
     }
 
     // Also: high-bill hits (slow successes) — useful for multipath cost.
     let mut slow_hits: Vec<&RowOut> = runnable.iter().copied().filter(|r| r.hit).collect();
-    slow_hits.sort_by(|a, b| b.bill.cmp(&a.bill).then(b.secs.partial_cmp(&a.secs).unwrap()));
+    slow_hits.sort_by(|a, b| {
+        b.bill
+            .cmp(&a.bill)
+            .then(b.secs.partial_cmp(&a.secs).unwrap())
+    });
     println!("\n=== top 15 expensive hits (by bill) ===");
     for r in slow_hits.iter().take(15) {
         println!(

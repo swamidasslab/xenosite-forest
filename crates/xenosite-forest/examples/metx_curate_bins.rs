@@ -26,9 +26,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use chematic::chem::remove_stereo;
-use xenosite_forest::{
-    FindPathConfig, PathCounters, as_forest_mol, find_path_partial, phase_one,
-};
+use xenosite_forest::{FindPathConfig, PathCounters, as_forest_mol, find_path_partial, phase_one};
 
 const SCAN: &str =
     "metx_hard_scan_nostereo (taut=0, nostereo call-site, max_nodes=200, timeout=1.5s)";
@@ -65,19 +63,10 @@ const QUIET_GAP_CORE: &[(&str, &str)] = &[
         "BIOTID00154",
         "epoxidation_regio: PhaseOne emits other arene oxides; MetX isomer absent",
     ),
-    (
-        "BIOTID00059",
-        "tzd_ring_open+S_ox multi-atom rewrite",
-    ),
+    ("BIOTID00059", "tzd_ring_open+S_ox multi-atom rewrite"),
     ("BIOTID00058", "tzd_ring_open variant"),
-    (
-        "BIOTID00882",
-        "N-dealkylation large fragment Δha≪0",
-    ),
-    (
-        "BIOTID01486",
-        "TCE→chloral hydrate; not simple epoxide",
-    ),
+    ("BIOTID00882", "N-dealkylation large fragment Δha≪0"),
+    ("BIOTID01486", "TCE→chloral hydrate; not simple epoxide"),
 ];
 
 #[derive(Clone, Default)]
@@ -185,10 +174,7 @@ fn miss_from_map(m: &BTreeMap<String, String>) -> MissRow {
             .get("residual_cost")
             .and_then(|s| s.parse().ok())
             .unwrap_or(0),
-        root_cost: m
-            .get("root_cost")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0),
+        root_cost: m.get("root_cost").and_then(|s| s.parse().ok()).unwrap_or(0),
         categories: m.get("categories").cloned().unwrap_or_default(),
         closest: m.get("closest").cloned().unwrap_or_default(),
         reactant_smi: m.get("reactant_smi").cloned().unwrap_or_default(),
@@ -450,7 +436,10 @@ fn main() {
             || rxn.contains("ring open")
             || rxn.contains("thiazolidinedione")
         {
-            Some(format!("heterocycle_open / labeled open: {}", m.reaction_type))
+            Some(format!(
+                "heterocycle_open / labeled open: {}",
+                m.reaction_type
+            ))
         } else if rxn.contains("n-hydrox") || rxn.contains("n-oxidation") {
             Some(format!("N-ox/N-OH gap?: {}", m.reaction_type))
         } else if m.root_cost.saturating_sub(m.residual_cost) == 0
@@ -493,8 +482,7 @@ fn main() {
             continue;
         }
         let drop = m.root_cost.saturating_sub(m.residual_cost);
-        let candidate = (m.residual_cost <= 2 && drop >= 3)
-            || (m.residual_cost <= 3 && drop >= 7);
+        let candidate = (m.residual_cost <= 2 && drop >= 3) || (m.residual_cost <= 3 && drop >= 7);
         if !candidate {
             continue;
         }
@@ -554,9 +542,21 @@ fn main() {
     }
 
     std::fs::create_dir_all(&out_dir).unwrap();
-    write_bin(&out_dir.join("metx_thrash_rules_cover.tsv"), &commit, &thrash_cover);
-    write_bin(&out_dir.join("metx_thrash_rules_gap.tsv"), &commit, &thrash_gap);
-    write_bin(&out_dir.join("metx_quiet_rules_gap.tsv"), &commit, &quiet_gap);
+    write_bin(
+        &out_dir.join("metx_thrash_rules_cover.tsv"),
+        &commit,
+        &thrash_cover,
+    );
+    write_bin(
+        &out_dir.join("metx_thrash_rules_gap.tsv"),
+        &commit,
+        &thrash_gap,
+    );
+    write_bin(
+        &out_dir.join("metx_quiet_rules_gap.tsv"),
+        &commit,
+        &quiet_gap,
+    );
     write_bin(&out_dir.join("metx_near_miss_progress.tsv"), &commit, &near);
 
     let mut combined = Vec::new();

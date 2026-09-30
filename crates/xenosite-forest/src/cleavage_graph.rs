@@ -343,7 +343,10 @@ pub fn cleavage_layer(
         });
     }
 
-    for pair in ruleset.candidates(mol).filter(|c| matches!(c, Ok(s) if s.is_pair())) {
+    for pair in ruleset
+        .candidates(mol)
+        .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+    {
         let pair = pair?;
         if !pair.effect.cleaves {
             continue;
@@ -668,7 +671,10 @@ pub fn cleavage_first_seeds(
             }
         }
 
-        for pair in ruleset.candidates(&parent.mol).filter(|c| matches!(c, Ok(s) if s.is_pair())) {
+        for pair in ruleset
+            .candidates(&parent.mol)
+            .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+        {
             let pair = pair?;
             if !pair.effect.cleaves {
                 continue;
