@@ -1,7 +1,7 @@
 //! Phase profile for the **tagged `ForestMol`** `find_path` door.
 //!
 //! Same walk as production: structure/`csmi` cache, `Atom.tag` through
-//! `adopt_product`, lazy cost closer on pop, eager tag-lift child MCS.
+//! `ForestMol::product`, lazy cost closer on pop, eager tag-lift child MCS.
 //! Does **not** re-parse walk CSMI strings.
 //!
 //! ```text
@@ -394,7 +394,7 @@ fn microbench() {
     );
     if let Some(a) = adopt {
         println!(
-            "adopt_product            50×  {:.3} µs/op",
+            "ForestMol::product       50×  {:.3} µs/op",
             a.as_secs_f64() * 1e6 / 50.0
         );
     }

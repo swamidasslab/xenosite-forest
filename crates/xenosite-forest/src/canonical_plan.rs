@@ -12,12 +12,13 @@
 //! Apply: [`Deps::linearizations`] → [`StepSequence::apply`] through named
 //! elementary rules at resolved sites.
 
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::ops::Deref;
 
 use crate::ForestError;
 use crate::ForestMol;
-use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles, parse_mol};
+use crate::labels::Tag;
+use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles};
 use crate::pattern::Effect;
 
 /// One atom note in a [`Step`] site.
@@ -142,6 +143,11 @@ impl Step {
     ///
     /// Products keep atom indices from the edit (no SMILES round-trip) so
     /// later steps' anchors still resolve.
+    ///
+    /// Unique-edit emits one orbit representative. When the plan names a
+    /// different atom in that class, remap a non-pair [`DeferredSite`] onto the
+    /// **wanted** site so the edit lands on the planned atom (not the rep) —
+    /// otherwise free multi-Index plans and [`Deps::reaches`] miss orbit mates.
     pub fn apply(&self, mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         let wanted = self.resolve_site(mol)?;
         let Some(rule) = crate::rules::leaf_rule(&self.rule) else {
@@ -150,16 +156,32 @@ impl Step {
                 self.rule
             )));
         };
-        // Plan replay works on chemistry graphs; stamp a ForestMol only so
-        // discovery/apply can run. Products are returned as Molecule pieces.
-        let forest = ForestMol::new(mol.clone());
+        // Discovery only — preserve existing chematic tags so multi-hop Index
+        // replay can compose src_to_new (ForestMol::new would restamp).
+        let forest = ForestMol::wrap_preserving_labels(mol.clone());
+        let gens = forest.atom_bond_generators();
+        let n = mol.atom_count();
+        let mut accepted = wanted.clone();
+        for &w in &wanted {
+            for i in crate::orbits::atom_orbit_with_gens(gens.as_ref(), n, w) {
+                accepted.insert(i);
+            }
+        }
         let mut products = Vec::new();
         let mut seen = HashSet::new();
         for c in rule.candidates(&forest) {
             let c = c?;
-            if !wanted.contains(&c.site) {
-                continue;
-            }
+            let c = if c.is_pair() {
+                if !pair_matches_wanted(mol, &c, &accepted) {
+                    continue;
+                }
+                c
+            } else {
+                match remap_deferred_site_to_wanted(&c, &wanted, gens.as_ref(), n, mol) {
+                    Some(remapped) => remapped,
+                    None => continue,
+                }
+            };
             for p in c.materialize_mols()? {
                 let smi = canon_smiles(&p);
                 if seen.insert(smi) {
@@ -173,7 +195,7 @@ impl Step {
                 std::rc::Rc::new(forest.copy_mol()),
                 &endpoints,
             )? {
-                if !pair_matches_wanted(mol, &pair, &wanted) {
+                if !pair_matches_wanted(mol, &pair, &accepted) {
                     continue;
                 }
                 for p in pair.materialize_mols()? {
@@ -186,6 +208,72 @@ impl Step {
         }
         Ok(products)
     }
+}
+
+/// Prefer exact wanted site; else accept when every mapped site_map atom is
+/// wanted. Else remap a unique-edit embedding onto a wanted atom in the same
+/// automorphism orbit (singleton sites, or multi-map ends retargeted together).
+///
+/// Pairs are not remapped here — callers match them with [`pair_matches_wanted`].
+fn remap_deferred_site_to_wanted(
+    c: &crate::candidate::DeferredSite,
+    wanted: &HashSet<usize>,
+    gens: &[crate::orbits::AtomBondGenerator],
+    n_atoms: usize,
+    mol: &Molecule,
+) -> Option<crate::candidate::DeferredSite> {
+    if c.is_pair() {
+        return None;
+    }
+    if wanted.contains(&c.site) {
+        return Some(c.clone());
+    }
+    if !c.mapped.is_empty() && c.mapped.values().all(|i| wanted.contains(i)) {
+        return Some(c.clone());
+    }
+    let orbit = crate::orbits::atom_orbit_with_gens(gens, n_atoms, c.site);
+    let &want = wanted.iter().find(|w| orbit.contains(w))?;
+    if c.mapped.len() <= 1 {
+        let mut e2 = c.clone();
+        e2.site = want;
+        e2.info.site = want;
+        for v in e2.mapped.values_mut() {
+            *v = want;
+        }
+        return Some(e2);
+    }
+    // Multi-atom SMIRKS map: move each mapped end onto the wanted atom of the
+    // same element in the orbit (C→wanted carbon; O/N/S→hetero bonded to it).
+    let want_z = mol.atom(atom_idx(want)).element.atomic_number();
+    let mut e2 = c.clone();
+    e2.site = want;
+    e2.info.site = want;
+    for v in e2.mapped.values_mut() {
+        let z = mol.atom(atom_idx(*v)).element.atomic_number();
+        if z == want_z {
+            *v = want;
+        } else if matches!(z, 7 | 8 | 16) {
+            let hetero = wanted
+                .iter()
+                .copied()
+                .find(|&w| {
+                    mol.atom(atom_idx(w)).element.atomic_number() == z
+                        && mol
+                            .neighbors(atom_idx(want))
+                            .any(|(n, _)| atom_usize(n) == w)
+                })
+                .or_else(|| {
+                    mol.neighbors(atom_idx(want)).find_map(|(n, _)| {
+                        let j = atom_usize(n);
+                        (mol.atom(atom_idx(j)).element.atomic_number() == z).then_some(j)
+                    })
+                })?;
+            *v = hetero;
+        } else {
+            return None;
+        }
+    }
+    Some(e2)
 }
 
 fn pair_matches_wanted(
@@ -336,6 +424,235 @@ impl Maybe {
     }
 }
 
+/// MS1 example: many hydroxylation / O-placing leaves as arms, `count = 3`
+/// when the spectrum expects three oxygenations. Arms are elementary rule
+/// names (catalog leaf names). Pattern-level OR inside a leaf stays on
+/// [`crate::pattern::PatternInfo`] — not duplicated here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApplyN {
+    /// Allowed elementary rule names (OR). Order is not significance.
+    pub arms: Vec<String>,
+    /// Exact number of applications required from `arms`.
+    pub count: u16,
+}
+
+impl ApplyN {
+    pub fn new(arms: impl IntoIterator<Item = impl Into<String>>, count: u16) -> Self {
+        let mut arms: Vec<_> = arms.into_iter().map(Into::into).collect();
+        arms.sort();
+        arms.dedup();
+        Self { arms, count }
+    }
+
+    pub fn allows(&self, rule: &str) -> bool {
+        self.arms.iter().any(|a| a == rule)
+    }
+
+    /// Orbit-deduped unordered site combinations of length [`Self::count`].
+    ///
+    /// `eligible` must already include unique-edit orbit atoms (not just
+    /// representatives) — see [`eligible_sites_for_apply_n`]. Counts and
+    /// dedup for ApplyN read this set, not sequential unique-edit alone.
+    pub fn site_combinations(&self, mol: &Molecule, eligible: &[usize]) -> Vec<Vec<usize>> {
+        crate::orbits::unordered_site_combinations(mol, eligible, self.count as usize)
+    }
+
+    /// Number of orbit-deduped site combinations ([`Self::site_combinations`]).
+    pub fn n_combinations(&self, mol: &Molecule, eligible: &[usize]) -> usize {
+        self.site_combinations(mol, eligible).len()
+    }
+}
+
+/// Eligible site atoms for an [`ApplyN`] pool: union of unique-edit / candidate
+/// orbits for arms that fire on `mol` under `ruleset`.
+pub fn eligible_sites_for_apply_n(
+    mol: &ForestMol,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<Vec<usize>, ForestError> {
+    let mut eligible = BTreeSet::new();
+    for cand in ruleset.candidates(mol) {
+        let cand = cand?;
+        let rule = cand.leaf_rule().unwrap_or_else(|| cand.pattern_name());
+        if !pool.allows(rule) {
+            continue;
+        }
+        if cand.orbit.is_empty() {
+            eligible.insert(cand.site);
+        } else {
+            eligible.extend(cand.orbit.iter().copied());
+        }
+    }
+    Ok(eligible.into_iter().collect())
+}
+
+/// One distinct ApplyN product plus the step plans that cover paths to it.
+///
+/// Each [`Deps`] has free elementary steps (no precedes) for one Aut-deduped
+/// site combination. [`Deps::linearizations`] are the ordered paths; several
+/// plans appear only when distinct site combos collapse to the same CSMI.
+#[derive(Clone, Debug)]
+pub struct ApplyNProduct {
+    pub smiles: String,
+    pub plans: Vec<Deps>,
+}
+
+impl ApplyNProduct {
+    /// Sum of [`Deps::n_linearizations`] over covering plans.
+    pub fn n_covering_linearizations(&self) -> usize {
+        self.plans.iter().map(Deps::n_linearizations).sum()
+    }
+}
+
+/// Counts from [`apply_n_emit_products`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ApplyNEmitStats {
+    pub n_eligible_sites: usize,
+    pub n_combinations: usize,
+    pub n_products: usize,
+    pub n_plans: usize,
+    /// Σ plan linearizations (paths covered across all products).
+    pub n_covering_linearizations: usize,
+}
+
+/// Emit distinct products for `pool`, each with covering step plans.
+///
+/// **Efficient:** one materialize pass per Aut-deduped site combination (sorted
+/// tag order), not `k!` apply orders. Paths to a product are the free-plan
+/// linearizations on its covering [`Deps`] (and any extra combos that share
+/// the CSMI).
+pub fn apply_n_emit_products(
+    reactant: &str,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<(Vec<ApplyNProduct>, ApplyNEmitStats), ForestError> {
+    let start = ForestMol::parse(reactant)?;
+    let eligible = eligible_sites_for_apply_n(&start, ruleset, pool)?;
+    let combos = pool.site_combinations(start.mol(), &eligible);
+    let mut by_csmi: BTreeMap<String, Vec<Deps>> = BTreeMap::new();
+
+    for combo in &combos {
+        let mut tags: Vec<Tag> = combo
+            .iter()
+            .map(|&i| {
+                start
+                    .tag_of(i)
+                    .ok_or_else(|| ForestError::Plan(format!("no tag on eligible site index {i}")))
+            })
+            .collect::<Result<_, _>>()?;
+        tags.sort_unstable();
+        let Some((smiles, steps)) = apply_combo_sorted(&start, ruleset, pool, &tags)? else {
+            continue;
+        };
+        // Free plan: no precedes — linearizations cover all step orders.
+        let plan = Deps::bind(steps);
+        let entry = by_csmi.entry(smiles).or_default();
+        if !entry.iter().any(|p| p.same_linearizations(&plan)) {
+            entry.push(plan);
+        }
+    }
+
+    let products: Vec<ApplyNProduct> = by_csmi
+        .into_iter()
+        .map(|(smiles, plans)| ApplyNProduct { smiles, plans })
+        .collect();
+    let stats = ApplyNEmitStats {
+        n_eligible_sites: eligible.len(),
+        n_combinations: combos.len(),
+        n_products: products.len(),
+        n_plans: products.iter().map(|p| p.plans.len()).sum(),
+        n_covering_linearizations: products
+            .iter()
+            .map(ApplyNProduct::n_covering_linearizations)
+            .sum(),
+    };
+    Ok((products, stats))
+}
+
+/// Apply `tags` in given order; return product CSMI and elementary steps.
+///
+/// Sites are tracked across [`DeferredSite::apply`] / [`ForestMol::from_edit_product`]
+/// via tags. Emitted plans use stamp-origin Indices so replay is index-stable.
+/// [`PlanAtom::Index`] notes use **start** indices (carbons keep indices when
+/// O is appended). Step orbits are atom indices from
+/// [`crate::orbits::atom_orbit_with_gens`] on the start mol — not tag ids.
+fn apply_combo_sorted(
+    start: &ForestMol,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+    tags: &[Tag],
+) -> Result<Option<(String, Vec<Step>)>, ForestError> {
+    let mut cur = start.clone();
+    let mut steps = Vec::with_capacity(tags.len());
+    let start_gens = start.atom_bond_generators();
+    let start_n = start.mol().atom_count();
+    for &tag in tags {
+        let Some(idx) = cur.index_of(tag) else {
+            return Ok(None);
+        };
+        let Some(start_idx) = start.index_of(tag) else {
+            return Ok(None);
+        };
+        let gens = cur.atom_bond_generators();
+        let n = cur.mol().atom_count();
+        let mut applied = false;
+        for cand in ruleset.candidates(&cur) {
+            let cand = cand?;
+            let rule = cand.leaf_rule().unwrap_or_else(|| cand.pattern_name());
+            if !pool.allows(rule) {
+                continue;
+            }
+            let wanted: HashSet<usize> = [idx].into_iter().collect();
+            let Some(cand) =
+                remap_deferred_site_to_wanted(&cand, &wanted, gens.as_ref(), n, cur.mol())
+            else {
+                continue;
+            };
+            let Some(em) = cand.apply()? else {
+                continue;
+            };
+            let piece = if cand.effect.cleaves && em.products.len() > 1 {
+                // Keep the largest fragment (MS1 continue side); leave goes to Maybe.
+                em.products
+                    .into_iter()
+                    .max_by_key(|p| p.mol().atom_count())
+                    .expect("non-empty")
+            } else {
+                em.products.into_iter().next().expect("non-empty")
+            };
+            let orbit =
+                crate::orbits::atom_orbit_with_gens(start_gens.as_ref(), start_n, start_idx);
+            steps.push(Step::new(rule, [PlanAtom::index(start_idx)]).with_orbit(orbit));
+            cur = piece;
+            applied = true;
+            break;
+        }
+        if !applied {
+            return Ok(None);
+        }
+    }
+    Ok(Some((cur.csmi().as_ref().to_string(), steps)))
+}
+
+/// Sorted unique product CSMIs for `pool` (see [`apply_n_emit_products`]).
+pub fn apply_n_distinct_products(
+    reactant: &str,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<Vec<String>, ForestError> {
+    let (products, _) = apply_n_emit_products(reactant, ruleset, pool)?;
+    Ok(products.into_iter().map(|p| p.smiles).collect())
+}
+
+/// Number of distinct products from [`apply_n_distinct_products`].
+pub fn apply_n_n_distinct_products(
+    reactant: &str,
+    ruleset: &crate::ruleset::RuleSet,
+    pool: &ApplyN,
+) -> Result<usize, ForestError> {
+    Ok(apply_n_emit_products(reactant, ruleset, pool)?.1.n_products)
+}
+
 /// Compact set of linearizations under step + precedes constraints.
 ///
 /// Python calls this `StepPlan`. Each linear extension is a [`StepSequence`]
@@ -347,6 +664,8 @@ pub struct Deps {
     precedes: Vec<(usize, usize)>,
     /// Discarded cleavage fragments (Python `PathOutcome.maybe`, on the plan).
     maybe: Maybe,
+    /// OR-pools with exact apply counts (MS1 / spectrum constraints).
+    apply_n: Vec<ApplyN>,
 }
 
 impl Deps {
@@ -373,6 +692,7 @@ impl Deps {
             steps,
             precedes,
             maybe: Maybe::default(),
+            apply_n: Vec::new(),
         }
     }
 
@@ -387,6 +707,12 @@ impl Deps {
         self
     }
 
+    /// Attach OR-apply pools (MS1: N hydroxylations from a long arm list).
+    pub fn with_apply_n(mut self, pools: impl IntoIterator<Item = ApplyN>) -> Self {
+        self.apply_n = pools.into_iter().collect();
+        self
+    }
+
     pub fn steps(&self) -> &[Step] {
         &self.steps
     }
@@ -397,6 +723,10 @@ impl Deps {
 
     pub fn maybe(&self) -> &Maybe {
         &self.maybe
+    }
+
+    pub fn apply_n(&self) -> &[ApplyN] {
+        &self.apply_n
     }
 
     /// Delegate to [`Maybe::allows`] (site overlap or discarded side SMILES).
@@ -456,17 +786,48 @@ impl Deps {
     }
 
     /// True if some linearization apply reaches `target` CSMI (or canon spelling).
+    ///
+    /// Reactant is parsed as a [`ForestMol`] so atom tags survive edits;
+    /// [`StepSequence::apply_forest`] remaps Index notes through `src_to_new`
+    /// (same adopt path as find_path).
     pub fn reaches(&self, reactant: &str, target: &str) -> Result<bool, ForestError> {
         let want = canon_of(target)?;
-        let mol = parse_mol(reactant)?;
+        let start = ForestMol::parse(reactant)?;
         for lin in self.linearizations() {
-            for product in lin.apply(&mol)? {
-                if canon_smiles(&product) == want {
+            for product in lin.apply_forest(&start)? {
+                if product.csmi().as_ref() == want {
                     return Ok(true);
                 }
             }
         }
         Ok(false)
+    }
+
+    /// Sorted unique product CSMIs from every linearization apply on `reactant`.
+    ///
+    /// Empty apply results (sites that fail to rebind) contribute nothing.
+    /// Pair with [`Self::n_linearizations`]: `n_lin` can exceed distinct products
+    /// when several orders yield the same CSMI, or exceed zero while products are
+    /// empty when replay fails.
+    pub fn distinct_products(&self, reactant: &str) -> Result<Vec<String>, ForestError> {
+        let start = ForestMol::parse(reactant)?;
+        let mut seen = BTreeSet::new();
+        for lin in self.linearizations() {
+            for product in lin.apply_forest(&start)? {
+                seen.insert(product.csmi().as_ref().to_string());
+            }
+        }
+        Ok(seen.into_iter().collect())
+    }
+
+    /// [`Self::distinct_products`] length.
+    pub fn n_distinct_products(&self, reactant: &str) -> Result<usize, ForestError> {
+        Ok(self.distinct_products(reactant)?.len())
+    }
+
+    /// `(n_linearizations, n_distinct_products)` for reporting / fuzz checks.
+    pub fn replay_stats(&self, reactant: &str) -> Result<(usize, usize), ForestError> {
+        Ok((self.n_linearizations(), self.n_distinct_products(reactant)?))
     }
 
     /// Number of topological sorts under precedes.
@@ -583,11 +944,12 @@ impl Deps {
         let Ok(reduced) = canonical_dependency_edges(n, &edges) else {
             return 0;
         };
-        // Same nodes + union edges; maybe does not affect required orders.
+        // Same nodes + union edges; maybe / apply_n do not affect required orders.
         Deps {
             steps: self.steps.clone(),
             precedes: reduced,
             maybe: Maybe::default(),
+            apply_n: Vec::new(),
         }
         .n_linearizations()
     }
@@ -689,20 +1051,35 @@ pub struct StepSequence {
 
 impl StepSequence {
     /// Apply steps in order. Returns product molecules after the last step.
+    ///
+    /// Soft-continues when a current fragment cannot resolve a site (cleavage
+    /// leave sides). Index notes are in stamp-origin / reactant frame and are
+    /// remapped through composed `src_to_new` after each hop.
     pub fn apply(&self, mol: &Molecule) -> Result<Vec<Molecule>, ForestError> {
         if self.steps.is_empty() {
             return Ok(vec![mol.clone()]);
         }
-        let mut currents = vec![mol.clone()];
+        let mut currents: Vec<(Molecule, Vec<Option<usize>>)> = {
+            let map: Vec<Option<usize>> = (0..mol.atom_count()).map(Some).collect();
+            vec![(mol.clone(), map)]
+        };
         for step in &self.steps {
             let mut next = Vec::new();
             let mut seen = HashSet::new();
-            for cur in &currents {
-                for product in step.apply(cur)? {
+            for (cur, map) in &currents {
+                let Ok(mapped_step) = remap_step_through(step, map) else {
+                    continue;
+                };
+                let Ok(prods) = mapped_step.apply(cur) else {
+                    continue;
+                };
+                for product in prods {
                     let smi = canon_smiles(&product);
-                    if seen.insert(smi) {
-                        next.push(product);
+                    if !seen.insert(smi) {
+                        continue;
                     }
+                    let src_to_new = crate::atom_tracker::AtomTracker::src_to_new(cur, &product);
+                    next.push((product, compose_index_map(map, &src_to_new)));
                 }
             }
             if next.is_empty() {
@@ -710,8 +1087,94 @@ impl StepSequence {
             }
             currents = next;
         }
-        Ok(currents)
+        Ok(currents.into_iter().map(|(m, _)| m).collect())
     }
+
+    /// Apply steps in order, adopting each product onto a [`ForestMol`].
+    ///
+    /// Soft-continues on site resolve failures (cleavage leaves). Stamp-origin
+    /// Index notes are remapped through composed `src_to_new` after each adopt.
+    pub fn apply_forest(&self, start: &ForestMol) -> Result<Vec<ForestMol>, ForestError> {
+        if self.steps.is_empty() {
+            return Ok(vec![start.clone()]);
+        }
+        let mut currents: Vec<(ForestMol, Vec<Option<usize>>)> = {
+            let map: Vec<Option<usize>> = (0..start.mol().atom_count()).map(Some).collect();
+            vec![(start.clone(), map)]
+        };
+        for step in &self.steps {
+            let mut next = Vec::new();
+            let mut seen = HashSet::new();
+            for (cur, map) in &currents {
+                let Ok(mapped_step) = remap_step_through(step, map) else {
+                    continue;
+                };
+                let Ok(prods) = mapped_step.apply(cur.mol()) else {
+                    continue;
+                };
+                for product in prods {
+                    let child = cur.from_edit_product(product);
+                    let smi = child.csmi().as_ref().to_string();
+                    if !seen.insert(smi) {
+                        continue;
+                    }
+                    let src_to_new =
+                        crate::atom_tracker::AtomTracker::src_to_new(cur.mol(), child.mol());
+                    next.push((child, compose_index_map(map, &src_to_new)));
+                }
+            }
+            if next.is_empty() {
+                return Ok(Vec::new());
+            }
+            currents = next;
+        }
+        Ok(currents.into_iter().map(|(m, _)| m).collect())
+    }
+}
+
+fn compose_index_map(map: &[Option<usize>], src_to_new: &[Option<usize>]) -> Vec<Option<usize>> {
+    map.iter()
+        .map(|cur| cur.and_then(|i| src_to_new.get(i).copied().flatten()))
+        .collect()
+}
+
+fn remap_step_through(step: &Step, map: &[Option<usize>]) -> Result<Step, ForestError> {
+    let mut site = Vec::with_capacity(step.site.len());
+    for note in &step.site {
+        site.push(match note {
+            PlanAtom::Index(i) => {
+                let j = map.get(*i).copied().flatten().ok_or_else(|| {
+                    ForestError::Plan(format!("origin index {i} left this piece"))
+                })?;
+                PlanAtom::index(j)
+            }
+            PlanAtom::WillAdd { element, at } => {
+                let j = map.get(*at).copied().flatten().ok_or_else(|| {
+                    ForestError::Plan(format!("will-add anchor {at} left this piece"))
+                })?;
+                PlanAtom::will_add(element.clone(), j)
+            }
+            PlanAtom::AddedBy { rule, anchors } => {
+                let mut out = Vec::with_capacity(anchors.len());
+                for &a in anchors {
+                    let j = map.get(a).copied().flatten().ok_or_else(|| {
+                        ForestError::Plan(format!("added-by anchor {a} left this piece"))
+                    })?;
+                    out.push(j);
+                }
+                PlanAtom::AddedBy {
+                    rule: rule.clone(),
+                    anchors: out,
+                }
+            }
+        });
+    }
+    let orbit: Vec<_> = step
+        .orbit
+        .iter()
+        .filter_map(|&i| map.get(i).copied().flatten())
+        .collect();
+    Ok(Step::new(step.rule.clone(), site).with_orbit(orbit))
 }
 
 /// Former name of [`StepSequence`]. Prefer `StepSequence`.
@@ -905,6 +1368,76 @@ pub fn identity_plan_with_orbit(
     vec![Step::new(rule, site.into_iter().map(PlanAtom::index)).with_orbit(orbit)]
 }
 
+/// Identity plan on a tagged [`ForestMol`]: root-survivor sites as stamp-origin
+/// [`PlanAtom::Index`] (`Tag(k)` ↔ index `k-1` on the stamped reactant), born
+/// O/N/S as [`PlanAtom::AddedBy`] at a carbon anchor (not a raw Index of the
+/// born atom). Replay remaps origin Indices through `src_to_new`.
+pub fn identity_plan_on_forest(
+    rule: impl Into<String>,
+    forest: &ForestMol,
+    site_atoms: impl IntoIterator<Item = usize>,
+    orbit: impl IntoIterator<Item = usize>,
+) -> Vec<Step> {
+    let site_atoms: Vec<usize> = site_atoms.into_iter().collect();
+    let mol = forest.mol();
+    let n = mol.atom_count();
+    let mut carbons = Vec::new();
+    let mut heteros = Vec::new();
+    for &i in &site_atoms {
+        if i >= n {
+            continue;
+        }
+        let z = mol.atom(atom_idx(i)).element.atomic_number();
+        match z {
+            7 | 8 | 16 => heteros.push(i),
+            _ => carbons.push(i),
+        }
+    }
+    let origin_of = |i: usize| -> usize {
+        forest
+            .tag_of(i)
+            .and_then(|t| forest.stamp_origin_index(t))
+            .unwrap_or(i)
+    };
+    let mut site = Vec::new();
+    for &c in &carbons {
+        site.push(PlanAtom::index(origin_of(c)));
+    }
+    for &h in &heteros {
+        let z = mol.atom(atom_idx(h)).element.atomic_number();
+        let element = match z {
+            7 => "N",
+            16 => "S",
+            _ => "O",
+        };
+        let born = forest
+            .tag_of(h)
+            .map(|t| forest.stamp_origin_index(t).is_none())
+            .unwrap_or(true);
+        if born {
+            let anchor = carbons.first().copied().unwrap_or(h);
+            // WillAdd so Deps::bind can wire Hydroxylation ≺ DH (AddedBy
+            // rule:"O" never matches a prep step name).
+            site.push(PlanAtom::will_add(element, origin_of(anchor)));
+        } else {
+            site.push(PlanAtom::index(origin_of(h)));
+        }
+    }
+    if site.is_empty() {
+        for &i in &site_atoms {
+            if i < n {
+                site.push(PlanAtom::index(origin_of(i)));
+            }
+        }
+    }
+    let orbit: Vec<usize> = orbit
+        .into_iter()
+        .map(origin_of)
+        .filter(|&i| i < n)
+        .collect();
+    vec![Step::new(rule, site).with_orbit(orbit)]
+}
+
 /// Compat name.
 pub fn identity_canonical_plan(
     rule: impl Into<String>,
@@ -1056,9 +1589,15 @@ pub fn epoxide_hydration_canonical_plan(
     let c1 = site_atoms[1];
     vec![
         Step::new("Epoxidation", [PlanAtom::index(c0), PlanAtom::index(c1)]),
+        // Both epoxide carbons plus WillAdd O: one-carbon Opening misses after
+        // SMIRKS reorder on substituted alkenes; AddedBy resolves the born O.
         Step::new(
             "EpoxideOpening",
-            [PlanAtom::index(c0), PlanAtom::oxygen_at(c0)],
+            [
+                PlanAtom::index(c0),
+                PlanAtom::index(c1),
+                PlanAtom::oxygen_at(c0),
+            ],
         ),
     ]
 }
@@ -1066,6 +1605,7 @@ pub fn epoxide_hydration_canonical_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mol::parse_mol;
     use crate::pattern::Effect;
 
     #[test]
@@ -1721,6 +2261,75 @@ mod tests {
     }
 
     #[test]
+    fn replay_stats_free_hydroxylations_share_product() {
+        // Two free OH steps (no precedes): 2 linearizations, one product when
+        // both orders reach the same CSMI on ethane.
+        let plan = Deps::bind([
+            Step::new("Hydroxylation", [PlanAtom::index(0)]),
+            Step::new("Hydroxylation", [PlanAtom::index(1)]),
+        ]);
+        assert_eq!(plan.n_linearizations(), 2);
+        let (n_lin, n_prod) = plan.replay_stats("CC").unwrap();
+        assert_eq!(n_lin, 2);
+        assert_eq!(n_prod, plan.n_distinct_products("CC").unwrap());
+        assert_eq!(
+            n_prod,
+            1,
+            "both orders → same ethane diol: {:?}",
+            plan.distinct_products("CC")
+        );
+    }
+
+    #[test]
+    fn apply_n_benzene_oh2_three_combinations_three_products() {
+        let set = crate::rules::hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let mol = ForestMol::parse("c1ccccc1").unwrap();
+        let eligible = eligible_sites_for_apply_n(&mol, &set, &pool).unwrap();
+        assert_eq!(eligible.len(), 6);
+        assert_eq!(pool.n_combinations(mol.mol(), &eligible), 3);
+        let (products, stats) = apply_n_emit_products("c1ccccc1", &set, &pool).unwrap();
+        assert_eq!(stats.n_combinations, 3);
+        assert_eq!(stats.n_products, 3, "{products:?}");
+        assert_eq!(products.len(), 3);
+        // Each product: one free 2-step plan → 2 linearizations (path orders).
+        for p in &products {
+            assert_eq!(p.plans.len(), 1, "{}", p.smiles);
+            assert_eq!(p.n_covering_linearizations(), 2, "{}", p.smiles);
+            assert!(
+                p.plans[0].reaches("c1ccccc1", &p.smiles).unwrap(),
+                "{} plan={:?}",
+                p.smiles,
+                p.plans[0]
+            );
+        }
+        assert_eq!(stats.n_covering_linearizations, 6);
+        assert_eq!(
+            apply_n_n_distinct_products("c1ccccc1", &set, &pool).unwrap(),
+            3
+        );
+    }
+
+    #[test]
+    fn apply_n_emit_covers_paths_without_permuting_applies() {
+        // Ethane OH×2: one combo, one product; free plan has 2 lins.
+        let set = crate::rules::hydroxylation();
+        let pool = ApplyN::new(["Hydroxylation"], 2);
+        let (products, stats) = apply_n_emit_products("CC", &set, &pool).unwrap();
+        assert_eq!(stats.n_combinations, 1);
+        assert_eq!(
+            stats.n_products,
+            1,
+            "{:?}",
+            products.iter().map(|p| &p.smiles).collect::<Vec<_>>()
+        );
+        assert_eq!(products[0].n_covering_linearizations(), 2);
+        let (n_lin, n_prod) = products[0].plans[0].replay_stats("CC").unwrap();
+        assert_eq!(n_lin, 2);
+        assert_eq!(n_prod, 1);
+    }
+
+    #[test]
     fn deps_invalid_edge_panics() {
         let a = Step::new("A", [PlanAtom::index(0)]);
         let b = Step::new("B", [PlanAtom::index(1)]);
@@ -1735,6 +2344,120 @@ mod tests {
                 let _ = Deps::new([a, b], [(0, 1), (1, 0)]);
             })
             .is_err()
+        );
+    }
+
+    #[test]
+    fn apply_n_composes_with_maybe_on_deps() {
+        let steps = Deps::new([Step::new("Dealkylation", [PlanAtom::index(0)])], [])
+            .with_maybe(Maybe::new([CleavageSide::new(
+                [0],
+                "C",
+                std::iter::empty::<BTreeSet<usize>>(),
+            )]))
+            .with_apply_n([ApplyN::new(["Hydroxylation", "Epoxidation"], 2)]);
+        assert_eq!(steps.apply_n().len(), 1);
+        assert_eq!(steps.apply_n()[0].count, 2);
+        assert!(steps.apply_n()[0].allows("Hydroxylation"));
+        assert!(steps.apply_n()[0].allows("Epoxidation"));
+        assert!(!steps.apply_n()[0].allows("Dealkylation"));
+        assert!(!steps.maybe().is_empty());
+        assert_eq!(steps.len(), 1);
+    }
+
+    /// Key ops: ApplyN beside precedes (WillAdd bind) and Maybe — linearizations,
+    /// reaches, and bag attachment stay consistent.
+    #[test]
+    fn apply_n_composes_with_precedes_maybe_reaches() {
+        let mol = parse_mol("C=C").unwrap();
+        let plan = epoxide_hydration_canonical_plan(&mol, "EpoxideHydration", &[0, 1], None);
+        let deps = Deps::bind(plan)
+            .with_maybe(Maybe::new([CleavageSide::new(
+                [0],
+                "leave",
+                std::iter::empty::<BTreeSet<usize>>(),
+            )]))
+            .with_apply_n([ApplyN::new(["EpoxideHydration"], 1)]);
+        assert_eq!(deps.precedes(), &[(0, 1)]);
+        assert_eq!(deps.n_linearizations(), 1);
+        assert!(!deps.maybe().is_empty());
+        assert_eq!(deps.apply_n().len(), 1);
+        assert_eq!(deps.apply_n()[0].count, 1);
+        assert!(deps.apply_n()[0].allows("EpoxideHydration"));
+        assert!(deps.reaches("C=C", "OCCO").unwrap());
+    }
+
+    #[test]
+    fn apply_n_epoxide_hydration_plan_replays_after_hydrogenation() {
+        // Multi-hop substrate: alkyne → ene → diol. Opening names both carbons
+        // so Step.apply Index layout still resolves.
+        let h2_then_hyd = Deps::bind([
+            Step::new("Hydrogenation", [PlanAtom::index(0), PlanAtom::index(1)]),
+            Step::new("Epoxidation", [PlanAtom::index(0), PlanAtom::index(1)]),
+            Step::new(
+                "EpoxideOpening",
+                [
+                    PlanAtom::index(0),
+                    PlanAtom::index(1),
+                    PlanAtom::oxygen_at(0),
+                ],
+            ),
+        ])
+        .with_apply_n([ApplyN::new(
+            ["Hydrogenation", "EpoxideHydration", "Epoxidation"],
+            2,
+        )]);
+        assert_eq!(h2_then_hyd.precedes(), &[(1, 2)]);
+        assert!(h2_then_hyd.reaches("C#C", "OCCO").unwrap());
+        assert_eq!(h2_then_hyd.apply_n()[0].count, 2);
+    }
+
+    /// Alcohol DH after epoxide hydration: identity from site_atoms (C+O when
+    /// the deferred site maps both ends) must replay to the aldehyde.
+    #[test]
+    fn ethene_hyd_then_alcohol_dh_pair_identity_replays() {
+        let start = ForestMol::parse("C=C").unwrap();
+        let hyd = crate::rules::epoxide_hydration();
+        let c = hyd.candidates(&start).next().unwrap().unwrap();
+        let glycol = c.apply().unwrap().unwrap().products.remove(0);
+        let dh = crate::rules::dehydrogenation();
+        let alcohol = dh
+            .candidates(&glycol)
+            .find(|c| c.as_ref().is_ok_and(|c| c.pattern_name() == "alcohol"))
+            .unwrap()
+            .unwrap();
+        let mut steps =
+            epoxide_hydration_canonical_plan(start.mol(), "EpoxideHydration", &[0, 1], None);
+        // Stamp-origin Indices + AddedBy for born alcohol O (not raw Index of O).
+        let atoms = alcohol.site_atoms();
+        steps.extend(identity_plan_on_forest(
+            alcohol
+                .leaf_rule()
+                .unwrap_or_else(|| alcohol.pattern_name()),
+            &glycol,
+            atoms.clone(),
+            if alcohol.is_pair() {
+                atoms
+            } else {
+                alcohol.orbit.clone()
+            },
+        ));
+        let deps = Deps::bind(steps);
+        assert_eq!(deps.steps()[2].rule, "Dehydrogenation");
+        assert!(
+            !deps.steps()[2].site.is_empty(),
+            "alcohol identity site: {:?}",
+            deps.steps()[2]
+        );
+        assert!(deps.reaches("C=C", "OCC=O").unwrap(), "plan={deps:?}");
+    }
+
+    #[test]
+    fn apply_n_dedups_and_sorts_arms() {
+        let pool = ApplyN::new(["Epoxidation", "Hydroxylation", "Hydroxylation"], 3);
+        assert_eq!(
+            pool.arms,
+            vec!["Epoxidation".to_string(), "Hydroxylation".to_string()]
         );
     }
 }

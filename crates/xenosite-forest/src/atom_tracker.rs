@@ -396,6 +396,70 @@ mod tests {
     }
 
     #[test]
+    fn aromatize_preserves_chematic_labels() {
+        use crate::chematic_tags::get_label;
+        use crate::mol::{aromatize, atom_idx, parse_mol};
+        use chematic::smiles::parse;
+
+        // Kekulé input → aromatize rebuild path (most likely to drop tags).
+        let mut mol = parse("C1=CC=CC=C1").unwrap();
+        let _ = AtomTracker::stamp(&mut mol);
+        let before: Vec<_> = AtomTracker::all_tags(&mol);
+        assert_eq!(before.iter().flatten().count(), 6);
+
+        let arom = aromatize(&mol);
+        let after: Vec<_> = AtomTracker::all_tags(&arom);
+        assert_eq!(
+            after.iter().flatten().count(),
+            6,
+            "aromatize dropped labels: before={before:?} after={after:?}"
+        );
+        for (i, tag) in before.iter().enumerate() {
+            // Same tag must exist somewhere (indices may permute).
+            if let Some(t) = tag {
+                assert!(
+                    (0..arom.atom_count()).any(|j| get_label(&arom, atom_idx(j)) == Some(*t)),
+                    "tag {t:?} (was idx {i}) missing after aromatize"
+                );
+            }
+        }
+        let _ = parse_mol;
+    }
+
+    #[test]
+    fn benzodioxole_leave_methane_carries_excised_carbon_tag() {
+        use crate::chematic_tags::get_label;
+        use crate::mol::atom_idx;
+        use crate::rules::benzodioxole_reduction;
+        use std::collections::HashSet;
+
+        let parent = crate::ForestMol::parse("c1ccc2c(c1)OCO2").unwrap();
+        let parent_tags: HashSet<_> = (0..parent.mol().atom_count())
+            .filter_map(|i| AtomTracker::tag_of(parent.mol(), i))
+            .collect();
+
+        let cand = benzodioxole_reduction()
+            .candidates(&parent)
+            .next()
+            .unwrap()
+            .unwrap();
+        let raw = cand.materialize_mols().unwrap();
+        let leave = raw.iter().min_by_key(|f| f.atom_count()).expect("leave");
+        assert_eq!(leave.atom_count(), 1, "methane leave");
+
+        let leave_tag = get_label(leave, atom_idx(0));
+        assert!(
+            leave_tag.is_some(),
+            "leave methane is untagged — remove_mapped_ch2_leave uses parse_mol(\"C\") \
+             instead of carrying the excised methylene's label"
+        );
+        assert!(
+            parent_tags.contains(&leave_tag.unwrap()),
+            "leave tag {leave_tag:?} not from parent {parent_tags:?}"
+        );
+    }
+
+    #[test]
     fn fragments_preserve_tags_without_apply() {
         let mut mol = parse("CCO.N").unwrap();
         let _ = AtomTracker::stamp(&mut mol);

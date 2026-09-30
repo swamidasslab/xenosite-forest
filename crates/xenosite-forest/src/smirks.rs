@@ -739,39 +739,20 @@ fn apply_smirks_raw(
     Ok(Vec::new())
 }
 
-/// Chematic often saturates `El+` with an implicit H (`[SH+]`) even when the
-/// product template asked for H0 (`[*&H0&+:1]` → `[SH0+:1]`). Strip that H in
-/// the SMILES round-trip so dialkyl S/N oxides match RDKit's closed-shell form.
+/// Chematic often saturates `El+` with an implied H in SMILES (`[SH+]`) even
+/// when the product template asked for H0 (`[*&H0&+:1]`). Force explicit H0 on
+/// charged atoms in place so CSMI matches RDKit without a SMILES round-trip
+/// (reparse drops caller tags).
 fn enforce_charged_h0(mol: Molecule) -> Molecule {
-    use crate::mol::{canon_smiles, parse_mol};
-    let s = canon_smiles(&mol);
-    let mut out = String::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'[' {
-            // Rewrite [XH+] / [xH+] → [X+] / [x+] (single-letter organic els).
-            if i + 5 <= bytes.len()
-                && bytes[i + 2] == b'H'
-                && bytes[i + 3] == b'+'
-                && bytes[i + 4] == b']'
-                && bytes[i + 1].is_ascii_alphabetic()
-            {
-                out.push('[');
-                out.push(bytes[i + 1] as char);
-                out.push('+');
-                out.push(']');
-                i += 5;
-                continue;
-            }
+    let n = mol.atom_count();
+    let mut out = mol;
+    for i in 0..n {
+        let atom = out.atom(atom_idx(i));
+        if atom.charge != 0 && atom.hydrogen_count != Some(0) {
+            out = crate::chematic_tags::preserving::with_atom_explicit_h(&out, atom_idx(i), 0);
         }
-        out.push(bytes[i] as char);
-        i += 1;
     }
-    if out == s {
-        return mol;
-    }
-    parse_mol(&out).unwrap_or(mol)
+    out
 }
 
 /// RDKit writes monatomic At as ``[AtH]`` (not organic-subset); chematic yields
