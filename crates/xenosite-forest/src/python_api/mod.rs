@@ -6,6 +6,7 @@
 //! Native-only: CPython C-API. Not compiled for `wasm32-unknown-unknown`.
 
 mod common;
+mod display;
 mod graph;
 mod macros;
 mod mol;

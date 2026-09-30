@@ -66,6 +66,17 @@ impl PyEmission {
         let view = EmissionView::from(&self.inner);
         Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
     }
+
+    fn __str__(&self) -> String {
+        super::display::format_emission(&self.inner)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Emission({:?}, site={})",
+            self.inner.pattern_name, self.inner.site
+        )
+    }
 }
 
 fn parse_edit(edit: &str) -> Edit {
@@ -281,6 +292,14 @@ impl PyBoundPattern {
 
     fn __repr__(&self) -> String {
         format!("BoundPattern({:?})", self.inner.curie())
+    }
+
+    fn __str__(&self) -> String {
+        format!(
+            "BoundPattern {}  ({} patterns under leaf)",
+            self.inner.curie(),
+            self.inner.len()
+        )
     }
 }
 
@@ -525,6 +544,10 @@ impl PyRuleSet {
                 self.inner.patterns().len()
             ),
         }
+    }
+
+    fn __str__(&self) -> String {
+        super::display::format_ruleset(&self.inner)
     }
 }
 

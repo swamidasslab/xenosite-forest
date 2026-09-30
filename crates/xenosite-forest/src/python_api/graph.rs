@@ -492,6 +492,36 @@ impl PyMetabolicNetwork {
         self.node(idx)
     }
 
+    /// Marked target CSMIs (sorted), for notebooks / summaries.
+    fn target_csmis(&self) -> PyResult<Vec<String>> {
+        let net = self.inner.lock().map_err(|_| network_lock_err())?;
+        let mut out: Vec<String> = net
+            .targets
+            .iter()
+            .filter_map(|&i| net.nodes.get(i).map(|n| n.csmi.clone()))
+            .collect();
+        out.sort();
+        Ok(out)
+    }
+
+    fn __str__(&self) -> String {
+        match self.inner.lock() {
+            Ok(net) => super::display::format_network(&net),
+            Err(_) => "MetabolicNetwork(<lock poisoned>)".into(),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        match self.inner.lock() {
+            Ok(net) => format!(
+                "MetabolicNetwork(nodes={}, edges={})",
+                net.n_nodes(),
+                net.n_edges()
+            ),
+            Err(_) => "MetabolicNetwork(<lock poisoned>)".into(),
+        }
+    }
+
     fn missed(&self, py: Python<'_>, csmi: &str, target: &str) -> PyResult<Option<Py<PyAny>>> {
         let residual = self
             .inner

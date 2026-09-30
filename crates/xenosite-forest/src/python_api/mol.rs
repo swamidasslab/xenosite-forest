@@ -139,6 +139,52 @@ impl PyForestMol {
             .collect())
     }
 
+    /// Atom tags parallel to chematic indexes (`None` if unlabeled).
+    fn atom_tags(&self) -> Vec<Option<u16>> {
+        (0..self.inner.mol().atom_count())
+            .map(|i| self.inner.tag_of(i).map(|t| t.get()))
+            .collect()
+    }
+
+    /// Trace summary: `(stamp_end, n_survivors, n_born, n_untagged)`.
+    ///
+    /// Survivors are tags ``< stamp_end`` (present on the stamped root);
+    /// born atoms were minted later in the shared tag lineage.
+    fn trace_counts(&self) -> (u16, usize, usize, usize) {
+        let stamp_end = self.inner.stamp_end();
+        let mut survivors = 0usize;
+        let mut born = 0usize;
+        let mut untagged = 0usize;
+        for i in 0..self.inner.mol().atom_count() {
+            match self.inner.tag_of(i) {
+                Some(t) if t.get() < stamp_end => survivors += 1,
+                Some(_) => born += 1,
+                None => untagged += 1,
+            }
+        }
+        (stamp_end, survivors, born, untagged)
+    }
+
+    /// Root-stamp origin index for each atom (`None` if born / untagged).
+    fn stamp_origins(&self) -> Vec<Option<usize>> {
+        (0..self.inner.mol().atom_count())
+            .map(|i| {
+                self.inner
+                    .tag_of(i)
+                    .and_then(|t| self.inner.stamp_origin_index(t))
+            })
+            .collect()
+    }
+
+    #[getter]
+    fn stamp_end(&self) -> u16 {
+        self.inner.stamp_end()
+    }
+
+    fn __str__(&self) -> String {
+        super::display::format_forest_mol(&self.inner)
+    }
+
     fn __repr__(&self) -> String {
         format!("ForestMol({:?})", self.inner.csmi())
     }

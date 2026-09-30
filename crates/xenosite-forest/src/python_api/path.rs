@@ -151,9 +151,43 @@ impl PyPathOutcome {
         )
     }
 
+    /// Search hops (pattern / site / kept product) for notebook step displays.
+    fn hops(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let rows: Vec<Py<PyAny>> = self
+            .inner
+            .steps
+            .iter()
+            .map(|s| {
+                let d = pyo3::types::PyDict::new(py);
+                d.set_item("pattern_name", &s.pattern_name)?;
+                d.set_item("site", s.site)?;
+                d.set_item("site_orbit", s.site_orbit.clone())?;
+                d.set_item("product", &s.product)?;
+                d.set_item("sides", s.sides.clone())?;
+                let leaf = s.leaf_rule().unwrap_or("");
+                d.set_item("rule", leaf)?;
+                Ok(d.unbind().into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
+    }
+
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = PathOutcomeView::from(&self.inner);
         Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
+    }
+
+    fn __str__(&self) -> String {
+        super::display::format_path_outcome(
+            &self.inner.smiles,
+            self.inner.steps.len(),
+            self.inner.plan.steps().len(),
+            self.inner.plan.n_linearizations(),
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!("PathOutcome({:?})", self.inner.smiles)
     }
 }
 
@@ -192,6 +226,17 @@ impl PyPartialPathOutcome {
         residual.set_item("unresolvable", self.inner.residual.unresolvable)?;
         d.set_item("residual", residual)?;
         Ok(d.unbind().into_any())
+    }
+
+    fn __str__(&self) -> String {
+        format!(
+            "PartialOutcome  {}\n  residual_cost={}",
+            self.inner.smiles, self.inner.residual.cost
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!("PartialOutcome({:?})", self.inner.smiles)
     }
 }
 

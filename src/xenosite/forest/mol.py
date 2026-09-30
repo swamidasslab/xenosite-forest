@@ -51,8 +51,16 @@ class ForestMol:
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
 
+    def __str__(self) -> str:
+        return str(self._inner)
+
     def __repr__(self) -> str:
         return repr(self._inner)
+
+    def _repr_html_(self) -> str:
+        from . import notebook
+
+        return notebook._forest_mol_html(self._inner)
 
     def to_rdkit(self) -> Any:
         """RDKit view from chematic CSMI (atom tags are not round-tripped)."""

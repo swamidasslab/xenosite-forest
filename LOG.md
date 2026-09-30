@@ -8,6 +8,12 @@
   (`network=` locks `Arc<Mutex>` inside the closure). Pyclasses remain `unsendable`.
   Gate: `make test` **9311 passed, 64 xfailed**; `make test-rust-python` green.
 
+- **Notebook displays.** Rust truncated `__str__` for RuleSet tree, ForestMol **tag
+  trace** (survivors/born/stamp_end), MetabolicNetwork summary, StepPlan
+  (`n_linearizations`), Emission, PathOutcome. Python `notebook.py` installs
+  `_repr_html_` (RDKit SVG with tag notes; PathOutcome = traced mol + StepPlan,
+  not hop dumps).
+
 - **PyO3 handle API port — finished.** Split `python_api` into `mol` / `rules` / `path` /
   `walk` (+ existing `common` / `plan` / `graph`). `GraphNode`/`GraphEdge`: `sealed` /
   `expanded`, mutable attrs (`[]` / `get_attr` / `set_attr`), `.to_dict()`. Gate:

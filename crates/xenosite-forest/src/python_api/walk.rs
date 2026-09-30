@@ -49,6 +49,25 @@ impl PyRandomPathOutcome {
         }
         Ok(false)
     }
+
+    fn __str__(&self) -> String {
+        let path = &self.inner.path;
+        let shown = if path.len() <= 5 {
+            path.join(" → ")
+        } else {
+            format!(
+                "{} → … → {} ({} hops)",
+                path.first().map(String::as_str).unwrap_or("?"),
+                path.last().map(String::as_str).unwrap_or("?"),
+                path.len().saturating_sub(1)
+            )
+        };
+        format!("RandomPathOutcome  {}\n  {}", self.inner.smiles, shown)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("RandomPathOutcome({:?})", self.inner.smiles)
+    }
 }
 
 /// Seeded random walk: apply up to ``max_steps`` rules. Returns
