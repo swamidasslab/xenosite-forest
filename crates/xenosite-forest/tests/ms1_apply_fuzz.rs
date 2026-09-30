@@ -105,17 +105,15 @@ fn products_from_apply(reactant: &str, leaf: &str) -> Vec<(String, f64)> {
         let Ok(cand) = cand else {
             continue;
         };
-        let Ok(pieces) = cand.materialize_mols() else {
+        let Ok(Some(em)) = cand.apply() else {
             continue;
         };
-        if pieces.is_empty() {
-            continue;
+        for child in &em.products {
+            let Some(mz) = mz_of_mol(child.mol(), Ms1Adduct::MPlusH) else {
+                continue;
+            };
+            out.push((child.csmi().as_ref().to_string(), mz));
         }
-        let child = parent.adopt_product(pieces[0].clone());
-        let Some(mz) = mz_of_mol(child.mol(), Ms1Adduct::MPlusH) else {
-            continue;
-        };
-        out.push((child.csmi().as_ref().to_string(), mz));
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out.dedup_by(|a, b| a.0 == b.0);
@@ -284,13 +282,12 @@ proptest! {
         let mut second = None;
         for cand in set.candidates(&mid) {
             let Ok(cand) = cand else { continue };
-            let Ok(pieces) = cand.materialize_mols() else {
+            let Ok(Some(em)) = cand.apply() else {
                 continue;
             };
-            if pieces.is_empty() {
+            let Some(child) = em.products.first() else {
                 continue;
-            }
-            let child = mid.adopt_product(pieces[0].clone());
+            };
             let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).expect("mz");
             second = Some((child.csmi().as_ref().to_string(), mz));
             break;
@@ -331,16 +328,15 @@ fn chain_two_largest(reactant: &str, leaf_a: &str, leaf_b: &str) -> Option<(Stri
         let set = leaf_rule(leaf)?;
         let mut best: Option<(usize, ForestMol)> = None;
         for cand in set.candidates(&cur).filter_map(|c| c.ok()) {
-            let Ok(pieces) = cand.materialize_mols() else {
+            let Ok(Some(em)) = cand.apply() else {
                 continue;
             };
-            if pieces.is_empty() {
+            let Some(piece) = em.products.into_iter().max_by_key(|p| p.mol().atom_count()) else {
                 continue;
-            }
-            let piece = pieces.into_iter().max_by_key(|p| p.atom_count()).unwrap();
-            let n = piece.atom_count();
+            };
+            let n = piece.mol().atom_count();
             if best.as_ref().map(|(b, _)| n > *b).unwrap_or(true) {
-                best = Some((n, cur.adopt_product(piece)));
+                best = Some((n, piece));
             }
         }
         cur = best?.1;

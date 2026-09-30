@@ -1243,7 +1243,8 @@ mod tests {
 
         // (name, smiles, ruleset factory, optional candidate filter)
         type Filter = fn(&crate::candidate::DeferredSite) -> bool;
-        let cases: &[(&str, &str, fn() -> RuleSet, Option<Filter>)] = &[
+        type Case = (&'static str, &'static str, fn() -> RuleSet, Option<Filter>);
+        let cases: &[Case] = &[
             ("add_hydroxyl", "CC", hydroxylation, None),
             ("smirks_epoxidation", "C=C", epoxidation, None),
             ("smirks_sulfur_ox", "CCS", sulfur_oxidation, None),

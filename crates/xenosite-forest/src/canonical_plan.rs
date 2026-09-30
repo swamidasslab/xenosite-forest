@@ -571,7 +571,8 @@ pub fn apply_n_emit_products(
 
 /// Apply `tags` in given order; return product CSMI and elementary steps.
 ///
-/// Sites are tracked across [`ForestMol::adopt_product`] via tags. Emitted
+/// Sites are tracked across [`DeferredSite::apply`] / [`ForestMol::from_edit_product`]
+/// via tags. Emitted plans use stamp-origin Indices so replay is index-stable.
 /// [`PlanAtom::Index`] notes use **start** indices (carbons keep indices when
 /// O is appended). Step orbits are atom indices from
 /// [`crate::orbits::atom_orbit_with_gens`] on the start mol — not tag ids.
@@ -607,28 +608,22 @@ fn apply_combo_sorted(
             else {
                 continue;
             };
-            let pieces = cand.materialize_mols()?;
-            if pieces.is_empty() {
+            let Some(em) = cand.apply()? else {
                 continue;
-            }
-            let piece = if cand.effect.cleaves && pieces.len() > 1 {
+            };
+            let piece = if cand.effect.cleaves && em.products.len() > 1 {
                 // Keep the largest fragment (MS1 continue side); leave goes to Maybe.
-                pieces
+                em.products
                     .into_iter()
-                    .max_by_key(|p| p.atom_count())
+                    .max_by_key(|p| p.mol().atom_count())
                     .expect("non-empty")
             } else {
-                pieces.into_iter().next().expect("non-empty")
+                em.products.into_iter().next().expect("non-empty")
             };
             let orbit =
                 crate::orbits::atom_orbit_with_gens(start_gens.as_ref(), start_n, start_idx);
             steps.push(Step::new(rule, [PlanAtom::index(start_idx)]).with_orbit(orbit));
-            cur = {
-                #[allow(deprecated)]
-                {
-                    cur.adopt_product(piece)
-                }
-            };
+            cur = piece;
             applied = true;
             break;
         }
@@ -1118,12 +1113,7 @@ impl StepSequence {
                     continue;
                 };
                 for product in prods {
-                    let child = {
-                        #[allow(deprecated)]
-                        {
-                            cur.adopt_product(product)
-                        }
-                    };
+                    let child = cur.from_edit_product(product);
                     let smi = child.csmi().as_ref().to_string();
                     if !seen.insert(smi) {
                         continue;
@@ -2429,12 +2419,7 @@ mod tests {
         let start = ForestMol::parse("C=C").unwrap();
         let hyd = crate::rules::epoxide_hydration();
         let c = hyd.candidates(&start).next().unwrap().unwrap();
-        let glycol = {
-            #[allow(deprecated)]
-            {
-                start.adopt_product(c.materialize_mols().unwrap().remove(0))
-            }
-        };
+        let glycol = c.apply().unwrap().unwrap().products.remove(0);
         let dh = crate::rules::dehydrogenation();
         let alcohol = dh
             .candidates(&glycol)
@@ -2460,7 +2445,7 @@ mod tests {
         let deps = Deps::bind(steps);
         assert_eq!(deps.steps()[2].rule, "Dehydrogenation");
         assert!(
-            deps.steps()[2].site.len() >= 1,
+            !deps.steps()[2].site.is_empty(),
             "alcohol identity site: {:?}",
             deps.steps()[2]
         );

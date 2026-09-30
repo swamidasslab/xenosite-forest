@@ -312,16 +312,15 @@ pub fn find_path_ms1(
                 }
             }
 
-            let pieces = cand.materialize_mols()?;
-            if pieces.is_empty() {
+            let Some(em) = cand.apply()? else {
                 continue;
-            }
+            };
             counters.mol_edits += 1;
-            let child_mol = walk.mol.from_edit_product(pieces[0].clone());
-            if let Some(k) = child_mol.stable_csmi_key() {
-                if walk.ancestors.contains(k.as_ref()) {
-                    continue;
-                }
+            let child_mol = em.products.into_iter().next().expect("non-empty emission");
+            if let Some(k) = child_mol.stable_csmi_key()
+                && walk.ancestors.contains(k.as_ref())
+            {
+                continue;
             }
             if !remember_seen(&mut seen, &child_mol) {
                 continue;
@@ -573,13 +572,13 @@ mod tests {
         let mut out = Vec::new();
         for cand in set.candidates(&parent) {
             let cand = cand.unwrap();
-            let pieces = cand.materialize_mols().unwrap();
-            if pieces.is_empty() {
+            let Ok(Some(em)) = cand.apply() else {
                 continue;
+            };
+            for child in &em.products {
+                let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).unwrap();
+                out.push((child.csmi().as_ref().to_string(), mz));
             }
-            let child = parent.from_edit_product(pieces[0].clone());
-            let mz = mz_of_mol(child.mol(), Ms1Adduct::MPlusH).unwrap();
-            out.push((child.csmi().as_ref().to_string(), mz));
         }
         out.sort_by(|a, b| a.0.cmp(&b.0));
         out.dedup_by(|a, b| a.0 == b.0);
@@ -674,11 +673,10 @@ mod tests {
             let mut next = None;
             for cand in set.candidates(&cur) {
                 let cand = cand.unwrap();
-                let pieces = cand.materialize_mols().unwrap();
-                if pieces.is_empty() {
+                let Ok(Some(em)) = cand.apply() else {
                     continue;
-                }
-                next = Some(cur.from_edit_product(pieces[0].clone()));
+                };
+                next = em.products.into_iter().next();
                 break;
             }
             cur = next.unwrap_or_else(|| panic!("{reactant} chain failed at {leaf}"));
@@ -859,8 +857,10 @@ mod tests {
             if !cand.effect.cleaves {
                 continue;
             }
-            for p in cand.materialize_mols().unwrap() {
-                let child = parent.from_edit_product(p);
+            let Ok(Some(em)) = cand.apply() else {
+                continue;
+            };
+            for child in &em.products {
                 let f = molecule_formula(child.mol());
                 if f.counts.get("C") == Some(&6)
                     && f.counts.get("O") == Some(&1)
@@ -1023,14 +1023,16 @@ mod tests {
             let mut best: Option<(usize, ForestMol)> = None;
             for cand in set.candidates(&cur) {
                 let cand = cand.unwrap();
-                let pieces = cand.materialize_mols().unwrap();
-                if pieces.is_empty() {
+                let Ok(Some(em)) = cand.apply() else {
                     continue;
-                }
-                let piece = pieces.into_iter().max_by_key(|p| p.atom_count()).unwrap();
-                let n = piece.atom_count();
+                };
+                let Some(piece) = em.products.into_iter().max_by_key(|p| p.mol().atom_count())
+                else {
+                    continue;
+                };
+                let n = piece.mol().atom_count();
                 if best.as_ref().map(|(b, _)| n > *b).unwrap_or(true) {
-                    best = Some((n, cur.from_edit_product(piece)));
+                    best = Some((n, piece));
                 }
             }
             cur = best
@@ -1709,7 +1711,7 @@ mod tests {
         let hits = find_path_ms1(
             "c1ccccc1",
             &set,
-            &[pool.clone()],
+            std::slice::from_ref(&pool),
             &mut counters,
             Ms1Config {
                 mz: diol_mz,
@@ -1865,7 +1867,7 @@ mod tests {
         let delta = set.patterns()[0].effect.resolved_delta_formula();
         let pred = predicted_mz_after_delta(&parent, &delta, Ms1Adduct::MPlusH).unwrap();
         let c = set.candidates(&parent).next().unwrap().unwrap();
-        let child = parent.from_edit_product(c.materialize_mols().unwrap()[0].clone());
+        let child = c.apply().unwrap().unwrap().products.remove(0);
         let obs = walk_mz(&child, Ms1Adduct::MPlusH).unwrap();
         let ethane_mz = walk_mz(&parent, Ms1Adduct::MPlusH).unwrap();
         assert!(
