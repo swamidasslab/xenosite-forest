@@ -146,6 +146,9 @@ pub fn format_network(net: &MetabolicNetwork) -> String {
     ))
 }
 
+/// Soft cap: expand linearization orders in text/HTML only when small.
+pub const MAX_LIN_EXPAND: usize = 4;
+
 pub fn format_step_plan(plan: &Deps) -> String {
     let n_lin = plan.n_linearizations();
     let mut lines = vec![format!(
@@ -154,13 +157,7 @@ pub fn format_step_plan(plan: &Deps) -> String {
         n_lin
     )];
     for (i, step) in plan.steps().iter().enumerate() {
-        let site: Vec<String> = step.site.iter().map(|a| format!("{a:?}")).collect();
-        let site_s = if site.len() > 6 {
-            format!("[{}, …]", site[..6].join(", "))
-        } else {
-            format!("[{}]", site.join(", "))
-        };
-        lines.push(format!("  {i}: {} @ {}", step.rule, site_s));
+        lines.push(format!("  {i}: {}", format_plan_step(step)));
     }
     let precedes = plan.precedes();
     if !precedes.is_empty() {
@@ -172,7 +169,79 @@ pub fn format_step_plan(plan: &Deps) -> String {
         let more = if precedes.len() > 12 { " …" } else { "" };
         lines.push(format!("  precedes: {}{more}", edge_s.join(", ")));
     }
+    if n_lin > 0 && n_lin <= MAX_LIN_EXPAND {
+        lines.push("  linearizations:".into());
+        for (li, lin) in plan.linearizations().iter().enumerate() {
+            let order: Vec<String> = lin
+                .steps
+                .iter()
+                .map(|s| format!("{}@{}", s.rule, format_site_compact(&s.site)))
+                .collect();
+            lines.push(format!("    [{li}] {}", order.join(" → ")));
+        }
+    } else if n_lin > MAX_LIN_EXPAND {
+        lines.push(format!(
+            "  (~{n_lin} linearizations; not expanded — use .linearizations())"
+        ));
+    }
     truncate_display(&lines.join("\n"))
+}
+
+fn format_site_compact(site: &[crate::canonical_plan::PlanAtom]) -> String {
+    let parts: Vec<String> = site.iter().take(6).map(|a| format!("{a:?}")).collect();
+    if site.len() > 6 {
+        format!("[{},…]", parts.join(","))
+    } else {
+        format!("[{}]", parts.join(","))
+    }
+}
+
+fn format_plan_step(step: &crate::canonical_plan::Step) -> String {
+    format!("{} @ {}", step.rule, format_site_compact(&step.site))
+}
+
+pub fn format_path_counters(c: &crate::find_path::PathCounters) -> String {
+    truncate_display(&format!(
+        "PathCounters  billed={} nodes={} edits={} expansions={}\n  dropped_dup={} (exact={} skeleton={}) signal_contained={}\n  diversity_repush={} timed_out={}",
+        c.billed(),
+        c.nodes,
+        c.mol_edits,
+        c.expansions,
+        c.dropped_duplicate_plan,
+        c.dropped_exact_plan,
+        c.dropped_skeleton_twin,
+        c.signal_contained_plan,
+        c.diversity_repush,
+        c.timed_out
+    ))
+}
+
+pub fn format_partial_outcome(
+    smiles: &str,
+    residual_cost: usize,
+    n_plan_steps: usize,
+    n_lin: usize,
+) -> String {
+    truncate_display(&format!(
+        "PartialOutcome  {smiles}\n  residual_cost={residual_cost}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: ForestMol tag trace + residual; use .to_dict() for full residual)"
+    ))
+}
+
+pub fn format_pattern_info(p: &crate::pattern::PatternInfo) -> String {
+    let smarts = if p.smarts.len() > 64 {
+        format!("{}…", &p.smarts[..63])
+    } else {
+        p.smarts.clone()
+    };
+    truncate_display(&format!(
+        "PatternInfo  {}\n  smarts: {}\n  adds={:?} removes={:?} cleaves={} methide={}",
+        p.name,
+        smarts,
+        p.effect.adds,
+        p.effect.removes,
+        p.effect.cleaves,
+        p.effect.methide
+    ))
 }
 
 pub fn format_emission(em: &Emission) -> String {
@@ -193,13 +262,17 @@ pub fn format_emission(em: &Emission) -> String {
         .collect::<Vec<_>>()
         .join("/");
     truncate_display(&format!(
-        "Emission  {}  site={}\n  path: {}\n  products: {}",
-        em.pattern_name, em.site, path, prod
+        "Emission  {}  site={} on {}\n  path: {}\n  products: {}",
+        em.pattern_name,
+        em.site,
+        em.reactant.csmi().as_ref(),
+        path,
+        prod
     ))
 }
 
 pub fn format_path_outcome(smiles: &str, n_steps: usize, n_plan_steps: usize, n_lin: usize) -> String {
     truncate_display(&format!(
-        "PathOutcome  {smiles}\n  walk_hops={n_steps}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: ForestMol tag trace + StepPlan; use .hops() for walk trail)"
+        "PathOutcome  {smiles}\n  walk_hops={n_steps}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: reactant→product hop trail with SOM on each reactant; use .hops() / .plan)"
     ))
 }

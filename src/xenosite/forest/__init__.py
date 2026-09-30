@@ -4,6 +4,9 @@ Names match ``xenosite.forest._rust`` / ``crates/xenosite-forest`` exports::
 
     from xenosite.forest import find_path, phase_one, MetabolicNetwork, product_graph_into
 
+``find_path`` / ``find_path_partial`` return ``(..., network)`` — search always
+records hops on a ``MetabolicNetwork`` (pass ``network=`` to extend one).
+
 See ``docs/forest/RUST.md``. Do not extend :mod:`xenosite.forest.native` (frozen).
 """
 

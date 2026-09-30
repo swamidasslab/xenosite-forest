@@ -140,6 +140,8 @@ pub struct PathStep {
     /// Unique-edit primary-map orbit (includes `site`). Plan equivalence under
     /// automorphism compares sites via [`crate::same_site_orbit`].
     pub site_orbit: Vec<usize>,
+    /// CSMI of the mol the rule was applied to (site indexes this mol).
+    pub reactant: String,
     /// Kept fragment CSMI (the search node).
     pub product: String,
     /// Cleaved-off fragment CSMIs (not expanded).
@@ -166,12 +168,18 @@ impl PathStep {
             && crate::same_site_orbit(self.site, &self.site_orbit, other.site, &other.site_orbit)
     }
 
-    fn from_emission(emission: &ForestEmission, product: String, sides: Vec<String>) -> Self {
+    fn from_emission(
+        emission: &ForestEmission,
+        reactant: String,
+        product: String,
+        sides: Vec<String>,
+    ) -> Self {
         Self {
             rule_path: emission.rule_path.clone(),
             pattern_name: emission.pattern_name.clone(),
             site: emission.site,
             site_orbit: emission.site_orbit.clone(),
+            reactant,
             product,
             sides,
         }
@@ -1703,7 +1711,12 @@ impl<'g> PathSearch<'g> {
             emission.removes_oxygen,
         );
         let mut steps = walk.steps.clone();
-        steps.push(PathStep::from_emission(emission, kept_csmi.clone(), sides));
+        steps.push(PathStep::from_emission(
+            emission,
+            walk.mol.csmi().as_ref().to_string(),
+            kept_csmi.clone(),
+            sides,
+        ));
         let mut plan = walk.plan.clone();
         plan.extend(emission.plan.iter().cloned());
         let cost_gain = hop_cost_gain(parent_cost, child_diff.as_ref().map(|d| d.cost()));
@@ -2391,6 +2404,7 @@ where
                         pattern_name: emission.pattern_name.clone(),
                         site: emission.site,
                         site_orbit: emission.site_orbit.clone(),
+                        reactant: walk.mol.csmi().as_ref().to_string(),
                         product: kept_csmi.clone(),
                         sides,
                     });

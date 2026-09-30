@@ -348,6 +348,7 @@ pub fn find_path_ms1(
                 pattern_name: cand.pattern_name().to_string(),
                 site: cand.site,
                 site_orbit: cand.orbit.clone(),
+                reactant: walk.mol.csmi().as_ref().to_string(),
                 product: child_mol.csmi().as_ref().to_string(),
                 sides: Vec::new(),
             };

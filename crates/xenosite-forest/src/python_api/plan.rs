@@ -22,6 +22,31 @@ impl PyStepPlan {
         self.inner.n_linearizations()
     }
 
+    /// Enumerate topological sorts under precedes (tiny plans).
+    ///
+    /// Each row is a list of ``{"rule", "site"}`` like plan steps. Caps at
+    /// 64 rows so accidental factorial explosions stay bounded.
+    fn linearizations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        const MAX: usize = 64;
+        let lins = self.inner.linearizations();
+        let rows: Vec<Py<PyAny>> = lins
+            .iter()
+            .take(MAX)
+            .map(|lin| {
+                let steps: Vec<Py<PyAny>> = lin
+                    .steps
+                    .iter()
+                    .map(|step| {
+                        let view = crate::export::PlanStepView::from(step);
+                        Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
+                    })
+                    .collect::<PyResult<_>>()?;
+                Ok(pyo3::types::PyList::new(py, steps)?.unbind().into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
+    }
+
     fn allows(&self, site: Option<Vec<usize>>, side: Option<&str>) -> bool {
         let set: Option<BTreeSet<usize>> = site.map(|v| v.into_iter().collect());
         self.inner.allows(set.as_ref(), side)

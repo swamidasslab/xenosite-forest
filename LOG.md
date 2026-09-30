@@ -2,6 +2,24 @@
 
 ## 2026-09-29
 
+- **`find_path` / `find_path_partial` always return the graph.** Returns
+  `(hits, counters, network)` / `(exact, partials, counters, network)`. Search
+  always records hops; omit `network=` to get a fresh `MetabolicNetwork`, or
+  pass one to extend it. Fixes the prior “only if network=” gap.
+
+- **Pathway notebook displays.** PathOutcome / PartialOutcome / Emission /
+  GraphEdge / RandomPath draw **reactant→product** hops with SOM on the mol
+  the rule was applied to (`PathStep.reactant`, `Emission.reactant`,
+  `GraphEdge.parent_mol`). Final tagged mol + StepPlan sit under a details
+  fold. Gate: `make test` **9320 passed, 64 xfailed** (pre-pathway polish).
+
+- **Notebook displays — finished.** Remaining HTML surfaces use ForestMol
+  tracing: `GraphNode` / `GraphEdge` (kept mol + SOM), `PartialOutcome`,
+  `BoundPattern`, `PathCounters`. Rust `__str__` for those plus `PatternInfo`;
+  `StepPlan.linearizations()` (capped) and expand in text/HTML when
+  `n_lin ≤ 4`. Tutorial notebook cells print scalars then **end with a handle**
+  so IPython shows `_repr_html_`.
+
 - **GIL release via Arc.** `ForestMol` caches: `Rc`/`RefCell`/`Cell` → `Arc`/`Mutex`/`Atomic`
   (same sharing, no ForestMol copies). `Python::detach` (GIL release) on `find_path` /
   `find_path_partial` / `random_path` / `product_graph_*` / filter-free `metabolize`

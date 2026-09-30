@@ -58,6 +58,12 @@ impl PyEmission {
             .collect()
     }
 
+    /// Mol the pattern was applied to (`site` indexes this mol).
+    #[getter]
+    fn reactant(&self) -> PyForestMol {
+        PyForestMol::wrap(self.inner.reactant.clone())
+    }
+
     fn rule_path(&self) -> Vec<Option<String>> {
         self.inner.rule_path.clone()
     }
@@ -167,6 +173,10 @@ impl PyPatternInfo {
     #[getter]
     fn methide(&self) -> bool {
         self.inner.effect.methide
+    }
+
+    fn __str__(&self) -> String {
+        super::display::format_pattern_info(&self.inner)
     }
 
     fn __repr__(&self) -> String {

@@ -4,19 +4,20 @@ Attaches ``_repr_html_`` on Rust types after the extension loads. Text
 ``__str__`` / ``__repr__`` live in Rust (truncated). HTML stays here so RDKit
 drawings and light markup do not pull into the extension.
 
-Prefer **ForestMol tag tracing** (survivors vs born, stamp_end, atom notes)
-over search hop lists. PathOutcome shows the tagged hit mol + StepPlan; it
-does not dump per-hop intermediates unless tracing is unavailable.
+Pathway displays draw each hop's **reactant** with the SOM site highlighted
+(the mol the rule was applied to), then the product. Final tagged ForestMol
+trace is secondary. Do not mark sites on the terminal product.
 """
 
 from __future__ import annotations
 
 import html
-from typing import Any
+from typing import Any, Sequence
 
 _MAX_LIN_NOTE = 4
-_SVG_W = 280
-_SVG_H = 180
+_MAX_HOPS = 8
+_SVG_W = 220
+_SVG_H = 150
 
 
 def _esc(s: Any) -> str:
@@ -80,6 +81,14 @@ def _pre(text: str) -> str:
     return f"<pre style='margin:0.25em 0;white-space:pre-wrap'>{_esc(text)}</pre>"
 
 
+def _sites(site: Any) -> list[int]:
+    if site is None:
+        return []
+    if isinstance(site, int):
+        return [site]
+    return [int(x) for x in site]
+
+
 def _trace_bits(mol: Any) -> tuple[str, list[int | None], int]:
     tags = list(mol.atom_tags())
     stamp_end, survivors, born, untagged = mol.trace_counts()
@@ -91,15 +100,87 @@ def _trace_bits(mol: Any) -> tuple[str, list[int | None], int]:
     return bits, tags, int(stamp_end)
 
 
+def _traced_mol_block(mol: Any, *, highlight: list[int] | None = None) -> str:
+    csmi = mol.csmi
+    trace, tags, stamp_end = _trace_bits(mol)
+    svg = _mol_svg(csmi, highlight=highlight, tags=tags, born_cutoff=stamp_end)
+    parts = [
+        f"<div><code>{_esc(csmi)}</code></div>",
+        f"<div>{_esc(trace)}</div>",
+    ]
+    if svg:
+        parts.append(svg)
+    return "".join(parts)
+
+
+def _panel(label: str, smiles: str, *, highlight: list[int] | None = None) -> str:
+    svg = _mol_svg(smiles, highlight=highlight)
+    body = svg if svg else _pre(smiles)
+    return (
+        "<div style='min-width:11em'>"
+        f"<div style='font-size:0.85em'>{label}</div>"
+        f"{body}"
+        f"<div style='font-size:0.75em'><code>{_esc(smiles)}</code></div>"
+        "</div>"
+    )
+
+
+def _arrow(caption: str) -> str:
+    return (
+        "<div style='align-self:center;padding:0 0.4em;text-align:center;"
+        "font-size:0.85em;max-width:9em'>"
+        f"{_esc(caption)}<div style='font-size:1.4em'>→</div></div>"
+    )
+
+
+def _pathway_row(hops: Sequence[Any], *, final_smiles: str | None = None) -> str:
+    """Horizontal reactant(SOM) → product trail from hop dicts / objects."""
+
+    if not hops:
+        if final_smiles:
+            return _panel("<b>product</b>", final_smiles)
+        return "<div><i>(no hops)</i></div>"
+
+    parts: list[str] = [
+        "<div style='display:flex;gap:0.25em;flex-wrap:wrap;align-items:flex-start'>"
+    ]
+    shown = list(hops[:_MAX_HOPS])
+    for i, hop in enumerate(shown):
+        if isinstance(hop, dict):
+            reactant = hop.get("reactant") or ""
+            product = hop.get("product") or ""
+            rule = hop.get("rule") or hop.get("pattern_name") or "?"
+            site = _sites(hop.get("site"))
+        else:
+            reactant = getattr(hop, "reactant", "") or ""
+            product = getattr(hop, "product", "") or ""
+            rule = getattr(hop, "rule", None) or getattr(hop, "pattern_name", "?")
+            site = _sites(getattr(hop, "site", None))
+        site_s = ",".join(str(s) for s in site[:6])
+        label_r = f"<b>hop {i}</b> reactant"
+        if i == 0:
+            label_r = "<b>start</b> (SOM)"
+        parts.append(_panel(label_r, str(reactant), highlight=site))
+        parts.append(_arrow(f"{rule} @ [{site_s}]"))
+        if i == len(shown) - 1:
+            end = final_smiles or product
+            parts.append(_panel("<b>end</b>", str(end)))
+        else:
+            # Intermediate product is next hop's reactant; omit duplicate draw.
+            pass
+    if len(hops) > _MAX_HOPS:
+        parts.append(
+            f"<div style='align-self:center'>… (+{len(hops) - _MAX_HOPS} hops)</div>"
+        )
+    parts.append("</div>")
+    return "".join(parts)
+
+
 def _forest_mol_html(self: Any) -> str:
-    csmi = self.csmi
-    trace, tags, stamp_end = _trace_bits(self)
-    svg = _mol_svg(csmi, tags=tags, born_cutoff=stamp_end)
-    body = svg if svg else _pre(str(self))
+    body = _traced_mol_block(self)
     return (
         "<div class='xenosite-forest-mol'>"
-        f"<div><b>ForestMol</b> <code>{_esc(csmi)}</code></div>"
-        f"<div>{_esc(trace)}</div>"
+        f"<div><b>ForestMol</b></div>"
         f"{body}"
         f"{_pre(str(self))}"
         "</div>"
@@ -108,6 +189,16 @@ def _forest_mol_html(self: Any) -> str:
 
 def _ruleset_html(self: Any) -> str:
     return f"<div class='xenosite-ruleset'>{_pre(str(self))}</div>"
+
+
+def _bound_pattern_html(self: Any) -> str:
+    return (
+        "<div class='xenosite-bound-pattern'>"
+        f"<div><b>BoundPattern</b> <code>{_esc(self.curie)}</code>"
+        f" · {len(self)} pattern(s)</div>"
+        f"{_pre(str(self))}"
+        "</div>"
+    )
 
 
 def _network_html(self: Any) -> str:
@@ -166,79 +257,174 @@ def _step_plan_html(self: Any) -> str:
             edges += " …"
         lines.append(f"  precedes: {edges}")
     note = ""
-    if n_lin > _MAX_LIN_NOTE:
+    if 0 < n_lin <= _MAX_LIN_NOTE:
+        lines.append("  linearizations:")
+        for li, lin in enumerate(self.linearizations()):
+            order = []
+            for step in lin:
+                site = step.get("site") or []
+                site_s = ",".join(str(x) for x in site[:4])
+                if len(site) > 4:
+                    site_s += ",…"
+                order.append(f"{step.get('rule', '?')}@[{site_s}]")
+            lines.append(f"    [{li}] {' → '.join(order)}")
+    elif n_lin > _MAX_LIN_NOTE:
         note = (
             f"<div><i>~{n_lin} linearizations (not expanded; "
-            "use StepPlan text / to_dict for edges).</i></div>"
+            "use StepPlan.linearizations() / to_dict).</i></div>"
         )
     return f"<div class='xenosite-stepplan'>{note}{_pre(chr(10).join(lines))}</div>"
 
 
 def _path_outcome_html(self: Any) -> str:
-    """Hit mol via ForestMol tracing + elementary StepPlan — not hop dumps."""
+    """Multistep walk: SOM on each reactant; end mol; StepPlan summary."""
 
-    mol = self.mol
+    hops = list(self.hops())
     plan = self.plan
-    trace, tags, stamp_end = _trace_bits(mol)
-    svg = _mol_svg(self.smiles, tags=tags, born_cutoff=stamp_end)
     head = (
-        f"<div><b>PathOutcome</b> <code>{_esc(self.smiles)}</code>"
+        f"<div><b>PathOutcome</b> {len(hops)} hop(s)"
         f" · plan {len(plan)} elementary step(s)"
         f" · ~{plan.n_linearizations()} lin</div>"
-        f"<div>{_esc(trace)}</div>"
     )
-    plan_block = _step_plan_html(plan)
     return (
         "<div class='xenosite-path'>"
         + head
-        + (svg or "")
-        + plan_block
+        + _pathway_row(hops, final_smiles=self.smiles)
+        + "<details><summary>tagged end mol + StepPlan</summary>"
+        + _traced_mol_block(self.mol)
+        + _step_plan_html(plan)
         + _pre(str(self))
+        + "</details>"
+        + "</div>"
+    )
+
+
+def _partial_outcome_html(self: Any) -> str:
+    hops = list(self.hops())
+    plan = self.plan
+    head = (
+        f"<div><b>PartialOutcome</b> residual_cost={self.residual_cost}"
+        f" · {len(hops)} hop(s)"
+        f" · plan {len(plan)} step(s)</div>"
+    )
+    return (
+        "<div class='xenosite-partial'>"
+        + head
+        + _pathway_row(hops, final_smiles=self.smiles)
+        + "<details><summary>tagged end mol + StepPlan</summary>"
+        + _traced_mol_block(self.mol)
+        + _step_plan_html(plan)
+        + _pre(str(self))
+        + "</details>"
         + "</div>"
     )
 
 
 def _emission_html(self: Any) -> str:
-    products = list(self.products())
+    """SOM on the reactant; products without site marks."""
+
     site = int(self.site)
+    reactant = self.reactant
+    products = list(self.products())
     blocks = [
         f"<div><b>Emission</b> {_esc(self.pattern_name)} site={site}</div>",
-        _pre(str(self)),
+        "<div style='display:flex;gap:0.5em;flex-wrap:wrap;align-items:flex-start'>",
+        _panel("<b>reactant</b> (SOM)", reactant.csmi, highlight=[site]),
+        _arrow(f"{self.pattern_name} @ [{site}]"),
     ]
-    # Prefer tagged ForestMol products when available.
     for i, prod in enumerate(products[:4]):
-        if hasattr(prod, "atom_tags") and hasattr(prod, "trace_counts"):
-            trace, tags, stamp_end = _trace_bits(prod)
-            # Highlight SOM site when it is still in range; else born atoms.
-            highlight = [site] if site < len(tags) else None
-            svg = _mol_svg(
-                prod.csmi,
-                highlight=highlight,
-                tags=tags,
-                born_cutoff=stamp_end,
-            )
-            blocks.append(
-                f"<div>product {i}: <code>{_esc(prod.csmi)}</code> · {_esc(trace)}</div>"
-            )
-            if svg:
-                blocks.append(svg)
-        else:
-            smi = self.product_csmis()[i]
-            svg = _mol_svg(smi, highlight=[site])
-            blocks.append(f"<div>product {i}: <code>{_esc(smi)}</code></div>")
-            if svg:
-                blocks.append(svg)
+        smi = prod.csmi if hasattr(prod, "csmi") else self.product_csmis()[i]
+        blocks.append(_panel(f"product {i}", smi))
     if len(products) > 4:
-        blocks.append(f"<div>… ({len(products) - 4} more products)</div>")
+        blocks.append(f"<div>… (+{len(products) - 4})</div>")
+    blocks.append("</div>")
+    blocks.append(_pre(str(self)))
     return "<div class='xenosite-emission'>" + "".join(blocks) + "</div>"
 
 
 def _random_path_html(self: Any) -> str:
-    svg = _mol_svg(self.smiles)
+    path = list(self.path)
+    steps = list(self.steps()) if callable(getattr(self, "steps", None)) else []
+    # Prefer structured steps when present; else CSMI trail only.
+    hops: list[dict[str, Any]] = []
+    if steps and len(path) >= 2:
+        for i, step in enumerate(steps):
+            if isinstance(step, dict):
+                rule = step.get("rule") or step.get("pattern") or "?"
+                site = step.get("site")
+                chosen = int(step.get("chosen", 0))
+                products = step.get("products") or []
+                product = products[chosen] if products else path[min(i + 1, len(path) - 1)]
+            else:
+                rule = getattr(step, "rule", "?")
+                site = getattr(step, "site", [])
+                chosen = int(getattr(step, "chosen", 0))
+                products = list(getattr(step, "products", []))
+                product = products[chosen] if products else path[min(i + 1, len(path) - 1)]
+            reactant = path[i] if i < len(path) else ""
+            hops.append(
+                {
+                    "reactant": reactant,
+                    "product": product,
+                    "rule": rule,
+                    "site": site,
+                }
+            )
+    head = f"<div><b>RandomPathOutcome</b> {max(0, len(path) - 1)} hop(s)</div>"
+    body = (
+        _pathway_row(hops, final_smiles=self.smiles)
+        if hops
+        else _panel("<b>end</b>", self.smiles)
+    )
     return (
         "<div class='xenosite-random-path'>"
-        f"<div><b>RandomPathOutcome</b> <code>{_esc(self.smiles)}</code></div>"
-        + (svg or "")
+        + head
+        + body
+        + _pre(str(self))
+        + "</div>"
+    )
+
+
+def _path_counters_html(self: Any) -> str:
+    return f"<div class='xenosite-counters'>{_pre(str(self))}</div>"
+
+
+def _graph_node_html(self: Any) -> str:
+    mol = self.mol
+    head = (
+        f"<div><b>GraphNode</b>[{self.index}]"
+        f" sealed={self.sealed} expanded={self.expanded}"
+        f" inbound={self.n_inbound()}</div>"
+    )
+    return (
+        "<div class='xenosite-graph-node'>"
+        + head
+        + _traced_mol_block(mol)
+        + _pre(str(self))
+        + "</div>"
+    )
+
+
+def _graph_edge_html(self: Any) -> str:
+    """SOM on parent (reactant); kept child without site marks."""
+
+    site = int(self.site)
+    parent = self.parent_mol
+    kept = self.kept_mol
+    head = (
+        f"<div><b>GraphEdge</b> {_esc(self.rule)} @ site={site}"
+        f" · parent={self.parent_index}→{self.child_index}</div>"
+    )
+    hop = {
+        "reactant": parent.csmi,
+        "product": kept.csmi,
+        "rule": self.rule,
+        "site": site,
+    }
+    return (
+        "<div class='xenosite-graph-edge'>"
+        + head
+        + _pathway_row([hop], final_smiles=kept.csmi)
         + _pre(str(self))
         + "</div>"
     )
@@ -250,20 +436,16 @@ def install(rust: Any) -> None:
     mapping = {
         "ForestMol": _forest_mol_html,
         "RuleSet": _ruleset_html,
-        "BoundPattern": lambda self: _pre(str(self)),
+        "BoundPattern": _bound_pattern_html,
         "MetabolicNetwork": _network_html,
         "StepPlan": _step_plan_html,
         "PathOutcome": _path_outcome_html,
-        "PartialOutcome": lambda self: _pre(str(self)),
+        "PartialOutcome": _partial_outcome_html,
         "Emission": _emission_html,
         "RandomPathOutcome": _random_path_html,
-        "PathCounters": lambda self: _pre(str(self.to_dict())),
-        "GraphNode": lambda self: _pre(
-            f"GraphNode[{self.index}] {self.csmi} sealed={self.sealed} expanded={self.expanded}"
-        ),
-        "GraphEdge": lambda self: _pre(
-            f"GraphEdge {self.rule} site={self.site} parent={self.parent_index}→{self.child_index}"
-        ),
+        "PathCounters": _path_counters_html,
+        "GraphNode": _graph_node_html,
+        "GraphEdge": _graph_edge_html,
     }
     for name, fn in mapping.items():
         cls = getattr(rust, name, None)

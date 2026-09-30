@@ -22,7 +22,7 @@ EUGENOL_Q_TARGET = "O=C1C=C(O)C(=O)C(O)=C1"
 
 
 def test_tutorial_apap_to_napqi_phase_one():
-    hits, counters = find_path(
+    hits, counters, net = find_path(
         APAP,
         NAPQI,
         max_paths=1,
@@ -31,13 +31,14 @@ def test_tutorial_apap_to_napqi_phase_one():
     )
     assert hits, f"no path (billed={counters.billed})"
     assert hits[0].smiles
+    assert net.n_edges() >= 1
     steps = hits[0].to_dict()["steps"]
     rules = {s["rule"] for s in steps}
     assert rules  # hydroxylation / dehydrogenation / QF chain
 
 
 def test_tutorial_terbinafine_dealkylation():
-    hits, _ = find_path(
+    hits, _, net = find_path(
         TERBINAFINE,
         TBF_ALDEHYDE,
         max_paths=1,
@@ -46,6 +47,7 @@ def test_tutorial_terbinafine_dealkylation():
     )
     assert hits
     assert hits[0].to_dict()["steps"][0]["rule"] == "Dealkylation"
+    assert net.n_nodes() >= 2
 
 
 def test_tutorial_shared_network_bfs_then_find_path():
@@ -58,8 +60,9 @@ def test_tutorial_shared_network_bfs_then_find_path():
         network=net,
     )
     assert net.n_nodes() >= 2
-    hits, _ = find_path("CC", "CCO", max_paths=1, max_nodes=200, network=net)
+    hits, _, out = find_path("CC", "CCO", max_paths=1, max_nodes=200, network=net)
     assert hits
+    assert out.n_nodes() == net.n_nodes()
     root = net.root_idx()
     target_i = net.index_of(hits[0].smiles)
     assert root is not None and target_i is not None
@@ -100,7 +103,7 @@ def test_tutorial_random_path_seeded():
 
 
 def test_tutorial_find_path_partial_smoke():
-    exact, partials, counters = find_path_partial(
+    exact, partials, counters, net = find_path_partial(
         APAP,
         NAPQI,
         max_paths=1,
@@ -108,3 +111,4 @@ def test_tutorial_find_path_partial_smoke():
         use_atom_diff=False,
     )
     assert exact or partials or counters.billed >= 0
+    assert net.n_nodes() >= 1

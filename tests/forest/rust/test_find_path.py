@@ -25,16 +25,18 @@ assert available(), (
 
 
 def test_find_path_ethane_to_ethanol():
-    hits, counters = find_path("CC", "CCO", max_paths=1)
+    hits, counters, net = find_path("CC", "CCO", max_paths=1)
     assert len(hits) == 1
     assert hits[0].to_dict()["steps"][0]["rule"] == "Hydroxylation"
     assert counters.billed >= 1
     assert counters.diversity_repush == 0
     assert counters.timed_out is False
+    assert net.n_nodes() >= 2
+    assert net.n_edges() >= 1
 
 
 def test_find_path_diversity_opt_in():
-    hits, counters = find_path(
+    hits, counters, net = find_path(
         "COc1ccccc1",
         "Oc1ccccc1",
         max_paths=1,
@@ -43,12 +45,14 @@ def test_find_path_diversity_opt_in():
     assert len(hits) == 1
     assert "O" in hits[0].smiles or "c" in hits[0].smiles
     assert counters.diversity_repush >= 0
+    assert net.n_nodes() >= 1
 
 
 def test_find_path_timeout_zero():
-    hits, counters = find_path("CC", "CCO", timeout=0.0)
+    hits, counters, net = find_path("CC", "CCO", timeout=0.0)
     assert counters.timed_out is True
     assert hits == []
+    assert net.n_nodes() >= 1  # root recorded
 
 
 def test_normalize_tautomer_enol_keto_agree():
@@ -68,7 +72,7 @@ def test_forest_mol_normalize_tautomer_method():
 
 def test_find_path_normalize_tautomer_enol_keto():
     want, _ = normalize_tautomer("CC=O")
-    hits, _ = find_path(
+    hits, _, net = find_path(
         "OC=C",
         "CC=O",
         max_paths=1,
@@ -78,6 +82,7 @@ def test_find_path_normalize_tautomer_enol_keto():
     assert len(hits) == 1
     assert hits[0].to_dict()["steps"] == []
     assert hits[0].smiles == want.csmi
+    assert net.n_nodes() >= 1
 
 
 def test_find_path_invert_target_tautomer_not_implemented():
@@ -102,6 +107,7 @@ def test_product_graph_bfs_and_find_path_share_network():
     net = MetabolicNetwork()
     product_graph_bfs("CC", target="CCO", max_nodes=32, max_depth=3, network=net)
     assert net.n_nodes() >= 1
-    hits, _ = find_path("CC", "CCO", max_paths=1, max_nodes=200, network=net)
+    hits, _, out = find_path("CC", "CCO", max_paths=1, max_nodes=200, network=net)
     assert hits
     assert net.n_edges() >= 1
+    assert out.n_nodes() == net.n_nodes()

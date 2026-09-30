@@ -194,6 +194,25 @@ impl PyGraphNode {
             slot,
         })
     }
+
+    fn __str__(&self) -> String {
+        match (self.csmi(), self.sealed(), self.expanded(), self.n_inbound()) {
+            (Ok(csmi), Ok(sealed), Ok(expanded), Ok(n_in)) => {
+                super::display::truncate_display(&format!(
+                    "GraphNode[{}] {}\n  sealed={} expanded={} inbound={}",
+                    self.idx, csmi, sealed, expanded, n_in
+                ))
+            }
+            _ => format!("GraphNode[{}]", self.idx),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        match self.csmi() {
+            Ok(csmi) => format!("GraphNode({}, {:?})", self.idx, csmi),
+            Err(_) => format!("GraphNode({})", self.idx),
+        }
+    }
 }
 
 /// One recorded parent→child hop (multipath slot on the child).
@@ -254,6 +273,17 @@ impl PyGraphEdge {
             .get(self.slot)
             .ok_or_else(|| PyValueError::new_err("inbound slot out of range"))?;
         Ok(PyForestMol::wrap(edge.kept.as_ref().copy_mol()))
+    }
+
+    /// Parent node mol (``site`` indexes this reactant, not the kept child).
+    #[getter]
+    fn parent_mol(&self) -> PyResult<PyForestMol> {
+        let parent_idx = self.parent_index()?;
+        let net = self.net.lock().map_err(|_| network_lock_err())?;
+        let node = net.nodes.get(parent_idx).ok_or_else(|| {
+            PyValueError::new_err(format!("parent index {parent_idx} out of range"))
+        })?;
+        Ok(PyForestMol::wrap(node.mol.as_ref().copy_mol()))
     }
 
     fn products_csmi(&self) -> PyResult<Vec<String>> {
@@ -317,6 +347,34 @@ impl PyGraphEdge {
         d.set_item("cleaves", edge.hop.cleaves)?;
         d.set_item("attrs", attrs_to_dict(py, &edge.attrs)?)?;
         Ok(d.unbind().into_any())
+    }
+
+    fn __str__(&self) -> String {
+        match (
+            self.rule(),
+            self.site(),
+            self.parent_index(),
+            self.products_csmi(),
+        ) {
+            (Ok(rule), Ok(site), Ok(parent), Ok(prods)) => {
+                let kept = prods.first().map(String::as_str).unwrap_or("?");
+                super::display::truncate_display(&format!(
+                    "GraphEdge  {} @ site={}\n  parent={} → child={}\n  kept: {}",
+                    rule, site, parent, self.child_idx, kept
+                ))
+            }
+            _ => format!("GraphEdge(child={}, slot={})", self.child_idx, self.slot),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        match (self.rule(), self.site(), self.parent_index()) {
+            (Ok(rule), Ok(site), Ok(parent)) => format!(
+                "GraphEdge({rule:?}@{site}, {parent}→{})",
+                self.child_idx
+            ),
+            _ => format!("GraphEdge(child={}, slot={})", self.child_idx, self.slot),
+        }
     }
 }
 

@@ -65,6 +65,7 @@ impl<'a> From<&'a PathOutcome> for PathOutcomeView<'a> {
 pub struct EmissionView<'a> {
     pub pattern_name: &'a str,
     pub site: usize,
+    pub reactant: String,
     pub products: Vec<String>,
     pub rule_path: Vec<Option<String>>,
 }
@@ -99,6 +100,7 @@ impl<'a> From<&'a Emission> for EmissionView<'a> {
         Self {
             pattern_name: e.pattern_name.as_str(),
             site: e.site,
+            reactant: e.reactant.csmi().as_ref().to_string(),
             products: e.product_csmis(),
             rule_path: e.rule_path.clone(),
         }

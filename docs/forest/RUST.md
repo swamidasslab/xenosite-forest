@@ -68,7 +68,7 @@ Default returns are **Rust-backed pyclasses**, not dicts:
 | `PathCounters` | `PathCounters` | Search billing counters |
 | `RandomPathOutcome` | `RandomPathOutcome` | Seeded walk |
 | `Emission` | `Emission` | `RuleSet.metabolize` / `BoundPattern.metabolize` |
-| `MetabolicNetwork` | `Arc<Mutex<MetabolicNetwork>>` | One graph type; BFS via `product_graph_bfs` (`network=` optional) or `product_graph_into`; search via `find_path(..., network=)`; `net[i]` → `GraphNode`, `inbound_edge(j)` → `GraphEdge` |
+| `MetabolicNetwork` | `Arc<Mutex<MetabolicNetwork>>` | One graph type; BFS via `product_graph_bfs` (`network=` optional) or `product_graph_into`; **`find_path` / `find_path_partial` always record hops and return the network** (pass `network=` to extend a live graph); `net[i]` → `GraphNode`, `inbound_edge(j)` → `GraphEdge` |
 | `GraphNode` / `GraphEdge` | view into shared graph | Indexed node/edge handles; `.mol` / `.kept_mol` are `ForestMol`; mutable `attrs` (`get_attr` / `[]`, well-known `sealed` / `expanded`); `.to_dict()` merges spine + attrs |
 
 Python `product_graph_bfs` defaults to **`product_graph_ruleset()`** — QuinoneFormation, EpoxideHydration, and Phase I core (same shape as **`default_ruleset()`** minus Tautomerization). **`find_path`** uses **`default_ruleset()`** (includes Tautomerization). BFS can run a long time — use `target=` when possible.
@@ -79,6 +79,11 @@ Do not re-parse CSMI at the boundary when a handle already carries `ForestMol`.
 **Tutorial:** [notebooks/forest_product_door.ipynb](../../notebooks/forest_product_door.ipynb)
 (APAP→NAPQI, terbinafine dealkylation, shared `MetabolicNetwork`, BFS, metabolize).
 Smoke: `pytest tests/forest/rust/test_tutorial_snippets.py`.
+
+**Notebook display:** Rust truncated `__str__` / `__repr__`; Python
+`xenosite.forest.notebook` installs `_repr_html_` on load (RDKit SVG + ForestMol
+tag tracing — survivors vs born — not hop dumps). `StepPlan.linearizations()`
+enumerates topological sorts (capped); small plans expand in text/HTML.
 
 **Phase 2 (done):** `python_api/{common,mol,rules,plan,graph,path,walk}.rs`; `GraphNode` /
 `GraphEdge` views + attrs; `ForestMol` caches are `Arc`/`Mutex`/`Atomic` so search is
