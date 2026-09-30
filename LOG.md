@@ -2,6 +2,9 @@
 
 ## 2026-09-29
 
+- **deferred-site → main (local).** Merged as `c6394ca` in wheels worktree; origin/main waits on PR #40 CI. CI fixes (wasm ForestMol hydroxylate, rustfmt/ruff/clippy) pushed to `chore/deferred-site`.
+- **MS1 merge on `chore/merge-find-path-ms1`.** Blind tip merge too conflicted. Ported `mass.rs` (10 tests) onto DeferredSite. `find_path_ms1` still needs `ApplyN` on HEAD `canonical_plan`.
+
 - **MetX nostereo call-site + tautomer ±.** `metx_hard_cases` strips stereo on
   R/P before search (no lib canon change). Same budget 200/1.5s:
   - nostereo + tautnorm=**off**: hits=**1268** / misses=175 / t/o=41 / 154.7s
