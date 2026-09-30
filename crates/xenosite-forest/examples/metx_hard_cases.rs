@@ -238,7 +238,7 @@ fn main() {
                     miss_count.fetch_add(1, Ordering::Relaxed);
                 }
             }
-            if i % 50 == 0 || i == n {
+            if i.is_multiple_of(50) || i == n {
                 let _g = progress.lock().unwrap();
                 eprintln!(
                     "[{i}/{n}] elapsed={:.1}s hits={} misses={} last_bill={} last_hit={}",
@@ -297,17 +297,8 @@ fn main() {
 
     println!("\n=== top 40 hard misses (by bill, then residual cost) ===");
     println!(
-        "{:<14} {:>5} {:>6} {:>5} {:>5} {:>6} {:<4} {:>4} {:>3} {}",
-        "biot_id",
-        "bill",
-        "secs",
-        "nodes",
-        "edits",
-        "r_cost",
-        "t/o",
-        "root",
-        "xtr",
-        "name / reaction"
+        "{:<14} {:>5} {:>6} {:>5} {:>5} {:>6} {:<4} {:>4} {:>3} name / reaction",
+        "biot_id", "bill", "secs", "nodes", "edits", "r_cost", "t/o", "root", "xtr"
     );
     for r in hard.iter().take(40) {
         let rcost = r.residual_cost.unwrap_or(0);

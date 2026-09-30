@@ -135,7 +135,7 @@ pub fn random_path_with(
             let discovery = site.discovery_atoms();
             let pattern = site.bookkeeping_pattern().clone();
             let mut ranked = emission.products;
-            ranked.sort_by(|a, b| a.csmi().cmp(&b.csmi()));
+            ranked.sort_by_key(|a| a.csmi());
             // Explicit CSMI downgrade for pathway options / step record.
             let products: Vec<String> = ranked
                 .iter()

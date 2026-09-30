@@ -222,6 +222,7 @@ impl ForestMol {
     /// Remaps tags and shares the kekulé / tag-gen lineage. Used by edit
     /// doors ([`crate::candidate::DeferredSite::apply`]); not a user step —
     /// parents do not track children; the child is stamped at creation.
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn from_edit_product(&self, product: Molecule) -> Self {
         let normalized = normalize_tagged_product(&product).unwrap_or(product);
         let src_to_new = AtomTracker::src_to_new(self.mol(), &normalized);

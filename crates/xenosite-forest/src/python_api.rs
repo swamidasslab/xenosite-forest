@@ -553,10 +553,10 @@ impl PyRuleSet {
                 return Ok(Py::new(py, PyBoundPattern { inner: bp })?.into_any());
             }
             let name: String = key.extract()?;
-            if self.inner.is_catalog() {
-                if let Some(child) = self.inner.get_str(&name) {
-                    return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
-                }
+            if self.inner.is_catalog()
+                && let Some(child) = self.inner.get_str(&name)
+            {
+                return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
             }
             if let Some(bp) = self.inner.bound_pattern(&name) {
                 return Ok(Py::new(py, PyBoundPattern { inner: bp })?.into_any());
@@ -892,6 +892,7 @@ fn counters_dict(py: Python<'_>, counters: &PathCounters) -> PyResult<Py<PyAny>>
     Ok(c.unbind().into_any())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_find_path_config(
     score: &str,
     max_paths: usize,
@@ -953,7 +954,7 @@ fn parse_find_path_config(
     normalize_tautomer=false,
     invert_target_tautomer=false,
 ))]
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn find_path_partial_py(
     py: Python<'_>,
     reactant: &str,

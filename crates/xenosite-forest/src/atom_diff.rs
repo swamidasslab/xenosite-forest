@@ -196,12 +196,11 @@ pub fn atom_needs_carbonyl(
     let rank = ranks(reactant);
     let want = rank.get(atom).copied().unwrap_or(usize::MAX);
     for (i, &ri) in rank.iter().enumerate() {
-        if ri == want {
-            if let Some(order) = unmapped_oxygen_order(target, mapping, i) {
-                if order >= 1.5 {
-                    return true;
-                }
-            }
+        if ri == want
+            && let Some(order) = unmapped_oxygen_order(target, mapping, i)
+            && order >= 1.5
+        {
+            return true;
         }
     }
     false
@@ -407,7 +406,7 @@ fn mcs_seed_mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usi
         }
     }
     let mut ranked: Vec<_> = best.into_values().collect();
-    ranked.sort_by(|a, b| b.0.cmp(&a.0));
+    ranked.sort_by_key(|a| std::cmp::Reverse(a.0));
     ranked.into_iter().map(|(_, m)| m).collect()
 }
 
@@ -996,10 +995,8 @@ pub fn try_atom_diff_for_child_tracked(
     };
     let lifted = lift_mappings(parent, child, &parent_maps)?;
     let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
-    if used_mcs {
-        if let Some(c) = mcs_rematch.as_mut() {
-            **c += 1;
-        }
+    if used_mcs && let Some(c) = mcs_rematch.as_mut() {
+        **c += 1;
     }
     Some(diff)
 }
@@ -1083,10 +1080,8 @@ pub fn try_lift_cleaved_child_tracked(
     match lift_mappings(parent, child, &parent_maps) {
         Some(lifted) => {
             let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
-            if used_mcs {
-                if let Some(c) = mcs_rematch.as_mut() {
-                    **c += 1;
-                }
+            if used_mcs && let Some(c) = mcs_rematch.as_mut() {
+                **c += 1;
             }
             Some(diff)
         }
@@ -1258,10 +1253,12 @@ pub fn pattern_could_help_on(
             Some(_) => {}
         }
     }
-    if effect_adds_oxygen(effect) && !can_cleave && !effect.dearomatizes {
-        if let Some(m) = mol {
-            let _ = m;
-        }
+    if effect_adds_oxygen(effect)
+        && !can_cleave
+        && !effect.dearomatizes
+        && let Some(m) = mol
+    {
+        let _ = m;
     }
     if can_cleave && !diff.has_cleavage() {
         return false;
@@ -1320,6 +1317,7 @@ pub fn pattern_could_help_mol(
     true
 }
 
+#[allow(dead_code)] // retained for MS1 / site-bag helpers
 fn site_atoms(candidate: &Candidate) -> Vec<usize> {
     candidate.site_atoms()
 }
@@ -1581,12 +1579,11 @@ impl Candidate {
             if !diff.site_is_cleavage(&atoms) {
                 return false;
             }
-            if let Some(n) = effect.leave_count {
-                if let Some((a, b)) = leaving_heavy_counts(mol, &atoms) {
-                    if a.min(b) != n as usize {
-                        return false;
-                    }
-                }
+            if let Some(n) = effect.leave_count
+                && let Some((a, b)) = leaving_heavy_counts(mol, &atoms)
+                && a.min(b) != n as usize
+            {
+                return false;
             }
             return true;
         }
@@ -1658,12 +1655,11 @@ fn candidate_could_help_on_view(
     }
 
     // Single-site methide: alkyl partner needs an exocyclic C–C bond raise.
-    if effect.partner.as_deref() == Some("C") {
-        if let Some(m) = mol {
-            if !atoms.iter().any(|&a| alkyl_bond_raises(m, a, view)) {
-                return false;
-            }
-        }
+    if effect.partner.as_deref() == Some("C")
+        && let Some(m) = mol
+        && !atoms.iter().any(|&a| alkyl_bond_raises(m, a, view))
+    {
+        return false;
     }
 
     scope_could_help(effect, atoms, &[], view, mol, target)
@@ -2009,7 +2005,7 @@ mod tests {
         // C=C→OCCO: n_extra 2→1 and +1 cleavage_bond. Equal ×3 was lateral;
         // EXTRA=4 makes placing the O win: 8 → 7. Needs mcs_extend so the
         // epoxide O lands on a target hydroxyl.
-        use crate::forest_mol::ForestMol;
+
         use crate::rules::epoxidation;
         let parent = as_forest_mol("C=C").unwrap();
         let target = as_forest_mol("OCCO").unwrap();
@@ -2036,7 +2032,7 @@ mod tests {
         // Bare expand atom_diff does not place the epoxide O on a target
         // hydroxyl; mcs_extend views do (cost drop is lift/gold territory,
         // not find_path expand). See epoxide_toward_diol_drops_with_heavier_n_extra.
-        use crate::forest_mol::ForestMol;
+
         use crate::rules::epoxidation;
         let parent = as_forest_mol("C=C").unwrap();
         let target = as_forest_mol("OCCO").unwrap();
@@ -2398,7 +2394,6 @@ mod tests {
 
     #[test]
     fn tag_lift_dh_matches_full_mcs_cost() {
-        use crate::forest_mol::ForestMol;
         use crate::rules::dehydrogenation;
 
         let parent = as_forest_mol("Oc1ccc(O)cc1").unwrap();
@@ -2429,7 +2424,6 @@ mod tests {
 
     #[test]
     fn tag_lift_extends_added_oxygen() {
-        use crate::forest_mol::ForestMol;
         use crate::hydroxylation::hydroxylation;
 
         let parent = as_forest_mol("CC").unwrap();
@@ -2459,7 +2453,6 @@ mod tests {
 
     #[test]
     fn site_cast_residual_is_lower_bound_for_hydroxylation() {
-        use crate::forest_mol::ForestMol;
         use crate::hydroxylation::hydroxylation;
 
         let parent = as_forest_mol("CC").unwrap();
@@ -2525,8 +2518,6 @@ mod tests {
 
     #[test]
     fn tag_lift_shrinks_on_dealkylation() {
-        use crate::forest_mol::ForestMol;
-
         // Anisole → phenol: methyl carbon removed, no heavy add.
         let parent = as_forest_mol("COc1ccccc1").unwrap();
         let target = as_forest_mol("Oc1ccccc1").unwrap();
@@ -2577,7 +2568,6 @@ mod tests {
 
     #[test]
     fn dh_product_ends_match_after_hydroquinone_dh() {
-        use crate::forest_mol::ForestMol;
         use crate::rules::dehydrogenation;
 
         let parent = as_forest_mol("Oc1ccc(O)cc1").unwrap();

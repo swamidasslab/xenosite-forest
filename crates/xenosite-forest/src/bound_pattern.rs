@@ -106,6 +106,7 @@ impl BoundPattern {
     }
 
     /// Metabolize through the owning leaf with the BoundPattern filters applied.
+    #[allow(clippy::type_complexity)]
     pub fn metabolize<'a, R, S>(
         &'a self,
         mol: &'a ForestMol,
@@ -127,6 +128,7 @@ impl BoundPattern {
     }
 
     /// Metabolize with accept-all caller filters (BoundPattern filter only).
+    #[allow(clippy::type_complexity)]
     pub fn metabolize_default<'a>(
         &'a self,
         mol: &'a ForestMol,

@@ -578,48 +578,48 @@ fn eval_suite(
             .unwrap()
             .collect_all()
             .unwrap();
-        if let Some(hit) = hits.first() {
-            if let Some(step) = hit.steps.first() {
-                let mut atoms = if step.site_orbit.is_empty() {
-                    vec![step.site]
-                } else {
-                    step.site_orbit.clone()
-                };
-                atoms = expand_atoms(
-                    &ra,
-                    &atoms,
-                    &atoms,
-                    mode.leave && (!step.sides.is_empty() || ad.has_cleavage()),
-                    None,
-                    &ad.cleavage_bonds,
-                );
-                let hop = scored.iter().find(|(_, _, a)| a == &atoms);
-                let (hop_rank_val, hop_dropped) = if let Some((c, d, _)) = hop {
-                    (*c, *d)
-                } else if proj {
-                    (0.0, false)
-                } else {
-                    (site_cost_legacy(mode, &align, &atoms), true)
-                };
-                if proj && !hop_dropped {
-                    stats.path_miss += 1;
-                }
-                let mut drop_costs: Vec<f64> = scored
+        if let Some(hit) = hits.first()
+            && let Some(step) = hit.steps.first()
+        {
+            let mut atoms = if step.site_orbit.is_empty() {
+                vec![step.site]
+            } else {
+                step.site_orbit.clone()
+            };
+            atoms = expand_atoms(
+                &ra,
+                &atoms,
+                &atoms,
+                mode.leave && (!step.sides.is_empty() || ad.has_cleavage()),
+                None,
+                &ad.cleavage_bonds,
+            );
+            let hop = scored.iter().find(|(_, _, a)| a == &atoms);
+            let (hop_rank_val, hop_dropped) = if let Some((c, d, _)) = hop {
+                (*c, *d)
+            } else if proj {
+                (0.0, false)
+            } else {
+                (site_cost_legacy(mode, &align, &atoms), true)
+            };
+            if proj && !hop_dropped {
+                stats.path_miss += 1;
+            }
+            let mut drop_costs: Vec<f64> = scored
+                .iter()
+                .filter(|(_, d, _)| *d)
+                .map(|(c, _, _)| *c)
+                .collect();
+            drop_costs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+            if hop_dropped && !drop_costs.is_empty() {
+                stats.known += 1;
+                let rank = drop_costs
                     .iter()
-                    .filter(|(_, d, _)| *d)
-                    .map(|(c, _, _)| *c)
-                    .collect();
-                drop_costs.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-                if hop_dropped && !drop_costs.is_empty() {
-                    stats.known += 1;
-                    let rank = drop_costs
-                        .iter()
-                        .filter(|&&c| c > hop_rank_val + 1e-9)
-                        .count()
-                        + 1;
-                    if rank == 1 {
-                        stats.top1 += 1;
-                    }
+                    .filter(|&&c| c > hop_rank_val + 1e-9)
+                    .count()
+                    + 1;
+                if rank == 1 {
+                    stats.top1 += 1;
                 }
             }
         }
@@ -911,15 +911,15 @@ fn print_find_path_costs(label: &str, cases: &[(&str, &str, &str)]) {
             let ad = atom_diff(&mol, &rb);
             let sh = site_shell_cost(&cur_s, None, &tgt, &ad.mapping, &all_heavy(&cur_s));
             let at = ad.cost();
-            if let Some(ps) = prev_s {
-                if sh > ps + 1e-9 {
-                    shell_mono = false;
-                }
+            if let Some(ps) = prev_s
+                && sh > ps + 1e-9
+            {
+                shell_mono = false;
             }
-            if let Some(pa) = prev_a {
-                if at > pa {
-                    atom_mono = false;
-                }
+            if let Some(pa) = prev_a
+                && at > pa
+            {
+                atom_mono = false;
             }
             prev_s = Some(sh);
             prev_a = Some(at);

@@ -55,7 +55,7 @@ fn assert_lift_cost_eq_mcs(
 
 fn first_product(parent: &ForestMol, set: &RuleSet) -> ForestMol {
     let cands: Vec<_> = set
-        .candidates(&parent)
+        .candidates(parent)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     assert!(!cands.is_empty(), "no candidates on {}", parent.csmi());
@@ -70,7 +70,7 @@ fn goal_for_candidate(
     parent: &ForestMol,
 ) -> (Option<usize>, Vec<usize>) {
     let cands: Vec<_> = set
-        .candidates(&parent)
+        .candidates(parent)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     let c = &cands[0];

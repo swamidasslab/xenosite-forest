@@ -1,7 +1,7 @@
 //! Diagnose remaining MetX misses (call-site nostereo).
 use chematic::chem::remove_stereo;
 use xenosite_forest::{
-    as_forest_mol, atom_diff, canon_of, phase_one, residual_from_diff, residual_resolvable,
+    as_forest_mol, atom_diff, phase_one, residual_from_diff, residual_resolvable,
 };
 
 fn nostereo(s: &str) -> String {

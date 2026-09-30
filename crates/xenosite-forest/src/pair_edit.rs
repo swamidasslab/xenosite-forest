@@ -383,10 +383,10 @@ fn reapply_iminium_charges(
     map2: &BTreeMap<u16, usize>,
 ) {
     for (pat, map) in [(left, map1), (right, map2)] {
-        if matches!(&pat.edit, Edit::PairEndpoint(e) if e == "iminium") {
-            if let Some(&n) = map.get(&2) {
-                mol.set_charge(atom_idx(n), 1);
-            }
+        if matches!(&pat.edit, Edit::PairEndpoint(e) if e == "iminium")
+            && let Some(&n) = map.get(&2)
+        {
+            mol.set_charge(atom_idx(n), 1);
         }
     }
 }
@@ -509,7 +509,7 @@ pub type PairCandidate = crate::candidate::DeferredSite;
 /// Tautomer pairs (`tautomer_extend` on exactly one end) reuse the same
 /// alternating-path discovery and [`flip_path`], after extending the path by
 /// the H-donor (map 2). Odd atom counts are allowed only for that extension.
-
+///
 /// C18 constraint materialize (no path flip). Used for ordinary ResonancePair
 /// ends; tautomer pairs keep the path-flip door in [`materialize_pair_mols`].
 fn materialize_pair_constraints(
@@ -551,14 +551,13 @@ fn materialize_pair_constraints(
     let mut parent_double_deg: HashMap<usize, usize> = HashMap::new();
     let parent_doubles: BTreeSet<(usize, usize)> = mol
         .bonds()
-        .filter_map(|(_, bond)| {
-            (bond.order == BondOrder::Double).then(|| {
-                let a = atom_usize(bond.atom1);
-                let b = atom_usize(bond.atom2);
-                *parent_double_deg.entry(a).or_default() += 1;
-                *parent_double_deg.entry(b).or_default() += 1;
-                bond_key(a, b)
-            })
+        .filter(|&(_, bond)| bond.order == BondOrder::Double)
+        .map(|(_, bond)| {
+            let a = atom_usize(bond.atom1);
+            let b = atom_usize(bond.atom2);
+            *parent_double_deg.entry(a).or_default() += 1;
+            *parent_double_deg.entry(b).or_default() += 1;
+            bond_key(a, b)
         })
         .collect();
     let is_cumulated_framework = |a: usize, b: usize| -> bool {
@@ -798,6 +797,7 @@ fn materialize_pair_constraints(
 }
 
 /// Native ResonancePairRule: odd bond-count alternating paths, end edits, flip.
+#[allow(clippy::too_many_arguments)]
 fn materialize_pair_path_flip(
     mol: &Molecule,
     left: &PatternInfo,
@@ -895,6 +895,7 @@ fn materialize_pair_path_flip(
     Ok(products)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn materialize_pair_mols(
     mol: &Molecule,
     left: &PatternInfo,
@@ -1239,7 +1240,7 @@ mod tests {
     use super::*;
     use crate::candidate::DeferredSite;
     use crate::forest_mol::ForestMol;
-    use crate::mol::{atom_usize, canon_of, canon_smiles, parse_mol};
+    use crate::mol::{atom_usize, canon_of, canon_smiles};
     use crate::rules::{dehydrogenation, quinone_formation};
     use crate::valence::accept_product;
 
@@ -1546,8 +1547,8 @@ mod tests {
             c.left.name == "single_to_double"
                 && c.right.name == "single_to_double"
                 && c.mapped.get(&2) != c.pair.as_ref().unwrap().map2.get(&2)
-                && c.mapped.get(&2).is_some()
-                && c.pair.as_ref().unwrap().map2.get(&2).is_some()
+                && c.mapped.contains_key(&2)
+                && c.pair.as_ref().unwrap().map2.contains_key(&2)
         });
         assert!(
             saw_phenol_pair || saw_distinct_o,
@@ -2013,7 +2014,7 @@ mod tests {
             c.billed()
         );
         assert!(
-            !step_names.iter().any(|n| *n == "amine"),
+            !step_names.contains(&"amine"),
             "DH amine must not repair stuck [nH]; bill={} steps={step_names:?}",
             c.billed()
         );

@@ -382,10 +382,10 @@ pub fn edit_shells(parent: &ForestMol, child: &ForestMol) -> AlignedShells {
         let Some(tag) = parent.tag_of(i) else {
             continue;
         };
-        if let Some(j) = child.index_of(tag) {
-            if child.mol().atom(atom_idx(j)).element.atomic_number() > 1 {
-                alignment.insert(i, j);
-            }
+        if let Some(j) = child.index_of(tag)
+            && child.mol().atom(atom_idx(j)).element.atomic_number() > 1
+        {
+            alignment.insert(i, j);
         }
     }
     let parent_shells = molecule_shells(parent.mol());
@@ -588,15 +588,15 @@ pub fn site_shell_cost_leave(
         if leave.contains(&r) {
             continue;
         }
-        if let Some(t) = reactant_to_target.get(&r).copied() {
-            if let Some(tgt) = target.atoms.get(&t) {
-                let tgt = if opts.h_closer_no_n2 {
-                    neighborhood_h_closer_no_n2(tgt)
-                } else {
-                    tgt.clone()
-                };
-                target_envs.push(tgt);
-            }
+        if let Some(t) = reactant_to_target.get(&r).copied()
+            && let Some(tgt) = target.atoms.get(&t)
+        {
+            let tgt = if opts.h_closer_no_n2 {
+                neighborhood_h_closer_no_n2(tgt)
+            } else {
+                tgt.clone()
+            };
+            target_envs.push(tgt);
         }
     }
 

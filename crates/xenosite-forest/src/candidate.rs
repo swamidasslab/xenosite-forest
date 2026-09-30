@@ -132,6 +132,7 @@ impl DeferredSite {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn pair(
         mol: Rc<ForestMol>,
         site: usize,
@@ -147,7 +148,6 @@ impl DeferredSite {
         rule_path: Vec<Option<String>>,
     ) -> Self {
         let search_bias = left.search_bias.min(right.search_bias);
-        let pattern_name = pattern_name;
         let mut pattern = left.clone();
         pattern.name = pattern_name.clone();
         pattern.effect = effect.clone();

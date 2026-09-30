@@ -103,14 +103,14 @@ pub use forest::{
 pub use forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
 pub use formula_check::{FormulaDeltaMismatch, check_effect_delta_formula};
 pub use hydroxylation::{hydroxylate, hydroxylation};
-pub use mass::{
-    Ms1Adduct, PROTON_MASS, element_mono_mass, formula_apply_delta, formula_mono_mass,
-    isotope_exact_mass, molecule_mono_mass, mz_abs_error, mz_of, mz_of_mol, mz_within,
-};
 pub use labels::Tag;
 pub use mapping::{
     Resolved, SssomRow, XF_PREFIX, XMET_PREFIX, expand_iri, forest_xmet_sssom,
     forest_xmet_sssom_gz, parse_forest_xmet_sssom, resolve, to_curie, xf_path_segments,
+};
+pub use mass::{
+    Ms1Adduct, PROTON_MASS, element_mono_mass, formula_apply_delta, formula_mono_mass,
+    isotope_exact_mass, molecule_mono_mass, mz_abs_error, mz_of, mz_of_mol, mz_within,
 };
 pub use matched_atom::{
     AlignedShells, AtomNeighborhood, MoleculeShells, Shell, SiteShellBag, SiteShellCheck,

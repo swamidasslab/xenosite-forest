@@ -152,12 +152,12 @@ pub fn product_layer(
 
     let mut out = Vec::new();
 
-    for c in ruleset.candidates(&parent) {
+    for c in ruleset.candidates(parent) {
         let c = c?;
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !c.could_help_on(diff, Some(t)) {
-                continue;
-            }
+        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol)
+            && !c.could_help_on(diff, Some(t))
+        {
+            continue;
         }
         let pieces = c.materialize_mols()?;
         if pieces.is_empty() {
@@ -223,14 +223,14 @@ pub fn product_layer(
     }
 
     for pair in ruleset
-        .candidates(&parent)
+        .candidates(parent)
         .filter(|c| matches!(c, Ok(s) if s.is_pair()))
     {
         let pair = pair?;
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair.could_help_on(diff, Some(t)) {
-                continue;
-            }
+        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol)
+            && !pair.could_help_on(diff, Some(t))
+        {
+            continue;
         }
         push_pair_children(
             parent,
