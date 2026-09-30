@@ -15,10 +15,10 @@ from __future__ import annotations
 import pytest
 from rdkit import Chem
 
-from xenosite.forest import available, leaf_rule
+from xenosite.forest import available
 from xenosite.forest.native import rules as native_rules
 
-from .helpers import canon
+from .helpers import canon, rust_leaf_products_canon
 from .rule_parity_corpus import product_parity_xfail_reason
 from .substrate_library import COVERAGE_CANDIDATES
 
@@ -72,20 +72,7 @@ def _native_products(rule_cls: type, smiles: str) -> set[str] | None:
 
 
 def _rust_products(leaf: str, smiles: str) -> set[str] | None:
-    from xenosite.forest import load
-
-    ext = load()
-    try:
-        mol = ext.ForestMol(smiles)
-    except Exception:
-        return None
-    found: set[str] = set()
-    for _pattern, _site, product_csmis, _path in leaf_rule(leaf).metabolize(mol):
-        for csmi in product_csmis:
-            c = canon(csmi)
-            if c:
-                found.add(c)
-    return found
+    return rust_leaf_products_canon(leaf, smiles)
 
 
 @pytest.fixture(scope="module", autouse=True)

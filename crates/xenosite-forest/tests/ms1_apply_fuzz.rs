@@ -622,3 +622,50 @@ proptest! {
         );
     }
 }
+
+#[test]
+fn anthraquinone_hydrogenation_plan_replays() {
+    // Symmetric carbonyl pair: atom orbits 6↔14 and 7↔15. Step::apply must
+    // match the plan site, not the orbit-expanded union (that broke len==2).
+    let reactant = "c1ccc2c(c1)C(=O)c1ccccc1C2=O";
+    let leaf = "Hydrogenation";
+    let products = products_from_apply(reactant, leaf);
+    assert!(!products.is_empty(), "expected Hydrogenation products");
+    let set = leaf_rule(leaf).expect(leaf);
+    let pools = [ApplyN::new([leaf], 1)];
+    let start = ForestMol::parse(reactant).expect("reactant");
+    let target = "c1cccc2C(=O)c3c(cccc3)C(c12)O";
+    let mz = products
+        .iter()
+        .find(|(s, _)| s == target)
+        .map(|(_, m)| *m)
+        .expect("target product from apply");
+    let mut counters = PathCounters::default();
+    let hits = find_path_ms1(
+        reactant,
+        &set,
+        &pools,
+        &mut counters,
+        Ms1Config {
+            mz,
+            tol_da: 0.001,
+            adduct: Ms1Adduct::MPlusH,
+            max_paths: 16,
+            max_nodes: 800,
+        },
+    )
+    .expect("find_path_ms1");
+    let hit = hits
+        .iter()
+        .find(|h| h.smiles == target)
+        .expect("target among hits");
+    let mut any = false;
+    for lin in hit.plan.linearizations() {
+        let out = lin.apply_forest(&start).unwrap_or_default();
+        if out.iter().any(|p| p.csmi().as_ref() == target) {
+            any = true;
+            break;
+        }
+    }
+    assert!(any, "plan for {target} must replay; plan={:?}", hit.plan);
+}

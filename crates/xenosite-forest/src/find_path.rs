@@ -15,12 +15,12 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::ForestError;
 use crate::candidate::Candidate;
-use crate::canonical_plan::{CanonicalStep, CleavageSide, Deps, Maybe, as_deps};
+use crate::canonical_plan::{CanonicalStep, CleavageSide, Deps, Maybe, Step, as_deps};
 use crate::forest_mol::{ForestMol, IntoForestMol, as_forest_mol};
 use crate::labels::Tag;
 use crate::metabolic_network::{MetabolicNetwork, hop_from_parts, tags_for_atoms};
@@ -140,6 +140,8 @@ pub struct PathStep {
     /// Unique-edit primary-map orbit (includes `site`). Plan equivalence under
     /// automorphism compares sites via [`crate::same_site_orbit`].
     pub site_orbit: Vec<usize>,
+    /// CSMI of the mol the rule was applied to (site indexes this mol).
+    pub reactant: String,
     /// Kept fragment CSMI (the search node).
     pub product: String,
     /// Cleaved-off fragment CSMIs (not expanded).
@@ -166,12 +168,18 @@ impl PathStep {
             && crate::same_site_orbit(self.site, &self.site_orbit, other.site, &other.site_orbit)
     }
 
-    fn from_emission(emission: &ForestEmission, product: String, sides: Vec<String>) -> Self {
+    fn from_emission(
+        emission: &ForestEmission,
+        reactant: String,
+        product: String,
+        sides: Vec<String>,
+    ) -> Self {
         Self {
             rule_path: emission.rule_path.clone(),
             pattern_name: emission.pattern_name.clone(),
             site: emission.site,
             site_orbit: emission.site_orbit.clone(),
+            reactant,
             product,
             sides,
         }
@@ -179,11 +187,13 @@ impl PathStep {
 }
 
 /// One reactant→target hit.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct PathOutcome {
     pub steps: Vec<PathStep>,
     /// Elementary plan with precedes and cleavage [`Maybe`] (on the plan).
     pub plan: Deps,
+    /// Tagged mol at the hit (same tags as search walk).
+    pub mol: ForestMol,
     pub smiles: String,
 }
 
@@ -885,7 +895,7 @@ struct ForestEmission {
     dh_ends: Option<(usize, usize)>,
     rule_path: Vec<Option<String>>,
     products: Vec<ForestMol>,
-    plan: Vec<CanonicalStep>,
+    plan: Vec<Step>,
 }
 
 impl ForestEmission {
@@ -989,7 +999,7 @@ fn keep_fragment(
     if products.is_empty() {
         return None;
     }
-    let mut best: Option<(usize, Rc<str>, usize)> = None;
+    let mut best: Option<(usize, Arc<str>, usize)> = None;
     for (i, mol) in products.iter().enumerate() {
         let csmi = mol.csmi();
         let cost = if csmi.as_ref() == target_csmi {
@@ -998,12 +1008,12 @@ fn keep_fragment(
             1 + ha_distance(mol.heavy_atom_count(), target_ha)
         };
         match &best {
-            None => best = Some((i, Rc::clone(&csmi), cost)),
+            None => best = Some((i, Arc::clone(&csmi), cost)),
             Some((_, _, best_cost)) if cost < *best_cost => {
-                best = Some((i, Rc::clone(&csmi), cost));
+                best = Some((i, Arc::clone(&csmi), cost));
             }
             Some((_, kept, best_cost)) if cost == *best_cost && csmi.as_ref() < kept.as_ref() => {
-                best = Some((i, Rc::clone(&csmi), cost));
+                best = Some((i, Arc::clone(&csmi), cost));
             }
             _ => {}
         }
@@ -1399,16 +1409,17 @@ where
 }
 
 /// Closest / stuck reach for [`find_path_partial`] (end-of-search flush).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct PartialOutcome {
     pub steps: Vec<PathStep>,
     pub plan: Deps,
+    pub mol: ForestMol,
     pub smiles: String,
     pub residual: crate::atom_diff::AtomDiffResidual,
 }
 
 /// Exact hits plus end-of-search partials from [`find_path_partial`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct FindPathPartialResult {
     pub exact: Vec<PathOutcome>,
     pub partials: Vec<PartialOutcome>,
@@ -1520,6 +1531,7 @@ impl<'g> PathSearch<'g> {
         let outcome = PartialOutcome {
             steps: walk.steps.clone(),
             plan: as_deps(walk.plan.clone()).with_maybe(Maybe::new(walk.maybe.clone())),
+            mol: walk.mol.clone(),
             smiles,
             residual,
         };
@@ -1577,7 +1589,8 @@ impl<'g> PathSearch<'g> {
             return;
         };
         let site_tags = tags_for_atoms(parent, &emission.site_atoms);
-        let hop = hop_from_parts(
+        let site_atoms: Vec<usize> = emission.site_atoms.iter().copied().collect();
+        let mut hop = hop_from_parts(
             emission
                 .rule_path
                 .first()
@@ -1591,6 +1604,9 @@ impl<'g> PathSearch<'g> {
             products,
             emission.cleaves,
         );
+        // Edge evidence for later `step_plan_between` queries (not used for yield yet).
+        hop.plan = emission.plan.clone();
+        hop.site_atoms = site_atoms;
         net.record_hop(parent.csmi().as_ref(), child_csmi, hop);
     }
 
@@ -1695,7 +1711,12 @@ impl<'g> PathSearch<'g> {
             emission.removes_oxygen,
         );
         let mut steps = walk.steps.clone();
-        steps.push(PathStep::from_emission(emission, kept_csmi.clone(), sides));
+        steps.push(PathStep::from_emission(
+            emission,
+            walk.mol.csmi().as_ref().to_string(),
+            kept_csmi.clone(),
+            sides,
+        ));
         let mut plan = walk.plan.clone();
         plan.extend(emission.plan.iter().cloned());
         let cost_gain = hop_cost_gain(parent_cost, child_diff.as_ref().map(|d| d.cost()));
@@ -1838,6 +1859,7 @@ where
                 let outcome = PathOutcome {
                     steps: walk.steps,
                     plan,
+                    mol: walk.mol,
                     smiles: here.as_ref().to_string(),
                 };
                 self.yielded.push(outcome.clone());
@@ -2308,6 +2330,7 @@ where
                 let outcome = PathOutcome {
                     steps: walk.steps,
                     plan,
+                    mol: walk.mol,
                     smiles: here.as_ref().to_string(),
                 };
                 self.yielded.push(outcome.clone());
@@ -2381,6 +2404,7 @@ where
                         pattern_name: emission.pattern_name.clone(),
                         site: emission.site,
                         site_orbit: emission.site_orbit.clone(),
+                        reactant: walk.mol.csmi().as_ref().to_string(),
                         product: kept_csmi.clone(),
                         sides,
                     });
@@ -3641,6 +3665,7 @@ mod tests {
         let found = vec![PathOutcome {
             steps: vec![],
             plan: short,
+            mol: ForestMol::parse("C").unwrap(),
             smiles: "C".into(),
         }];
         let mut counters = PathCounters::default();
@@ -3685,6 +3710,7 @@ mod tests {
         let found = vec![PathOutcome {
             steps: vec![],
             plan: first,
+            mol: ForestMol::parse("C").unwrap(),
             smiles: "C".into(),
         }];
         let mut counters = PathCounters::default();

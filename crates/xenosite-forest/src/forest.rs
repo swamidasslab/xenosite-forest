@@ -3,7 +3,7 @@
 //! Not a Python `_forest` dict. [`ForestMol`] owns these as fields.
 
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::mol::Molecule;
 
@@ -51,20 +51,20 @@ pub fn is_charge_key(key: &str) -> bool {
     key == CHARGE_PLUS || key == CHARGE_MINUS
 }
 
-/// Structure-dependent answers, filled on first read. Shared by `Rc` when
+/// Structure-dependent answers, filled on first read. Shared by `Arc` when
 /// the chemistry is the same; a new bag after an edit.
 #[derive(Clone, Debug, Default)]
 pub struct Structure {
-    pub csmi: Option<Rc<str>>,
+    pub csmi: Option<Arc<str>>,
     /// Fail-closed dedup key ([`crate::mol::stable_csmi_key`]).
     /// Outer `None` = not filled; inner `None` = proven unstable (do not index).
-    pub stable_csmi: Option<Option<Rc<str>>>,
-    pub formula: Option<Rc<Formula>>,
-    pub topol_equiv: Option<Rc<Vec<usize>>>,
+    pub stable_csmi: Option<Option<Arc<str>>>,
+    pub formula: Option<Arc<Formula>>,
+    pub topol_equiv: Option<Arc<Vec<usize>>>,
     /// Atom+bond automorphism generators (canonaut). Needed for site and
     /// higher-order (plan) orbits; filled once per structure bag.
-    pub atom_bond_generators: Option<Rc<Vec<crate::orbits::AtomBondGenerator>>>,
-    pub smarts_matches: BTreeMap<String, Rc<Vec<BTreeMap<u16, usize>>>>,
+    pub atom_bond_generators: Option<Arc<Vec<crate::orbits::AtomBondGenerator>>>,
+    pub smarts_matches: BTreeMap<String, Arc<Vec<BTreeMap<u16, usize>>>>,
 }
 
 /// Heavy-atom counts, explicit + implicit hydrogens, and formal charge.

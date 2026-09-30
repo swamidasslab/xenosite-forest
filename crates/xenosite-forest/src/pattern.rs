@@ -566,6 +566,8 @@ pub struct Emission {
     pub rule_path: Vec<Option<String>>,
     /// Tagged products; atom tracking + kekulé caches propagate from the parent.
     pub products: Vec<crate::ForestMol>,
+    /// Parent mol the pattern was applied to (`site` indexes this mol).
+    pub reactant: crate::ForestMol,
     /// Elementary steps for this hop (identity or quinone-shaped expansion).
     /// Bind with [`crate::canonical_plan::Deps::bind`] for precedes / replay.
     pub plan: Vec<crate::canonical_plan::Step>,

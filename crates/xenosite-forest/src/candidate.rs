@@ -343,6 +343,7 @@ impl DeferredSite {
             search_bias: self.pattern.search_bias,
             rule_path: self.rule_path.clone(),
             products,
+            reactant: (*self.mol).clone(),
             plan: self.elementary_plan(),
         }))
     }

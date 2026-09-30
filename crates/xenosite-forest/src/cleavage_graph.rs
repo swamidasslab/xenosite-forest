@@ -13,7 +13,7 @@
 //! This is **not** archive And/Or plan trees: Deps stay the plan language.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ForestError;
 use crate::ForestMol;
@@ -540,7 +540,7 @@ pub struct CleavageSeed {
 }
 
 impl CleavageSeed {
-    pub fn csmi(&self) -> Rc<str> {
+    pub fn csmi(&self) -> Arc<str> {
         self.mol.csmi()
     }
 }

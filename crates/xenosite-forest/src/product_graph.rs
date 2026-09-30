@@ -11,80 +11,19 @@
 //! MCS / [`crate::atom_diff`] gates expansion toward an optional target: strict
 //! cost drop and ha ≥ target (same idea as the cleavage product graph).
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
+use std::sync::Arc;
 
 use crate::ForestError;
 use crate::atom_diff::atom_diff;
 use crate::forest_mol::ForestMol;
 use crate::labels::Tag;
+use crate::metabolic_network::{MetabolicHop, MetabolicNetwork, NodeIdx};
 use crate::mol::{Molecule, canon_of};
 use crate::ruleset::RuleSet;
 
-/// One parent→child hop recorded on the product graph.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProductHop {
-    pub rule: String,
-    pub pattern_name: String,
-    pub site: usize,
-    pub site_orbit: Vec<usize>,
-    /// Parent forest Tags of the discovery site atoms (sorted).
-    pub site_tags: Vec<Tag>,
-    /// Tags minted for atoms this product gained (sorted).
-    pub added_tags: Vec<Tag>,
-    /// All fragment CSMIs from this emission (sorted; len≥2 when cleaving).
-    pub products: Vec<String>,
-    pub cleaves: bool,
-}
-
-/// One molecule node in the product graph.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProductNode {
-    pub csmi: String,
-    /// Incoming hops: `(parent CSMI, hop)`.
-    pub via: Vec<(String, ProductHop)>,
-}
-
-impl ProductNode {
-    pub fn n_inbound(&self) -> usize {
-        self.via.len()
-    }
-}
-
-/// BFS product graph over all kept reaction products.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ProductGraph {
-    pub nodes: Vec<ProductNode>,
-}
-
-impl ProductGraph {
-    pub fn n_nodes(&self) -> usize {
-        self.nodes.len()
-    }
-
-    pub fn n_edges(&self) -> usize {
-        self.nodes.iter().map(|n| n.via.len()).sum()
-    }
-
-    /// Distinct `(rule, pattern_name)` pairs appearing on any inbound hop.
-    pub fn n_rule_patterns(&self) -> usize {
-        let mut keys = BTreeSet::new();
-        for n in &self.nodes {
-            for (_, hop) in &n.via {
-                keys.insert((hop.rule.as_str(), hop.pattern_name.as_str()));
-            }
-        }
-        keys.len()
-    }
-
-    pub fn index_of(&self, csmi: &str) -> Option<usize> {
-        self.nodes.iter().position(|n| n.csmi == csmi)
-    }
-
-    /// True when `target` CSMI appears as a node.
-    pub fn reaches(&self, target_csmi: &str) -> bool {
-        self.index_of(target_csmi).is_some()
-    }
-}
+/// Compat alias — hops are stored on [`MetabolicNetwork`].
+pub type ProductHop = MetabolicHop;
 
 /// Options for building a product layer / graph.
 #[derive(Clone, Debug)]
@@ -205,8 +144,9 @@ pub fn product_layer(
                 }
             }
             let added_tags = added_tags_of(parent, &child);
+            let plan = c.elementary_plan();
             out.push(ProductChild {
-                hop: ProductHop {
+                hop: MetabolicHop {
                     rule: rule.clone(),
                     pattern_name: c.pattern.name.clone(),
                     site: c.site,
@@ -215,6 +155,9 @@ pub fn product_layer(
                     added_tags,
                     products: products_sorted.clone(),
                     cleaves,
+                    plan,
+                    discarded_sides: Vec::new(),
+                    site_atoms: site_atoms.clone(),
                 },
                 child,
                 expand: config.target.is_none() || expand,
@@ -296,8 +239,9 @@ fn push_pair_children(
             continue;
         }
         let added_tags = added_tags_of(parent, &child);
+        let plan = pair.elementary_plan();
         out.push(ProductChild {
-            hop: ProductHop {
+            hop: MetabolicHop {
                 rule: rule.clone(),
                 pattern_name: pair.pattern_name.clone(),
                 site: pair.site,
@@ -306,6 +250,9 @@ fn push_pair_children(
                 added_tags,
                 products: products_sorted.clone(),
                 cleaves,
+                plan,
+                discarded_sides: Vec::new(),
+                site_atoms: site_atoms.clone(),
             },
             child,
             expand: !have_target || expand,
@@ -367,75 +314,60 @@ fn child_worth_expanding(
     }
 }
 
-/// BFS product graph from `start` under `config`.
+/// BFS product exploration from `start` under `config` (same type as search ``network=``).
 pub fn product_graph(
     start: &str,
     ruleset: &RuleSet,
     config: &ProductGraphConfig,
-) -> Result<ProductGraph, ForestError> {
+) -> Result<MetabolicNetwork, ForestError> {
+    let mut net = MetabolicNetwork::new();
+    product_graph_into(&mut net, start, ruleset, config)?;
+    Ok(net)
+}
+
+/// Grow an existing [`MetabolicNetwork`] via BFS from `start` (multipath edges, tagged mols).
+pub fn product_graph_into(
+    net: &mut MetabolicNetwork,
+    start: &str,
+    ruleset: &RuleSet,
+    config: &ProductGraphConfig,
+) -> Result<(), ForestError> {
     let root = ForestMol::parse(start)?;
-    let root_csmi = root.csmi().as_ref().to_string();
-    let mut nodes = vec![ProductNode {
-        csmi: root_csmi.clone(),
-        via: Vec::new(),
-    }];
-    let mut index: BTreeMap<String, usize> = BTreeMap::new();
-    index.insert(root_csmi, 0);
+    let root_i = if net.n_nodes() == 0 {
+        net.ensure_root_mol(root.clone())
+    } else {
+        net.ensure_node_mol(root.clone())
+    };
 
-    // Queue carries ForestMol for tag continuity through from_edit_product.
-    let mut queue: VecDeque<(usize, usize, ForestMol)> = VecDeque::new();
-    let mut scheduled: BTreeSet<usize> = BTreeSet::new();
-    queue.push_back((0, 0, root));
-    scheduled.insert(0);
+    let mut queue: VecDeque<(NodeIdx, usize, ForestMol)> = VecDeque::new();
+    let mut scheduled: BTreeSet<NodeIdx> = BTreeSet::new();
+    queue.push_back((root_i, 0, root));
+    scheduled.insert(root_i);
 
-    while let Some((ni, depth, parent)) = queue.pop_front() {
-        if depth >= config.max_depth || nodes.len() >= config.max_nodes {
+    while let Some((parent_i, depth, parent)) = queue.pop_front() {
+        if depth >= config.max_depth || net.n_nodes() >= config.max_nodes {
             continue;
         }
-        let parent_csmi = nodes[ni].csmi.clone();
         let layer = product_layer(&parent, ruleset, config)?;
 
-        // Expandable children first so dead-ends do not eat the node budget.
         let mut ranked = layer;
         ranked.sort_by_key(|c| !c.expand);
 
-        for child in ranked {
-            let child_csmi = child.child.csmi().as_ref().to_string();
-            let child_i = match index.entry(child_csmi.clone()) {
-                std::collections::btree_map::Entry::Occupied(o) => *o.get(),
-                std::collections::btree_map::Entry::Vacant(v) => {
-                    if nodes.len() >= config.max_nodes {
-                        continue;
-                    }
-                    let i = nodes.len();
-                    nodes.push(ProductNode {
-                        csmi: child_csmi,
-                        via: Vec::new(),
-                    });
-                    v.insert(i);
-                    i
-                }
-            };
-
-            let already = nodes[child_i].via.iter().any(|(p, h)| {
-                p == &parent_csmi
-                    && h.pattern_name == child.hop.pattern_name
-                    && h.site == child.hop.site
-                    && h.products == child.hop.products
-            });
-            if !already {
-                nodes[child_i]
-                    .via
-                    .push((parent_csmi.clone(), child.hop.clone()));
+        for item in ranked {
+            let child_csmi = item.child.csmi().as_ref().to_string();
+            if net.index_of(&child_csmi).is_none() && net.n_nodes() >= config.max_nodes {
+                continue;
             }
+            let child_i = net.ensure_node_mol(item.child.clone());
+            let kept = Arc::new(item.child.clone());
+            net.record_hop_idx(parent_i, child_i, item.hop, Some(kept));
 
-            if child.expand && depth + 1 < config.max_depth && scheduled.insert(child_i) {
-                queue.push_back((child_i, depth + 1, child.child));
+            if item.expand && depth + 1 < config.max_depth && scheduled.insert(child_i) {
+                queue.push_back((child_i, depth + 1, item.child));
             }
         }
     }
-
-    Ok(ProductGraph { nodes })
+    Ok(())
 }
 
 /// Compact stats for benches.
@@ -453,28 +385,28 @@ pub fn product_graph_stats(
     ruleset: &RuleSet,
     max_nodes: usize,
     max_depth: usize,
-) -> Result<(ProductGraphStats, ProductGraph), ForestError> {
+) -> Result<(ProductGraphStats, MetabolicNetwork), ForestError> {
     let config = ProductGraphConfig {
         target: target.map(str::to_string),
         max_nodes,
         max_depth,
     };
-    let graph = product_graph(start, ruleset, &config)?;
+    let net = product_graph(start, ruleset, &config)?;
     let reaches = match target {
         Some(t) => {
             let tc = canon_of(t)?;
-            graph.reaches(&tc)
+            net.reaches(&tc)
         }
         None => false,
     };
     Ok((
         ProductGraphStats {
-            n_nodes: graph.n_nodes(),
-            n_edges: graph.n_edges(),
-            n_rule_patterns: graph.n_rule_patterns(),
+            n_nodes: net.n_nodes(),
+            n_edges: net.n_edges(),
+            n_rule_patterns: net.n_rule_patterns(),
             reaches_target: reaches,
         },
-        graph,
+        net,
     ))
 }
 
@@ -508,20 +440,16 @@ mod tests {
 
     #[test]
     fn anisole_product_graph_reaches_phenol() {
-        let (stats, graph) =
+        let (stats, _net) =
             product_graph_stats("COc1ccccc1", Some("Oc1ccccc1"), &o_dealkylation(), 64, 4).unwrap();
-        assert!(
-            stats.reaches_target,
-            "nodes={:?}",
-            graph.nodes.iter().map(|n| &n.csmi).collect::<Vec<_>>()
-        );
+        assert!(stats.reaches_target, "n_nodes={}", stats.n_nodes);
         assert!(stats.n_nodes >= 2);
         assert!(stats.n_edges >= 1);
     }
 
     #[test]
     fn ethane_to_ethanol_graph_one_hop() {
-        let graph = product_graph(
+        let net = product_graph(
             "CC",
             &hydroxylation(),
             &ProductGraphConfig {
@@ -532,10 +460,10 @@ mod tests {
         )
         .unwrap();
         let ethanol = canon_of("CCO").unwrap();
-        assert!(graph.reaches(&ethanol));
-        let ei = graph.index_of(&ethanol).unwrap();
-        assert_eq!(graph.nodes[ei].via.len(), 1);
-        assert_eq!(graph.nodes[ei].via[0].1.rule, "Hydroxylation");
+        assert!(net.reaches(&ethanol));
+        let ei = net.index_of(&ethanol).unwrap();
+        assert_eq!(net.nodes[ei].inbound.len(), 1);
+        assert_eq!(net.nodes[ei].inbound[0].hop.rule, "Hydroxylation");
     }
 
     #[test]

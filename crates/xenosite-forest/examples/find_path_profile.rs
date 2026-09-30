@@ -9,7 +9,7 @@
 //! ```
 
 use std::collections::{BinaryHeap, HashSet};
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use xenosite_forest::as_forest_mol;
@@ -112,7 +112,7 @@ fn keep_fragment(
     target_csmi: &str,
     target_ha: usize,
 ) -> Option<(ForestMol, String)> {
-    let mut best: Option<(usize, Rc<str>, usize)> = None;
+    let mut best: Option<(usize, Arc<str>, usize)> = None;
     for (i, mol) in products.iter().enumerate() {
         let csmi = mol.csmi();
         let cost = if csmi.as_ref() == target_csmi {
@@ -121,10 +121,10 @@ fn keep_fragment(
             1 + mol.heavy_atom_count().abs_diff(target_ha)
         };
         match &best {
-            None => best = Some((i, Rc::clone(&csmi), cost)),
-            Some((_, _, bc)) if cost < *bc => best = Some((i, Rc::clone(&csmi), cost)),
+            None => best = Some((i, Arc::clone(&csmi), cost)),
+            Some((_, _, bc)) if cost < *bc => best = Some((i, Arc::clone(&csmi), cost)),
             Some((_, kept, bc)) if cost == *bc && csmi.as_ref() < kept.as_ref() => {
-                best = Some((i, Rc::clone(&csmi), cost));
+                best = Some((i, Arc::clone(&csmi), cost));
             }
             _ => {}
         }
@@ -344,7 +344,7 @@ fn microbench() {
         let _ = parent.csmi();
     }
     let cached = t0.elapsed();
-    assert!(Rc::ptr_eq(&first, &parent.csmi()));
+    assert!(Arc::ptr_eq(&first, &parent.csmi()));
 
     let t0 = Instant::now();
     for _ in 0..100 {

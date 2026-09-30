@@ -2311,54 +2311,69 @@ pub fn glutathionation() -> RuleSet {
 }
 
 /// Phase I leaf sets without QuinoneFormation, EpoxideHydration, or
-/// Tautomerization. Nested as the PhaseOne bundle inside [`default_ruleset`];
-/// [`phase_one`] prepends QF + EH for the public PhaseOne catalog.
-fn phase_one_core_leaves() -> [RuleSet; 16] {
+/// Tautomerization — nested as the five Rainbow color containers
+/// (StableOxygenation / UnstableOxygenation / Dehydrogenation / Hydrolysis /
+/// Reduction). Named `PhaseOne` via [`phase_one_core`]; QF and EH sit
+/// alongside that core in [`phase_one`] / [`default_ruleset`] /
+/// [`product_graph_ruleset`], not inside it.
+fn dh_phase_one() -> RuleSet {
+    // Container long name matches Rainbow DH; leaf inside is also Dehydrogenation.
+    RuleSet::compose(Some("Dehydrogenation".into()), [dehydrogenation()])
+}
+
+fn hd_phase_one() -> RuleSet {
+    RuleSet::compose(
+        Some("Hydrolysis".into()),
+        [dephosphorylation(), epoxide_opening(), hydrolysis()],
+    )
+}
+
+/// Five Rainbow Phase I color groups (native `PhaseOneRS`, long names).
+fn phase_one_colors() -> [RuleSet; 5] {
     [
-        hydroxylation(),
-        epoxidation(),
-        sulfur_oxidation(),
-        nitrogen_oxidation(),
-        dehydrogenation(),
-        dephosphorylation(),
-        epoxide_opening(),
-        hydrolysis(),
-        dehydration(),
-        hydrogenation(),
-        nitrogen_reduction(),
-        oxygen_reduction(),
-        reductive_dehalogenation(),
-        sulfur_reduction(),
-        dealkylation(),
-        oxidative_dehalogenation(),
+        stable_oxygenation(),
+        unstable_oxygenation(),
+        dh_phase_one(),
+        hd_phase_one(),
+        reduction(),
     ]
 }
 
 fn phase_one_core() -> RuleSet {
-    RuleSet::compose(Some("PhaseOne".into()), phase_one_core_leaves())
+    RuleSet::compose(Some("PhaseOne".into()), phase_one_colors())
 }
 
-/// Phase I catalog (Python `PhaseOne`): QF + EpoxideHydration + Phase I leaves.
+/// Public Phase I door: [`phase_one_core`] (five Rainbow colors) alongside
+/// QuinoneFormation and EpoxideHydration — not nested inside PhaseOne.
 /// Tautomerization is not included; use [`default_ruleset`] for find_path.
 pub fn phase_one() -> RuleSet {
-    let mut members = Vec::with_capacity(18);
-    members.push(quinone_formation());
-    members.push(epoxide_hydration());
-    members.extend(phase_one_core_leaves());
-    RuleSet::compose(Some("PhaseOne".into()), members)
+    RuleSet::compose(
+        None,
+        [phase_one_core(), quinone_formation(), epoxide_hydration()],
+    )
 }
 
-/// Default `find_path` ruleset: QuinoneFormation, EpoxideHydration,
-/// Tautomerization, and the PhaseOne core bundle (no leaf duplicates).
+/// Default `find_path` ruleset: PhaseOne, QuinoneFormation, EpoxideHydration,
+/// then Tautomerization.
 pub fn default_ruleset() -> RuleSet {
     RuleSet::compose(
         Some("Default".into()),
         [
+            phase_one_core(),
             quinone_formation(),
             epoxide_hydration(),
             tautomerization(),
-            phase_one_core(),
         ],
+    )
+}
+
+/// Default [`product_graph`](crate::product_graph::product_graph) rules: same
+/// nesting as [`default_ruleset`] but **without** Tautomerization (BFS can
+/// explode on tautomers).
+pub fn product_graph_ruleset() -> RuleSet {
+    RuleSet::compose(
+        Some("ProductGraph".into()),
+        [phase_one_core(), quinone_formation(), epoxide_hydration()],
     )
 }
 
@@ -2524,7 +2539,8 @@ pub fn seal_leaf(name: &'static str, set: RuleSet) -> RuleSet {
 /// Top-level catalogs that appear as SSSOM first segments (not leaves).
 #[allow(clippy::type_complexity)]
 pub const ROOT_CATALOGS: &[(&str, fn() -> RuleSet)] = &[
-    ("PhaseOne", phase_one),
+    // Named PhaseOne is the five-color core (QF / EH sit alongside in phase_one()).
+    ("PhaseOne", phase_one_core),
     ("Default", default_ruleset),
     ("All", all_rules),
     ("StableOxygenation", stable_oxygenation),
@@ -2593,18 +2609,78 @@ mod tests {
     use crate::ruleset::{accept_all_rules, accept_all_sites};
 
     #[test]
-    fn phase_one_nests_eighteen_leaf_rules() {
+    fn phase_one_composes_core_alongside_qf_and_eh() {
         let set = phase_one();
-        assert_eq!(set.members().len(), 18);
-        assert_eq!(set.name.as_deref(), Some("PhaseOne"));
-        assert!(
-            set.members().iter().all(|m| matches!(m, crate::ruleset::RuleMember::Set(s) if s.name.as_deref() != Some("Tautomerization"))),
-            "Tautomerization must not be in PhaseOne"
+        assert!(set.name.is_none(), "phase_one() is an un-named composite");
+        assert_eq!(set.members().len(), 3);
+        let names: Vec<_> = set
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.clone(),
+                crate::ruleset::RuleMember::Pattern(_) => None,
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                Some("PhaseOne".into()),
+                Some("QuinoneFormation".into()),
+                Some("EpoxideHydration".into()),
+            ]
+        );
+        assert!(!set.contains_name("Tautomerization"));
+        let phase = match &set.members()[0] {
+            crate::ruleset::RuleMember::Set(s) => s,
+            crate::ruleset::RuleMember::Pattern(_) => panic!("expected PhaseOne"),
+        };
+        assert_eq!(phase.members().len(), 5);
+        let color_names: Vec<_> = phase
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.as_deref().unwrap_or("?").to_string(),
+                crate::ruleset::RuleMember::Pattern(_) => "?".into(),
+            })
+            .collect();
+        assert_eq!(
+            color_names,
+            [
+                "StableOxygenation",
+                "UnstableOxygenation",
+                "Dehydrogenation",
+                "Hydrolysis",
+                "Reduction",
+            ]
         );
     }
 
     #[test]
-    fn default_ruleset_nests_qf_eh_tautomer_phase_one() {
+    fn product_graph_ruleset_has_qf_eh_phase_one_no_tautomer() {
+        let set = product_graph_ruleset();
+        assert_eq!(set.members().len(), 3);
+        assert_eq!(set.name.as_deref(), Some("ProductGraph"));
+        let names: Vec<_> = set
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.clone(),
+                crate::ruleset::RuleMember::Pattern(_) => None,
+            })
+            .collect();
+        assert_eq!(
+            names,
+            [
+                Some("PhaseOne".into()),
+                Some("QuinoneFormation".into()),
+                Some("EpoxideHydration".into()),
+            ]
+        );
+        assert!(!set.contains_name("Tautomerization"));
+    }
+
+    #[test]
+    fn default_ruleset_nests_phase_one_qf_eh_tautomer() {
         let set = default_ruleset();
         assert_eq!(set.members().len(), 4);
         assert_eq!(set.name.as_deref(), Some("Default"));
@@ -2619,17 +2695,39 @@ mod tests {
         assert_eq!(
             names,
             [
+                Some("PhaseOne".into()),
                 Some("QuinoneFormation".into()),
                 Some("EpoxideHydration".into()),
                 Some("Tautomerization".into()),
-                Some("PhaseOne".into()),
             ]
         );
-        let phase = match &set.members()[3] {
+        let phase = match &set.members()[0] {
             crate::ruleset::RuleMember::Set(s) => s,
             crate::ruleset::RuleMember::Pattern(_) => panic!("expected PhaseOne nest"),
         };
-        assert_eq!(phase.members().len(), 16);
+        assert_eq!(
+            phase.members().len(),
+            5,
+            "PhaseOne core is five color groups"
+        );
+        let color_names: Vec<_> = phase
+            .members()
+            .iter()
+            .map(|m| match m {
+                crate::ruleset::RuleMember::Set(s) => s.name.as_deref().unwrap_or("?").to_string(),
+                crate::ruleset::RuleMember::Pattern(_) => "?".into(),
+            })
+            .collect();
+        assert_eq!(
+            color_names,
+            [
+                "StableOxygenation",
+                "UnstableOxygenation",
+                "Dehydrogenation",
+                "Hydrolysis",
+                "Reduction",
+            ]
+        );
     }
 
     #[test]

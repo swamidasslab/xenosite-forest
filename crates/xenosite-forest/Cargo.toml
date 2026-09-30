@@ -23,7 +23,8 @@ wasm = [
     "dep:serde-wasm-bindgen",
 ]
 # CPython class wrap (`#[pyclass]`). Native only; not wasm32-unknown-unknown.
-python = ["dep:pyo3"]
+python = ["export", "dep:pyo3", "dep:pythonize"]
+export = ["dep:serde", "dep:serde_json"]
 # Wheel/cdylib: do not link libpython. cargo test --features python omits this.
 extension-module = ["python", "pyo3/extension-module"]
 
@@ -46,6 +47,7 @@ serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 pyo3 = { version = "0.26", optional = true }
+pythonize = { version = "0.26", optional = true }
 
 [build-dependencies]
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

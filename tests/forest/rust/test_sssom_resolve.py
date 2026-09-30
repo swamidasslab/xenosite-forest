@@ -53,10 +53,10 @@ def test_bound_pattern_metabolize():
     # ethane → ethanol via Hydroxylation/h2 (methyl/methylene)
     bp = mod.resolve("xf:Hydroxylation/h2")
     mol = mod.ForestMol("CC")
-    rows = bp.metabolize(mol)
-    assert rows
-    assert all(r[0] == "h2" for r in rows)
-    products = {p for row in rows for p in row[2]}
+    emissions = bp.metabolize(mol)
+    assert emissions
+    assert all(e.pattern_name == "h2" for e in emissions)
+    products = {p for e in emissions for p in e.product_csmis()}
     assert any("CCO" in p or "OCC" in p for p in products) or products
 
 
