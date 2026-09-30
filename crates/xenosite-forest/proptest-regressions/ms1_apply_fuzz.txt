@@ -1,1 +1,0 @@
-cc 9feac86c951c674db38c9c4e215563817e6116f0fbb21f27451a5a6ce10ad5c5 # shrinks to reactant = "CS(=O)C", leaf = "SulfurReduction"
