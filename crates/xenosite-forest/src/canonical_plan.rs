@@ -535,9 +535,9 @@ pub fn apply_n_emit_products(
         let mut tags: Vec<Tag> = combo
             .iter()
             .map(|&i| {
-                start.tag_of(i).ok_or_else(|| {
-                    ForestError::Plan(format!("no tag on eligible site index {i}"))
-                })
+                start
+                    .tag_of(i)
+                    .ok_or_else(|| ForestError::Plan(format!("no tag on eligible site index {i}")))
             })
             .collect::<Result<_, _>>()?;
         tags.sort_unstable();
@@ -1083,8 +1083,7 @@ impl StepSequence {
                     if !seen.insert(smi) {
                         continue;
                     }
-                    let src_to_new =
-                        crate::atom_tracker::AtomTracker::src_to_new(cur, &product);
+                    let src_to_new = crate::atom_tracker::AtomTracker::src_to_new(cur, &product);
                     next.push((product, compose_index_map(map, &src_to_new)));
                 }
             }
@@ -1105,8 +1104,7 @@ impl StepSequence {
             return Ok(vec![start.clone()]);
         }
         let mut currents: Vec<(ForestMol, Vec<Option<usize>>)> = {
-            let map: Vec<Option<usize>> =
-                (0..start.mol().atom_count()).map(Some).collect();
+            let map: Vec<Option<usize>> = (0..start.mol().atom_count()).map(Some).collect();
             vec![(start.clone(), map)]
         };
         for step in &self.steps {
@@ -1144,10 +1142,7 @@ impl StepSequence {
     }
 }
 
-fn compose_index_map(
-    map: &[Option<usize>],
-    src_to_new: &[Option<usize>],
-) -> Vec<Option<usize>> {
+fn compose_index_map(map: &[Option<usize>], src_to_new: &[Option<usize>]) -> Vec<Option<usize>> {
     map.iter()
         .map(|cur| cur.and_then(|i| src_to_new.get(i).copied().flatten()))
         .collect()
@@ -1158,11 +1153,9 @@ fn remap_step_through(step: &Step, map: &[Option<usize>]) -> Result<Step, Forest
     for note in &step.site {
         site.push(match note {
             PlanAtom::Index(i) => {
-                let j = map
-                    .get(*i)
-                    .copied()
-                    .flatten()
-                    .ok_or_else(|| ForestError::Plan(format!("origin index {i} left this piece")))?;
+                let j = map.get(*i).copied().flatten().ok_or_else(|| {
+                    ForestError::Plan(format!("origin index {i} left this piece"))
+                })?;
                 PlanAtom::index(j)
             }
             PlanAtom::WillAdd { element, at } => {
@@ -1447,7 +1440,11 @@ pub fn identity_plan_on_forest(
             }
         }
     }
-    let orbit: Vec<usize> = orbit.into_iter().map(origin_of).filter(|&i| i < n).collect();
+    let orbit: Vec<usize> = orbit
+        .into_iter()
+        .map(origin_of)
+        .filter(|&i| i < n)
+        .collect();
     vec![Step::new(rule, site).with_orbit(orbit)]
 }
 

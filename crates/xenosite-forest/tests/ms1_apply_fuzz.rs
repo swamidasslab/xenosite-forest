@@ -16,8 +16,7 @@ use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 use xenosite_forest::mass::{Ms1Adduct, mz_abs_error, mz_of_mol, mz_within};
 use xenosite_forest::{
-    ApplyN, ForestMol, Ms1Config, PathCounters, PathOutcome, canon_smiles, find_path_ms1,
-    leaf_rule,
+    ApplyN, ForestMol, Ms1Config, PathCounters, PathOutcome, canon_smiles, find_path_ms1, leaf_rule,
 };
 
 fn fuzz_config(default_cases: u32) -> ProptestConfig {

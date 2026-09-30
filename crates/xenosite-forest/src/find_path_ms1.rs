@@ -1105,7 +1105,12 @@ mod tests {
         );
         assert_hard_chain_in_ms1(
             "C/C=C/C",
-            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation", "Epoxidation"],
+            &[
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
             &["EpoxideHydration", "Dehydrogenation"],
             8000,
         );
@@ -1444,7 +1449,12 @@ mod tests {
         );
         assert_hard_chain_in_ms1(
             "C/C=C/C",
-            &["EpoxideHydration", "Dehydrogenation", "Hydroxylation", "Epoxidation"],
+            &[
+                "EpoxideHydration",
+                "Dehydrogenation",
+                "Hydroxylation",
+                "Epoxidation",
+            ],
             &["EpoxideHydration", "Dehydrogenation", "Hydroxylation"],
             15000,
         );
@@ -1548,21 +1558,6 @@ mod tests {
         );
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /// Deterministic regression corpus for the apply→MS1 property.
     /// Full proptest draw lives in `tests/ms1_apply_fuzz.rs`.
     #[test]
@@ -1656,7 +1651,11 @@ mod tests {
         assert_eq!(hits[0].plan.precedes(), &[(0, 1)]);
         assert_eq!(hits[0].plan.apply_n().len(), 1);
         assert_eq!(hits[0].plan.apply_n()[0].count, 1);
-        assert!(plan_reaches_forest(&hits[0].plan, &ForestMol::parse("C=C").unwrap(), "OCCO"));
+        assert!(plan_reaches_forest(
+            &hits[0].plan,
+            &ForestMol::parse("C=C").unwrap(),
+            "OCCO"
+        ));
         assert_hits_satisfy_mz(&hits, "C=C", mz, 0.001);
         // Catalog bags are mass-faithful for this leaf — prediction ≈ hit.
         let parent = ForestMol::parse("C=C").unwrap();
@@ -1721,7 +1720,12 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(hits.len(), 3, "{:?}", hits.iter().map(|h| &h.smiles).collect::<Vec<_>>());
+        assert_eq!(
+            hits.len(),
+            3,
+            "{:?}",
+            hits.iter().map(|h| &h.smiles).collect::<Vec<_>>()
+        );
         assert_no_redundant_emitted_plans(&hits);
         assert_eq!(counters.dropped_exact_plan, 0);
         assert_eq!(counters.dropped_skeleton_twin, 0);
@@ -1744,8 +1748,11 @@ mod tests {
         .unwrap();
         // All benzene diols share formula mass.
         for p in &emitted {
-            let pmz = mz_of_mol(ForestMol::parse(&p.smiles).unwrap().mol(), Ms1Adduct::MPlusH)
-                .unwrap();
+            let pmz = mz_of_mol(
+                ForestMol::parse(&p.smiles).unwrap().mol(),
+                Ms1Adduct::MPlusH,
+            )
+            .unwrap();
             assert!(mz_within(pmz, mz, 0.001), "{} mz drift", p.smiles);
         }
         let mut counters = PathCounters::default();

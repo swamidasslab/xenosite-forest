@@ -704,8 +704,8 @@ pub(crate) fn apply_edit_mols_raw(
 /// Returns the aromatized heavy fragment plus a methane leave piece — matching
 /// Python's catechol + C split for benzodioxole reduction.
 fn remove_mapped_ch2_leave(mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Option<Vec<Molecule>> {
-    use chematic::core::Element;
     use crate::chematic_tags::{get_label, set_label};
+    use chematic::core::Element;
     let mut leave_idx: Option<usize> = None;
     for &idx in mapped.values() {
         let atom = mol.atom(atom_idx(idx));
@@ -1207,8 +1207,8 @@ mod tests {
         use crate::chematic_tags::get_label;
         use crate::mol::atom_idx;
         use crate::rules::{
-            benzodioxole_reduction, dehydrogenation, epoxidation, hydrolysis,
-            n_dealkylation, oxidative_dehalogenation, sulfur_oxidation,
+            benzodioxole_reduction, dehydrogenation, epoxidation, hydrolysis, n_dealkylation,
+            oxidative_dehalogenation, sulfur_oxidation,
         };
         use std::collections::HashSet;
 

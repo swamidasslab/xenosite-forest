@@ -538,11 +538,7 @@ fn main() {
             .unwrap_or_else(|e| panic!("{}: {e}", case.name));
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
 
-        let sample: Vec<_> = products
-            .iter()
-            .take(3)
-            .map(|p| p.smiles.as_str())
-            .collect();
+        let sample: Vec<_> = products.iter().take(3).map(|p| p.smiles.as_str()).collect();
         let sample = if products.len() > 3 {
             format!("{}, …", sample.join(", "))
         } else {
