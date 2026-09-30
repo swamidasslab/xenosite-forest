@@ -18,7 +18,7 @@ use std::ops::Deref;
 use crate::ForestError;
 use crate::ForestMol;
 use crate::labels::Tag;
-use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles, parse_mol};
+use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles};
 use crate::pattern::Effect;
 
 /// One atom note in a [`Step`] site.
@@ -1618,6 +1618,7 @@ pub fn epoxide_hydration_canonical_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mol::parse_mol;
     use crate::pattern::Effect;
 
     #[test]

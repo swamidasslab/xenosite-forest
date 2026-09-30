@@ -2,6 +2,10 @@
 
 ## 2026-09-29
 
+- **`apply_n_bench` → `examples/`.** Ran release bench across Phase I leaves /
+  ApplyN pools; green (no API breaks). Pending MS1 directory emptied of
+  parked sources; CCS SOx→OH→DH plan-replay xfail still deferred.
+
 - **`enforce_charged_h0` in-place.** SMILES reparse (`[SH+]`→`[S+]`) dropped
   all parent tags on SulfurOxidation; set explicit H0 via `preserving::` instead.
   Edit-helper tag matrix green. MS1 plan emit: use `Candidate::elementary_plan`
