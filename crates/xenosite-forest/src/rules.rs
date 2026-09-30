@@ -2709,7 +2709,8 @@ mod tests {
             phase.members().len(),
             5,
             "PhaseOne core is five color groups"
-        );        let color_names: Vec<_> = phase
+        );
+        let color_names: Vec<_> = phase
             .members()
             .iter()
             .map(|m| match m {
