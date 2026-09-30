@@ -94,10 +94,7 @@ pub fn format_forest_mol(mol: &ForestMol) -> String {
     };
     let parts = [
         format!("ForestMol {}", mol.csmi()),
-        format!(
-            "  formula charge={} atoms={}",
-            formula.charge, n
-        ),
+        format!("  formula charge={} atoms={}", formula.charge, n),
         format!(
             "  trace stamp_end={} survivors={} born={} untagged={}",
             mol.stamp_end(),
@@ -235,12 +232,7 @@ pub fn format_pattern_info(p: &crate::pattern::PatternInfo) -> String {
     };
     truncate_display(&format!(
         "PatternInfo  {}\n  smarts: {}\n  adds={:?} removes={:?} cleaves={} methide={}",
-        p.name,
-        smarts,
-        p.effect.adds,
-        p.effect.removes,
-        p.effect.cleaves,
-        p.effect.methide
+        p.name, smarts, p.effect.adds, p.effect.removes, p.effect.cleaves, p.effect.methide
     ))
 }
 
@@ -271,7 +263,12 @@ pub fn format_emission(em: &Emission) -> String {
     ))
 }
 
-pub fn format_path_outcome(smiles: &str, n_steps: usize, n_plan_steps: usize, n_lin: usize) -> String {
+pub fn format_path_outcome(
+    smiles: &str,
+    n_steps: usize,
+    n_plan_steps: usize,
+    n_lin: usize,
+) -> String {
     truncate_display(&format!(
         "PathOutcome  {smiles}\n  walk_hops={n_steps}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: reactant→product hop trail with SOM on each reactant; use .hops() / .plan)"
     ))

@@ -519,7 +519,14 @@ mod tests {
         );
         let edited = parent.edit_copy();
         assert!(!edited.shares_structure(&parent));
-        assert!(edited.structure.lock().unwrap().atom_bond_generators.is_none());
+        assert!(
+            edited
+                .structure
+                .lock()
+                .unwrap()
+                .atom_bond_generators
+                .is_none()
+        );
         let edited_gens = edited.atom_bond_generators();
         assert!(!Arc::ptr_eq(&gens, &edited_gens));
     }

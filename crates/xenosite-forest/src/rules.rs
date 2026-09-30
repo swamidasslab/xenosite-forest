@@ -2367,11 +2367,7 @@ pub fn default_ruleset() -> RuleSet {
 pub fn product_graph_ruleset() -> RuleSet {
     RuleSet::compose(
         Some("ProductGraph".into()),
-        [
-            quinone_formation(),
-            epoxide_hydration(),
-            phase_one_core(),
-        ],
+        [quinone_formation(), epoxide_hydration(), phase_one_core()],
     )
 }
 

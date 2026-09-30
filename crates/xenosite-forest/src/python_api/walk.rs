@@ -40,7 +40,9 @@ impl PyRandomPathOutcome {
 
     fn patterns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = RandomPathOutcomeView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view.patterns)?.unbind().into_any())
+        Ok(pythonize::pythonize(py, &view.patterns)?
+            .unbind()
+            .into_any())
     }
 
     fn __eq__(&self, other: Bound<'_, PyAny>) -> PyResult<bool> {

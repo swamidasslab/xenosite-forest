@@ -255,31 +255,23 @@ impl MetabolicNetwork {
         let kept = kept.unwrap_or_else(|| self.nodes[child_i].mol.clone());
         let slot = self.nodes[child_i].inbound.len();
         let mut attrs = AttrMap::new();
-        attrs.insert(
-            EDGE_RULE.into(),
-            GraphValue::String(hop.rule.clone()),
-        );
+        attrs.insert(EDGE_RULE.into(), GraphValue::String(hop.rule.clone()));
         attrs.insert(
             EDGE_PATTERN.into(),
             GraphValue::String(hop.pattern_name.clone()),
         );
         attrs.insert(EDGE_SITE.into(), GraphValue::I64(hop.site as i64));
-        attrs.insert(
-            EDGE_CLEAVES.into(),
-            GraphValue::Bool(hop.cleaves),
-        );
+        attrs.insert(EDGE_CLEAVES.into(), GraphValue::Bool(hop.cleaves));
         self.nodes[child_i].inbound.push(InboundEdge {
             parent_idx: parent_i,
             kept,
             hop,
             attrs,
         });
-        self.nodes[parent_i]
-            .outbound
-            .push(OutboundRef {
-                child_idx: child_i,
-                inbound_slot: slot,
-            });
+        self.nodes[parent_i].outbound.push(OutboundRef {
+            child_idx: child_i,
+            inbound_slot: slot,
+        });
     }
 
     pub fn mark_expanded(&mut self, csmi: &str) {
@@ -323,9 +315,10 @@ impl MetabolicNetwork {
     }
 
     pub fn index_of(&self, csmi: &str) -> Option<NodeIdx> {
-        self.index.get(csmi).copied().or_else(|| {
-            stable_csmi_key_of(csmi).and_then(|k| self.index.get(k.as_str()).copied())
-        })
+        self.index
+            .get(csmi)
+            .copied()
+            .or_else(|| stable_csmi_key_of(csmi).and_then(|k| self.index.get(k.as_str()).copied()))
     }
 
     pub fn reaches(&self, target_csmi: &str) -> bool {
@@ -365,9 +358,7 @@ impl MetabolicNetwork {
             .nodes
             .iter()
             .enumerate()
-            .filter(|(i, n)| {
-                *i != root && n.outbound.is_empty() && !self.targets.contains(i)
-            })
+            .filter(|(i, n)| *i != root && n.outbound.is_empty() && !self.targets.contains(i))
             .map(|(i, _)| i)
             .collect();
         let mut removed = 0usize;
@@ -381,10 +372,7 @@ impl MetabolicNetwork {
             self.remove_node(n);
             removed += 1;
             for (pi, parent) in self.nodes.iter().enumerate() {
-                if parent.outbound.is_empty()
-                    && pi != root
-                    && !self.targets.contains(&pi)
-                {
+                if parent.outbound.is_empty() && pi != root && !self.targets.contains(&pi) {
                     queue.push_back(pi);
                 }
             }
@@ -398,7 +386,9 @@ impl MetabolicNetwork {
         }
         for e in self.nodes[n].inbound.clone() {
             if e.parent_idx < self.nodes.len() {
-                self.nodes[e.parent_idx].outbound.retain(|o| o.child_idx != n);
+                self.nodes[e.parent_idx]
+                    .outbound
+                    .retain(|o| o.child_idx != n);
             }
         }
         for o in self.nodes[n].outbound.clone() {
@@ -447,7 +437,11 @@ impl MetabolicNetwork {
             .root_csmi
             .as_ref()
             .and_then(|r| self.index.get(r.as_str()).copied());
-        self.targets = self.targets.iter().filter_map(|&i| remap.get(&i).copied()).collect();
+        self.targets = self
+            .targets
+            .iter()
+            .filter_map(|&i| remap.get(&i).copied())
+            .collect();
     }
 
     /// Summarization query: collapse recorded routes between two nodes (v1).
@@ -643,7 +637,20 @@ mod tests {
         let mut net = MetabolicNetwork::new();
         let root = net.ensure_root("A");
         let _ = net.ensure_node("B");
-        net.record_hop("A", "B", hop_from_parts("r", "p", 0, vec![0], vec![], vec![], vec!["B".into()], false));
+        net.record_hop(
+            "A",
+            "B",
+            hop_from_parts(
+                "r",
+                "p",
+                0,
+                vec![0],
+                vec![],
+                vec![],
+                vec!["B".into()],
+                false,
+            ),
+        );
         net.mark_target(root);
         let removed = net.prune_to_targets();
         assert_eq!(removed, 1);
@@ -669,12 +676,8 @@ mod tests {
             vec![child.csmi().as_ref().to_string()],
             false,
         );
-        hop.plan = crate::canonical_plan::identity_plan_on_forest(
-            "Hydroxylation",
-            &root,
-            [0],
-            [0, 1],
-        );
+        hop.plan =
+            crate::canonical_plan::identity_plan_on_forest("Hydroxylation", &root, [0], [0, 1]);
         hop.site_atoms = vec![0];
         net.record_hop_idx(ri, ci, hop, Some(std::sync::Arc::new(child)));
         let plan = net.step_plan_between(ri, ci).unwrap();

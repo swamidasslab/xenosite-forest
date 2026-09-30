@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+use crate::export::EmissionView;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo};
 use crate::rules::{
@@ -16,10 +17,9 @@ use crate::rules::{
     product_graph_ruleset as product_graph_ruleset_rs, quinone_formation as quinone_formation_rs,
 };
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
-use crate::export::EmissionView;
 
 use super::common::py_err;
-use super::mol::{py_forest_mol_ref, PyForestMol};
+use super::mol::{PyForestMol, py_forest_mol_ref};
 
 fn wrap_emissions(emissions: Vec<Emission>) -> Vec<PyEmission> {
     emissions

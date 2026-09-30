@@ -147,7 +147,10 @@ mod tests {
             assert_eq!(emissions.len(), 1);
             let e0 = emissions[0].bind(py);
             assert_eq!(
-                e0.getattr("pattern_name").unwrap().extract::<String>().unwrap(),
+                e0.getattr("pattern_name")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
                 "h"
             );
             assert_eq!(

@@ -157,8 +157,7 @@ pub use random_path::{RandomPathOutcome, RandomPathStep, random_path, random_pat
 pub use rules::{
     LEAF_CTORS, LEAF_EXAMPLE_SUBSTRATES, ROOT_CATALOGS, all_rules, catalog_names, default_ruleset,
     epoxide_hydration, leaf_rule, phase_one, product_graph_ruleset, reduction, resolve_root,
-    seal_leaf,
-    stable_oxygenation, unstable_oxygenation,
+    seal_leaf, stable_oxygenation, unstable_oxygenation,
 };
 pub use ruleset::{
     BoxedFilters, FilterRules, FilterSites, RuleMember, RuleSet, accept_all_rules,

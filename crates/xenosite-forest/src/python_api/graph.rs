@@ -5,9 +5,7 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::metabolic_network::{
-    AttrMap, GraphValue, MetabolicNetwork, NODE_EXPANDED, NODE_SEALED,
-};
+use crate::metabolic_network::{AttrMap, GraphValue, MetabolicNetwork, NODE_EXPANDED, NODE_SEALED};
 use crate::product_graph::{
     ProductGraphConfig, product_graph as product_graph_rs, product_graph_into,
 };
@@ -85,21 +83,16 @@ impl PyGraphNode {
     #[getter]
     fn mol(&self) -> PyResult<PyForestMol> {
         let net = self.net.lock().map_err(|_| network_lock_err())?;
-        let node = net
-            .nodes
-            .get(self.idx)
-            .ok_or_else(|| PyValueError::new_err(format!("node index {} out of range", self.idx)))?;
+        let node = net.nodes.get(self.idx).ok_or_else(|| {
+            PyValueError::new_err(format!("node index {} out of range", self.idx))
+        })?;
         Ok(PyForestMol::wrap(node.mol.as_ref().copy_mol()))
     }
 
     #[getter]
     fn sealed(&self) -> PyResult<bool> {
         let net = self.net.lock().map_err(|_| network_lock_err())?;
-        Ok(net
-            .nodes
-            .get(self.idx)
-            .map(|n| n.sealed())
-            .unwrap_or(false))
+        Ok(net.nodes.get(self.idx).map(|n| n.sealed()).unwrap_or(false))
     }
 
     #[getter]
@@ -130,7 +123,8 @@ impl PyGraphNode {
         let node = net.nodes.get_mut(self.idx).ok_or_else(|| {
             PyValueError::new_err(format!("node index {} out of range", self.idx))
         })?;
-        node.attrs.insert(key.to_string(), py_to_graph_value(&value)?);
+        node.attrs
+            .insert(key.to_string(), py_to_graph_value(&value)?);
         Ok(())
     }
 
@@ -143,9 +137,8 @@ impl PyGraphNode {
     }
 
     fn __getitem__(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
-        self.get_attr(py, key)?.ok_or_else(|| {
-            pyo3::exceptions::PyKeyError::new_err(key.to_string())
-        })
+        self.get_attr(py, key)?
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.to_string()))
     }
 
     fn __setitem__(&self, key: &str, value: Bound<'_, PyAny>) -> PyResult<()> {
@@ -196,7 +189,12 @@ impl PyGraphNode {
     }
 
     fn __str__(&self) -> String {
-        match (self.csmi(), self.sealed(), self.expanded(), self.n_inbound()) {
+        match (
+            self.csmi(),
+            self.sealed(),
+            self.expanded(),
+            self.n_inbound(),
+        ) {
             (Ok(csmi), Ok(sealed), Ok(expanded), Ok(n_in)) => {
                 super::display::truncate_display(&format!(
                     "GraphNode[{}] {}\n  sealed={} expanded={} inbound={}",
@@ -322,9 +320,8 @@ impl PyGraphEdge {
     }
 
     fn __getitem__(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
-        self.get_attr(py, key)?.ok_or_else(|| {
-            pyo3::exceptions::PyKeyError::new_err(key.to_string())
-        })
+        self.get_attr(py, key)?
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.to_string()))
     }
 
     fn __setitem__(&self, key: &str, value: Bound<'_, PyAny>) -> PyResult<()> {
@@ -369,10 +366,9 @@ impl PyGraphEdge {
 
     fn __repr__(&self) -> String {
         match (self.rule(), self.site(), self.parent_index()) {
-            (Ok(rule), Ok(site), Ok(parent)) => format!(
-                "GraphEdge({rule:?}@{site}, {parent}→{})",
-                self.child_idx
-            ),
+            (Ok(rule), Ok(site), Ok(parent)) => {
+                format!("GraphEdge({rule:?}@{site}, {parent}→{})", self.child_idx)
+            }
             _ => format!("GraphEdge(child={}, slot={})", self.child_idx, self.slot),
         }
     }
@@ -416,19 +412,11 @@ impl PyMetabolicNetwork {
     }
 
     fn n_nodes(&self) -> PyResult<usize> {
-        Ok(self
-            .inner
-            .lock()
-            .map_err(|_| network_lock_err())?
-            .n_nodes())
+        Ok(self.inner.lock().map_err(|_| network_lock_err())?.n_nodes())
     }
 
     fn n_edges(&self) -> PyResult<usize> {
-        Ok(self
-            .inner
-            .lock()
-            .map_err(|_| network_lock_err())?
-            .n_edges())
+        Ok(self.inner.lock().map_err(|_| network_lock_err())?.n_edges())
     }
 
     fn reaches(&self, target_csmi: &str) -> PyResult<bool> {
@@ -466,10 +454,7 @@ impl PyMetabolicNetwork {
     }
 
     fn node_csmi(&self, idx: usize) -> PyResult<String> {
-        let net = self
-            .inner
-            .lock()
-            .map_err(|_| network_lock_err())?;
+        let net = self.inner.lock().map_err(|_| network_lock_err())?;
         net.nodes
             .get(idx)
             .map(|n| n.csmi.clone())
@@ -534,7 +519,9 @@ impl PyMetabolicNetwork {
     fn node(&self, idx: usize) -> PyResult<PyGraphNode> {
         let n = self.n_nodes()?;
         if idx >= n {
-            return Err(PyValueError::new_err(format!("node index {idx} out of range")));
+            return Err(PyValueError::new_err(format!(
+                "node index {idx} out of range"
+            )));
         }
         Ok(PyGraphNode {
             net: self.inner.clone(),
@@ -660,8 +647,7 @@ pub fn product_graph_bfs(
         drop(net_py);
         py.detach(|| {
             let mut guard = arc.lock().map_err(|_| NETWORK_LOCK_POISONED.to_string())?;
-            product_graph_into(&mut *guard, &start, &rules, &config)
-                .map_err(|e| e.to_string())?;
+            product_graph_into(&mut *guard, &start, &rules, &config).map_err(|e| e.to_string())?;
             mark_target_csmi(&mut guard, target.as_deref());
             Ok::<_, String>(())
         })
