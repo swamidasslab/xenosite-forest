@@ -11,8 +11,9 @@ on:
 # make test-rust-smoke (no ms1_apply_fuzz), full cargo --features python + JS.
 # Tags: release.yml runs the full multi-Python suite and blocks publish on fail.
 # Defaults (make test / make test-python) stay the whole suite locally.
-# If Protect main required `pytest (3.x)`, switch PR required checks to `lint`
-# (and optionally `rust`); main check name is plain `pytest`.
+# If Protect main required checks drift from this file, PRs become unmergeable.
+# PR gates should be contexts that still run on pull_request: ``lint`` + ``rust``.
+# (pytest / js are main-only; do not require those on PRs.)
 
 jobs:
   pytest:
