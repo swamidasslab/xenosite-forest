@@ -1800,8 +1800,8 @@ def refuse_dearomatized_ketene(parent: Mol, product: Mol) -> bool:
         for bond in atom.GetBonds():
             if bond.GetBondType() != BondType.DOUBLE:
                 continue
-            other = bond.GetOtherAtom(atom)
-            z = other.GetAtomicNum()
+            other_idx = bond.GetOtherAtomIdx(atom.GetIdx())
+            z = product.GetAtomWithIdx(other_idx).GetAtomicNum()
             if z == 6:
                 to_c = True
             elif z == 8:
