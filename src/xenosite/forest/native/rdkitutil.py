@@ -1457,9 +1457,19 @@ def _store_assignments(
         parents.append(parent)
         orders.append(bond_orders)
         indexes.append(index)
+        charge_mag = sum(abs(a.GetFormalCharge()) for a in parent.GetAtoms())
         for key, order in bond_orders.items():
             slot = (key, order)
-            if slot not in by_order:
+            prev = by_order.get(slot)
+            if prev is None:
+                by_order[slot] = index
+                continue
+            # Prefer closed-shell / lower |charge| (C10): charged amide
+            # writings (APAP CC([O-])=[NH+]…) lose to neutral CC(=O)NH.
+            prev_mag = sum(
+                abs(a.GetFormalCharge()) for a in parents[prev].GetAtoms()
+            )
+            if charge_mag < prev_mag:
                 by_order[slot] = index
     found = tuple(indexes)
     systems[atoms] = found
@@ -1768,6 +1778,37 @@ def split_fragments(raw: Mol) -> FragmentSplit:
         return FragmentSplit(pieces=(raw,))
     frags = list(GetMolFrags(raw, asMols=True, sanitizeFrags=False)) or [raw]
     return FragmentSplit(pieces=tuple(carry_forest(raw, frag) for frag in frags))
+
+
+def refuse_dearomatized_ketene(parent: Mol, product: Mol) -> bool:
+    """True when ``product`` should be dropped as aromatic→ketene junk.
+
+    O-leave cleavage (dehydration) on an aromatic acid must not emit a fully
+    aliphatic ketene (``O=C=C1CCCCC1``). Ring-open dealk ketenes that retain
+    an aromatic piece are kept. Mirrors Rust ``accept_o_leave_product``.
+    """
+
+    if not any(a.GetIsAromatic() for a in parent.GetAtoms()):
+        return False
+    if any(a.GetIsAromatic() for a in product.GetAtoms()):
+        return False
+    # Ketene carbon: C with double bonds to both C and O.
+    for atom in product.GetAtoms():
+        if atom.GetAtomicNum() != 6:
+            continue
+        to_c = to_o = False
+        for bond in atom.GetBonds():
+            if bond.GetBondType() != BondType.DOUBLE:
+                continue
+            other_idx = bond.GetOtherAtomIdx(atom.GetIdx())
+            z = product.GetAtomWithIdx(other_idx).GetAtomicNum()
+            if z == 6:
+                to_c = True
+            elif z == 8:
+                to_o = True
+        if to_c and to_o:
+            return True
+    return False
 
 
 def _without_atoms(mol: Mol, drop: set[int]) -> tuple[NoForestMol, dict[int, int]]:

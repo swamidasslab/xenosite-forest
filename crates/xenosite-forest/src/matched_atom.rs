@@ -382,10 +382,10 @@ pub fn edit_shells(parent: &ForestMol, child: &ForestMol) -> AlignedShells {
         let Some(tag) = parent.tag_of(i) else {
             continue;
         };
-        if let Some(j) = child.index_of(tag) {
-            if child.mol().atom(atom_idx(j)).element.atomic_number() > 1 {
-                alignment.insert(i, j);
-            }
+        if let Some(j) = child.index_of(tag)
+            && child.mol().atom(atom_idx(j)).element.atomic_number() > 1
+        {
+            alignment.insert(i, j);
         }
     }
     let parent_shells = molecule_shells(parent.mol());
@@ -588,15 +588,15 @@ pub fn site_shell_cost_leave(
         if leave.contains(&r) {
             continue;
         }
-        if let Some(t) = reactant_to_target.get(&r).copied() {
-            if let Some(tgt) = target.atoms.get(&t) {
-                let tgt = if opts.h_closer_no_n2 {
-                    neighborhood_h_closer_no_n2(tgt)
-                } else {
-                    tgt.clone()
-                };
-                target_envs.push(tgt);
-            }
+        if let Some(t) = reactant_to_target.get(&r).copied()
+            && let Some(tgt) = target.atoms.get(&t)
+        {
+            let tgt = if opts.h_closer_no_n2 {
+                neighborhood_h_closer_no_n2(tgt)
+            } else {
+                tgt.clone()
+            };
+            target_envs.push(tgt);
         }
     }
 
@@ -1086,7 +1086,7 @@ mod tests {
         let map = atom_diff(parent.mol(), &target).mapping;
         let set = dealkylation();
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = cands
@@ -1120,8 +1120,8 @@ mod tests {
             "perfect residual δ"
         );
 
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let actual = edit_site_bag(&parent, &child, &atoms);
         check_site_shell_bags(
             "anisole demethylation",
@@ -1146,7 +1146,7 @@ mod tests {
         let map = atom_diff(parent.mol(), &target).mapping;
         let set = dealkylation();
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = cands
@@ -1154,8 +1154,8 @@ mod tests {
             .find(|c| c.pattern.name.contains("methyl_alcohol"))
             .expect("methyl_alcohol");
         let atoms = site_atoms_cand(c);
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let cur = molecule_shells(parent.mol());
         let tgt = molecule_shells(&target);
@@ -1191,7 +1191,7 @@ mod tests {
         let map = atom_diff(parent.mol(), &target).mapping;
         let set = hydroxylation();
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = &cands[0];
@@ -1203,8 +1203,8 @@ mod tests {
         atoms.sort_unstable();
         atoms.dedup();
         let forecast = forecast_site_bag(&align, &atoms);
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let actual = edit_site_bag(&parent, &child, &atoms);
         check_site_shell_bags("ethane OH orbit", &forecast, &actual, SiteShellCheck::Error)
             .unwrap();
@@ -1224,15 +1224,17 @@ mod tests {
         let align = aligned_shells_mol(parent.mol(), &target);
         let map = atom_diff(parent.mol(), &target).mapping;
         let pairs = dehydrogenation()
-            .pair_candidates_leaf(parent.mol())
+            .candidates(&parent)
+            .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let pair = &pairs[0];
         let (a, b) = pair.end_atoms().expect("ends");
         // Joint site — each end’s shell sees the other when close.
         let atoms = [a, b];
         let forecast = forecast_site_bag(&align, &atoms);
-        let pieces = pair.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = pair.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let actual = edit_site_bag(&parent, &child, &atoms);
         check_site_shell_bags("HQ DH joint", &forecast, &actual, SiteShellCheck::Error).unwrap();
         let cur = molecule_shells(parent.mol());
@@ -1258,7 +1260,7 @@ mod tests {
         let tgt = molecule_shells(&target);
         let set = epoxidation();
         let c = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
@@ -1269,8 +1271,8 @@ mod tests {
             "aromatic MeOPhOH site must resolve dearomatizes"
         );
         let atoms = site_atoms_cand(&c);
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let opts = SiteShellCostOpts {
             dearomatic: c.pattern.effect.dearomatizes,
@@ -1338,7 +1340,7 @@ mod tests {
         let tgt = molecule_shells(&target);
         let set = dehydration();
         let c = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
@@ -1373,8 +1375,8 @@ mod tests {
             !leave_only.is_empty(),
             "expected OH leave beyond site {site:?}, got {atoms:?}"
         );
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
         let before = site_shell_cost_leave(
             &cur,
@@ -1401,21 +1403,24 @@ mod tests {
     }
 
     #[test]
+
     fn open_leave_does_not_flood_ring() {
+        // Open leave (leave_count None): methylene dealk on phenetole.
+        // Stay on bond ends — do not flood the aromatic ring.
         use crate::rules::dealkylation;
-        let parent = ForestMol::parse("COc1ccc2c(OC)cccc2c1").unwrap();
-        let target = parse_mol("O=C1C(=O)c2ccccc2C=C1").unwrap();
+        let parent = ForestMol::parse("CCOc1ccccc1").unwrap();
+        let target = parse_mol("Oc1ccccc1").unwrap();
         let ad = atom_diff(parent.mol(), &target);
         let cur = molecule_shells(parent.mol());
         let tgt = molecule_shells(&target);
         let set = dealkylation();
         let c = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap()
             .into_iter()
-            .find(|c| c.pattern.name == "cc_quaternary_alcohol" && c.site == 2)
-            .expect("cc_quaternary at site 2");
+            .find(|c| c.pattern.name == "methylene_alcohol")
+            .expect("methylene_alcohol on phenetole");
         assert!(c.pattern.effect.cleaves);
         assert!(c.pattern.effect.leave_count.is_none());
         let site: Vec<usize> = c
@@ -1432,10 +1437,13 @@ mod tests {
             2,
             "open leave must stay at bond ends, not flood the ring: {expanded:?}"
         );
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        assert!(
+            !pieces.is_empty(),
+            "methylene_alcohol must materialize on phenetole"
+        );
+        let child = parent.from_edit_product(pieces[0].clone());
         let edit = edit_shells(&parent, &child);
-        // Leave = heavies the edit actually drops from the alignment.
         let leave_only: Vec<usize> = expanded
             .iter()
             .copied()
@@ -1455,7 +1463,7 @@ mod tests {
             &tgt,
             &ad.mapping,
             &atoms,
-            &leave_only,
+            &[],
             SiteShellCostOpts::default(),
         );
         let after = site_shell_cost_leave(
@@ -1469,7 +1477,7 @@ mod tests {
         );
         assert!(
             before > after + 1e-12,
-            "open-leave cleavage should drop residual: {before:.3} → {after:.3} leave={leave_only:?}"
+            "cleaving leave should drop residual: {before:.3} → {after:.3} atoms={atoms:?} leave={leave_only:?}"
         );
     }
 

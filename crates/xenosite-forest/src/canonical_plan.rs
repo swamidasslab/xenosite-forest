@@ -16,6 +16,7 @@ use std::collections::{BTreeSet, HashSet, VecDeque};
 use std::ops::Deref;
 
 use crate::ForestError;
+use crate::ForestMol;
 use crate::mol::{Molecule, atom_idx, atom_usize, canon_of, canon_smiles, parse_mol};
 use crate::pattern::Effect;
 
@@ -149,14 +150,17 @@ impl Step {
                 self.rule
             )));
         };
+        // Plan replay works on chemistry graphs; stamp a ForestMol only so
+        // discovery/apply can run. Products are returned as Molecule pieces.
+        let forest = ForestMol::new(mol.clone());
         let mut products = Vec::new();
         let mut seen = HashSet::new();
-        for c in rule.candidates(mol) {
+        for c in rule.candidates(&forest) {
             let c = c?;
             if !wanted.contains(&c.site) {
                 continue;
             }
-            for p in c.materialize_mols(mol)? {
+            for p in c.materialize_mols()? {
                 let smi = canon_smiles(&p);
                 if seen.insert(smi) {
                     products.push(p);
@@ -165,11 +169,14 @@ impl Step {
         }
         let endpoints = rule.leaf_pair_endpoints();
         if !endpoints.is_empty() {
-            for pair in crate::pair_edit::pair_candidates(mol, &endpoints)? {
+            for pair in crate::pair_edit::compose_candidates_from_endpoints(
+                std::rc::Rc::new(forest.copy_mol()),
+                &endpoints,
+            )? {
                 if !pair_matches_wanted(mol, &pair, &wanted) {
                     continue;
                 }
-                for p in pair.materialize_mols(mol)? {
+                for p in pair.materialize_mols()? {
                     let smi = canon_smiles(&p);
                     if seen.insert(smi) {
                         products.push(p);
@@ -183,7 +190,7 @@ impl Step {
 
 fn pair_matches_wanted(
     mol: &Molecule,
-    pair: &crate::pair_edit::PairCandidate,
+    pair: &crate::candidate::DeferredSite,
     wanted: &HashSet<usize>,
 ) -> bool {
     let Some((a, b)) = pair.end_atoms() else {
@@ -999,10 +1006,10 @@ pub fn hydroxylation_then_dehydrogenation(
             "S" => Some(16),
             _ => None,
         };
-        if let Some(z) = atomic_num {
-            if let Some(hetero) = bonded(mol, atom, z) {
-                dh_refs.push(PlanAtom::index(hetero));
-            }
+        if let Some(z) = atomic_num
+            && let Some(hetero) = bonded(mol, atom, z)
+        {
+            dh_refs.push(PlanAtom::index(hetero));
         }
     }
     if dh_refs.is_empty() {
@@ -1472,7 +1479,7 @@ mod tests {
 
     #[test]
     fn replay_hydroxylation_ethane() {
-        let mol = parse_mol("CC").unwrap();
+        let mol = crate::as_forest_mol("CC").unwrap();
         let rule = crate::rules::hydroxylation();
         let em = rule
             .metabolize(&mol, |_, _, _| true, |_, _, _| true, true)

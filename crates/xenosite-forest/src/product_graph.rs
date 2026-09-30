@@ -14,11 +14,10 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::ForestError;
-use crate::atom_diff::{atom_diff, candidate_could_help_on, pair_could_help};
+use crate::atom_diff::atom_diff;
 use crate::forest_mol::ForestMol;
 use crate::labels::Tag;
 use crate::mol::{Molecule, canon_of};
-use crate::pair_edit::PairCandidate;
 use crate::ruleset::RuleSet;
 
 /// One parent→child hop recorded on the product graph.
@@ -153,14 +152,14 @@ pub fn product_layer(
 
     let mut out = Vec::new();
 
-    for c in ruleset.candidates(mol) {
+    for c in ruleset.candidates(parent) {
         let c = c?;
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !candidate_could_help_on(&c, diff, Some(mol), Some(t)) {
-                continue;
-            }
+        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol)
+            && !c.could_help_on(diff, Some(t))
+        {
+            continue;
         }
-        let pieces = c.materialize_mols(mol)?;
+        let pieces = c.materialize_mols()?;
         if pieces.is_empty() {
             continue;
         }
@@ -184,7 +183,7 @@ pub fn product_layer(
         let cleaves = c.pattern.effect.cleaves && pieces.len() >= 2;
 
         for piece in pieces {
-            let child = parent.adopt_product(piece);
+            let child = parent.from_edit_product(piece);
             let child_csmi = child.csmi().as_ref().to_string();
             let expand = child_worth_expanding(
                 parent_diff.as_ref(),
@@ -223,12 +222,15 @@ pub fn product_layer(
         }
     }
 
-    for pair in ruleset.pair_candidates(mol) {
+    for pair in ruleset
+        .candidates(parent)
+        .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+    {
         let pair = pair?;
-        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol) {
-            if !pair_could_help(&pair, diff, mol, t) {
-                continue;
-            }
+        if let (Some(diff), Some(t)) = (&parent_diff, &target_mol)
+            && !pair.could_help_on(diff, Some(t))
+        {
+            continue;
         }
         push_pair_children(
             parent,
@@ -249,7 +251,7 @@ pub fn product_layer(
 #[allow(clippy::too_many_arguments)] // target gate + parent walk; keep flat
 fn push_pair_children(
     parent: &ForestMol,
-    pair: &PairCandidate,
+    pair: &crate::candidate::DeferredSite,
     parent_diff: Option<&crate::atom_diff::AtomDiff>,
     parent_ha: usize,
     target_mol: Option<&Molecule>,
@@ -258,8 +260,7 @@ fn push_pair_children(
     have_target: bool,
     out: &mut Vec<ProductChild>,
 ) -> Result<(), ForestError> {
-    let mol = parent.mol();
-    let pieces = pair.materialize_mols(mol)?;
+    let pieces = pair.materialize_mols()?;
     if pieces.is_empty() {
         return Ok(());
     }
@@ -277,7 +278,7 @@ fn push_pair_children(
     let cleaves = pair.effect.cleaves && pieces.len() >= 2;
 
     for piece in pieces {
-        let child = parent.adopt_product(piece);
+        let child = parent.from_edit_product(piece);
         let child_csmi = child.csmi().as_ref().to_string();
         let expand = child_worth_expanding(
             parent_diff,

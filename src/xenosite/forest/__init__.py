@@ -2,7 +2,7 @@
 
 Recommended imports::
 
-    from xenosite.forest import find_path, random_path, PhaseOne, Epoxidation
+    from xenosite.forest import find_path, random_path, PhaseOne, Default, Epoxidation
 
 **New features** are implemented in ``crates/xenosite-forest`` and exposed
 here. Do **not** add them to :mod:`xenosite.forest.native` (frozen RDKit
@@ -29,13 +29,32 @@ __all__ = [
     "__version__",
     "available",
     "find_path",
+    "find_path_partial",
+    "normalize_tautomer",
+    "MetabolicNetwork",
     "random_path",
     "PhaseOne",
+    "Default",
     "Epoxidation",
     "QuinoneFormation",
     "EpoxideOpening",
     "NDealkylation",
+    "resolve",
+    "forest_xmet_sssom",
+    "expand_iri",
+    "to_curie",
+    "BoundPattern",
+    "RuleSet",
 ]
+
+
+def normalize_tautomer(smiles: str) -> tuple[Any, bool]:
+    """Chematic tautomer pick adopted as a tagged ForestMol.
+
+    Returns ``(ForestMol, changed)``.
+    """
+
+    return load().normalize_tautomer(smiles)
 
 
 def find_path(
@@ -50,12 +69,22 @@ def find_path(
     drop_skeleton_twins: bool = True,
     score: str = "log-neg-pc",
     timeout: float | None = None,
+    network: Any | None = None,
+    normalize_tautomer: bool = False,
+    invert_target_tautomer: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Run PhaseOne chematic ``find_path``; return ``(hits, counters)``.
+    """Run default-ruleset chematic ``find_path``; return ``(hits, counters)``.
 
-    Each hit is ``{"smiles": str, "steps": [{"rule": str, "site": list[str]}]}``.
+    Default ruleset is QuinoneFormation + EpoxideHydration + Tautomerization +
+    PhaseOne core. Each hit is
+    ``{"smiles": str, "steps": [{"rule": str, "site": list[str]}]}``.
     ``timeout`` is an optional wall-clock budget in seconds; counters include
-    ``timed_out``.
+    ``timed_out``. Pass ``network=`` a :class:`MetabolicNetwork` to record hops.
+    ``normalize_tautomer`` (default False) runs chematic zwitterion → remove
+    explicit H → canonical tautomer on reactant and target once before search.
+    Opt in when both ends should share a chematic preferred form. Emit stays
+    in that normalized target form unless ``invert_target_tautomer`` (not
+    implemented yet when the target changes).
 
     This is the Rust product door. New search features belong in the Rust crate
     and this wrapper — not in :mod:`xenosite.forest.native`.
@@ -72,7 +101,55 @@ def find_path(
         drop_skeleton_twins=drop_skeleton_twins,
         score=score,
         timeout=timeout,
+        network=network,
+        normalize_tautomer=normalize_tautomer,
+        invert_target_tautomer=invert_target_tautomer,
     )
+
+
+def find_path_partial(
+    reactant: str,
+    target: str,
+    *,
+    max_paths: int = 1,
+    max_nodes: int = 800,
+    use_atom_diff: bool = True,
+    lazy_closer: bool = False,
+    diversity: bool = False,
+    drop_skeleton_twins: bool = True,
+    score: str = "log-neg-pc",
+    timeout: float | None = None,
+    network: Any | None = None,
+    normalize_tautomer: bool = False,
+    invert_target_tautomer: bool = False,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Exact hits plus end-of-search closest reaches when the target is missed.
+
+    Returns ``(exact, partials, counters)``. Each partial includes ``residual``
+    with ``cost`` / ``categories``. Prefer exact when ``max_paths`` is filled.
+    """
+
+    return load().find_path_partial(
+        reactant,
+        target,
+        max_paths=max_paths,
+        max_nodes=max_nodes,
+        use_atom_diff=use_atom_diff,
+        lazy_closer=lazy_closer,
+        diversity=diversity,
+        drop_skeleton_twins=drop_skeleton_twins,
+        score=score,
+        timeout=timeout,
+        network=network,
+        normalize_tautomer=normalize_tautomer,
+        invert_target_tautomer=invert_target_tautomer,
+    )
+
+
+def MetabolicNetwork() -> Any:
+    """Explored reactant+metabolite graph recorded by search ``network=``."""
+
+    return load().MetabolicNetwork()
 
 
 def random_path(
@@ -120,10 +197,22 @@ def _ruleset(attr: str, label: str) -> Any:
     return factory()
 
 
+def leaf_rule(name: str) -> Any:
+    """Sealed leaf ``RuleSet`` by catalog name (Rust ``LEAF_CTORS``)."""
+
+    return load().leaf_rule(name)
+
+
 def PhaseOne() -> Any:
-    """Composed Phase I ruleset (Rust)."""
+    """Composed Phase I ruleset (Rust). No Tautomerization; see :func:`Default`."""
 
     return _ruleset("phase_one", "PhaseOne")
+
+
+def Default() -> Any:
+    """Default find_path ruleset: QF + EpoxideHydration + Tautomer + PhaseOne."""
+
+    return _ruleset("default_ruleset", "Default")
 
 
 def Epoxidation() -> Any:
@@ -169,3 +258,35 @@ def hydrolysis() -> Any:
 
 def default_ruleset() -> Any:
     return _ruleset("default_ruleset", "Default")
+
+
+def resolve(id: str) -> Any:
+    """Resolve an ``xf:`` CURIE / Forest IRI to a ``RuleSet`` or ``BoundPattern``."""
+
+    return load().resolve(id)
+
+
+def forest_xmet_sssom() -> str:
+    """Decompressed Forest↔XMET SSSOM TSV text (embedded at build time)."""
+
+    return load().forest_xmet_sssom()
+
+
+def expand_iri(curie_or_iri: str) -> str:
+    """Expand ``xf:`` / ``xmet:`` CURIEs to absolute IRIs."""
+
+    return load().expand_iri(curie_or_iri)
+
+
+def to_curie(iri: str) -> str:
+    """Compact an absolute ``xf`` / ``xmet`` IRI to a CURIE when possible."""
+
+    return load().to_curie(iri)
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy class exports from the Rust extension."""
+
+    if name in ("BoundPattern", "RuleSet"):
+        return getattr(load(), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

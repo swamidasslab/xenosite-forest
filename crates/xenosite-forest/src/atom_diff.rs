@@ -15,7 +15,6 @@ use chematic::smarts::{BondCompare, McsConfig, find_matches, find_mcs_with_confi
 
 use crate::candidate::Candidate;
 use crate::mol::{Molecule, atom_idx, atom_usize, ranks};
-use crate::pair_edit::PairCandidate;
 use crate::pattern::Effect;
 
 fn hydrogens(mol: &Molecule, idx: usize) -> i32 {
@@ -87,9 +86,19 @@ impl AtomDiff {
         self.field_cost()
     }
 
+    /// Structured “what / where still disagrees” for partial search yields.
+    pub fn residual(
+        &self,
+        reactant: Option<&Molecule>,
+        target: Option<&Molecule>,
+    ) -> AtomDiffResidual {
+        residual_from_diff(self, reactant, target)
+    }
+
     fn field_cost(&self) -> usize {
-        // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H is not a cost
-        // term: `formula_l1` counts it like any element; H at atoms is via
+        // MCS map gaps + per-atom |Δaromatic| ∈ {0,1} (×1). H and formal
+        // charge are not field-cost terms: `formula_l1` counts them like any
+        // formula key (``H``, ``"+"``, ``"-"``); per-atom H is via
         // [`Self::atom_h_delta`] (no cache).
         //
         // `n_extra` (unmapped target heavies) weighs more than cleaved /
@@ -187,12 +196,11 @@ pub fn atom_needs_carbonyl(
     let rank = ranks(reactant);
     let want = rank.get(atom).copied().unwrap_or(usize::MAX);
     for (i, &ri) in rank.iter().enumerate() {
-        if ri == want {
-            if let Some(order) = unmapped_oxygen_order(target, mapping, i) {
-                if order >= 1.5 {
-                    return true;
-                }
-            }
+        if ri == want
+            && let Some(order) = unmapped_oxygen_order(target, mapping, i)
+            && order >= 1.5
+        {
+            return true;
         }
     }
     false
@@ -398,7 +406,7 @@ fn mcs_seed_mappings(reactant: &Molecule, target: &Molecule) -> Vec<BTreeMap<usi
         }
     }
     let mut ranked: Vec<_> = best.into_values().collect();
-    ranked.sort_by(|a, b| b.0.cmp(&a.0));
+    ranked.sort_by_key(|a| std::cmp::Reverse(a.0));
     ranked.into_iter().map(|(_, m)| m).collect()
 }
 
@@ -987,10 +995,8 @@ pub fn try_atom_diff_for_child_tracked(
     };
     let lifted = lift_mappings(parent, child, &parent_maps)?;
     let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
-    if used_mcs {
-        if let Some(c) = mcs_rematch.as_mut() {
-            **c += 1;
-        }
+    if used_mcs && let Some(c) = mcs_rematch.as_mut() {
+        **c += 1;
     }
     Some(diff)
 }
@@ -1074,10 +1080,8 @@ pub fn try_lift_cleaved_child_tracked(
     match lift_mappings(parent, child, &parent_maps) {
         Some(lifted) => {
             let (diff, used_mcs) = best_diff_from_lifted_maps(child, target, lifted)?;
-            if used_mcs {
-                if let Some(c) = mcs_rematch.as_mut() {
-                    **c += 1;
-                }
+            if used_mcs && let Some(c) = mcs_rematch.as_mut() {
+                **c += 1;
             }
             Some(diff)
         }
@@ -1249,10 +1253,12 @@ pub fn pattern_could_help_on(
             Some(_) => {}
         }
     }
-    if effect_adds_oxygen(effect) && !can_cleave && !effect.dearomatizes {
-        if let Some(m) = mol {
-            let _ = m;
-        }
+    if effect_adds_oxygen(effect)
+        && !can_cleave
+        && !effect.dearomatizes
+        && let Some(m) = mol
+    {
+        let _ = m;
     }
     if can_cleave && !diff.has_cleavage() {
         return false;
@@ -1272,7 +1278,10 @@ pub fn pattern_could_help_on(
             (Some(_), Some(_)) => {}
         }
     }
-    let adds_h_only = !can_cleave && effect_adds_h(effect) && effect.removes.is_none();
+    let adds_h_only = !can_cleave
+        && effect_adds_h(effect)
+        && !effect_adds_oxygen(effect)
+        && effect.removes.is_none();
     if adds_h_only {
         match (mol, target) {
             (Some(m), Some(t)) if !any_h_gain(m, t, diff) => return false,
@@ -1308,17 +1317,9 @@ pub fn pattern_could_help_mol(
     true
 }
 
+#[allow(dead_code)] // retained for MS1 / site-bag helpers
 fn site_atoms(candidate: &Candidate) -> Vec<usize> {
-    let mut atoms: Vec<usize> = candidate
-        .pattern
-        .site_map
-        .iter()
-        .filter_map(|m| candidate.mapped.get(m).copied())
-        .collect();
-    if atoms.is_empty() {
-        atoms.push(candidate.site);
-    }
-    atoms
+    candidate.site_atoms()
 }
 
 fn leaving_heavy_counts(mol: &Molecule, atoms: &[usize]) -> Option<(usize, usize)> {
@@ -1439,11 +1440,6 @@ pub fn dh_product_ends_match(
     false
 }
 
-/// Site-level gate (Python `_site_could_help`) for a deferred candidate.
-pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
-    candidate_could_help_on(candidate, diff, None, None)
-}
-
 fn scope_could_help(
     effect: &Effect,
     atoms: &[usize],
@@ -1454,15 +1450,38 @@ fn scope_could_help(
 ) -> bool {
     let mut scope: HashSet<usize> = atoms.iter().copied().collect();
     scope.extend(path_ends.iter().copied());
-    // Carbonyl / imine reduction sites the heteroatom; H change is on the
-    // partner heavy atom. Include double-bond neighbors so adds-H sees whether
-    // applying helps (undo would not).
-    if let Some(m) = mol {
-        extend_h_edit_partners(m, &mut scope);
-    }
     if effect.dearomatizes && !scope.iter().any(|a| diff.loses_aromaticity.contains(a)) {
         return false;
     }
+
+    // Formula-neutral + ResonancePair path (tautomer-shaped): need both an
+    // H-gain and an H-loss under this MCS view — net redistribution toward the
+    // target. Matched ends (all ΔH==0) do not help.
+    let formula_neutral = !effect_adds_h(effect)
+        && !effect_removes_h(effect)
+        && !effect_adds_oxygen(effect)
+        && !effect.cleaves;
+    if formula_neutral && !path_ends.is_empty() {
+        return match (mol, target) {
+            (Some(m), Some(t)) => {
+                let mut any_gain = false;
+                let mut any_loss = false;
+                for &a in &scope {
+                    let d = atom_h_delta(m, t, &diff.mapping, a);
+                    if d > 0 {
+                        any_gain = true;
+                    }
+                    if d < 0 {
+                        any_loss = true;
+                    }
+                }
+                any_gain && any_loss
+            }
+            // No live target: pattern-level already passed; defer.
+            _ => true,
+        };
+    }
+
     if effect_removes_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
         let loses_ar = scope.iter().any(|a| diff.loses_aromaticity.contains(a));
         let loses_h = match (mol, target) {
@@ -1475,17 +1494,39 @@ fn scope_could_help(
             return false;
         }
     }
-    // Adding H helps only where the target needs more H. Then undoing (remove H)
-    // would move away from the target — so it would not help.
+    // Adding H: require ΔH>0 on primary site atoms (atoms / path ends) first.
+    // Partner-extend double-bond neighbors only for heteroatom-sited edits
+    // (OxygenReduction carbonyl/imine O/N). Plain C=C hydrogenation must show
+    // H-need on those carbons.
     if effect_adds_h(effect) && !effect_adds_oxygen(effect) && !effect.cleaves {
-        let gains = match (mol, target) {
+        let primary_gains = match (mol, target) {
             (Some(m), Some(t)) => scope
                 .iter()
                 .any(|&a| atom_h_delta(m, t, &diff.mapping, a) > 0),
             _ => true, // no live pair: defer to pattern-level gate
         };
-        if !gains {
-            return false;
+        if !primary_gains {
+            let hetero_sited = mol.is_some_and(|m| {
+                scope.iter().any(|&a| {
+                    let z = m.atom(atom_idx(a)).element.atomic_number();
+                    z == 7 || z == 8
+                })
+            });
+            if !hetero_sited {
+                return false;
+            }
+            if let Some(m) = mol {
+                extend_h_edit_partners(m, &mut scope);
+            }
+            let partner_gains = match (mol, target) {
+                (Some(m), Some(t)) => scope
+                    .iter()
+                    .any(|&a| atom_h_delta(m, t, &diff.mapping, a) > 0),
+                _ => true,
+            };
+            if !partner_gains {
+                return false;
+            }
         }
     }
     true
@@ -1511,51 +1552,78 @@ fn extend_h_edit_partners(mol: &Molecule, scope: &mut HashSet<usize>) {
     }
 }
 
-/// Full site gate with live mol (leave_count / methide partner).
-///
-/// Non-cleavage: the whole site must help under **one** MCS placement (same
-/// rule for atom / bond / pair). Merged top-rank unions across placements are
-/// optimistic when the site has more than one atom.
-pub fn candidate_could_help_on(
-    candidate: &Candidate,
-    diff: &AtomDiff,
-    mol: Option<&Molecule>,
-    target: Option<&Molecule>,
-) -> bool {
-    let effect = &candidate.pattern.effect;
-    let ok = match (mol, target) {
-        (Some(m), Some(t)) => pattern_could_help_mol(effect, diff, m, t),
-        _ => pattern_could_help_on(effect, diff, mol, target),
-    };
-    if !ok {
-        return false;
-    }
-    let atoms = site_atoms(candidate);
-    if effect.cleaves {
-        if !diff.site_is_cleavage(&atoms) {
-            return false;
-        }
-        if let (Some(n), Some(m)) = (effect.leave_count, mol) {
-            if let Some((a, b)) = leaving_heavy_counts(m, &atoms) {
-                if a.min(b) != n as usize {
-                    return false;
-                }
-            }
-        }
-        return true;
+/// Site-level help gates on a deferred candidate (uses [`Candidate::mol`]).
+impl Candidate {
+    /// Pattern-level site gate (no live target).
+    pub fn could_help(&self, diff: &AtomDiff) -> bool {
+        self.could_help_on(diff, None)
     }
 
-    match (mol, target) {
-        (Some(m), Some(t)) => {
-            for mapping in diff.mappings_slice() {
-                let view = diff_for(m, t, mapping);
-                if candidate_could_help_on_view(candidate, &atoms, &view, Some(m), Some(t)) {
-                    return true;
-                }
-            }
-            false
+    /// Full site gate toward `target` (leave_count / methide / per-placement).
+    ///
+    /// Non-cleavage: the whole site must help under **one** MCS placement (same
+    /// rule for atom / bond / pair). Pair ends also check per-end oxygen /
+    /// ``partner == "C"`` on each endpoint effect.
+    pub fn could_help_on(&self, diff: &AtomDiff, target: Option<&Molecule>) -> bool {
+        let mol = self.mol();
+        let effect = &self.effect;
+        let ok = match target {
+            Some(t) => pattern_could_help_mol(effect, diff, mol, t),
+            None => pattern_could_help_on(effect, diff, Some(mol), None),
+        };
+        if !ok {
+            return false;
         }
-        _ => candidate_could_help_on_view(candidate, &atoms, diff, mol, target),
+        let atoms = self.site_atoms();
+        if effect.cleaves {
+            if !diff.site_is_cleavage(&atoms) {
+                return false;
+            }
+            if let Some(n) = effect.leave_count
+                && let Some((a, b)) = leaving_heavy_counts(mol, &atoms)
+                && a.min(b) != n as usize
+            {
+                return false;
+            }
+            return true;
+        }
+
+        match target {
+            Some(t) => {
+                for mapping in diff.mappings_slice() {
+                    let view = diff_for(mol, t, mapping);
+                    if self.is_pair() {
+                        let Some((end_a, end_b)) = self.end_atoms() else {
+                            return false;
+                        };
+                        if !pair_ends_match_view(self, end_a, end_b, &view, mol, t) {
+                            continue;
+                        }
+                        let (p0, p1) = self.path_ends();
+                        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol), Some(t)) {
+                            return true;
+                        }
+                    } else if candidate_could_help_on_view(self, &atoms, &view, Some(mol), Some(t))
+                    {
+                        return true;
+                    }
+                }
+                false
+            }
+            None => candidate_could_help_on_view(self, &atoms, diff, Some(mol), None),
+        }
+    }
+
+    /// H-progress under the best MCS placement (pairs include path ends).
+    pub fn site_h_progress_on(&self, diff: &AtomDiff, target: &Molecule) -> i32 {
+        let atoms = self.site_atoms();
+        let path_ends: Vec<usize> = if self.is_pair() {
+            let (p0, p1) = self.path_ends();
+            vec![p0, p1]
+        } else {
+            Vec::new()
+        };
+        site_h_progress_best_placement(&self.effect, &atoms, &path_ends, diff, self.mol(), target)
     }
 }
 
@@ -1566,7 +1634,7 @@ fn candidate_could_help_on_view(
     mol: Option<&Molecule>,
     target: Option<&Molecule>,
 ) -> bool {
-    let effect = &candidate.pattern.effect;
+    let effect = &candidate.effect;
     if effect_adds_oxygen(effect) && !effect.dearomatizes {
         let (Some(m), Some(t)) = (mol, target) else {
             return false;
@@ -1587,70 +1655,43 @@ fn candidate_could_help_on_view(
     }
 
     // Single-site methide: alkyl partner needs an exocyclic C–C bond raise.
-    // Pair ends use [`pair_could_help`] (per-end partner), not this merge.
-    if effect.partner.as_deref() == Some("C") {
-        if let Some(m) = mol {
-            if !atoms.iter().any(|&a| alkyl_bond_raises(m, a, view)) {
-                return false;
-            }
-        }
+    if effect.partner.as_deref() == Some("C")
+        && let Some(m) = mol
+        && !atoms.iter().any(|&a| alkyl_bond_raises(m, a, view))
+    {
+        return false;
     }
 
     scope_could_help(effect, atoms, &[], view, mol, target)
 }
 
-/// Pair-site gate (Python `_site_could_help` when ``"ends"`` is on the info).
-///
-/// Same one-placement rule as [`candidate_could_help_on`]. Per-end oxygen /
-/// ``partner == "C"`` read each end's effect (pair data), not the merged span.
-pub fn pair_could_help(
-    pair: &PairCandidate,
+/// Thin alias of [`Candidate::could_help`].
+pub fn candidate_could_help(candidate: &Candidate, diff: &AtomDiff) -> bool {
+    candidate.could_help(diff)
+}
+
+/// Thin alias of [`Candidate::could_help_on`] (ignores redundant `mol`).
+pub fn candidate_could_help_on(
+    candidate: &Candidate,
     diff: &AtomDiff,
-    mol: &Molecule,
+    _mol: Option<&Molecule>,
+    target: Option<&Molecule>,
+) -> bool {
+    candidate.could_help_on(diff, target)
+}
+
+/// Thin alias of [`Candidate::could_help_on`].
+pub fn pair_could_help(
+    pair: &crate::candidate::DeferredSite,
+    diff: &AtomDiff,
+    _mol: &Molecule,
     target: &Molecule,
 ) -> bool {
-    let effect = &pair.effect;
-    if !pattern_could_help_mol(effect, diff, mol, target) {
-        return false;
-    }
-    let Some((end_a, end_b)) = pair.end_atoms() else {
-        return false;
-    };
-    let atoms = [end_a, end_b];
-    if effect.cleaves {
-        if !diff.site_is_cleavage(&atoms) {
-            return false;
-        }
-        if let Some(n) = effect.leave_count {
-            if let Some((a, b)) = leaving_heavy_counts(mol, &atoms) {
-                if a.min(b) != n as usize {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    let (p0, p1) = pair.path_ends();
-    let mappings = if diff.mappings.is_empty() {
-        std::slice::from_ref(&diff.mapping)
-    } else {
-        diff.mappings.as_slice()
-    };
-    for mapping in mappings {
-        let view = diff_for(mol, target, mapping);
-        if !pair_ends_match_view(pair, end_a, end_b, &view, mol, target) {
-            continue;
-        }
-        if scope_could_help(effect, &atoms, &[p0, p1], &view, Some(mol), Some(target)) {
-            return true;
-        }
-    }
-    false
+    pair.could_help_on(diff, Some(target))
 }
 
 fn pair_ends_match_view(
-    pair: &PairCandidate,
+    pair: &crate::candidate::DeferredSite,
     end_a: usize,
     end_b: usize,
     view: &AtomDiff,
@@ -1676,15 +1717,14 @@ fn pair_ends_match_view(
 /// reduction partners are included when `mol` is given so OxygenReduction's
 /// O-only site still scores the carbon that gains H.
 pub fn candidate_order_key(candidate: &Candidate, diff: &AtomDiff) -> (u8, u8, u8, String) {
-    let (a, b, c, _progress, name) = candidate_order_key_on(candidate, diff, None, None);
+    let (a, b, c, _progress, name) = candidate_order_key_on(candidate, diff, None);
     (a, b, c, name)
 }
 
-/// Same as [`candidate_order_key`], with live mol / target for H-progress and O preference.
+/// Same as [`candidate_order_key`], with live target for H-progress and O preference.
 pub fn candidate_order_key_on(
     candidate: &Candidate,
     diff: &AtomDiff,
-    mol: Option<&Molecule>,
     target: Option<&Molecule>,
 ) -> (u8, u8, u8, i32, String) {
     let effect = &candidate.pattern.effect;
@@ -1697,8 +1737,11 @@ pub fn candidate_order_key_on(
     let primary = if want_cleave { cleave } else { 0 };
     let secondary = if want_dear { dear } else { 0 };
     let tertiary = if want_oxy { oxy } else { 0 };
-    let atoms = site_atoms(candidate);
-    let progress = site_h_progress(effect, &atoms, &[], diff, mol, target);
+    let atoms = candidate.site_atoms();
+    let progress = match target {
+        Some(t) => candidate.site_h_progress_on(diff, t),
+        None => site_h_progress(effect, &atoms, &[], diff, Some(candidate.mol()), None),
+    };
     // Negate so ascending sort prefers higher progress (apply helps more).
     (
         primary,
@@ -1772,57 +1815,161 @@ pub fn site_h_progress_best_placement(
         .unwrap_or(0)
 }
 
-/// Pair emit: H-progress for both ends under the best consistent placement.
-pub fn pair_site_h_progress(
-    pair: &PairCandidate,
+/// Thin alias of [`Candidate::site_h_progress_on`].
+pub fn candidate_site_h_progress(
+    candidate: &Candidate,
     diff: &AtomDiff,
-    mol: &Molecule,
+    _mol: &Molecule,
     target: &Molecule,
 ) -> i32 {
-    let atoms = pair
-        .end_atoms()
-        .map(|(a, b)| [a, b])
-        .unwrap_or([pair.site, pair.site]);
-    let (p0, p1) = pair.path_ends();
-    site_h_progress_best_placement(&pair.effect, &atoms, &[p0, p1], diff, mol, target)
+    candidate.site_h_progress_on(diff, target)
+}
+
+/// Thin alias of [`Candidate::site_h_progress_on`].
+pub fn pair_site_h_progress(
+    pair: &crate::candidate::DeferredSite,
+    diff: &AtomDiff,
+    _mol: &Molecule,
+    target: &Molecule,
+) -> i32 {
+    pair.site_h_progress_on(diff, target)
 }
 
 /// Keep predicate for [`crate::find_path::find_path_with`] from an [`AtomDiff`].
 pub fn keep_against_diff(diff: &AtomDiff) -> impl Fn(&Candidate) -> bool + '_ {
-    move |c: &Candidate| candidate_could_help(c, diff)
+    move |c: &Candidate| c.could_help(diff)
+}
+
+/// Structured leftover disagreement for partial search / [`crate::MetabolicNetwork::missed`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AtomDiffResidual {
+    pub cost: usize,
+    pub cleaved: BTreeSet<usize>,
+    pub cleavage_bonds: BTreeSet<(usize, usize)>,
+    pub loses_aromaticity: BTreeSet<usize>,
+    pub aromatic_delta: BTreeSet<usize>,
+    pub bond_raises: BTreeSet<(usize, usize)>,
+    pub n_extra: usize,
+    pub reactant_heavy: usize,
+    pub target_heavy: usize,
+    /// Soft category hints for callers (conjugation-sized add, needs oxygen, …).
+    pub categories: Vec<String>,
+    /// True when a full candidate scan found no helper for this residual.
+    pub unresolvable: bool,
+}
+
+impl AtomDiffResidual {
+    /// Stable class key for basin sealing (cost + structural bags).
+    pub fn class_key(&self) -> String {
+        format!(
+            "c{}_x{}_cl{}_ar{}_br{}",
+            self.cost,
+            self.n_extra,
+            self.cleavage_bonds.len(),
+            self.aromatic_delta.len(),
+            self.bond_raises.len()
+        )
+    }
+}
+
+/// Build a residual summary from an [`AtomDiff`].
+pub fn residual_from_diff(
+    diff: &AtomDiff,
+    reactant: Option<&Molecule>,
+    target: Option<&Molecule>,
+) -> AtomDiffResidual {
+    let mut categories = Vec::new();
+    if diff.n_extra > 0 {
+        categories.push("extra_target_heavies".into());
+    }
+    if diff.has_cleavage() {
+        categories.push("cleavage".into());
+    }
+    if !diff.loses_aromaticity.is_empty() {
+        categories.push("dearomatize".into());
+    }
+    if let (Some(r), Some(t)) = (reactant, target) {
+        if any_needs_oxygen(t, diff) {
+            categories.push("needs_oxygen".into());
+        }
+        if formula_oxygen(t) > formula_oxygen(r) + 2 {
+            categories.push("conjugation_sized_o".into());
+        }
+        let rf = crate::forest::molecule_formula(r);
+        let tf = crate::forest::molecule_formula(t);
+        if crate::forest::formula_heavy_l1(&rf, &tf) >= 6 {
+            categories.push("large_formula_gap".into());
+        }
+    }
+    AtomDiffResidual {
+        cost: diff.cost(),
+        cleaved: diff.cleaved.clone(),
+        cleavage_bonds: diff.cleavage_bonds.clone(),
+        loses_aromaticity: diff.loses_aromaticity.clone(),
+        aromatic_delta: diff.aromatic_delta.clone(),
+        bond_raises: diff.bond_raises.clone(),
+        n_extra: diff.n_extra,
+        reactant_heavy: diff.reactant_heavy,
+        target_heavy: diff.target_heavy,
+        categories,
+        unresolvable: false,
+    }
+}
+
+/// True when some deferred site on `mol` can help `diff` toward `target`.
+///
+/// Scans the **full** candidate list (discovery only — no materialize).
+pub fn residual_resolvable(
+    mol: &crate::ForestMol,
+    target: &Molecule,
+    diff: &AtomDiff,
+    ruleset: &crate::ruleset::RuleSet,
+) -> Result<bool, crate::ForestError> {
+    if diff.cost() == 0 {
+        return Ok(true);
+    }
+    let parent = mol;
+    for site in ruleset.candidates(parent) {
+        let site = site?;
+        if site.could_help_on(diff, Some(target)) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::as_forest_mol;
+
     use crate::mol::{canon_of, parse_mol};
     use crate::rules::{dealkylation, hydroxylation};
 
     #[test]
     fn ethane_to_ethanol_needs_oxygen_on_carbon() {
-        let reactant = parse_mol("CC").unwrap();
-        let target = parse_mol("CCO").unwrap();
-        let diff = atom_diff(&reactant, &target);
-        assert!(any_needs_oxygen(&target, &diff), "{diff:?}");
+        let reactant = as_forest_mol("CC").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        assert!(any_needs_oxygen(target.mol(), &diff), "{diff:?}");
         assert!(!diff.has_cleavage());
         let set = hydroxylation();
         let cands = set
             .candidates(&reactant)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        assert!(cands.iter().any(|c| candidate_could_help_on(
-            c,
-            &diff,
-            Some(&reactant),
-            Some(&target)
-        )));
+        assert!(
+            cands
+                .iter()
+                .any(|c| c.could_help_on(&diff, Some(target.mol())))
+        );
     }
 
     #[test]
     fn anisole_to_phenol_is_cleavage() {
-        let reactant = parse_mol("COc1ccccc1").unwrap();
-        let target = parse_mol("Oc1ccccc1").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("COc1ccccc1").unwrap();
+        let target = as_forest_mol("Oc1ccccc1").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         assert!(diff.has_cleavage() || diff.target_smaller(), "{diff:?}");
         let set = dealkylation();
         let cands = set
@@ -1830,24 +1977,25 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert!(
-            cands.iter().any(|c| c.pattern.effect.cleaves
-                && candidate_could_help_on(c, &diff, Some(&reactant), Some(&target))),
+            cands
+                .iter()
+                .any(|c| c.pattern.effect.cleaves && c.could_help_on(&diff, Some(target.mol()))),
             "dealkylation should survive filter; diff={diff:?}"
         );
     }
 
     #[test]
     fn meoph_oh_mcs_covers_ring() {
-        let reactant = parse_mol("COc1ccc(O)cc1").unwrap();
-        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("COc1ccc(O)cc1").unwrap();
+        let target = as_forest_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         assert!(
             diff.mapping.len() >= 6,
             "BondCompare::Any MCS should cover the ring; got {}",
             diff.mapping.len()
         );
         assert!(
-            !diff.loses_aromaticity.is_empty() || any_needs_oxygen(&target, &diff),
+            !diff.loses_aromaticity.is_empty() || any_needs_oxygen(target.mol(), &diff),
             "{diff:?}"
         );
     }
@@ -1857,21 +2005,17 @@ mod tests {
         // C=C→OCCO: n_extra 2→1 and +1 cleavage_bond. Equal ×3 was lateral;
         // EXTRA=4 makes placing the O win: 8 → 7. Needs mcs_extend so the
         // epoxide O lands on a target hydroxyl.
-        use crate::forest_mol::ForestMol;
+
         use crate::rules::epoxidation;
-        let parent = ForestMol::parse("C=C").unwrap();
-        let target = parse_mol("OCCO").unwrap();
-        let before = atom_diff_mcs_extend(parent.mol(), &target);
+        let parent = as_forest_mol("C=C").unwrap();
+        let target = as_forest_mol("OCCO").unwrap();
+        let before = atom_diff_mcs_extend(parent.mol(), target.mol());
         assert_eq!(before.n_extra, 2);
         assert!(before.cleavage_bonds.is_empty());
         assert_eq!(before.cost(), 8, "2 n_extra ×4 = 8");
-        let c = epoxidation()
-            .candidates(parent.mol())
-            .next()
-            .unwrap()
-            .unwrap();
-        let epox = parent.adopt_product(c.materialize_mols(parent.mol()).unwrap()[0].clone());
-        let after = atom_diff_mcs_extend(epox.mol(), &target);
+        let c = epoxidation().candidates(&parent).next().unwrap().unwrap();
+        let epox = parent.from_edit_product(c.materialize_mols().unwrap()[0].clone());
+        let after = atom_diff_mcs_extend(epox.mol(), target.mol());
         assert_eq!(after.n_extra, 1, "{after:?}");
         assert_eq!(after.cleavage_bonds.len(), 1, "{after:?}");
         assert_eq!(after.cost(), 7, "1 n_extra ×4 + 1 bond ×3 = 7");
@@ -1888,18 +2032,14 @@ mod tests {
         // Bare expand atom_diff does not place the epoxide O on a target
         // hydroxyl; mcs_extend views do (cost drop is lift/gold territory,
         // not find_path expand). See epoxide_toward_diol_drops_with_heavier_n_extra.
-        use crate::forest_mol::ForestMol;
+
         use crate::rules::epoxidation;
-        let parent = ForestMol::parse("C=C").unwrap();
-        let target = parse_mol("OCCO").unwrap();
-        let c = epoxidation()
-            .candidates(parent.mol())
-            .next()
-            .unwrap()
-            .unwrap();
-        let epox = parent.adopt_product(c.materialize_mols(parent.mol()).unwrap()[0].clone());
-        let bare = atom_diff(epox.mol(), &target);
-        let extended = atom_diff_mcs_extend(epox.mol(), &target);
+        let parent = as_forest_mol("C=C").unwrap();
+        let target = as_forest_mol("OCCO").unwrap();
+        let c = epoxidation().candidates(&parent).next().unwrap().unwrap();
+        let epox = parent.from_edit_product(c.materialize_mols().unwrap()[0].clone());
+        let bare = atom_diff(epox.mol(), target.mol());
+        let extended = atom_diff_mcs_extend(epox.mol(), target.mol());
         assert!(
             extended.n_extra < bare.n_extra || extended.cost() < bare.cost(),
             "extend should improve ethene-epoxide vs glycol: bare={bare:?} ext={extended:?}"
@@ -1964,17 +2104,18 @@ mod tests {
     #[test]
     fn meoph_oh_pair_end_filter_matches_python() {
         use crate::rules::{phase_one, quinone_formation};
-        let reactant = parse_mol("COc1ccc(O)cc1").unwrap();
-        let target = parse_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("COc1ccc(O)cc1").unwrap();
+        let target = as_forest_mol("O=C1C=C(O)C(=O)C(O)=C1").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         let qf = quinone_formation();
         let pairs = qf
-            .pair_candidates(&reactant)
+            .candidates(&reactant)
+            .filter(|c| matches!(c, Ok(s) if s.is_pair()))
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let kept: Vec<_> = pairs
             .iter()
-            .filter(|p| pair_could_help(p, &diff, &reactant, &target))
+            .filter(|p| p.could_help_on(&diff, Some(target.mol())))
             .collect();
         // Python QuinoneFormation filter_sites keeps 3 pair sites here.
         assert_eq!(
@@ -1995,9 +2136,9 @@ mod tests {
 
     #[test]
     fn dimethoxy_keeps_dealkylation() {
-        let reactant = parse_mol("COc1ccc(CCN)cc1OC").unwrap();
-        let target = parse_mol("NCCc1ccc(O)c(O)c1").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("COc1ccc(CCN)cc1OC").unwrap();
+        let target = as_forest_mol("NCCc1ccc(O)c(O)c1").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         assert!(diff.target_smaller());
         assert!(diff.has_cleavage(), "{diff:?}");
         let set = dealkylation();
@@ -2007,7 +2148,7 @@ mod tests {
             .unwrap();
         let kept: Vec<_> = cands
             .iter()
-            .filter(|c| candidate_could_help_on(c, &diff, Some(&reactant), Some(&target)))
+            .filter(|c| c.could_help_on(&diff, Some(target.mol())))
             .collect();
         assert!(
             !kept.is_empty(),
@@ -2019,7 +2160,8 @@ mod tests {
     #[test]
     fn h_via_methods_not_stored_cost_or_field() {
         // H is never a stored AtomDiff field and never a field_cost term.
-        // Per-atom H is recomputed; global H rides formula_l1 (like any element).
+        // Per-atom H is recomputed; global H and formal-charge units ride
+        // formula_l1 (like any formula key).
         use crate::forest::{formula_l1, molecule_formula};
 
         // ethane → ethene: same MCS skeleton → atom cost 0; H 6→4 → formula_l1=2;
@@ -2075,6 +2217,23 @@ mod tests {
             -1,
             "[NH4+] has 4 H, N has 3 → delta −1 (not −5 from double-count)"
         );
+
+        // Neutral → cation: charge units ride formula_l1; atom field_cost stays
+        // map/aromatic only (no stored charge field on AtomDiff).
+        use crate::forest::{CHARGE_PLUS, formula_delta};
+        let d5 = atom_diff(&ammonia, &ammonium);
+        assert_eq!(
+            d5.cost(),
+            0,
+            "same heavy map; charge not in field_cost: {d5:?}"
+        );
+        let f_charge = formula_l1(&molecule_formula(&ammonia), &molecule_formula(&ammonium));
+        assert!(
+            f_charge >= 1,
+            "formula_l1 must see charge units: {f_charge}"
+        );
+        let delta = formula_delta(&molecule_formula(&ammonia), &molecule_formula(&ammonium));
+        assert_eq!(delta.counts.get(CHARGE_PLUS), Some(&1));
     }
 
     #[test]
@@ -2101,9 +2260,9 @@ mod tests {
     #[test]
     fn hydrogenation_refused_toward_quinone() {
         use crate::rules::hydrogenation;
-        let reactant = parse_mol("c1ccccc1").unwrap();
-        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("c1ccccc1").unwrap();
+        let target = as_forest_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         let set = hydrogenation();
         let cands = set
             .candidates(&reactant)
@@ -2111,14 +2270,14 @@ mod tests {
             .unwrap();
         for c in &cands {
             if c.pattern.effect.adds.as_deref() == Some("HH")
-                && !any_h_gain(&reactant, &target, &diff)
+                && !any_h_gain(reactant.mol(), target.mol(), &diff)
             {
                 assert!(
                     !pattern_could_help_on(
                         &c.pattern.effect,
                         &diff,
-                        Some(&reactant),
-                        Some(&target)
+                        Some(reactant.mol()),
+                        Some(target.mol())
                     ) || c.pattern.effect.cleaves,
                     "pattern {} should not help toward quinone",
                     c.pattern.name
@@ -2153,10 +2312,10 @@ mod tests {
         // carbon. Partners must be in scope so adds-H / progress see the full
         // helpful delta (apply helps; undo toward the carbonyl would not).
         use crate::rules::oxygen_reduction;
-        let reactant = parse_mol("CC=O").unwrap();
-        let target = parse_mol("CCO").unwrap();
-        let diff = atom_diff(&reactant, &target);
-        assert!(any_h_gain(&reactant, &target, &diff), "{diff:?}");
+        let reactant = as_forest_mol("CC=O").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        assert!(any_h_gain(reactant.mol(), target.mol(), &diff), "{diff:?}");
         let set = oxygen_reduction();
         let cands = set
             .candidates(&reactant)
@@ -2168,12 +2327,9 @@ mod tests {
             .collect();
         assert!(!carbonyl.is_empty(), "expected carbonyl OR candidates");
         assert!(
-            carbonyl.iter().any(|c| candidate_could_help_on(
-                c,
-                &diff,
-                Some(&reactant),
-                Some(&target)
-            )),
+            carbonyl
+                .iter()
+                .any(|c| c.could_help_on(&diff, Some(target.mol()))),
             "OR carbonyl should help CC=O→CCO when partners expand scope"
         );
     }
@@ -2183,11 +2339,12 @@ mod tests {
         // Still a carbonyl match, but the target wants fewer H on that carbon
         // (oxidation to acid) — adding H would undo progress.
         use crate::rules::oxygen_reduction;
-        let reactant = parse_mol("CC=O").unwrap();
-        let target = parse_mol("CC(=O)O").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("CC=O").unwrap();
+        let target = as_forest_mol("CC(=O)O").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         assert!(
-            any_h_loss(&reactant, &target, &diff) || !any_h_gain(&reactant, &target, &diff),
+            any_h_loss(reactant.mol(), target.mol(), &diff)
+                || !any_h_gain(reactant.mol(), target.mol(), &diff),
             "{diff:?}"
         );
         let set = oxygen_reduction();
@@ -2205,7 +2362,7 @@ mod tests {
         );
         for c in &carbonyl {
             assert!(
-                !candidate_could_help_on(c, &diff, Some(&reactant), Some(&target)),
+                !c.could_help_on(&diff, Some(target.mol())),
                 "OR toward acid (H loss at carbonyl C) must not help"
             );
         }
@@ -2214,9 +2371,9 @@ mod tests {
     #[test]
     fn order_key_h_progress_prefers_adds_h_toward_alcohol() {
         use crate::rules::oxygen_reduction;
-        let reactant = parse_mol("CC=O").unwrap();
-        let target = parse_mol("CCO").unwrap();
-        let diff = atom_diff(&reactant, &target);
+        let reactant = as_forest_mol("CC=O").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
         let set = oxygen_reduction();
         let cands = set
             .candidates(&reactant)
@@ -2226,9 +2383,8 @@ mod tests {
             .iter()
             .find(|c| c.pattern.name == "carbonyl")
             .expect("carbonyl");
-        let (_a, _b, _c, prog_no_mol, _) = candidate_order_key_on(c, &diff, None, None);
-        let (_a, _b, _c, prog_with, _) =
-            candidate_order_key_on(c, &diff, Some(&reactant), Some(&target));
+        let (_a, _b, _c, prog_no_mol, _) = candidate_order_key_on(c, &diff, None);
+        let (_a, _b, _c, prog_with, _) = candidate_order_key_on(c, &diff, Some(target.mol()));
         // Negated progress: with partners, progress > 0 ⇒ key more negative.
         assert!(
             prog_with < prog_no_mol,
@@ -2238,26 +2394,27 @@ mod tests {
 
     #[test]
     fn tag_lift_dh_matches_full_mcs_cost() {
-        use crate::forest_mol::ForestMol;
         use crate::rules::dehydrogenation;
 
-        let parent = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
-        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
-        let parent_diff = atom_diff(parent.mol(), &target);
+        let parent = as_forest_mol("Oc1ccc(O)cc1").unwrap();
+        let target = as_forest_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let parent_diff = atom_diff(parent.mol(), target.mol());
         let pairs = dehydrogenation()
-            .pair_candidates_leaf(parent.mol())
+            .candidates(&parent)
+            .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert!(!pairs.is_empty());
-        let pieces = pairs[0].materialize_mols(parent.mol()).unwrap();
+        let pieces = pairs[0].materialize_mols().unwrap();
         assert!(!pieces.is_empty());
-        let child = parent.adopt_product(pieces[0].clone());
+        let child = parent.from_edit_product(pieces[0].clone());
         assert!(
             added_heavy_atoms(&parent, &child).is_empty(),
             "DH does not add heavy atoms"
         );
-        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
+        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, target.mol())
             .expect("same-atom-count tag lift should not need MCS");
-        let full = atom_diff(child.mol(), &target);
+        let full = atom_diff(child.mol(), target.mol());
         assert_eq!(
             lifted.cost(),
             full.cost(),
@@ -2267,18 +2424,17 @@ mod tests {
 
     #[test]
     fn tag_lift_extends_added_oxygen() {
-        use crate::forest_mol::ForestMol;
         use crate::hydroxylation::hydroxylation;
 
-        let parent = ForestMol::parse("CC").unwrap();
-        let target = parse_mol("CCO").unwrap();
-        let parent_diff = atom_diff(parent.mol(), &target);
+        let parent = as_forest_mol("CC").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let parent_diff = atom_diff(parent.mol(), target.mol());
         let cands = hydroxylation()
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        let pieces = cands[0].materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = cands[0].materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         assert_eq!(child.mol().atom_count(), 3);
         let added = added_heavy_atoms(&parent, &child);
         assert_eq!(added.len(), 1);
@@ -2287,25 +2443,24 @@ mod tests {
             8
         );
         // Add: lift + extend where diff shows a free target O; no MCS.
-        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, &target)
+        let lifted = try_atom_diff_for_child(&parent, &parent_diff, &child, target.mol())
             .expect("generator lift + extend should place added oxygen");
         assert_eq!(lifted.cost(), 0, "{lifted:?}");
-        let via = atom_diff_for_child(&parent, &parent_diff, &child, &target);
+        let via = atom_diff_for_child(&parent, &parent_diff, &child, target.mol());
         assert_eq!(via.cost(), 0, "{via:?}");
         assert!(child.shares_tag_gen(&parent));
     }
 
     #[test]
     fn site_cast_residual_is_lower_bound_for_hydroxylation() {
-        use crate::forest_mol::ForestMol;
         use crate::hydroxylation::hydroxylation;
 
-        let parent = ForestMol::parse("CC").unwrap();
-        let target = parse_mol("CCO").unwrap();
-        let parent_diff = atom_diff(parent.mol(), &target);
+        let parent = as_forest_mol("CC").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let parent_diff = atom_diff(parent.mol(), target.mol());
         assert!(parent_diff.cost() > 0, "{parent_diff:?}");
         let cands = hydroxylation()
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let c = &cands[0];
@@ -2317,10 +2472,10 @@ mod tests {
             "goal={goal} parent={}",
             parent_diff.cost()
         );
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = c.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let lifted =
-            try_atom_diff_for_child_goal(&parent, &parent_diff, &child, &target, Some(goal))
+            try_atom_diff_for_child_goal(&parent, &parent_diff, &child, target.mol(), Some(goal))
                 .expect("lift");
         assert!(
             lifted.cost() <= goal,
@@ -2363,24 +2518,22 @@ mod tests {
 
     #[test]
     fn tag_lift_shrinks_on_dealkylation() {
-        use crate::forest_mol::ForestMol;
-
         // Anisole → phenol: methyl carbon removed, no heavy add.
-        let parent = ForestMol::parse("COc1ccccc1").unwrap();
-        let target = parse_mol("Oc1ccccc1").unwrap();
-        let parent_diff = atom_diff(parent.mol(), &target);
+        let parent = as_forest_mol("COc1ccccc1").unwrap();
+        let target = as_forest_mol("Oc1ccccc1").unwrap();
+        let parent_diff = atom_diff(parent.mol(), target.mol());
         let parent_cost = parent_diff.cost();
         let cands = dealkylation()
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert!(!cands.is_empty());
         let phenol = canon_of("Oc1ccccc1").unwrap();
         let mut child = None;
         for c in &cands {
-            let pieces = c.materialize_mols(parent.mol()).unwrap();
+            let pieces = c.materialize_mols().unwrap();
             for piece in pieces {
-                let adopted = parent.adopt_product(piece);
+                let adopted = parent.from_edit_product(piece);
                 if adopted.csmi().as_ref() == phenol.as_str() {
                     child = Some(adopted);
                     break;
@@ -2396,12 +2549,12 @@ mod tests {
             "dealkylation keeps no new heavies on the kept fragment"
         );
         assert!(
-            try_atom_diff_for_child(&parent, &parent_diff, &child, &target).is_none(),
+            try_atom_diff_for_child(&parent, &parent_diff, &child, target.mol()).is_none(),
             "closer still refuses shrink lift"
         );
-        let lifted = try_lift_cleaved_child(&parent, &parent_diff, &child, &target)
+        let lifted = try_lift_cleaved_child(&parent, &parent_diff, &child, target.mol())
             .expect("cleavage shrink should tag-lift");
-        let via = atom_diff_after_cleavage(&parent, &parent_diff, &child, &target);
+        let via = atom_diff_after_cleavage(&parent, &parent_diff, &child, target.mol());
         assert!(
             via.cost() <= parent_cost,
             "toward phenol: parent={parent_cost} child={}",
@@ -2415,28 +2568,33 @@ mod tests {
 
     #[test]
     fn dh_product_ends_match_after_hydroquinone_dh() {
-        use crate::forest_mol::ForestMol;
         use crate::rules::dehydrogenation;
 
-        let parent = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
-        let target = parse_mol("O=C1C=CC(=O)C=C1").unwrap();
+        let parent = as_forest_mol("Oc1ccc(O)cc1").unwrap();
+        let target = as_forest_mol("O=C1C=CC(=O)C=C1").unwrap();
         let pairs = dehydrogenation()
-            .pair_candidates_leaf(parent.mol())
+            .candidates(&parent)
+            .filter(|c| matches!(c, Ok(s) if s.is_pair()))
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
         assert!(!pairs.is_empty());
         let pair = &pairs[0];
         let (end_a, end_b) = pair.end_atoms().expect("DH pair ends");
         // Pre-application reactant ends also match here — but the gate is
         // defined on the product.
-        let pieces = pair.materialize_mols(parent.mol()).unwrap();
-        let child = parent.adopt_product(pieces[0].clone());
+        let pieces = pair.materialize_mols().unwrap();
+        let child = parent.from_edit_product(pieces[0].clone());
         let tag_a = parent.tag_of(end_a).expect("tagged");
         let tag_b = parent.tag_of(end_b).expect("tagged");
         let product_ends = [
             child.index_of(tag_a).expect("product end a"),
             child.index_of(tag_b).expect("product end b"),
         ];
-        assert!(dh_product_ends_match(child.mol(), &product_ends, &target));
+        assert!(dh_product_ends_match(
+            child.mol(),
+            &product_ends,
+            target.mol()
+        ));
     }
 
     #[test]
@@ -2449,5 +2607,92 @@ mod tests {
             .collect();
         assert_eq!(oxygens.len(), 2);
         assert!(!dh_product_ends_match(&product, &oxygens, &target));
+    }
+
+    #[test]
+    fn tautomer_refused_when_h_already_matched() {
+        // Same tautomer form: empty Effect + path ends, all ΔH==0 → refuse.
+        use crate::rules::tautomerization;
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let reactant = as_forest_mol(amine).unwrap();
+        let target = as_forest_mol(amine).unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = tautomerization()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let pairs: Vec<_> = cands.into_iter().filter(|c| c.is_pair()).collect();
+        assert!(
+            !pairs.is_empty(),
+            "expected tautomer pair sites on tacrine amine"
+        );
+        for c in &pairs {
+            assert!(
+                !c.could_help_on(&diff, Some(target.mol())),
+                "matched tautomer ends must not help (formula-neutral redistribute)"
+            );
+        }
+    }
+
+    #[test]
+    fn tautomer_helps_amine_toward_imine() {
+        use crate::rules::tautomerization;
+        let amine = "Nc1c2c(nc3ccccc13)CCCC2";
+        let imine = "N=c1c2c([nH]c3ccccc13)CCCC2";
+        let reactant = as_forest_mol(amine).unwrap();
+        let target = as_forest_mol(imine).unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = tautomerization()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let pairs: Vec<_> = cands.into_iter().filter(|c| c.is_pair()).collect();
+        assert!(
+            pairs
+                .iter()
+                .any(|c| c.could_help_on(&diff, Some(target.mol()))),
+            "amine→imine should keep at least one H-redistributing tautomer site"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_helps_ethene_to_ethane() {
+        use crate::rules::hydrogenation;
+        let reactant = as_forest_mol("C=C").unwrap();
+        let target = as_forest_mol("CC").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = hydrogenation()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(!cands.is_empty());
+        assert!(
+            cands
+                .iter()
+                .any(|c| c.could_help_on(&diff, Some(target.mol()))),
+            "ethene→ethane: primary C=C must show H-need"
+        );
+    }
+
+    #[test]
+    fn hydrogenation_refused_ethene_toward_ethanol() {
+        // Target has more O, not more H on the alkene carbons in a helpful
+        // hydrogenation sense — C=C→ethanol is oxidation+saturation mix;
+        // plain H-add on the bond should not pass when site carbons do not
+        // need H toward the alcohol MCS placement.
+        use crate::rules::hydrogenation;
+        let reactant = as_forest_mol("C=C").unwrap();
+        let target = as_forest_mol("CCO").unwrap();
+        let diff = atom_diff(reactant.mol(), target.mol());
+        let cands = hydrogenation()
+            .candidates(&reactant)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        for c in &cands {
+            assert!(
+                !c.could_help_on(&diff, Some(target.mol())),
+                "hydrogenation must not help ethene→ethanol on primary site"
+            );
+        }
     }
 }

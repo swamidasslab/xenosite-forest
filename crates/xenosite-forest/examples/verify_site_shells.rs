@@ -88,11 +88,14 @@ fn main() {
         println!("=== {name}  parent_residual={parent_residual:.4} ===");
 
         let cands = set
-            .candidates(parent.mol())
+            .candidates(&parent)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
         let mut checked = 0usize;
         for c in &cands {
+            if c.is_pair() {
+                continue;
+            }
             if !candidate_could_help_on(
                 c,
                 &atom_diff(parent.mol(), &tgt),
@@ -101,15 +104,14 @@ fn main() {
             ) {
                 continue;
             }
-            let Ok(pieces) = c.materialize_mols(parent.mol()) else {
+            let Ok(Some(em)) = c.apply() else {
                 continue;
             };
-            if pieces.is_empty() {
+            if em.products.is_empty() {
                 continue;
             }
             let mut best: Option<(xenosite_forest::ForestMol, f64)> = None;
-            for piece in pieces {
-                let child = parent.adopt_product(piece);
+            for child in em.products {
                 let child_shells = molecule_shells(child.mol());
                 let child_map = atom_diff(child.mol(), &tgt).mapping;
                 let child_residual = site_shell_cost(
@@ -187,23 +189,19 @@ fn main() {
             }
         }
 
-        let pairs = set
-            .pair_candidates(parent.mol())
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+        let pairs: Vec<_> = cands.iter().filter(|p| p.is_pair()).cloned().collect();
         let ad = atom_diff(parent.mol(), &tgt);
         let mut pair_checked = 0usize;
         for p in &pairs {
             if !pair_could_help(p, &ad, parent.mol(), &tgt) {
                 continue;
             }
-            let Ok(pieces) = p.materialize_mols(parent.mol()) else {
+            let Ok(Some(em)) = p.apply() else {
                 continue;
             };
-            if pieces.is_empty() {
+            let Some(child) = em.products.into_iter().next() else {
                 continue;
-            }
-            let child = parent.adopt_product(pieces[0].clone());
+            };
             let child_shells = molecule_shells(child.mol());
             let child_map = atom_diff(child.mol(), &tgt).mapping;
             let child_residual = site_shell_cost(

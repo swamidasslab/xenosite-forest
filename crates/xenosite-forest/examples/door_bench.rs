@@ -65,7 +65,7 @@ fn main() {
             let _ = unique_atom_sites(&mol, "[#6h1:1]").unwrap();
         });
         let hydrox = mean_ns(200, || {
-            let _ = hydroxylate(&mol).unwrap();
+            let _ = hydroxylate(&held).unwrap();
         });
         let orbits = mean_ns(80, || {
             let _ = unordered_atom_pair_orbit_sizes(&mol);
@@ -89,16 +89,17 @@ fn main() {
     );
     for (name, smiles) in cases {
         let mol = parse_mol(smiles).unwrap();
+        let held = ForestMol::parse(smiles).unwrap();
         let n_h1 = unique_atom_sites(&mol, "[#6h1:1]").unwrap().len();
         let n_h2 = unique_atom_sites(&mol, "[#6h2,#6h3:1]").unwrap().len();
         let sites = n_h1 + n_h2;
-        let products = hydroxylate(&mol).unwrap();
+        let products = hydroxylate(&held).unwrap();
         let unique_both = mean_ns(200, || {
             let _ = unique_atom_sites(&mol, "[#6h1:1]").unwrap();
             let _ = unique_atom_sites(&mol, "[#6h2,#6h3:1]").unwrap();
         });
         let hydrox = mean_ns(200, || {
-            let _ = hydroxylate(&mol).unwrap();
+            let _ = hydroxylate(&held).unwrap();
         });
         let n = products.len().max(1) as f64;
         println!(
@@ -112,7 +113,7 @@ fn main() {
         );
     }
 
-    let hq = parse_mol("Oc1ccc(O)cc1").unwrap();
+    let hq = ForestMol::parse("Oc1ccc(O)cc1").unwrap();
     let dh = mean_ns(80, || {
         let _ = dehydrogenate_hydroquinone(&hq).unwrap();
     });

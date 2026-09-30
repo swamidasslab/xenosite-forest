@@ -3,9 +3,9 @@
 //! `SiteKind`, `Edit`, and `Effect` are the categories. Methide is an effect
 //! field, not a pathway flag.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::mol::{Molecule, atom_idx};
+use crate::mol::{Molecule, atom_idx, atom_usize};
 
 /// What kind of site this pattern names. Discovery indexes follow this.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,6 +37,8 @@ pub struct When {
     pub map: u16,
     pub z: Option<u8>,
     pub h: Option<u8>,
+    /// When set, require the mapped atom's aromaticity to match.
+    pub aromatic: Option<bool>,
 }
 
 impl When {
@@ -45,6 +47,7 @@ impl When {
             map,
             z: Some(z),
             h: None,
+            aromatic: None,
         }
     }
 
@@ -53,12 +56,48 @@ impl When {
             map,
             z: Some(z),
             h: Some(h),
+            aromatic: None,
         }
+    }
+
+    pub fn aromaticity(map: u16, aromatic: bool) -> Self {
+        Self {
+            map,
+            z: None,
+            h: None,
+            aromatic: Some(aromatic),
+        }
+    }
+
+    /// True when this constraint matches `mol` under `mapped`.
+    pub fn matches(&self, mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> bool {
+        let Some(&idx) = mapped.get(&self.map) else {
+            return false;
+        };
+        let atom = mol.atom(atom_idx(idx));
+        if let Some(z) = self.z
+            && atom.element.atomic_number() != z
+        {
+            return false;
+        }
+        if let Some(h) = self.h
+            && mol.implicit_hydrogen_count(atom_idx(idx)) != h
+        {
+            return false;
+        }
+        if let Some(want) = self.aromatic
+            && atom.aromatic != want
+        {
+            return false;
+        }
+        true
     }
 }
 
 /// Known element symbols, longest first (for bag strings like ``Cl``, ``Br``).
-const ELEMENT_SYMBOLS: &[&str] = &["At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H"];
+const ELEMENT_SYMBOLS: &[&str] = &[
+    "At", "Br", "Cl", "I", "F", "O", "N", "S", "P", "C", "H", "+", "-",
+];
 
 /// Parse an ``adds`` / ``removes`` bag (``"OO"``, ``"HH"``, ``"Cl"``, ``"OH"``)
 /// into element → count. Unknown characters are skipped.
@@ -177,10 +216,18 @@ pub struct Effect {
     /// ``removes`` (e.g. dehydration ``OH``).
     pub leave_formula: BTreeMap<String, i32>,
     pub cleaves: bool,
+    /// Cleaved bond is in a ring (ring-open). Filled at resolve from the match.
+    pub breaks_ring: bool,
     /// Named leaving heavy-atom count (methyl dealkylation = 1). `None` = open.
     pub leave_count: Option<u16>,
     /// Effect bit, not a `pathways=("methide",)` switch.
     pub methide: bool,
+    /// Partner atom (non-site mapped) is exclusive to this ResonancePair end.
+    ///
+    /// Set when chemistry consumes that partner (bridging N/O on iminium /
+    /// hetero ``single_to_double`` / dealkylate). Not a global shared-map
+    /// refuse — methide alkyl (`partner == "C"`) leaves this false.
+    pub exclusive_partner: bool,
     /// Capability: pair/path may dearomatize. Resolved against system aromaticity.
     pub dearomatizes: bool,
     /// Methide / alkyl partner element hint (`"C"`). Filters read this.
@@ -251,6 +298,10 @@ pub struct PatternInfo {
     pub possibilities: Vec<Effect>,
     /// Refuse single-to-double when maps 1 and 2 share the same ring set.
     pub skip_same_rings: bool,
+    /// Pair composition: walk aliphatic π–π C–C singles into the conjugated
+    /// system (polyene chains). Default false keeps biaryl rings split.
+    /// Tautomerization endpoints set this; other ResonancePair rules do not.
+    pub chain_conjugate: bool,
     /// Cleavage side groups `(leave, keep)` aligned to [`Self::site_map`] order.
     ///
     /// Cleavage analogue of pair ``swap_group``, but pooled **across rules** at
@@ -282,19 +333,21 @@ impl PatternInfo {
             effect: effect.sealed(),
             possibilities: Vec::new(),
             skip_same_rings: false,
+            chain_conjugate: false,
             cleave_side_group: None,
             search_bias: 0,
         }
     }
 
     pub fn hydroxyl(name: impl Into<String>, smarts: impl Into<String>) -> Self {
+        // Net mol formula of C–H → C–OH is +O (H count unchanged: site loses
+        // one H, OH adds one). Do not seal H:-1 — that disagreed with products.
         Self::new(
             name,
             smarts,
             Edit::Hydroxyl,
             Effect {
                 adds: Some("O".into()),
-                removes: Some("H".into()),
                 ..Effect::default()
             },
         )
@@ -318,22 +371,22 @@ impl PatternInfo {
     ) -> Self {
         let leave = leave.into();
         let keep = keep.into();
-        if self.effect.leave_formula.is_empty() {
-            if let Some(formula) = named_leave_formula(&leave) {
-                self.effect.leave_formula = formula;
-                self.effect = self.effect.reseal_delta();
-            }
+        if self.effect.leave_formula.is_empty()
+            && let Some(formula) = named_leave_formula(&leave)
+        {
+            self.effect.leave_formula = formula;
+            self.effect = self.effect.reseal_delta();
         }
         for arm in &mut self.possibilities {
-            if arm.leave_formula.is_empty() {
-                if let Some(formula) = named_leave_formula(&leave) {
-                    arm.leave_formula = formula.clone();
-                    arm.delta_formula = compose_delta_formula(
-                        arm.adds.as_deref(),
-                        arm.removes.as_deref(),
-                        &arm.leave_formula,
-                    );
-                }
+            if arm.leave_formula.is_empty()
+                && let Some(formula) = named_leave_formula(&leave)
+            {
+                arm.leave_formula = formula.clone();
+                arm.delta_formula = compose_delta_formula(
+                    arm.adds.as_deref(),
+                    arm.removes.as_deref(),
+                    &arm.leave_formula,
+                );
             }
         }
         self.cleave_side_group = Some((leave, keep));
@@ -355,8 +408,19 @@ impl PatternInfo {
     /// not a Kekulé supplier form (flags may be cleared there).
     pub fn resolve_for_match(&self, mol: &Molecule, mapped: &BTreeMap<u16, usize>) -> Self {
         let mut out = self.clone();
+        if !out.possibilities.is_empty()
+            && let Some(arm) = out
+                .possibilities
+                .iter()
+                .find(|e| e.when.as_ref().is_some_and(|w| w.matches(mol, mapped)))
+        {
+            out.effect = arm.clone();
+        }
         if out.effect.dearomatizes {
             out.effect.dearomatizes = site_map_aromatic(mol, mapped, &out.site_map);
+        }
+        if out.effect.cleaves {
+            out.effect.breaks_ring = cleavage_breaks_ring(mol, mapped, &out.site_map);
         }
         out
     }
@@ -388,6 +452,40 @@ pub fn site_map_aromatic(mol: &Molecule, mapped: &BTreeMap<u16, usize>, site_map
             .get(m)
             .is_some_and(|&i| mol.atom(atom_idx(i)).aromatic)
     })
+}
+
+/// True when the cleaved bond's atoms share a ring (Python `_cleavage_breaks_ring`).
+pub fn cleavage_breaks_ring(
+    mol: &Molecule,
+    mapped: &BTreeMap<u16, usize>,
+    site_map: &[u16],
+) -> bool {
+    let (left, right) = if site_map.len() == 2 {
+        match (mapped.get(&site_map[0]), mapped.get(&site_map[1])) {
+            (Some(&a), Some(&b)) => (a, b),
+            _ => return false,
+        }
+    } else {
+        match (mapped.get(&1), mapped.get(&2)) {
+            (Some(&a), Some(&b)) => (a, b),
+            _ => return false,
+        }
+    };
+    let rings = chematic::perception::find_sssr(mol);
+    let mut left_rings = BTreeSet::new();
+    let mut right_rings = BTreeSet::new();
+    for (ri, ring) in rings.rings().iter().enumerate() {
+        for &atom in ring {
+            let i = atom_usize(atom);
+            if i == left {
+                left_rings.insert(ri);
+            }
+            if i == right {
+                right_rings.insert(ri);
+            }
+        }
+    }
+    !left_rings.is_disjoint(&right_rings)
 }
 
 /// How cleavage sides participate in cross-rule Or fold keys.
@@ -444,12 +542,17 @@ pub struct SiteInfo {
     pub shell_forecast: Option<crate::matched_atom::AlignedShells>,
 }
 
-/// One metabolize emission: discovery site, pattern, rule namespace, product CSMIs.
+/// One metabolize hop: discovery metadata + product CSMIs.
+///
+/// Built by [`crate::candidate::DeferredSite::emit`]. Contrast
+/// [`crate::candidate::DeferredSite::apply`]. Products are [`crate::ForestMol`]
+/// with tags and caches adopted from the discovery parent — never CSMI by
+/// default. Call [`Self::product_csmis`] only when a string identity is chosen.
 ///
 /// `rule_path` is leaf-first (emitting rule, then each containing [`crate::ruleset::RuleSet`]),
 /// matching Python `info["rule"]` / addition chain order. Unnamed sets stay on the
 /// chain as `None`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Emission {
     pub site: usize,
     /// Primary-map orbit passed down from unique-edit (see [`SiteInfo::orbit`]).
@@ -461,7 +564,8 @@ pub struct Emission {
     /// From [`PatternInfo::search_bias`] (pair: min of both ends).
     pub search_bias: i8,
     pub rule_path: Vec<Option<String>>,
-    pub products: Vec<String>,
+    /// Tagged products; atom tracking + kekulé caches propagate from the parent.
+    pub products: Vec<crate::ForestMol>,
     /// Elementary steps for this hop (identity or quinone-shaped expansion).
     /// Bind with [`crate::canonical_plan::Deps::bind`] for precedes / replay.
     pub plan: Vec<crate::canonical_plan::Step>,
@@ -479,6 +583,17 @@ impl Emission {
     /// Emitting (leaf) rule name, if the leaf was named.
     pub fn leaf_rule(&self) -> Option<&str> {
         self.rule_path.first().and_then(|n| n.as_deref())
+    }
+
+    /// Explicit downgrade to product CSMIs (dedup / display / Python string rows).
+    ///
+    /// Prefer keeping [`Self::products`] as [`crate::ForestMol`] so tags and
+    /// caches stay continuous. Do not re-parse these strings into ForestMol.
+    pub fn product_csmis(&self) -> Vec<String> {
+        self.products
+            .iter()
+            .map(|p| p.csmi().as_ref().to_string())
+            .collect()
     }
 }
 
@@ -524,7 +639,8 @@ mod tests {
     fn hydroxyl_pattern_carries_delta() {
         let p = PatternInfo::hydroxyl("h", "[#6h1:1]");
         assert_eq!(p.effect.delta_formula.get("O"), Some(&1));
-        assert_eq!(p.effect.delta_formula.get("H"), Some(&-1));
+        assert!(!p.effect.delta_formula.contains_key("H"));
+        assert!(p.effect.removes.is_none());
     }
 
     #[test]

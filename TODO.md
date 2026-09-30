@@ -2,30 +2,36 @@
 
 All items below target the **Rust** door (`crates/xenosite-forest` +
 `xenosite.forest` wrapper). Do not implement them in `xenosite.forest.native`
-— see `docs/forest/NATIVE.md`. No CLI work for now (no Rust CLI; do not grow
-the temporary native console script).
+— see `docs/forest/NATIVE.md`. No CLI work for now.
 
-## Now (find_path + sampling)
+## Now
 
-- find_path_partial: like find_path when rules cannot reach target; report closest reach and what was missed (may replace find_path); DRY/clarity refactor of shared search so top-level find_path stays easy to follow
+- Re-enable Keep-H / Effect-formula materialize filters + parity harness
+  formula gates (`allow_formula_delta_mismatch`, SiteDeduplicationWarning)
+- **Do not remove** `inventory_fully_covered_in_sssom` xfail until the **next
+  version bump** (map new Effect SMARTS-split PatternInfo names into
+  `mappings/xmet-forest.sssom.tsv` as part of that bump)
+
+## After parity + catalog
+
+- Pair materialize: stop minting path-end iminium/sulfinic junk; collapse
+  `accept_pair_product` → `accept_product` (HEURISTICS: soft failure today)
+- Re-enable parity-chase soft filters: Rust Keep-H / Effect-formula drop in
+  `materialize_pair_mols` + `DeferredSite::materialize_mols`; drop
+  `allow_formula_delta_mismatch` and `SiteDeduplicationWarning` ignore on
+  `test_rule_parity_fuzz.py` (conftest formula collector gate back on)
+- Tautomerization: cut find_path bill on tacrine further; normalize_tautomer
+  stays opt-in (default off)
+- Validate walk-history residual bags on MetX hard misses
 - find_path: mapping argument between target and reactant
-- find_path: return graph alongside paths; emit graph even when path not found (crate has `product_graph`; public API still `(hits, counters)`)
-- Collect hard metabolism-DB cases where find_path / find_path_partial do not fail fast; harden fail-fast (includes MeOPhOH seen-after-`mol_edits` residual)
-- StepSequence: ordered container of steps that **acts like a Step** (composite). Same `apply` (intermediates + final, `PathwayOptions`, ensure-tags-never-overwrite) for length 1..n or `random_path`
-- StepPlan (`Deps` in Rust): compact set of linearizations under constraints; `linearizations()` yields `StepSequence`s then `apply`
-- PathOutcome: randomly sample a StepSequence from a plan; `apply` it on a molecule (same as above)
-
-## Next (conjugation / reactivity)
-
-- Preserve text labels on stars through the pipeline; wrap chematics where labels drop and reapply
-- Normalize conjugated/adduct mols (collapse glucuronide, GSH, etc. to `*` with normalized labels; standardize common/hinted text ids); wire into target-seeking
-- Validate conjugation rules with examples + review; ship a prebuilt Reactivity ruleset (protein, DNA, cyanide, GSH)
+- StepSequence / StepPlan / PathOutcome sampling doors
+- Preserve text labels on stars; conjugation normalize; Reactivity ruleset
+- XMET SSSOM / chemist-home lint; Conjugation catalog when Phase II settles
 
 ## Later
 
-- Optimize `alternating_paths` (path clone per BFS step; odd-ring / 2-colorable decomposition)
-- PatternInfo coverage gaps still worth asserting (product-side SMARTS; `pin`; `skip_same_rings` / `edit`; `breaks_ring` + `partner`/`partner_h` from `resolve_effect`)
-- `find_path_to_MS1` / then `find_path_to_MS2` (isotope-aware m/z within tolerance; MS fragmentation rules)
-- Rank PathOutcome hits by likelihood via `xenosite-predict` (cleavage-side bags; no side-reaction enum)
-- Deferred: tautomer SMARTS / TautomerQuery (Status: not decided) — orthogonal to `TautomerRule` stub
+- Optimize `alternating_paths`
+- PatternInfo coverage gaps (product-side SMARTS; `pin`; `breaks_ring`)
+- `find_path_to_MS1` / MS2; rank hits via `xenosite-predict`
+- Deferred: tautomer SMARTS / TautomerQuery (not decided)
 - SMARTS least-common atoms first

@@ -3,6 +3,18 @@
 //! Python attaches `_forest` and mints `xf` on a foreign RDKit `Mol`. Rust
 //! owns the type, so those are not a layer. Caches live on this object:
 //! structure answers (`csmi`, formula, …) and a shared per-system kekulé bag.
+//!
+//! **Birth always stamps or remaps tags.** [`Self::parse`] / [`Self::new`]
+//! stamp a fresh label on every atom. Edit products are born already traced
+//! ([`DeferredSite::apply`](crate::candidate::DeferredSite::apply) /
+//! private remap helpers) — callers do not run a separate adopt step. A
+//! parent does not record its children; the child carries the continuity.
+//!
+//! **Intake:** [`as_forest_mol`] / [`IntoForestMol`] at API boundaries. SMILES
+//! and bare [`Molecule`] stamp on the way in; an existing [`ForestMol`]
+//! passes through (**tracing continues**). APIs do not reinit tracing. Call
+//! [`ForestMol::with_new_trace`] only when a caller wants a
+//! disconnected tag tree.
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -14,10 +26,75 @@ use crate::forest::{Formula, Structure, molecule_formula};
 use crate::kekule::{KekuleCache, ensure_kekule_parents};
 use crate::labels::{self, Tag};
 use crate::mol::{
-    ForestError, Molecule, atom_idx, canon_smiles, parse_mol, ranks, stable_csmi_key,
+    ForestError, Molecule, atom_idx, canon_of, canon_smiles, parse_mol, ranks, stable_csmi_key,
 };
 use crate::smarts::smarts_matches;
 use chematic::smiles::canonical_smiles_with_atom_order;
+
+/// Polymorphic door into a tagged [`ForestMol`].
+///
+/// - [`ForestMol`] / `&ForestMol` — pass through; **tracing continues**
+/// - SMILES — [`ForestMol::parse`] (stamps immediately)
+/// - [`Molecule`] — [`ForestMol::new`] (stamps immediately)
+///
+/// Never reinitializes tracing on an existing [`ForestMol`]. For a disconnected
+/// tag tree, call [`ForestMol::with_new_trace`] first.
+pub trait IntoForestMol {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError>;
+}
+
+/// Central intake: SMILES / [`Molecule`] / [`ForestMol`] → tagged [`ForestMol`].
+///
+/// Existing ForestMol input keeps tags and caches. Most search/edit doors use
+/// this and do not reinit tracing.
+#[inline]
+pub fn as_forest_mol<T: IntoForestMol>(input: T) -> Result<ForestMol, ForestError> {
+    input.into_forest_mol()
+}
+
+impl IntoForestMol for ForestMol {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        Ok(self)
+    }
+}
+
+impl IntoForestMol for &ForestMol {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        Ok(self.copy_mol())
+    }
+}
+
+impl IntoForestMol for &str {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        // Canonical writing then parse — same graph find_path historically got
+        // from `canon_of` + `parse_mol`. Existing ForestMol passes through.
+        ForestMol::parse(&canon_of(self)?)
+    }
+}
+
+impl IntoForestMol for String {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        ForestMol::parse(&canon_of(&self)?)
+    }
+}
+
+impl IntoForestMol for &String {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        ForestMol::parse(&canon_of(self)?)
+    }
+}
+
+impl IntoForestMol for Molecule {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        Ok(ForestMol::new(self))
+    }
+}
+
+impl IntoForestMol for &Molecule {
+    fn into_forest_mol(self) -> Result<ForestMol, ForestError> {
+        Ok(ForestMol::new(self.clone()))
+    }
+}
 
 /// Write sidecar labels onto chematic caller tags so apply/fragments copy them.
 fn sync_tags_to_mol(mol: &mut Molecule, labels: &[Option<Tag>]) {
@@ -55,12 +132,23 @@ pub struct ForestMol {
     pub is_terminal_product: Cell<bool>,
 }
 
+impl std::fmt::Debug for ForestMol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ForestMol")
+            .field("atoms", &self.mol.atom_count())
+            .finish_non_exhaustive()
+    }
+}
+
 impl ForestMol {
     pub fn parse(smiles: &str) -> Result<Self, ForestError> {
         Ok(Self::new(parse_mol(smiles)?))
     }
 
-    /// Wrap chemistry with **new** caches (disconnected from any parent tree).
+    /// Wrap chemistry with **new** caches and freshly stamped atom tags.
+    ///
+    /// Call this (or [`Self::parse`]) for format conversions / disconnected
+    /// graphs. Tracking starts here — no follow-up stamp call.
     pub fn new(mol: Molecule) -> Self {
         let mut mol = mol;
         let (labels, next) = labels::stamp(mol.atom_count());
@@ -73,6 +161,20 @@ impl ForestMol {
             kekule: Rc::new(RefCell::new(KekuleCache::default())),
             is_terminal_product: Cell::new(false),
         }
+    }
+
+    /// Copy with a **new** tag lineage and empty structure/kekulé caches.
+    ///
+    /// Most doors ([`as_forest_mol`], `find_path`, `apply`, …) keep tracing.
+    /// Call this only when the caller wants a disconnected tracking tree on
+    /// the same chemistry.
+    pub fn with_new_trace(&self) -> Self {
+        Self::new(self.mol.clone())
+    }
+
+    /// Soft alias of [`Self::with_new_trace`].
+    pub fn restamp(&self) -> Self {
+        self.with_new_trace()
     }
 
     /// Product of an edit: new structure bag, **same** kekulé cache `Rc`.
@@ -115,13 +217,22 @@ impl ForestMol {
         }
     }
 
-    /// Adopt a chematic product: re-parse via [`canon_smiles`] + [`parse_mol`]
-    /// (aromaticity parity with the old string walk) while remapping caller tags
-    /// by canonical visit order.
-    pub fn adopt_product(&self, product: Molecule) -> Self {
+    /// Birth a product ForestMol from a chematic edit of `self`.
+    ///
+    /// Remaps tags and shares the kekulé / tag-gen lineage. Used by edit
+    /// doors ([`crate::candidate::DeferredSite::apply`]); not a user step —
+    /// parents do not track children; the child is stamped at creation.
+    #[allow(clippy::wrong_self_convention)]
+    pub(crate) fn from_edit_product(&self, product: Molecule) -> Self {
         let normalized = normalize_tagged_product(&product).unwrap_or(product);
         let src_to_new = AtomTracker::src_to_new(self.mol(), &normalized);
         self.from_apply(normalized, &src_to_new)
+    }
+
+    /// Soft rename — prefer creation via apply / [`Self::from_edit_product`].
+    #[deprecated(note = "edit doors stamp products; use DeferredSite::apply")]
+    pub fn adopt_product(&self, product: Molecule) -> Self {
+        self.from_edit_product(product)
     }
 
     /// Same tags after a permutation: `old_at_new[new] = old`.
@@ -156,6 +267,12 @@ impl ForestMol {
 
     pub fn shares_tag_gen(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.tag_gen, &other.tag_gen)
+    }
+
+    /// Chematic tautomer pick adopted with Forest tracing (same as
+    /// [`crate::normalize_tautomer`]).
+    pub fn normalize_tautomer(&self) -> Result<crate::NormalizedTautomer, ForestError> {
+        crate::normalize_tautomer(self)
     }
 
     pub fn mol(&self) -> &Molecule {

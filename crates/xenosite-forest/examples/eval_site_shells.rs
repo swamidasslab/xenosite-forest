@@ -1,8 +1,8 @@
 //! Site vs full align: cost = Σ|δ| over aromatic + n0/n1/n2 (missing = 0).
 use xenosite_forest::rules::{dealkylation, hydroxylation, oxygen_reduction};
 use xenosite_forest::{
-    AtomNeighborhood, aligned_shells, atom_diff, candidate_could_help_on, format_shell, parse_mol,
-    shell_l1,
+    AtomNeighborhood, ForestMol, aligned_shells, atom_diff, candidate_could_help_on, format_shell,
+    parse_mol, shell_l1,
 };
 
 fn site_atoms_of(c: &xenosite_forest::Candidate) -> Vec<usize> {
@@ -76,6 +76,7 @@ fn main() {
     ] {
         let ra = parse_mol(a).unwrap();
         let rb = parse_mol(b).unwrap();
+        let forest = ForestMol::parse(a).unwrap();
         let d = aligned_shells(&ra, &rb);
         let ad = atom_diff(&ra, &rb);
         let set = match kind {
@@ -84,7 +85,11 @@ fn main() {
             "or" => oxygen_reduction(),
             _ => continue,
         };
-        for c in set.candidates(&ra).collect::<Result<Vec<_>, _>>().unwrap() {
+        for c in set
+            .candidates(&forest)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+        {
             if kind == "cleave" && !c.pattern.effect.cleaves {
                 continue;
             }

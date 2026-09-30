@@ -34,9 +34,12 @@ chematic = { version = "1.0.27", default-features = false, features = [
     "smarts",
     "rxn",
     "perception",
+    "chem",
 ] }
 canonaut = "1.0.0"
 log = "0.4"
+# Rust-only inflate for embedded SSSOM (no C zlib; wasm-clean).
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -44,11 +47,15 @@ serde_json = { version = "1", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 pyo3 = { version = "0.26", optional = true }
 
+[build-dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 proptest = "1.11"
+rayon = "1.10"
 
 # Newer rustc emits bulk-memory / saturating float ops; enable all features for
 # the wasm-opt shipped with wasm-pack (same as xenosite-pict).

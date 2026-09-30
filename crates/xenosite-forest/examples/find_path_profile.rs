@@ -12,11 +12,12 @@ use std::collections::{BinaryHeap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use xenosite_forest::as_forest_mol;
 use xenosite_forest::atom_diff::{
     atom_diff, atom_diff_for_child, candidate_could_help_on, candidate_order_key, pair_could_help,
 };
 use xenosite_forest::forest_mol::ForestMol;
-use xenosite_forest::mol::{Molecule, canon_of, parse_mol};
+use xenosite_forest::mol::{Molecule, parse_mol};
 use xenosite_forest::rules::phase_one;
 use xenosite_forest::ruleset::RuleSet;
 use xenosite_forest::{Candidate, FindPathConfig, HeapScoreMode, PathCounters, find_path_with};
@@ -141,15 +142,12 @@ fn expand_timed(
 ) -> Vec<ForestEmission> {
     let mol = parent.mol();
     let t0 = Instant::now();
-    let mut candidates = ruleset
-        .candidates(mol)
+    let all = ruleset
+        .candidates(parent)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    // Nested sets: full pair_candidates (same as production walk).
-    let mut pairs = ruleset
-        .pair_candidates(mol)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+    let mut candidates: Vec<_> = all.iter().filter(|c| !c.is_pair()).cloned().collect();
+    let mut pairs: Vec<_> = all.into_iter().filter(|c| c.is_pair()).collect();
     t.discover += t0.elapsed();
 
     let t0 = Instant::now();
@@ -164,32 +162,32 @@ fn expand_timed(
     let mut out = Vec::new();
     for c in candidates {
         t.mol_edits += 1;
-        let pieces = c.materialize_mols(mol).unwrap();
-        if pieces.is_empty() {
+        let Ok(Some(em)) = c.apply() else {
+            continue;
+        };
+        if em.products.is_empty() {
             continue;
         }
-        let products: Vec<_> = pieces
-            .into_iter()
-            .map(|piece| parent.adopt_product(piece))
-            .collect();
-        out.push(ForestEmission { products });
+        out.push(ForestEmission {
+            products: em.products,
+        });
     }
     for pair in pairs {
-        let pieces = pair.materialize_mols(mol).unwrap();
-        if pieces.is_empty() {
+        let Ok(Some(em)) = pair.apply() else {
+            continue;
+        };
+        if em.products.is_empty() {
             continue;
         }
         t.mol_edits += 1;
-        let products: Vec<_> = pieces
-            .into_iter()
-            .map(|piece| parent.adopt_product(piece))
-            .collect();
         let _ = ruleset.canonical_plan(
             mol,
             &pair.plan_site_atoms(),
             Some(&[&pair.left.effect, &pair.right.effect]),
         );
-        out.push(ForestEmission { products });
+        out.push(ForestEmission {
+            products: em.products,
+        });
     }
     t.materialize += t0.elapsed();
     out
@@ -201,15 +199,16 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
     let mut t = Timers::default();
     let set = phase_one();
 
-    let start = ForestMol::parse(reactant).unwrap();
+    let start = as_forest_mol(reactant).unwrap();
+    let target = as_forest_mol(target).unwrap();
     let t0 = Instant::now();
     let start_csmi = start.csmi();
     t.csmi += t0.elapsed();
     t.csmi_calls += 1;
 
-    let target_csmi = canon_of(target).unwrap();
-    let target_mol = parse_mol(&target_csmi).unwrap();
-    let target_ha = ForestMol::parse(&target_csmi).unwrap().heavy_atom_count();
+    let target_csmi = target.csmi().as_ref().to_string();
+    let target_mol = target.mol();
+    let target_ha = target.heavy_atom_count();
 
     let mut heap = BinaryHeap::new();
     let mut seq = 0usize;
@@ -248,22 +247,21 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
         }
 
         let t0 = Instant::now();
-        let diff = atom_diff(walk.mol.mol(), &target_mol);
+        let diff = atom_diff(walk.mol.mol(), target_mol);
         let cost = diff.cost();
         t.atom_diff += t0.elapsed();
 
-        if lazy {
-            if let Some(pc) = walk.parent_cost {
-                if cost >= pc {
-                    t.rejected += 1;
-                    t.reject += Duration::ZERO; // MCS already in atom_diff
-                    continue;
-                }
-            }
+        if lazy
+            && let Some(pc) = walk.parent_cost
+            && cost >= pc
+        {
+            t.rejected += 1;
+            t.reject += Duration::ZERO; // MCS already in atom_diff
+            continue;
         }
         t.nodes += 1;
 
-        let emissions = expand_timed(&set, &walk.mol, &target_mol, &diff, &mut t);
+        let emissions = expand_timed(&set, &walk.mol, target_mol, &diff, &mut t);
 
         for emission in emissions {
             let t0 = Instant::now();
@@ -281,7 +279,7 @@ fn profile_search(reactant: &str, target: &str, lazy: bool) -> (Timers, Duration
                 true
             } else if let Some(pc) = walk.parent_cost {
                 let t1 = Instant::now();
-                let child_cost = atom_diff_for_child(&walk.mol, &diff, &kept, &target_mol).cost();
+                let child_cost = atom_diff_for_child(&walk.mol, &diff, &kept, target_mol).cost();
                 t.lift += t1.elapsed();
                 target_hit || child_cost < pc
             } else {
@@ -356,19 +354,23 @@ fn microbench() {
 
     // Adopt cost: one real hydroxylation-style product if any candidate exists.
     let cands = set
-        .candidates(parent.mol())
+        .candidates(&parent)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     let adopt = if let Some(c) = cands.first() {
-        let pieces = c.materialize_mols(parent.mol()).unwrap();
-        if let Some(piece) = pieces.into_iter().next() {
-            let t0 = Instant::now();
-            for _ in 0..50 {
-                let _ = parent.adopt_product(piece.clone());
+        match c.materialize_mols() {
+            Ok(pieces) => {
+                if let Some(piece) = pieces.into_iter().next() {
+                    let t0 = Instant::now();
+                    for _ in 0..50 {
+                        let _ = ForestMol::product(piece.clone(), &parent);
+                    }
+                    Some(t0.elapsed())
+                } else {
+                    None
+                }
             }
-            Some(t0.elapsed())
-        } else {
-            None
+            Err(_) => None,
         }
     } else {
         None
