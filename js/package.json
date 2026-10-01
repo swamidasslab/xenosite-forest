@@ -1,6 +1,6 @@
 {
   "name": "@xenosite/forest",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Metabolic Forest — chematic Phase I search and rules (JS/WASM)",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",

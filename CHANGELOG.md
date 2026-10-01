@@ -10,6 +10,13 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.10.2](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.10.2) - 2026-09-30
+
+### Fixed
+
+- ForestMol(rdkit) keeps GetIdx() atom order (non-canonical SMILES + _smilesAtomOutputOrder check). ([#rdkit-atom-order](https://github.com/swamidasslab/xenosite-forest/issues/rdkit-atom-order))
+
+
 ## [0.10.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.10.1) - 2026-10-01
 
 No significant changes.
