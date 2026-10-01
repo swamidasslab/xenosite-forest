@@ -92,7 +92,11 @@ enumerates topological sorts (capped); small plans expand in text/HTML.
 `unsendable`. Deferred: wire `step_plan_between` into find_path/BFS yields.
 
 Public `ForestMol` in ``xenosite.forest`` is a thin Python subclass (``mol.py``) for lazy
-RDKit ``to_rdkit()`` / RDKit ``__init__`` (`[rdkit]` extra). Atom tags are **not** round-tripped to RDKit.
+RDKit ``to_rdkit()`` / RDKit ``__init__`` (`[rdkit]` extra). Atom tags are **not**
+round-tripped to RDKit. **Sites are in the input heavy-atom frame:** RDKit ingest
+uses non-canonical ``MolToSmiles`` so indexes match ``GetIdx()`` (canonical SMILES
+would reorder, e.g. anisole ``c1ccccc1OC`` → ``COc1ccccc1``). ``to_rdkit()``
+rebuilds from display ``csmi`` and does **not** preserve that frame.
 
 ```rust
 #[pyclass(name = "ForestMol", unsendable)]

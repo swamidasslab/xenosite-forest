@@ -53,6 +53,15 @@ disulfide SMARTS only on GSH / Protein / Glutathionation.
 
 Predict’s older adapter ([`conjugates.py`](../../xenosite-predict/src/xenosite/predict/conjugates.py)) can drop once it calls these options. Forest keeps AtomTracker on star products; `mol_to_cxsmiles` copies before stripping props so tracing is unchanged.
 
+## ForestMol site frame (product door)
+
+`ForestMol(rdkit_mol)` must keep heavy atoms in the predict mol’s `GetIdx()`
+order. Metabolize sites are in that input frame; SOM scores stay on the original
+RDKit indexes — a canonical-SMILES rewrite would attach the wrong atoms
+(anisole: RDKit `c1ccccc1OC` is C0…C5,O6,C7; canonical `COc1ccccc1` puts methyl
+at 0). Product `mol.py` ingests with `MolToSmiles(..., canonical=False)`.
+`to_rdkit()` is still CSMI-based and **not** index-preserving.
+
 ### Examples where GSH vs DNA/Cyanide output differs
 
 Thiol substrates match `[#16h1` and must **not** appear as DNA/Cyanide conjugates:

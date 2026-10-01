@@ -621,4 +621,4 @@ If baseline is not green, fix or document pre-existing failures first — do not
 - **Graph schema:** **`graph-rich-schema`** is a breaking Rust change (multipath edges, larger records) — land incrementally; **`make test`** after each step.
 - **Breaking:** default returns are **handles**, not dicts; dependents must use **`.to_dict()`** or pyclass fields — document in stub docstrings. **Rationale:** §3g (graph **`Rc`** + cross-call **`network=`**).
 - **Anti-pattern:** “marshal for convenience” on graph or path results — rejected; it duplicates the mistake the old CSMI-only hops made at the engine layer.
-- **RDKit bridge:** SMILES-only conversion; tagged trace on product `ForestMol` is lost on `to_rdkit()` — document; do not conflate with native `Mol.xf`.
+- **RDKit bridge:** SMILES conversion with `canonical=False` so ingest keeps `GetIdx()` order (sites in input frame); tagged trace on product `ForestMol` is lost on `to_rdkit()` (CSMI rebuild) — document; do not conflate with native `Mol.xf`.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from typing import Any
 
 from xenosite.forest._ext import load
@@ -25,8 +26,48 @@ def _is_rdkit_mol(spec: Any) -> bool:
     return isinstance(spec, Chem.Mol)
 
 
+def _smiles_atom_output_order(mol: Any) -> list[int]:
+    """Parse RDKit ``_smilesAtomOutputOrder`` set by the last ``MolToSmiles``."""
+
+    raw = mol.GetProp("_smilesAtomOutputOrder")
+    order = ast.literal_eval(raw)
+    return [int(i) for i in order]
+
+
+def _require_identity_smiles_atom_order(mol: Any) -> None:
+    """Raise if the last ``MolToSmiles`` did not emit atoms in ``GetIdx()`` order."""
+
+    order = _smiles_atom_output_order(mol)
+    expected = list(range(mol.GetNumAtoms()))
+    if order != expected:
+        raise ValueError(
+            "RDKit MolToSmiles reordered heavy atoms; "
+            "cannot build ForestMol in the input GetIdx() site frame "
+            f"(output order {order}, expected {expected})"
+        )
+
+
+def _rdkit_to_smiles_preserving_atom_order(mol: Any) -> str:
+    """Non-canonical SMILES whose write order matches ``GetIdx()``, or raise."""
+
+    Chem = _lazy_rdkit()
+    smiles = Chem.MolToSmiles(mol, canonical=False)
+    _require_identity_smiles_atom_order(mol)
+    return smiles
+
+
 class ForestMol:
-    """Delegates to the Rust ``ForestMol`` pyclass; adds RDKit helpers."""
+    """Delegates to the Rust ``ForestMol`` pyclass; adds RDKit helpers.
+
+    **Atom-index frame:** metabolize / emission ``site`` indexes are in the
+    **input** heavy-atom order. For a SMILES string that is the parse order of
+    that string (display ``csmi`` may still be canonical spelling). For an
+    RDKit ``Mol``, ingest writes non-canonical SMILES and checks
+    ``_smilesAtomOutputOrder`` is identity — do **not** round-trip through
+    canonical ``MolToSmiles`` (that reorders, e.g. ``c1ccccc1OC`` →
+    ``COc1ccccc1``). ``to_rdkit()`` rebuilds from ``csmi`` and does **not**
+    preserve indexes.
+    """
 
     __slots__ = ("_inner",)
 
@@ -36,8 +77,7 @@ class ForestMol:
             self._inner = rust(spec)
             return
         if _is_rdkit_mol(spec):
-            Chem = _lazy_rdkit()
-            smiles = Chem.MolToSmiles(spec)
+            smiles = _rdkit_to_smiles_preserving_atom_order(spec)
             self._inner = rust(smiles)
             return
         if isinstance(spec, rust):
@@ -63,7 +103,7 @@ class ForestMol:
         return notebook._forest_mol_html(self._inner)
 
     def to_rdkit(self) -> Any:
-        """RDKit view from chematic CSMI (atom tags are not round-tripped)."""
+        """RDKit view from chematic CSMI (tags and input atom order are lost)."""
 
         Chem = _lazy_rdkit()
         mol = Chem.MolFromSmiles(self.csmi)
@@ -73,6 +113,8 @@ class ForestMol:
 
     @classmethod
     def from_rdkit(cls, mol: Any) -> ForestMol:
+        """Build from RDKit ``Mol`` preserving heavy-atom ``GetIdx()`` order."""
+
         return cls(mol)
 
     @property

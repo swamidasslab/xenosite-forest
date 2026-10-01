@@ -2,6 +2,16 @@
 
 ## 2026-09-30
 
+- **ForestMol RDKit ingest preserves GetIdx() frame.** Product
+  `ForestMol(rdkit_mol)` had used canonical `MolToSmiles`, so anisole
+  `c1ccccc1OC` became chematic `COc1ccccc1` and demethylation sites moved
+  off RDKit index 7. Predict SOM attach needs sites in the predict mol’s
+  index frame. Fix: `MolToSmiles(..., canonical=False)`, then require
+  `_smilesAtomOutputOrder` is identity (raise if RDKit reorders). Display
+  `csmi` / `to_rdkit()` still canonical and do not round-trip indexes.
+  Tests: `test_forest_mol_from_rdkit_preserves_atom_index_frame`,
+  `test_require_identity_smiles_atom_order_rejects_canonical_reorder`.
+
 - **Product parity targets stars.** Native↔Rust leaf fuzz instantiates
   conjugation with default `as_star=True` (not inventory's `as_star=False`).
   Rust `product_csmis` CX block stripped before RDKit CSMI compare. Reactivity
