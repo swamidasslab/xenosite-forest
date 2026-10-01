@@ -80,7 +80,7 @@ jobs:
               exit 1
               ;;
           esac
-      - name: Full forest suite (public stub + native + legacy)
+      - name: Forest suite (product door + native; no legacy)
         run: make test-python
 
   linux:

@@ -2,7 +2,7 @@
 # Mirrors the language jobs in .github/workflows/test.yml.
 
 .PHONY: help check check-rust check-python test test-python test-python-smoke \
-	test-rust test-rust-smoke test-rust-python test-smoke
+	test-python-legacy test-rust test-rust-smoke test-rust-python test-smoke
 
 PYTEST ?= uv run pytest
 # Same as CI: PATH ``cargo`` after dtolnay/rust-toolchain / rust-toolchain.toml.
@@ -25,6 +25,12 @@ PYTHON_SMOKE_PATHS = \
 	tests/forest/native/test_rule_parity_fuzz.py \
 	tests/forest/native/test_rust_parity_coverage.py
 
+# Frozen 0.6.x archive + native↔legacy product pairs. Opt-in only — not CI,
+# not ``make test`` / ``make test-python``.
+PYTHON_LEGACY_PATHS = \
+	tests/forest/legacy \
+	tests/forest/native/test_parity.py
+
 # Full ``test-rust`` still runs ms1_apply_fuzz. Smoke omits that binary (heavy
 # + anthraquinone Hydrogenation plan-replay xfail lives there).
 RUST_SMOKE_INTEGRATION_TESTS = gold_csmi phase1_plan_fuzz sssom_coverage derisk
@@ -33,12 +39,13 @@ help:
 	@echo "check              CI non-test gates (fmt/clippy/WASM/ruff/pyright)"
 	@echo "check-rust         rustfmt + clippy (+ python feature) + WASM build"
 	@echo "check-python       ruff + pyright (forest package + tests)"
-	@echo "test               Rust then full Python (default)"
+	@echo "test               Rust then Python (no legacy)"
 	@echo "test-rust          cargo test -p xenosite-forest"
 	@echo "test-rust-smoke    opt-in: lib + integration except ms1_apply_fuzz"
 	@echo "test-rust-python   cargo test -p xenosite-forest --features python"
-	@echo "test-python        full pytest tests/forest (-n auto, coverage)"
+	@echo "test-python        pytest tests/forest minus legacy / native↔legacy"
 	@echo "test-python-smoke  opt-in: rust wrapper + focused native↔Rust parity"
+	@echo "test-python-legacy opt-in: tests/forest/legacy + native test_parity"
 	@echo "test-smoke         opt-in: test-rust-smoke + test-rust-python + test-python-smoke"
 
 # CI lint/compile gates that ``make test*`` does not run (see test.yml rust +
@@ -73,13 +80,25 @@ test-rust-python:
 	# not link libpython. PYO3_PYTHON forces a consistent interpreter/dylib.
 	PYO3_PYTHON="$(PYO3_PYTHON)" $(CARGO_TEST) --lib --features python
 
+# Default Python suite: product door + native RDKit reference. Excludes frozen
+# legacy archive and native↔legacy ``test_parity`` (use ``test-python-legacy``).
 test-python:
-	$(PYTEST) tests/forest -n auto --cov=xenosite.forest --cov-report=term-missing
+	$(PYTEST) tests/forest -n auto \
+		--ignore=tests/forest/legacy \
+		--ignore=tests/forest/native/test_parity.py \
+		--cov=xenosite.forest --cov-report=term-missing
 
 # Opt-in CI/main smoke. XENOSITE_PARITY_FULL=0 / --parity-focused shrinks
-# rule_parity_fuzz to CoverIntent cases; default make test-python stays full.
+# rule_parity_fuzz to CoverIntent cases; default make test-python stays full
+# native↔Rust cartesian (still without legacy).
 test-python-smoke:
 	XENOSITE_PARITY_FULL=0 $(PYTEST) $(PYTHON_SMOKE_PATHS) -n auto \
+		--parity-focused \
+		--cov=xenosite.forest --cov-report=term-missing
+
+# Opt-in: frozen legacy suite + native↔legacy product pairs. Not on CI.
+test-python-legacy:
+	$(PYTEST) $(PYTHON_LEGACY_PATHS) -n auto \
 		--cov=xenosite.forest --cov-report=term-missing
 
 test-smoke: test-rust-smoke test-rust-python test-python-smoke

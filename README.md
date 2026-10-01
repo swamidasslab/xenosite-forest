@@ -155,8 +155,9 @@ git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
 uv sync --extra network --group dev   # maturin builds the Rust extension
 make check                            # CI non-test gates (fmt/clippy/WASM/ruff/pyright)
-make test                             # Rust + Python (see Makefile)
-make test-python                      # pytest tests/forest only
+make test                             # Rust + Python (no legacy; see Makefile)
+make test-python                      # pytest tests/forest minus legacy
+make test-python-legacy               # opt-in: legacy archive + native↔legacy
 make test-rust                        # cargo test -p xenosite-forest
 ```
 

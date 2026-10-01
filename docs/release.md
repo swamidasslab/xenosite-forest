@@ -54,11 +54,12 @@ Wheels are built **only** on that tag workflow — not on PR or push to
 |---|---|
 | PR | Lint only (ruff / pyright / rustfmt / clippy / WASM compile) |
 | `main` | Single Python 3.12: `make test-python-smoke` + `make test-rust-smoke` + JS |
-| `v*` tag | Full `make test-python` on 3.11–3.14; publish blocked on fail |
+| `v*` tag | `make test-python` on 3.11–3.14 (no legacy); publish blocked on fail |
 
-Local defaults are unchanged: `make test` / `make test-python` / `make test-rust`
-still run the whole suite. Smoke is opt-in (`make test-python-smoke` /
-`make test-rust-smoke` / `make test-smoke`). `test-rust-smoke` omits the
+Local defaults: `make test` / `make test-python` exclude frozen legacy and
+native↔legacy `test_parity.py`. Smoke is opt-in (`make test-python-smoke` /
+`make test-rust-smoke` / `make test-smoke`). Legacy archive + native↔legacy
+pairs: `make test-python-legacy` (not CI). `test-rust-smoke` omits the
 `ms1_apply_fuzz` integration binary (full suite on tags / `make test-rust`
 still runs it). CI non-test gates (rustfmt, clippy, WASM compile, ruff,
 pyright) are `make check` — run that before pushing; `make test*` does not.
@@ -75,12 +76,15 @@ pyright) are `make check` — run that before pushing; `make test*` does not.
   `test_rust_parity_coverage.py` (coverage-substrate product sets)
 - JS wrapper: `npm test` (tsc + API smoke)
 
-**Exclude (still on tag full suite)**
+**Exclude (never on CI; opt-in locally)**
 
-- Entire `tests/forest/legacy/`
-- Native-only RDKit suites (goldens, Hypothesis fuzz, CLI, ported archives,
-  `test_canonical_plan`, native↔legacy `test_parity.py`, …)
-- Full rule×mol cartesian parity (`XENOSITE_PARITY_FULL=1`, the default)
+- Entire `tests/forest/legacy/` and native↔legacy `test_parity.py`
+  (`make test-python-legacy`)
+- Native-only RDKit suites on main smoke only (goldens, Hypothesis fuzz, CLI,
+  ported archives, `test_canonical_plan`, …) — still on tag `make test-python`
+- Full rule×mol cartesian native↔Rust parity on main smoke
+  (`XENOSITE_PARITY_FULL=1`); tag / local `make test-python` keep the full
+  cartesian
 
 ## Forest ↔ XMET SSSOM snapshot
 

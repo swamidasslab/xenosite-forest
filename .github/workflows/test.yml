@@ -9,8 +9,8 @@ on:
 # PRs: lint only (ruff / pyright / rustfmt / clippy / WASM compile).
 # Main: fast smoke — single Python 3.12, make test-python-smoke,
 # make test-rust-smoke (no ms1_apply_fuzz), full cargo --features python + JS.
-# Tags: release.yml runs the full multi-Python suite and blocks publish on fail.
-# Defaults (make test / make test-python) stay the whole suite locally.
+# Tags: release.yml runs make test-python (no legacy) on 3.11–3.14.
+# Legacy / native↔legacy parity is opt-in only: make test-python-legacy.
 # If Protect main required checks drift from this file, PRs become unmergeable.
 # PR gates should be contexts that still run on pull_request: ``lint`` + ``rust``.
 # (pytest / js are main-only; do not require those on PRs.)
@@ -51,7 +51,7 @@ jobs:
         run: uv sync --extra rdkit --extra network --group dev
       - name: Show package version
         run: uv run python -c "import xenosite.forest as m; print(m.__version__); assert m.available()"
-      - name: Product-door smoke (rust wrapper + focused parity)
+      - name: Product-door smoke (rust wrapper + focused native↔Rust parity)
         run: make test-python-smoke
 
   rust:

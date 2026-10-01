@@ -2,6 +2,11 @@
 
 ## 2026-09-30
 
+- **Legacy / native↔legacy off default + CI.** `make test-python` ignores
+  `tests/forest/legacy` and `tests/forest/native/test_parity.py`. Release
+  CI uses that same recipe. Opt-in: `make test-python-legacy`. Main smoke
+  still runs focused native↔Rust parity only.
+
 - **ForestMol RDKit ingest preserves GetIdx() frame.** Product
   `ForestMol(rdkit_mol)` had used canonical `MolToSmiles`, so anisole
   `c1ccccc1OC` became chematic `COc1ccccc1` and demethylation sites moved

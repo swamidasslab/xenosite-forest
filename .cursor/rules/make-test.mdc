@@ -13,7 +13,8 @@ When running this repo’s tests, use the Makefile — do not invent ad-hoc
 | Both languages (default) | `make test` |
 | Rust only | `make test-rust` |
 | Rust + `python` feature | `make test-rust-python` |
-| Python forest suite | `make test-python` |
+| Python forest suite (no legacy) | `make test-python` |
+| Legacy archive + native↔legacy | `make test-python-legacy` |
 | CI non-test gates | `make check` |
 
 These mirror `.github/workflows/test.yml`. Narrow filters (`cargo test --lib foo`,
@@ -22,3 +23,7 @@ suite back through `make` when checking green.
 
 **Before pushing / cutting a tag:** run `make check` (fmt, clippy ×2, WASM
 build, ruff, pyright) — `make test*` does not cover those gates.
+
+**Legacy:** `tests/forest/legacy` and native↔legacy `test_parity.py` are
+**not** on CI or default `make test` / `make test-python`. Use
+`make test-python-legacy` when you need them.
