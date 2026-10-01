@@ -39,12 +39,13 @@ git tag -a v0.8.1 -m "0.8.1"
 git push origin v0.8.1
 ```
 
-Pushing `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml):
-[`scripts/set_release_version.py`](../scripts/set_release_version.py) sets
-package versions from the tag, then tests, platform wheels (manylinux /
-musllinux / macOS / Windows, x86_64 + aarch64), sdist, GitHub Release, PyPI
-upload, JS publish, and a housekeeping commit on the default branch
-(`CHANGELOG.md` + Cargo/JS versions). That push needs repo secret
+Pushing `v*` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+Each test/build/publish job sets package versions from the tag via
+[`scripts/set_release_version.py`](../scripts/set_release_version.py) — builds
+do not wait on a main bump. Order: tests → platform wheels (manylinux /
+musllinux / macOS / Windows, x86_64 + aarch64) + sdist + JS → GitHub Release
++ PyPI → then a housekeeping commit on tip of the default branch
+(`CHANGELOG.md` + Cargo/JS versions). That final push needs repo secret
 `RELEASE_PUSH_TOKEN` (see [`.github/PUBLISH.md`](../.github/PUBLISH.md)).
 
 Wheels are built **only** on that tag workflow — not on PR or push to

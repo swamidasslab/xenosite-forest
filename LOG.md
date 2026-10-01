@@ -1,5 +1,14 @@
 # Lab log
 
+## 2026-10-01
+
+- **v0.10.2 release race.** Tag cut at `573ae8f`; `41a8319` landed on main
+  before the changelog job pushed. Job checked out the tag and
+  `git push HEAD:main` was non-fast-forward; publish still succeeded (PyPI /
+  GH Release / npm `0.10.2`). Manual tip-of-main bump later. Fix: builds keep
+  taking version from the tag; changelog runs after publish/js and applies
+  the bump on tip of default branch.
+
 ## 2026-09-30
 
 - **Legacy / native↔legacy off default + CI.** `make test-python` ignores

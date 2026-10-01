@@ -3,13 +3,15 @@
 ## Python (PyPI)
 
 Tag `vX.Y.Z`. Workflow [`release.yml`](workflows/release.yml) sets
-`crates/xenosite-forest/Cargo.toml` from the tag, runs tests, builds manylinux /
-musllinux / macOS / Windows wheels (x86_64 + aarch64) + sdist, then publishes to
-PyPI via Trusted Publishing (OIDC, environment `pypi`).
+`crates/xenosite-forest/Cargo.toml` from the tag in every build job, runs
+tests, builds manylinux / musllinux / macOS / Windows wheels (x86_64 +
+aarch64) + sdist, then publishes to PyPI via Trusted Publishing (OIDC,
+environment `pypi`). The main-branch changelog / version commit runs only
+after that publish succeeds.
 
 ## Release housekeeping push (`RELEASE_PUSH_TOKEN`)
 
-Protect main blocks `GITHUB_TOKEN` from pushing the post-tag version /
+Protect main blocks `GITHUB_TOKEN` from pushing the post-publish version /
 CHANGELOG commit. Use a PAT for an account on the ruleset bypass list
 (currently `swamidass`).
 

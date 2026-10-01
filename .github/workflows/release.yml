@@ -2,9 +2,14 @@
 # Pushing a tag always creates the git tag; this workflow refuses to publish
 # a GitHub Release / PyPI upload unless the suite is green.
 #
-# Version comes from the tag. scripts/set_release_version.py rewrites
-# Cargo.toml / Cargo.lock / js/package.json before builds; the changelog job
-# commits those bumps onto the default branch with CHANGELOG.md.
+# Version always comes from the tag in each build/publish job via
+# scripts/set_release_version.py (Cargo.toml / Cargo.lock / js/package.json).
+# Builds do not depend on the post-release housekeeping commit on main.
+#
+# After PyPI (+ JS) publish succeeds, the changelog job checks out the
+# default branch tip, applies towncrier + the same version rewrite, and
+# pushes the housekeeping commit. That ordering avoids racing main and
+# keeps publish independent of whether the bump landed.
 #
 # Protect main blocks GITHUB_TOKEN pushes. One-time: create a classic PAT
 # (or fine-grained: Contents R/W on this repo) for an account that can bypass
@@ -100,7 +105,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set package version from tag
-        run: python scripts/set_release_version.py
+        run: |
+          set -euo pipefail
+          python scripts/set_release_version.py
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          echo "tag=$TAG_VER cargo=$CARGO_VER"
+          test "$TAG_VER" = "$CARGO_VER"
       - name: Build manylinux wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -133,7 +144,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set package version from tag
-        run: python scripts/set_release_version.py
+        run: |
+          set -euo pipefail
+          python scripts/set_release_version.py
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          echo "tag=$TAG_VER cargo=$CARGO_VER"
+          test "$TAG_VER" = "$CARGO_VER"
       - name: Build musllinux wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -166,7 +183,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set package version from tag
-        run: python scripts/set_release_version.py
+        run: |
+          set -euo pipefail
+          python scripts/set_release_version.py
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          echo "tag=$TAG_VER cargo=$CARGO_VER"
+          test "$TAG_VER" = "$CARGO_VER"
       - name: Build macOS wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -201,7 +224,14 @@ jobs:
           python-version: "3.12"
           architecture: ${{ matrix.platform.python_arch }}
       - name: Set package version from tag
-        run: python scripts/set_release_version.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/set_release_version.py
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          echo "tag=$TAG_VER cargo=$CARGO_VER"
+          test "$TAG_VER" = "$CARGO_VER"
       - name: Build Windows wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -225,7 +255,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Set package version from tag
-        run: python scripts/set_release_version.py
+        run: |
+          set -euo pipefail
+          python scripts/set_release_version.py
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          echo "tag=$TAG_VER cargo=$CARGO_VER"
+          test "$TAG_VER" = "$CARGO_VER"
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -248,7 +284,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set package version from tag
-        run: python3 scripts/set_release_version.py
+        run: |
+          set -euo pipefail
+          python3 scripts/set_release_version.py
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          JS_VER=$(python3 -c "import json; print(json.load(open('js/package.json'))['version'])")
+          echo "tag=$TAG_VER cargo=$CARGO_VER js=$JS_VER"
+          test "$TAG_VER" = "$CARGO_VER"
+          test "$TAG_VER" = "$JS_VER"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.88.0"
@@ -297,53 +341,6 @@ jobs:
           name: npm-forest
           path: dist-js/
 
-  changelog:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Require RELEASE_PUSH_TOKEN
-        env:
-          HAS_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
-        run: |
-          if [ "$HAS_TOKEN" != "true" ]; then
-            echo "::error::Set repo secret RELEASE_PUSH_TOKEN (PAT that can bypass Protect main). See .github/PUBLISH.md"
-            exit 1
-          fi
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          # Bypass Protect main: PAT of a ruleset-bypass user (not GITHUB_TOKEN).
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-      - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: "3.12"
-      - name: Version without v prefix
-        id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Set package version from tag
-        run: python3 scripts/set_release_version.py
-      - name: Compile CHANGELOG.md and commit version bump
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          VERSION="${{ steps.ver.outputs.version }}"
-          if grep -Eq "^## \[${VERSION}\]" CHANGELOG.md; then
-            echo "CHANGELOG.md already has [${VERSION}]"
-          else
-            uvx towncrier build --yes --version "$VERSION"
-          fi
-          git add CHANGELOG.md changelog.d \
-            crates/xenosite-forest/Cargo.toml Cargo.lock js/package.json
-          if git diff --cached --quiet; then
-            echo "No release housekeeping changes to commit"
-            exit 0
-          fi
-          git commit -m "Release ${GITHUB_REF_NAME}: changelog + package versions."
-          git push origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}"
-
   publish:
     needs: [linux, musllinux, macos, windows, sdist]
     runs-on: ubuntu-latest
@@ -365,6 +362,29 @@ jobs:
           merge-multiple: true
       - name: List dist
         run: ls -la dist
+      - name: Require artifact versions match tag
+        run: |
+          set -euo pipefail
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          shopt -s nullglob
+          files=(dist/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No artifacts in dist/"
+            exit 1
+          fi
+          bad=0
+          for f in "${files[@]}"; do
+            base=$(basename "$f")
+            case "$base" in
+              *"-$TAG_VER-"*|*"-$TAG_VER."*|*"-$TAG_VER.tar."*)
+                ;;
+              *)
+                echo "::error::Artifact version mismatch for tag $TAG_VER: $base"
+                bad=1
+                ;;
+            esac
+          done
+          test "$bad" -eq 0
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -375,3 +395,65 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+  # Housekeeping only: never gates publish. Runs on tip of default branch so
+  # concurrent main commits cannot non-fast-forward the bump push.
+  changelog:
+    needs: [publish, js]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Require RELEASE_PUSH_TOKEN
+        env:
+          HAS_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::Set repo secret RELEASE_PUSH_TOKEN (PAT that can bypass Protect main). See .github/PUBLISH.md"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Tip of main (not the tag): apply bump as a forward commit.
+          ref: ${{ github.event.repository.default_branch }}
+          # Bypass Protect main: PAT of a ruleset-bypass user (not GITHUB_TOKEN).
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Version without v prefix
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Compile CHANGELOG.md and commit version bump
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          VERSION="${{ steps.ver.outputs.version }}"
+          BRANCH="${{ github.event.repository.default_branch }}"
+          # Tip of main at push time (main may have moved during publish/js).
+          git fetch origin "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+          python3 scripts/set_release_version.py
+          CARGO_VER=$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$CARGO_PACKAGE_VERSION_FILE" | head -1)
+          echo "tag=$VERSION cargo=$CARGO_VER"
+          test "$VERSION" = "$CARGO_VER"
+          if grep -Eq "^## \[${VERSION}\]" CHANGELOG.md; then
+            echo "CHANGELOG.md already has [${VERSION}]"
+          else
+            uvx towncrier build --yes --version "$VERSION"
+          fi
+          git add CHANGELOG.md changelog.d \
+            crates/xenosite-forest/Cargo.toml Cargo.lock js/package.json
+          if git diff --cached --quiet; then
+            echo "No release housekeeping changes to commit"
+            exit 0
+          fi
+          git commit -m "Release ${GITHUB_REF_NAME}: changelog + package versions."
+          # Retry once if main advanced between reset and push.
+          if ! git push origin "HEAD:refs/heads/${BRANCH}"; then
+            git fetch origin "$BRANCH"
+            git pull --rebase origin "$BRANCH"
+            git push origin "HEAD:refs/heads/${BRANCH}"
+          fi
