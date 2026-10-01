@@ -2178,7 +2178,11 @@ fn glutathionation_patterns(include_thiol: bool) -> Vec<PatternInfo> {
             vec![1],
             gsh_halide_effect(),
         )
-        .with_possibilities(halide_remove_branches_z(2, gsh_halide_effect(), HALIDE_Z_NO_AT)),
+        .with_possibilities(halide_remove_branches_z(
+            2,
+            gsh_halide_effect(),
+            HALIDE_Z_NO_AT,
+        )),
         smirks_row(
             "alkene",
             "[#6H2:1]=[#6:2]>>C(CC(=O)N[C@@H](CS([*:1]-[*:2]))C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
@@ -2255,10 +2259,7 @@ fn glutathionation_patterns(include_thiol: bool) -> Vec<PatternInfo> {
 fn glutathionation_leaf(name: &'static str, include_thiol: bool) -> RuleSet {
     seal_leaf(
         name,
-        RuleSet::new(
-            Some(name.into()),
-            glutathionation_patterns(include_thiol),
-        ),
+        RuleSet::new(Some(name.into()), glutathionation_patterns(include_thiol)),
     )
 }
 

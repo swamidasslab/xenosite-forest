@@ -88,9 +88,7 @@ pub fn collapse_conjugate_to_star(product: &ForestMol, label: &str) -> ForestMol
         let remap = mol.remove_atom(AtomIdx(i as u32));
         src_to_new = src_to_new
             .into_iter()
-            .map(|cur| {
-                cur.and_then(|j| remap.get(j).copied().flatten().map(|a| a.0 as usize))
-            })
+            .map(|cur| cur.and_then(|j| remap.get(j).copied().flatten().map(|a| a.0 as usize)))
             .collect();
     }
 
@@ -138,10 +136,7 @@ mod tests {
             );
             let cx = p.write_cxsmiles();
             assert!(cx.contains('*'), "CXSMILES missing *: {cx}");
-            assert!(
-                cx.contains(label),
-                "CXSMILES missing label {label:?}: {cx}"
-            );
+            assert!(cx.contains(label), "CXSMILES missing label {label:?}: {cx}");
             let stars: Vec<_> = p
                 .mol()
                 .atoms()
@@ -232,9 +227,7 @@ mod tests {
         mol.add_bond(atom_idx(free_o), new_idx, BondOrder::Single)
             .expect("attach star");
         let mut p = ForestMol::product(mol, &first);
-        let new_star_tag = p
-            .tag_of(atom_usize(new_idx))
-            .expect("born star tagged");
+        let new_star_tag = p.tag_of(atom_usize(new_idx)).expect("born star tagged");
         p.set_cx_label(new_star_tag, "GlcA");
 
         assert_eq!(p.cx_label(first_star_tag), Some("SO3"));

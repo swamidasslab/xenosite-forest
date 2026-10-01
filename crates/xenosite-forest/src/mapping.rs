@@ -292,8 +292,7 @@ mod tests {
             if !row.object_id.starts_with("xf:") {
                 continue;
             }
-            resolve(&row.object_id)
-                .unwrap_or_else(|e| panic!("{}: {e}", row.object_id));
+            resolve(&row.object_id).unwrap_or_else(|e| panic!("{}: {e}", row.object_id));
         }
     }
 }

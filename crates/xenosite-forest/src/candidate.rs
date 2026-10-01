@@ -338,7 +338,9 @@ impl DeferredSite {
             .map(|piece| {
                 let product = self.mol.from_edit_product(piece);
                 match star_label {
-                    Some(label) => crate::star_conjugate::collapse_conjugate_to_star(&product, label),
+                    Some(label) => {
+                        crate::star_conjugate::collapse_conjugate_to_star(&product, label)
+                    }
                     None => product,
                 }
             })
