@@ -60,7 +60,8 @@ Local defaults are unchanged: `make test` / `make test-python` / `make test-rust
 still run the whole suite. Smoke is opt-in (`make test-python-smoke` /
 `make test-rust-smoke` / `make test-smoke`). `test-rust-smoke` omits the
 `ms1_apply_fuzz` integration binary (full suite on tags / `make test-rust`
-still runs it).
+still runs it). CI non-test gates (rustfmt, clippy, WASM compile, ruff,
+pyright) are `make check` — run that before pushing; `make test*` does not.
 
 ### Main smoke contents
 

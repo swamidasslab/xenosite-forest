@@ -154,6 +154,7 @@ A machine-readable citation is also in [`CITATION.cff`](https://github.com/swami
 git clone https://github.com/swamidasslab/xenosite-forest.git
 cd xenosite-forest
 uv sync --extra network --group dev   # maturin builds the Rust extension
+make check                            # CI non-test gates (fmt/clippy/WASM/ruff/pyright)
 make test                             # Rust + Python (see Makefile)
 make test-python                      # pytest tests/forest only
 make test-rust                        # cargo test -p xenosite-forest

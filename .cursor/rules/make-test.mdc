@@ -14,7 +14,11 @@ When running this repo’s tests, use the Makefile — do not invent ad-hoc
 | Rust only | `make test-rust` |
 | Rust + `python` feature | `make test-rust-python` |
 | Python forest suite | `make test-python` |
+| CI non-test gates | `make check` |
 
 These mirror `.github/workflows/test.yml`. Narrow filters (`cargo test --lib foo`,
 `pytest path::test`) are fine for debugging a single failure; put the full
 suite back through `make` when checking green.
+
+**Before pushing / cutting a tag:** run `make check` (fmt, clippy ×2, WASM
+build, ruff, pyright) — `make test*` does not cover those gates.

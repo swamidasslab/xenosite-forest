@@ -1,11 +1,14 @@
-# Local test entry points. Prefer these over ad-hoc cargo/pytest.
+# Local test + lint entry points. Prefer these over ad-hoc cargo/pytest.
 # Mirrors the language jobs in .github/workflows/test.yml.
 
-.PHONY: help test test-python test-python-smoke test-rust test-rust-smoke \
-	test-rust-python test-smoke
+.PHONY: help check check-rust check-python test test-python test-python-smoke \
+	test-rust test-rust-smoke test-rust-python test-smoke
 
 PYTEST ?= uv run pytest
-CARGO_TEST ?= cargo test -p xenosite-forest
+# Same as CI: PATH ``cargo`` after dtolnay/rust-toolchain / rust-toolchain.toml.
+# Do not rewrite to an absolute rustup path — that diverges from CI/CD.
+CARGO ?= cargo
+CARGO_TEST ?= $(CARGO) test -p xenosite-forest
 # PyO3 links libpython for ``--features python`` unit tests. Prefer the project
 # uv interpreter locally; on CI (no uv in the rust job) fall back to python3
 # from setup-python / PATH so PYO3_PYTHON is never empty.
@@ -27,6 +30,9 @@ PYTHON_SMOKE_PATHS = \
 RUST_SMOKE_INTEGRATION_TESTS = gold_csmi phase1_plan_fuzz sssom_coverage derisk
 
 help:
+	@echo "check              CI non-test gates (fmt/clippy/WASM/ruff/pyright)"
+	@echo "check-rust         rustfmt + clippy (+ python feature) + WASM build"
+	@echo "check-python       ruff + pyright (forest package + tests)"
 	@echo "test               Rust then full Python (default)"
 	@echo "test-rust          cargo test -p xenosite-forest"
 	@echo "test-rust-smoke    opt-in: lib + integration except ms1_apply_fuzz"
@@ -34,6 +40,22 @@ help:
 	@echo "test-python        full pytest tests/forest (-n auto, coverage)"
 	@echo "test-python-smoke  opt-in: rust wrapper + focused native↔Rust parity"
 	@echo "test-smoke         opt-in: test-rust-smoke + test-rust-python + test-python-smoke"
+
+# CI lint/compile gates that ``make test*`` does not run (see test.yml rust +
+# lint jobs). Needs ``wasm32-unknown-unknown`` on the active toolchain.
+# If Homebrew cargo/rustc is ahead of rustup on PATH, put
+# ``$$(dirname $$(rustup which rustc))`` first or WASM will fail to find core.
+check: check-rust check-python
+
+check-rust:
+	$(CARGO) fmt --all -- --check
+	$(CARGO) clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
+	$(CARGO) clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
+	$(CARGO) build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
+
+check-python:
+	uv run ruff check src/xenosite/forest tests/forest
+	uv run pyright src/xenosite/forest
 
 test: test-rust test-python
 

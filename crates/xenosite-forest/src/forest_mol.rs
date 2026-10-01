@@ -329,11 +329,11 @@ impl ForestMol {
         use chematic::smiles::{CxSmiles, write_cxsmiles};
         let n = self.mol.atom_count();
         let mut atom_labels = vec![None; n];
-        for i in 0..n {
+        for (i, slot) in atom_labels.iter_mut().enumerate() {
             if let Some(tag) = self.tag_of(i)
                 && let Some(lab) = self.cx_labels.get(&tag)
             {
-                atom_labels[i] = Some(lab.clone());
+                *slot = Some(lab.clone());
             }
         }
         let cx = CxSmiles {
