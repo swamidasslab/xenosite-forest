@@ -7,6 +7,7 @@
 
 import { initNative, requireReady } from "./native.js";
 import {
+  BoundPattern,
   ForestMol,
   Formula,
   PatternInfo,
@@ -16,9 +17,11 @@ import {
   dehydrogenation as wasmDehydrogenation,
   epoxidation as wasmEpoxidation,
   epoxide_opening as wasmEpoxideOpening,
+  expand_iri as wasmExpandIri,
   find_path_with_options as wasmFindPathWithOptions,
   forest_canon_smiles as wasmForestCanonSmiles,
   forest_hydroxylate as wasmForestHydroxylate,
+  forest_xmet_sssom as wasmForestXmetSssom,
   hydrolysis as wasmHydrolysis,
   hydroxylation as wasmHydroxylation,
   n_dealkylation as wasmNDealkylation,
@@ -27,9 +30,11 @@ import {
   random_path as wasmRandomPath,
   random_path_with_options as wasmRandomPathWithOptions,
   reactivity as wasmReactivity,
+  resolve as wasmResolve,
+  to_curie as wasmToCurie,
 } from "./wasm/xenosite_forest.js";
 
-export { ForestMol, Formula, PatternInfo, RuleSet };
+export { BoundPattern, ForestMol, Formula, PatternInfo, RuleSet };
 export { initNative as init, isNativeReady } from "./native.js";
 
 export type FindPathOptions = {
@@ -210,4 +215,28 @@ export function forestCanonSmiles(smiles: string): string {
 export function forestHydroxylate(smiles: string): string {
   requireReady();
   return wasmForestHydroxylate(smiles);
+}
+
+/** Resolve an `xf:` CURIE / Forest IRI to a {@link RuleSet} or {@link BoundPattern}. */
+export function resolve(id: string): RuleSet | BoundPattern {
+  requireReady();
+  return wasmResolve(id) as RuleSet | BoundPattern;
+}
+
+/** Expand `xf:` / `xmet:` CURIEs (absolute IRIs pass through). */
+export function expandIri(curieOrIri: string): string {
+  requireReady();
+  return wasmExpandIri(curieOrIri);
+}
+
+/** Compact an absolute `xf` / `xmet` IRI to a CURIE when possible. */
+export function toCurie(iri: string): string {
+  requireReady();
+  return wasmToCurie(iri);
+}
+
+/** Decompressed Forest↔XMET SSSOM TSV text. */
+export function forestXmetSssom(): string {
+  requireReady();
+  return wasmForestXmetSssom();
 }

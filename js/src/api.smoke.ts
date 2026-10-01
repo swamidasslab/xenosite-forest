@@ -1,14 +1,19 @@
 /**
- * Node smoke: ForestMol, findPath, PhaseOne metabolize, randomPath.
+ * Node smoke: ForestMol, findPath, PhaseOne / resolve metabolize, randomPath.
  * Run: `npx tsx src/api.smoke.ts` (after wasm build).
  */
 import {
+  BoundPattern,
   ForestMol,
   PhaseOne,
   Reactivity,
+  RuleSet,
   ensureInit,
+  expandIri,
   findPath,
   randomPath,
+  resolve,
+  toCurie,
 } from "./index.js";
 
 if (typeof document !== "undefined") {
@@ -58,6 +63,45 @@ if (!rows[0]!.products?.length) {
   throw new Error("metabolize row missing products");
 }
 
+const viaResolve = resolve("xf:PhaseOne");
+if (!(viaResolve instanceof RuleSet)) {
+  throw new Error("resolve(xf:PhaseOne) expected RuleSet");
+}
+const anisole = new ForestMol("c1ccccc1OC");
+const resolveRows = viaResolve.metabolize(anisole) as Array<{
+  pattern_name: string;
+  site: number;
+  products: string[];
+  rule_path: Array<string | null>;
+}>;
+if (!Array.isArray(resolveRows) || resolveRows.length < 1) {
+  throw new Error("resolve(xf:PhaseOne).metabolize returned no rows");
+}
+const first = resolveRows[0]!;
+if (!first.products?.length || typeof first.site !== "number") {
+  throw new Error("resolve metabolize row missing products/site");
+}
+if (!Array.isArray(first.rule_path)) {
+  throw new Error("resolve metabolize row missing rule_path");
+}
+
+const leaf = resolve("xf:PhaseOne/StableOxygenation/Hydroxylation/h");
+if (!(leaf instanceof BoundPattern)) {
+  throw new Error("resolve(…/h) expected BoundPattern");
+}
+if (!leaf.curie.includes("Hydroxylation")) {
+  throw new Error(`unexpected BoundPattern.curie=${leaf.curie}`);
+}
+const leafRows = leaf.metabolize(benzene) as Array<{ products: string[] }>;
+if (!Array.isArray(leafRows) || leafRows.length < 1) {
+  throw new Error("BoundPattern.metabolize returned no rows");
+}
+
+const iri = expandIri("xf:PhaseOne");
+if (!iri.includes("PhaseOne") || toCurie(iri) !== "xf:PhaseOne") {
+  throw new Error(`expandIri/toCurie roundtrip failed: ${iri}`);
+}
+
 const react = Reactivity();
 const epoxide = new ForestMol("C1OC1c1ccccc1");
 const conj = react.metabolize(epoxide) as Array<{
@@ -87,5 +131,5 @@ if (!Array.isArray(walk.steps)) {
 }
 
 console.log(
-  "ok: ForestMol, findPath, PhaseOne.metabolize, Reactivity CX stars, randomPath"
+  "ok: ForestMol, findPath, PhaseOne/resolve.metabolize, Reactivity CX stars, randomPath"
 );

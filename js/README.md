@@ -19,11 +19,27 @@ npm install @swamidasslab/forest
 ## Usage
 
 ```ts
-import { init, findPath, PhaseOne, ForestMol } from "@swamidasslab/forest";
+import { init, ForestMol, resolve } from "@swamidasslab/forest";
 
 await init();
-const [hits, counters] = findPath("CC", "CCO", { maxPaths: 1 });
-const rows = PhaseOne().metabolize(new ForestMol("c1ccccc1"));
+
+const rules = resolve("xf:PhaseOne"); // RuleSet (or BoundPattern for a leaf CURIE)
+const smi = "c1ccccc1OC";
+
+/** @returns {Array<[string[], number, Array<string|null>]>} */
+function products(rules, reactant) {
+  const rows = rules.metabolize(new ForestMol(reactant));
+  // rows: { pattern_name, site, products: string[], rule_path: (string|null)[] }[]
+  return rows.map((emit) => {
+    const path = [...emit.rule_path].reverse();
+    path.push(emit.pattern_name);
+    return [emit.products, emit.site, path];
+  });
+}
+
+for (const row of products(rules, smi)) {
+  console.log(row);
+}
 ```
 
 ## Develop
