@@ -440,6 +440,17 @@ impl ForestMol {
             .map(Arc::clone)
     }
 
+    /// Yield-dedup key: bare [`Self::stable_csmi_key`], or CXSMILES when this
+    /// mol carries tag-keyed star labels (Reactivity GSH vs Protein vs …).
+    pub fn unique_product_key(&self) -> Option<String> {
+        if self.cx_labels.is_empty() {
+            self.stable_csmi_key().map(|k| k.as_ref().to_string())
+        } else {
+            // Labeled stars share a graph CSMI; CX atomLabel is the identity.
+            Some(self.write_cxsmiles())
+        }
+    }
+
     pub fn formula(&self) -> Arc<Formula> {
         let mut cache = self.structure.lock().unwrap_or_else(|e| e.into_inner());
         if cache.formula.is_none() {

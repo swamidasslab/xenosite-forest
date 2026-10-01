@@ -8,6 +8,10 @@
   / NoThiol rust-only leaves get `parity_exception`. Public `__all__` includes
   `reactivity`.
 
+- **Reactivity unique_csmi keeps all four heads.** Cross-leaf yield dedup keyed
+  on bare graph CSMI collapsed GSH/Protein/DNA/Cyanide (same `*`).
+  `ForestMol::unique_product_key` uses CXSMILES when `cx_labels` is non-empty.
+
 - **Star labels are tag-keyed, not CxSmiles-on-ForestMol.** Do not store a
   chematic `CxSmiles` blob on `ForestMol`. Labels live in
   `ForestMol.cx_labels: Tag → String`; emit projects into

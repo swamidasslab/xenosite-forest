@@ -296,10 +296,14 @@ where
 }
 
 /// Product multiset for yield dedup — `None` if any fragment lacks a stable key.
+///
+/// Uses [`ForestMol::unique_product_key`] so conjugation / reactivity stars
+/// with distinct CX labels (GSH vs Protein vs DNA vs Cyanide) do not collapse
+/// under cross-leaf `unique_csmi`.
 fn emission_stable_product_key(products: &[ForestMol]) -> Option<BTreeSet<String>> {
     let mut key = BTreeSet::new();
     for p in products {
-        key.insert(p.stable_csmi_key()?.as_ref().to_string());
+        key.insert(p.unique_product_key()?);
     }
     Some(key)
 }

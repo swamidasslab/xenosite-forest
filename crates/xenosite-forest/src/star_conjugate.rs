@@ -257,4 +257,42 @@ mod tests {
         assert_eq!(parsed.atom_labels[old_i].as_deref(), Some("SO3"), "{cx}");
         assert_eq!(parsed.atom_labels[new_i].as_deref(), Some("GlcA"), "{cx}");
     }
+
+    /// Composed `reactivity()` must not unique-csmi-collapse GSH/Protein/DNA/Cyanide.
+    #[test]
+    fn reactivity_emits_all_four_heads_with_distinct_labels() {
+        use crate::rules::reactivity;
+        use crate::ruleset::{accept_all_rules, accept_all_sites};
+        use std::collections::BTreeSet;
+
+        let mol = ForestMol::new(parse_mol("C=2C1OC1C=CC=2").unwrap());
+        let emissions: Vec<_> = reactivity()
+            .metabolize(&mol, accept_all_rules, accept_all_sites, true)
+            .map(|e| e.expect("metabolize"))
+            .collect();
+        let leaves: BTreeSet<_> = emissions
+            .iter()
+            .filter_map(|e| e.leaf_rule().map(str::to_string))
+            .collect();
+        assert_eq!(
+            leaves,
+            BTreeSet::from([
+                "GSH".into(),
+                "Protein".into(),
+                "DNA".into(),
+                "Cyanide".into(),
+            ]),
+            "got {:?}",
+            emissions
+                .iter()
+                .map(|e| (e.leaf_rule(), e.product_csmis()))
+                .collect::<Vec<_>>()
+        );
+        for e in &emissions {
+            let label = conjugate_star_label(e.leaf_rule().unwrap()).unwrap();
+            let cx = &e.product_csmis()[0];
+            assert!(cx.contains(label), "{cx} missing {label}");
+            assert!(cx.contains('*'), "{cx}");
+        }
+    }
 }
