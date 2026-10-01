@@ -10,6 +10,11 @@ release; fragments live in [`changelog.d/`](changelog.d/).
 
 <!-- towncrier release notes start -->
 
+## [0.10.1](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.10.1) - 2026-10-01
+
+No significant changes.
+
+
 ## [0.10.0](https://github.com/swamidasslab/xenosite-forest/releases/tag/v0.10.0) - 2026-09-30
 
 ### Changed
