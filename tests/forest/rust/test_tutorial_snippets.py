@@ -103,12 +103,14 @@ def test_tutorial_random_path_seeded():
 
 
 def test_tutorial_find_path_partial_smoke():
-    exact, partials, counters, net = find_path_partial(
+    outcomes, counters, net = find_path_partial(
         APAP,
         NAPQI,
         max_paths=1,
         max_nodes=80,
         use_atom_diff=False,
     )
-    assert exact or partials or counters.billed >= 0
+    assert len(outcomes) <= 1
+    assert all(o.residual_cost >= 0 for o in outcomes)
+    assert counters.billed >= 0
     assert net.n_nodes() >= 1

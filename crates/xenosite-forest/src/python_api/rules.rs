@@ -4,8 +4,10 @@ use std::cell::RefCell;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+#[cfg(feature = "stubs")]
+use pyo3_stub_gen::derive::*;
 
-use crate::export::EmissionView;
+use crate::export::EmissionDict;
 use crate::mol::Molecule;
 use crate::pattern::{Edit, Effect, Emission, PatternInfo, SiteInfo, SiteKind};
 use crate::rules::{
@@ -19,14 +21,47 @@ use crate::rules::{
 };
 use crate::ruleset::{RuleSet, accept_all_rules, accept_all_sites};
 
+#[cfg(feature = "stubs")]
+use super::args::literal_str;
+use super::args::{
+    BoundSiteFilter, Callback, IndexKey, MolArg, RuleFilter, RuleOrPattern, SiteFilter,
+};
 use super::common::py_err;
-use super::mol::{PyForestMol, py_forest_mol_ref};
+use super::mol::PyForestMol;
 
 fn wrap_emissions(emissions: Vec<Emission>) -> Vec<PyEmission> {
     emissions
         .into_iter()
         .map(|inner| PyEmission { inner })
         .collect()
+}
+
+#[cfg(feature = "stubs")]
+const SITE_KINDS: [SiteKind; 4] = [
+    SiteKind::Atom,
+    SiteKind::Bond,
+    SiteKind::DirectedBond,
+    SiteKind::AtomPair,
+];
+
+/// ``site_kind`` string; stub type is the ``Literal`` of [`site_kind_str`].
+pub struct SiteKindName(&'static str);
+
+#[cfg(feature = "stubs")]
+impl pyo3_stub_gen::PyStubType for SiteKindName {
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        literal_str(&SITE_KINDS.map(site_kind_str))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for SiteKindName {
+    type Target = pyo3::types::PyString;
+    type Output = Bound<'py, pyo3::types::PyString>;
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        self.0.into_pyobject(py)
+    }
 }
 
 fn site_kind_str(kind: SiteKind) -> &'static str {
@@ -59,11 +94,13 @@ fn site_kind_for_emission(em: &Emission) -> &'static str {
 }
 
 /// One applied metabolize row (Python ``Emission``).
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "Emission", unsendable)]
 pub struct PyEmission {
     pub(crate) inner: Emission,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyEmission {
     #[getter]
@@ -85,8 +122,8 @@ impl PyEmission {
     /// From the leaf rule's pattern ``site_kind`` (``atom`` / ``bond`` /
     /// ``directed_bond`` / ``atom_pair``) — how notebook SOM is drawn.
     #[getter]
-    fn site_kind(&self) -> &'static str {
-        site_kind_for_emission(&self.inner)
+    fn site_kind(&self) -> SiteKindName {
+        SiteKindName(site_kind_for_emission(&self.inner))
     }
 
     /// Trace labels for [`Self::site_atoms`] on the reactant (notebook SOM).
@@ -121,9 +158,8 @@ impl PyEmission {
         self.inner.rule_path.clone()
     }
 
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = EmissionView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
+    fn to_dict(&self) -> EmissionDict {
+        EmissionDict::from(&self.inner)
     }
 
     fn __str__(&self) -> String {
@@ -155,12 +191,14 @@ fn edit_label(edit: &Edit) -> String {
 }
 
 /// Python wrap of [`PatternInfo`]. Frozen data; `RuleSet` clones it in.
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "PatternInfo", frozen)]
 #[derive(Clone)]
 pub struct PyPatternInfo {
     pub(crate) inner: PatternInfo,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyPatternInfo {
     #[new]
@@ -200,8 +238,8 @@ impl PyPatternInfo {
 
     /// ``atom`` / ``bond`` / ``directed_bond`` / ``atom_pair``.
     #[getter]
-    fn site_kind(&self) -> &'static str {
-        site_kind_str(self.inner.site_kind)
+    fn site_kind(&self) -> SiteKindName {
+        SiteKindName(site_kind_str(self.inner.site_kind))
     }
 
     #[getter]
@@ -247,18 +285,21 @@ impl PyPatternInfo {
 }
 
 /// Python wrap of [`RuleSet`]. Patterns are copied into Rust at construction.
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "RuleSet", unsendable)]
 pub struct PyRuleSet {
     pub(crate) inner: RuleSet,
 }
 
 /// Python wrap of [`crate::bound_pattern::BoundPattern`].
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "BoundPattern", unsendable)]
 #[derive(Clone)]
 pub struct PyBoundPattern {
     inner: crate::bound_pattern::BoundPattern,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyBoundPattern {
     #[getter]
@@ -303,30 +344,23 @@ impl PyBoundPattern {
         self.inner.contains_name(key)
     }
 
-    fn __getitem__(&self, key: Bound<'_, PyAny>) -> PyResult<PyBoundPattern> {
-        if let Ok(index) = key.extract::<isize>() {
-            let index = if index < 0 {
-                return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
-                    "BoundPattern index out of range",
-                ));
-            } else {
-                index as usize
-            };
-            return self
+    fn __getitem__(&self, key: IndexKey) -> PyResult<PyBoundPattern> {
+        let index_err =
+            || PyErr::new::<pyo3::exceptions::PyIndexError, _>("BoundPattern index out of range");
+        match key {
+            IndexKey::Index(index) => {
+                let index = usize::try_from(index).map_err(|_| index_err())?;
+                self.inner
+                    .get(index)
+                    .map(|inner| PyBoundPattern { inner })
+                    .ok_or_else(index_err)
+            }
+            IndexKey::Name(name) => self
                 .inner
-                .get(index)
+                .get_str(&name)
                 .map(|inner| PyBoundPattern { inner })
-                .ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyIndexError, _>(
-                        "BoundPattern index out of range",
-                    )
-                });
+                .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>(name)),
         }
-        let name: String = key.extract()?;
-        self.inner
-            .get_str(&name)
-            .map(|inner| PyBoundPattern { inner })
-            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>(name))
     }
 
     /// Releases the GIL when no Python filters are passed.
@@ -334,12 +368,14 @@ impl PyBoundPattern {
     fn metabolize(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
-        mol: &Bound<'_, PyAny>,
-        filter_rules: Option<Bound<'_, PyAny>>,
-        filter_sites: Option<Bound<'_, PyAny>>,
+        mol: MolArg<'_>,
+        filter_rules: Option<Callback<'_, RuleFilter>>,
+        filter_sites: Option<Callback<'_, BoundSiteFilter>>,
     ) -> PyResult<Vec<PyEmission>> {
-        let py_mol = py_forest_mol_ref(mol)?;
-        let forest = py_mol.inner.copy_mol();
+        let forest = mol.mol.inner.copy_mol();
+        let filter_rules = filter_rules.map(|c| c.func);
+        let filter_sites = filter_sites.map(|c| c.func);
+        let mol = &mol.obj;
         let bp = slf.borrow().inner.clone();
         let set = bp.rule().clone();
         let pattern_name = bp.name().to_string();
@@ -447,6 +483,7 @@ fn metabolize_with_python_bound(
     Ok(out)
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyRuleSet {
     #[new]
@@ -520,43 +557,38 @@ impl PyRuleSet {
     }
 
     /// Index by int or name: catalog → child ``RuleSet``; leaf → ``BoundPattern``.
-    fn __getitem__(&self, key: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-        Python::attach(|py| {
-            if let Ok(mut index) = key.extract::<isize>() {
+    fn __getitem__(&self, key: IndexKey) -> PyResult<RuleOrPattern> {
+        let index_err =
+            || PyErr::new::<pyo3::exceptions::PyIndexError, _>("RuleSet index out of range");
+        match key {
+            IndexKey::Index(mut index) => {
                 let len = self.inner.len() as isize;
                 if index < 0 {
                     index += len;
                 }
                 if index < 0 || index >= len {
-                    return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
-                        "RuleSet index out of range",
-                    ));
+                    return Err(index_err());
                 }
                 let index = index as usize;
                 if self.inner.is_catalog() {
-                    let child = self.inner.get(index).ok_or_else(|| {
-                        PyErr::new::<pyo3::exceptions::PyIndexError, _>(
-                            "RuleSet index out of range",
-                        )
-                    })?;
-                    return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
+                    let child = self.inner.get(index).ok_or_else(index_err)?;
+                    return Ok(RuleOrPattern::Rule(PyRuleSet { inner: child }));
                 }
-                let bp = self.inner.bound_pattern_at(index).ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyIndexError, _>("RuleSet index out of range")
-                })?;
-                return Ok(Py::new(py, PyBoundPattern { inner: bp })?.into_any());
+                let bp = self.inner.bound_pattern_at(index).ok_or_else(index_err)?;
+                Ok(RuleOrPattern::Pattern(PyBoundPattern { inner: bp }))
             }
-            let name: String = key.extract()?;
-            if self.inner.is_catalog()
-                && let Some(child) = self.inner.get_str(&name)
-            {
-                return Ok(Py::new(py, PyRuleSet { inner: child })?.into_any());
+            IndexKey::Name(name) => {
+                if self.inner.is_catalog()
+                    && let Some(child) = self.inner.get_str(&name)
+                {
+                    return Ok(RuleOrPattern::Rule(PyRuleSet { inner: child }));
+                }
+                if let Some(bp) = self.inner.bound_pattern(&name) {
+                    return Ok(RuleOrPattern::Pattern(PyBoundPattern { inner: bp }));
+                }
+                Err(PyErr::new::<pyo3::exceptions::PyKeyError, _>(name))
             }
-            if let Some(bp) = self.inner.bound_pattern(&name) {
-                return Ok(Py::new(py, PyBoundPattern { inner: bp })?.into_any());
-            }
-            Err(PyErr::new::<pyo3::exceptions::PyKeyError, _>(name))
-        })
+        }
     }
 
     /// Flat leaf patterns under this set (including nested members).
@@ -580,12 +612,14 @@ impl PyRuleSet {
     fn metabolize(
         slf: &Bound<'_, Self>,
         py: Python<'_>,
-        mol: &Bound<'_, PyAny>,
-        filter_rules: Option<Bound<'_, PyAny>>,
-        filter_sites: Option<Bound<'_, PyAny>>,
+        mol: MolArg<'_>,
+        filter_rules: Option<Callback<'_, RuleFilter>>,
+        filter_sites: Option<Callback<'_, SiteFilter>>,
     ) -> PyResult<Vec<PyEmission>> {
-        let py_mol = py_forest_mol_ref(mol)?;
-        let forest = py_mol.inner.copy_mol();
+        let forest = mol.mol.inner.copy_mol();
+        let filter_rules = filter_rules.map(|c| c.func);
+        let filter_sites = filter_sites.map(|c| c.func);
+        let mol = &mol.obj;
         let set = slf.borrow().inner.clone();
         let emissions = if filter_rules.is_none() && filter_sites.is_none() {
             py.detach(move || {
@@ -703,11 +737,13 @@ fn wrap_ruleset(inner: RuleSet) -> PyRuleSet {
     PyRuleSet { inner }
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn phase_one() -> PyRuleSet {
     wrap_ruleset(phase_one_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn reactivity() -> PyRuleSet {
     wrap_ruleset(reactivity_rs())
@@ -716,6 +752,7 @@ pub fn reactivity() -> PyRuleSet {
 /// Look up a sealed leaf by catalog name (`LEAF_CTORS`).
 ///
 /// Used by native↔Rust product parity over the shared coverage substrate pool.
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn leaf_rule(name: &str) -> PyResult<PyRuleSet> {
     leaf_rule_rs(name)
@@ -723,78 +760,92 @@ pub fn leaf_rule(name: &str) -> PyResult<PyRuleSet> {
         .ok_or_else(|| PyValueError::new_err(format!("unknown leaf rule: {name}")))
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn epoxidation() -> PyRuleSet {
     wrap_ruleset(epoxidation_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn quinone_formation() -> PyRuleSet {
     wrap_ruleset(quinone_formation_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn epoxide_opening() -> PyRuleSet {
     wrap_ruleset(epoxide_opening_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn n_dealkylation() -> PyRuleSet {
     wrap_ruleset(n_dealkylation_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn hydroxylation() -> PyRuleSet {
     wrap_ruleset(hydroxylation_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn dehydrogenation() -> PyRuleSet {
     wrap_ruleset(dehydrogenation_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn dealkylation() -> PyRuleSet {
     wrap_ruleset(dealkylation_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn hydrolysis() -> PyRuleSet {
     wrap_ruleset(hydrolysis_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn default_ruleset() -> PyRuleSet {
     wrap_ruleset(default_ruleset_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn product_graph_ruleset() -> PyRuleSet {
     wrap_ruleset(product_graph_ruleset_rs())
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn forest_xmet_sssom() -> String {
     crate::mapping::forest_xmet_sssom().to_string()
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "resolve")]
-pub fn resolve_py(id: &str) -> PyResult<Py<PyAny>> {
-    Python::attach(|py| match crate::mapping::resolve(id).map_err(py_err)? {
-        crate::mapping::Resolved::Rule(inner) => Ok(Py::new(py, PyRuleSet { inner })?.into_any()),
+pub fn resolve_py(id: &str) -> PyResult<RuleOrPattern> {
+    Ok(match crate::mapping::resolve(id).map_err(py_err)? {
+        crate::mapping::Resolved::Rule(inner) => RuleOrPattern::Rule(PyRuleSet { inner }),
         crate::mapping::Resolved::Pattern(inner) => {
-            Ok(Py::new(py, PyBoundPattern { inner })?.into_any())
+            RuleOrPattern::Pattern(PyBoundPattern { inner })
         }
     })
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "expand_iri")]
 pub fn expand_iri_py(curie_or_iri: &str) -> String {
     crate::mapping::expand_iri(curie_or_iri)
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "to_curie")]
 pub fn to_curie_py(iri: &str) -> String {

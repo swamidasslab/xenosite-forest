@@ -5,6 +5,7 @@
 //!
 //! Native-only: CPython C-API. Not compiled for `wasm32-unknown-unknown`.
 
+mod args;
 mod common;
 mod display;
 mod graph;
@@ -13,15 +14,16 @@ mod mol;
 mod path;
 mod plan;
 mod rules;
+#[cfg(feature = "stubs")]
+pub mod stubs;
+mod typed_dicts;
 mod walk;
 
 pub use graph::{
     PyGraphEdge, PyGraphNode, PyMetabolicNetwork, product_graph_bfs, product_graph_into_py,
 };
 pub use mol::{PyForestMol, PyFormula, normalize_tautomer};
-pub use path::{
-    PyPartialPathOutcome, PyPathCounters, PyPathOutcome, find_path, find_path_partial_py,
-};
+pub use path::{PyPathCounters, PyPathOutcome, find_path, find_path_partial_py};
 pub use plan::PyStepPlan;
 pub use rules::{
     PyBoundPattern, PyEmission, PyPatternInfo, PyRuleSet, dealkylation, default_ruleset,
@@ -45,7 +47,6 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyGraphNode>()?;
     m.add_class::<PyGraphEdge>()?;
     m.add_class::<PyPathOutcome>()?;
-    m.add_class::<PyPartialPathOutcome>()?;
     m.add_class::<PyPathCounters>()?;
     m.add_class::<PyStepPlan>()?;
     m.add_class::<PyEmission>()?;
@@ -73,6 +74,7 @@ fn xenosite_forest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resolve_py, m)?)?;
     m.add_function(wrap_pyfunction!(expand_iri_py, m)?)?;
     m.add_function(wrap_pyfunction!(to_curie_py, m)?)?;
+    typed_dicts::add_typed_dicts(m)?;
     Ok(())
 }
 

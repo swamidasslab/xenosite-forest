@@ -211,7 +211,7 @@ fn rerun_partial(r_smi: &str, p_smi: &str) -> Option<(String, String, usize, Str
         ..FindPathConfig::default()
     };
     let out = find_path_partial(r.as_str(), p.as_str(), &set, &mut c, cfg, None, |_| true).ok()?;
-    let pp = out.partials.first()?;
+    let pp = out.iter().find(|o| !o.is_exact())?;
     Some((
         path_format(&pp.steps),
         pp.smiles.clone(),

@@ -114,6 +114,7 @@ pub struct PyForestMol {
 
 ```bash
 cargo test -p xenosite-forest --features python
+cargo test -p xenosite-forest --lib --features stubs  # + stub drift gate
 ```
 
 `python3-dev` (libpython) is required to link the test binary. `#[pyclass]` is CPython; it is not WASM.
@@ -178,6 +179,20 @@ Native tests (PatternInfo catalog audit is part of `--lib`, not a separate harne
 cargo test -p xenosite-forest
 cargo test -p xenosite-forest --lib   # includes pattern_info_catalog
 cargo test -p xenosite-forest --features python
+cargo test -p xenosite-forest --lib --features stubs  # + stub drift gate
+```
+
+Python type stubs (`src/xenosite/forest/_rust.pyi`) are generated, never
+hand-edited. `#[gen_stub_*]` (pyo3-stub-gen) on the pyclasses / pyfunctions
+supplies signatures; dict-shaped returns are `typed_dict!` structs in
+`src/export/mod.rs`, which serialize to the runtime dict *and* emit a
+`typing.TypedDict`. The generator is behind the dev-only `stubs` feature, so
+wheels (`python,extension-module`) never compile it. After changing the
+Python door:
+
+```bash
+make stubs        # regenerate _rust.pyi
+make check-stubs  # CI gate; test-rust-python also fails on a stale stub
 ```
 
 Browser / Node WASM (parity with the Python door):

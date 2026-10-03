@@ -58,8 +58,8 @@ fn run_partial(name: &str, reactant: &str, target: &str, config: FindPathConfig)
     )
     .unwrap();
     let secs = t0.elapsed().as_secs_f64();
-    let best = out
-        .partials
+    let (exact, partials): (Vec<_>, Vec<_>) = out.into_iter().partition(|o| o.is_exact());
+    let best = partials
         .first()
         .map(|p| {
             format!(
@@ -70,8 +70,8 @@ fn run_partial(name: &str, reactant: &str, target: &str, config: FindPathConfig)
         .unwrap_or_else(|| "none".into());
     println!(
         "{name:<48} exact={} partials={} secs={secs:7.3} nodes={:<5} edits={:<7} bill={:<7} net_nodes={} best={best}",
-        out.exact.len(),
-        out.partials.len(),
+        exact.len(),
+        partials.len(),
         counters.nodes,
         counters.mol_edits,
         counters.billed(),

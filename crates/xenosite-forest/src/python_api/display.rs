@@ -263,17 +263,6 @@ pub fn format_path_counters(c: &crate::find_path::PathCounters) -> String {
     ))
 }
 
-pub fn format_partial_outcome(
-    smiles: &str,
-    residual_cost: usize,
-    n_plan_steps: usize,
-    n_lin: usize,
-) -> String {
-    truncate_display(&format!(
-        "PartialOutcome  {smiles}\n  residual_cost={residual_cost}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: ForestMol tag trace + residual; use .to_dict() for full residual)"
-    ))
-}
-
 pub fn format_pattern_info(p: &crate::pattern::PatternInfo) -> String {
     let smarts = if p.smarts.len() > 64 {
         format!("{}…", &p.smarts[..63])
@@ -317,11 +306,17 @@ pub fn format_emission(em: &Emission) -> String {
 
 pub fn format_path_outcome(
     smiles: &str,
+    residual_cost: usize,
     n_steps: usize,
     n_plan_steps: usize,
     n_lin: usize,
 ) -> String {
+    let reach = if residual_cost == 0 {
+        "exact".to_string()
+    } else {
+        format!("partial residual_cost={residual_cost}")
+    };
     truncate_display(&format!(
-        "PathOutcome  {smiles}\n  walk_hops={n_steps}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: reactant→product hop trail with SOM on each reactant; use .hops() / .plan)"
+        "PathOutcome  {smiles}\n  {reach}  walk_hops={n_steps}  plan_steps={n_plan_steps}  ~{n_lin} linearization(s)\n  (display: reactant→product hop trail with SOM on each reactant; use .hops() / .plan / .residual())"
     ))
 }

@@ -1,7 +1,7 @@
 # Local test + lint entry points. Prefer these over ad-hoc cargo/pytest.
 # Mirrors the language jobs in .github/workflows/test.yml.
 
-.PHONY: help check check-rust check-python test test-python test-python-smoke \
+.PHONY: help stubs check-stubs check check-rust check-python test test-python test-python-smoke \
 	test-python-legacy test-rust test-rust-smoke test-rust-python test-smoke
 
 PYTEST ?= uv run pytest
@@ -36,13 +36,15 @@ PYTHON_LEGACY_PATHS = \
 RUST_SMOKE_INTEGRATION_TESTS = gold_csmi phase1_plan_fuzz sssom_coverage derisk
 
 help:
-	@echo "check              CI non-test gates (fmt/clippy/WASM/ruff/pyright)"
+	@echo "stubs              regenerate src/xenosite/forest/_rust.pyi from Rust"
+	@echo "check-stubs        fail if _rust.pyi is stale (CI gate)"
+	@echo "check              CI non-test gates (fmt/clippy/WASM/stubs/ruff/pyright)"
 	@echo "check-rust         rustfmt + clippy (+ python feature) + WASM build"
 	@echo "check-python       ruff + pyright (forest package + tests)"
 	@echo "test               Rust then Python (no legacy)"
 	@echo "test-rust          cargo test -p xenosite-forest"
 	@echo "test-rust-smoke    opt-in: lib + integration except ms1_apply_fuzz"
-	@echo "test-rust-python   cargo test -p xenosite-forest --features python"
+	@echo "test-rust-python   cargo test -p xenosite-forest --lib --features stubs"
 	@echo "test-python        pytest tests/forest minus legacy / native↔legacy"
 	@echo "test-python-smoke  opt-in: rust wrapper + focused native↔Rust parity"
 	@echo "test-python-legacy opt-in: tests/forest/legacy + native test_parity"
@@ -52,12 +54,25 @@ help:
 # lint jobs). Needs ``wasm32-unknown-unknown`` on the active toolchain.
 # If Homebrew cargo/rustc is ahead of rustup on PATH, put
 # ``$$(dirname $$(rustup which rustc))`` first or WASM will fail to find core.
-check: check-rust check-python
+check: check-rust check-stubs check-python
+
+# ``_rust.pyi`` is generated (pyo3-stub-gen + ``typed_dict!``); never hand-edit.
+# ``stubs`` is a dev-only feature: wheels build ``python,extension-module``.
+# ``test-rust-python`` also fails on a stale stub (checked_in_stub_is_current).
+STUB_GEN = PYO3_PYTHON="$(PYO3_PYTHON)" $(CARGO) run -q -p xenosite-forest \
+	--features stubs --bin stub_gen --
+
+stubs:
+	$(STUB_GEN)
+
+check-stubs:
+	$(STUB_GEN) --check
 
 check-rust:
 	$(CARGO) fmt --all -- --check
 	$(CARGO) clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
 	$(CARGO) clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
+	$(CARGO) clippy -p xenosite-forest --all-targets --features stubs --no-deps -- -D warnings
 	$(CARGO) build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
 
 check-python:
@@ -78,7 +93,8 @@ test-rust-smoke:
 test-rust-python:
 	# ``--lib``: PyO3 unit tests live in the crate; integration binaries need
 	# not link libpython. PYO3_PYTHON forces a consistent interpreter/dylib.
-	PYO3_PYTHON="$(PYO3_PYTHON)" $(CARGO_TEST) --lib --features python
+	# ``stubs`` ⊃ ``python``: also runs the checked_in_stub_is_current gate.
+	PYO3_PYTHON="$(PYO3_PYTHON)" $(CARGO_TEST) --lib --features stubs
 
 # Default Python suite: product door + native RDKit reference. Excludes frozen
 # legacy archive and native↔legacy ``test_parity`` (use ``test-python-legacy``).

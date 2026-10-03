@@ -257,6 +257,7 @@ pub fn find_path_ms1(
                 plan,
                 mol: walk.mol,
                 smiles,
+                residual: Default::default(),
             });
             continue;
         }

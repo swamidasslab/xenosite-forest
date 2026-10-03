@@ -60,6 +60,10 @@ pub mod export;
 #[cfg(all(feature = "python", not(target_arch = "wasm32")))]
 mod python_api;
 
+/// `.pyi` generation for the PyO3 door (`stub_gen` binary; dev-only).
+#[cfg(all(feature = "stubs", not(target_arch = "wasm32")))]
+pub use python_api::stubs as python_stubs;
+
 #[cfg(feature = "wasm")]
 mod wasm_api;
 
@@ -97,11 +101,11 @@ pub use cleavage_graph::{
     fold_cleavage_arms,
 };
 pub use find_path::{
-    FindPath, FindPathConfig, FindPathFilters, FindPathPartialResult, HeapScoreMode, MatchCombine,
-    MatchMetric, MatchScoreSpec, OpenFindPath, PartialOutcome, PathCounters, PathOutcome, PathStep,
-    diversity_penalty, find_path, find_path_default, find_path_diff, find_path_partial,
-    find_path_with, find_path_with_filters, find_path_with_network, hop_match_add_score,
-    hop_match_product_score, hop_match_score, log_close_term, log_improve_term, neg_log1p_score,
+    FindPath, FindPathConfig, FindPathFilters, HeapScoreMode, MatchCombine, MatchMetric,
+    MatchScoreSpec, OpenFindPath, PathCounters, PathOutcome, PathStep, diversity_penalty,
+    find_path, find_path_default, find_path_diff, find_path_partial, find_path_with,
+    find_path_with_filters, find_path_with_network, hop_match_add_score, hop_match_product_score,
+    hop_match_score, log_close_term, log_improve_term, neg_log1p_score,
 };
 pub use find_path_ms1::{
     Ms1Config, find_path_ms1, find_path_ms1_default, predicted_mz_after_delta,

@@ -12,6 +12,12 @@ publish = false
 name = "xenosite_forest"
 crate-type = ["cdylib", "rlib"]
 
+# Writes / checks `src/xenosite/forest/_rust.pyi` (see `make stubs`).
+[[bin]]
+name = "stub_gen"
+path = "src/bin/stub_gen.rs"
+required-features = ["stubs"]
+
 [features]
 default = []
 # JS bindings. wasm32 getrandom backend is in the target-specific dep below.
@@ -23,14 +29,17 @@ wasm = [
     "dep:serde-wasm-bindgen",
 ]
 # CPython class wrap (`#[pyclass]`). Native only; not wasm32-unknown-unknown.
-python = ["export", "dep:pyo3", "dep:pythonize"]
+python = ["export", "dep:pyo3", "dep:pythonize", "dep:inventory"]
+# Dev-only: `.pyi` generation (`stub_gen` bin, drift test). Never in wheels —
+# maturin builds `python,extension-module`; stubs ship as the checked-in file.
+stubs = ["python", "dep:pyo3-stub-gen"]
 export = ["dep:serde", "dep:serde_json"]
 # Wheel/cdylib: do not link libpython. cargo test --features python omits this.
 extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
 # 1.0.27+ ships caller atom tags + SMILES visit-order helpers (no local patch).
-chematic = { version = "1.0.27", default-features = false, features = [
+chematic = { version = "1.0.31", default-features = false, features = [
     "smiles",
     "smarts",
     "rxn",
@@ -48,6 +57,11 @@ serde_json = { version = "1", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 pyo3 = { version = "0.26", optional = true }
 pythonize = { version = "0.26", optional = true }
+# Runtime registry of `typed_dict!` structs (defines the TypedDicts on `_rust`).
+inventory = { version = "0.3", optional = true }
+# `.pyi` generator (`stubs` feature only). 0.22 is the last line on pyo3 0.26;
+# bump together with pyo3.
+pyo3-stub-gen = { version = "0.22", optional = true, default-features = false, features = ["infer_signature"] }
 
 [build-dependencies]
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

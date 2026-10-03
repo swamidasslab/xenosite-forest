@@ -1,14 +1,18 @@
-//! find_path / find_path_partial and path outcome pyclasses.
+//! find_path / find_path_partial and the shared ``PathOutcome`` pyclass.
 
 use std::sync::{Arc, Mutex};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+#[cfg(feature = "stubs")]
+use pyo3_stub_gen::derive::*;
 
-use crate::export::{PathCountersView, PathOutcomeView};
+use crate::export::{
+    HopDict, MaybeEntryDict, PathCountersDict, PathOutcomeDict, ResidualDict, hops, maybe_entries,
+};
 use crate::find_path::{
-    FindPathConfig, FindPathPartialResult, HeapScoreMode, PartialOutcome, PathCounters,
-    PathOutcome, find_path_partial, find_path_with_network,
+    FindPathConfig, HeapScoreMode, PathCounters, PathOutcome, find_path_partial,
+    find_path_with_network,
 };
 use crate::metabolic_network::MetabolicNetwork;
 use crate::rules::default_ruleset as default_ruleset_rs;
@@ -24,14 +28,82 @@ fn lock_network(
     arc.lock().map_err(|_| NETWORK_LOCK_POISONED.to_string())
 }
 
+/// ``(outcomes, counters, network)`` — shared by ``find_path`` and
+/// ``find_path_partial``.
+type SearchResult = (Vec<PyPathOutcome>, PyPathCounters, PyMetabolicNetwork);
+
+/// Run the default-ruleset search; `partial` adds the closest-reach flush.
+fn run_search(
+    py: Python<'_>,
+    reactant: &str,
+    target: &str,
+    config: FindPathConfig,
+    network: Option<&Bound<'_, PyMetabolicNetwork>>,
+    partial: bool,
+) -> PyResult<SearchResult> {
+    let rules = default_ruleset_rs();
+    let reactant = reactant.to_owned();
+    let target = target.to_owned();
+    let net_arc = match network {
+        Some(n) => n.borrow().inner.clone(),
+        None => Arc::new(Mutex::new(MetabolicNetwork::new())),
+    };
+
+    let (outcomes, counters) = py
+        .detach({
+            let net_arc = net_arc.clone();
+            move || -> Result<_, String> {
+                let mut counters = PathCounters::default();
+                let mut guard = lock_network(&net_arc)?;
+                let net = Some(&mut *guard);
+                let outcomes = if partial {
+                    find_path_partial(
+                        &reactant,
+                        &target,
+                        &rules,
+                        &mut counters,
+                        config,
+                        net,
+                        |_| true,
+                    )
+                } else {
+                    find_path_with_network(
+                        &reactant,
+                        &target,
+                        &rules,
+                        &mut counters,
+                        config,
+                        net,
+                        |_| true,
+                    )
+                    .and_then(|it| it.collect_all())
+                }
+                .map_err(|e| e.to_string())?;
+                Ok((outcomes, counters))
+            }
+        })
+        .map_err(PyValueError::new_err)?;
+
+    Ok((
+        outcomes
+            .into_iter()
+            .map(|inner| PyPathOutcome { inner })
+            .collect(),
+        PyPathCounters { inner: counters },
+        PyMetabolicNetwork { inner: net_arc },
+    ))
+}
+
 /// Native chematic ``find_path`` (default ruleset).
 ///
-/// Returns ``(hits, counters, network)``. Search always records hops on a
+/// Returns ``(hits, counters, network)``; every hit is exact
+/// (``residual_cost == 0``). Search always records hops on a
 /// [`MetabolicNetwork`]: pass ``network=`` to extend a live graph, or omit it
 /// to get a fresh one back. Default ruleset is QuinoneFormation +
 /// EpoxideHydration + Tautomerization + PhaseOne core.
 ///
 /// Releases the GIL for the Rust search (including ``network=``).
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (
     reactant,
@@ -65,7 +137,7 @@ pub fn find_path(
     network: Option<&Bound<'_, PyMetabolicNetwork>>,
     normalize_tautomer: bool,
     invert_target_tautomer: bool,
-) -> PyResult<(Vec<PyPathOutcome>, PyPathCounters, PyMetabolicNetwork)> {
+) -> PyResult<SearchResult> {
     let mut config = parse_find_path_config(
         score,
         max_paths,
@@ -78,50 +150,20 @@ pub fn find_path(
     )?;
     config.normalize_tautomer = normalize_tautomer;
     config.invert_target_tautomer = invert_target_tautomer;
-    let rules = default_ruleset_rs();
-    let reactant = reactant.to_owned();
-    let target = target.to_owned();
-    let net_arc = match network {
-        Some(n) => n.borrow().inner.clone(),
-        None => Arc::new(Mutex::new(MetabolicNetwork::new())),
-    };
-
-    let (hits, counters) = py
-        .detach({
-            let net_arc = net_arc.clone();
-            move || -> Result<_, String> {
-                let mut counters = PathCounters::default();
-                let mut guard = lock_network(&net_arc)?;
-                let hits = find_path_with_network(
-                    &reactant,
-                    &target,
-                    &rules,
-                    &mut counters,
-                    config,
-                    Some(&mut *guard),
-                    |_| true,
-                )
-                .and_then(|it| it.collect_all())
-                .map_err(|e| e.to_string())?;
-                Ok((hits, counters))
-            }
-        })
-        .map_err(PyValueError::new_err)?;
-
-    Ok((
-        hits.into_iter()
-            .map(|h| PyPathOutcome { inner: h })
-            .collect(),
-        PyPathCounters { inner: counters },
-        PyMetabolicNetwork { inner: net_arc },
-    ))
+    run_search(py, reactant, target, config, network, false)
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "PathOutcome", unsendable)]
+/// One reactant→target reach from ``find_path`` / ``find_path_partial``.
+///
+/// Exact hits have ``residual_cost == 0``; ``find_path_partial`` may also
+/// return closest non-exact reaches (``residual_cost > 0``).
 pub struct PyPathOutcome {
     inner: PathOutcome,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyPathOutcome {
     #[getter]
@@ -145,49 +187,40 @@ impl PyPathOutcome {
     }
 
     /// Cleavage Maybe bags (same as ``plan.maybe()``).
-    fn maybe(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        super::plan::maybe_to_py(py, self.inner.plan.maybe())
+    fn maybe(&self) -> Vec<MaybeEntryDict> {
+        maybe_entries(self.inner.plan.maybe())
     }
 
     /// Search hops (pattern / site on reactant / product) for pathway displays.
-    fn hops(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let rows: Vec<Py<PyAny>> = self
-            .inner
-            .steps
-            .iter()
-            .map(|s| {
-                let d = pyo3::types::PyDict::new(py);
-                d.set_item("pattern_name", &s.pattern_name)?;
-                d.set_item("site", s.site)?;
-                d.set_item("site_orbit", s.site_orbit.clone())?;
-                d.set_item("reactant", &s.reactant)?;
-                d.set_item("product", &s.product)?;
-                d.set_item("sides", s.sides.clone())?;
-                let leaf = s.leaf_rule().unwrap_or("");
-                d.set_item("rule", leaf)?;
-                // Outer→leaf for display; omit Default catalog root.
-                let path: Vec<Option<String>> = s
-                    .rule_path
-                    .iter()
-                    .rev()
-                    .filter(|p| p.as_deref() != Some("Default"))
-                    .cloned()
-                    .collect();
-                d.set_item("rule_path", path)?;
-                Ok(d.unbind().into_any())
-            })
-            .collect::<PyResult<_>>()?;
-        Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
+    fn hops(&self) -> Vec<HopDict> {
+        hops(&self.inner.steps)
     }
 
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = PathOutcomeView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
+    /// Leftover disagreement with the target; ``0`` for exact hits.
+    #[getter]
+    fn residual_cost(&self) -> usize {
+        self.inner.residual.cost
+    }
+
+    /// ``residual_cost == 0``: reached the target.
+    #[getter]
+    fn is_exact(&self) -> bool {
+        self.inner.is_exact()
+    }
+
+    /// Full residual (cost, extra atoms, category hints); all-zero when exact.
+    fn residual(&self) -> ResidualDict {
+        ResidualDict::from(&self.inner.residual)
+    }
+
+    fn to_dict(&self) -> PathOutcomeDict {
+        PathOutcomeDict::from(&self.inner)
     }
 
     fn __str__(&self) -> String {
         super::display::format_path_outcome(
             &self.inner.smiles,
+            self.inner.residual.cost,
             self.inner.steps.len(),
             self.inner.plan.steps().len(),
             self.inner.plan.n_linearizations(),
@@ -195,124 +228,28 @@ impl PyPathOutcome {
     }
 
     fn __repr__(&self) -> String {
-        format!("PathOutcome({:?})", self.inner.smiles)
+        if self.inner.is_exact() {
+            format!("PathOutcome({:?})", self.inner.smiles)
+        } else {
+            format!(
+                "PathOutcome({:?}, residual_cost={})",
+                self.inner.smiles, self.inner.residual.cost
+            )
+        }
     }
 }
 
-#[pyclass(name = "PartialOutcome", unsendable)]
-pub struct PyPartialPathOutcome {
-    inner: PartialOutcome,
-}
-
-#[pymethods]
-impl PyPartialPathOutcome {
-    #[getter]
-    fn smiles(&self) -> &str {
-        &self.inner.smiles
-    }
-
-    #[getter]
-    fn mol(&self) -> PyForestMol {
-        PyForestMol::wrap(self.inner.mol.clone())
-    }
-
-    /// Walk hops (same shape as [`PyPathOutcome::hops`]).
-    fn hops(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let rows: Vec<Py<PyAny>> = self
-            .inner
-            .steps
-            .iter()
-            .map(|s| {
-                let d = pyo3::types::PyDict::new(py);
-                d.set_item("pattern_name", &s.pattern_name)?;
-                d.set_item("site", s.site)?;
-                d.set_item("site_orbit", s.site_orbit.clone())?;
-                d.set_item("reactant", &s.reactant)?;
-                d.set_item("product", &s.product)?;
-                d.set_item("sides", s.sides.clone())?;
-                let leaf = s.leaf_rule().unwrap_or("");
-                d.set_item("rule", leaf)?;
-                let path: Vec<Option<String>> = s
-                    .rule_path
-                    .iter()
-                    .rev()
-                    .filter(|p| p.as_deref() != Some("Default"))
-                    .cloned()
-                    .collect();
-                d.set_item("rule_path", path)?;
-                Ok(d.unbind().into_any())
-            })
-            .collect::<PyResult<_>>()?;
-        Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
-    }
-
-    /// Cleavage Maybe bags (same as ``plan.maybe()``).
-    fn maybe(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        super::plan::maybe_to_py(py, self.inner.plan.maybe())
-    }
-
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let hit = PathOutcome {
-            steps: self.inner.steps.clone(),
-            plan: self.inner.plan.clone(),
-            mol: self.inner.mol.clone(),
-            smiles: self.inner.smiles.clone(),
-        };
-        let view = PathOutcomeView::from(&hit);
-        let d = pyo3::types::PyDict::new(py);
-        d.set_item("smiles", view.smiles)?;
-        d.set_item("steps", pythonize::pythonize(py, &view.steps)?)?;
-        let residual = pyo3::types::PyDict::new(py);
-        residual.set_item("cost", self.inner.residual.cost)?;
-        residual.set_item("n_extra", self.inner.residual.n_extra)?;
-        residual.set_item("categories", self.inner.residual.categories.clone())?;
-        residual.set_item("unresolvable", self.inner.residual.unresolvable)?;
-        d.set_item("residual", residual)?;
-        Ok(d.unbind().into_any())
-    }
-
-    #[getter]
-    fn plan(&self, py: Python<'_>) -> PyResult<Py<PyStepPlan>> {
-        Py::new(
-            py,
-            PyStepPlan {
-                inner: self.inner.plan.clone(),
-            },
-        )
-    }
-
-    #[getter]
-    fn residual_cost(&self) -> usize {
-        self.inner.residual.cost
-    }
-
-    fn __str__(&self) -> String {
-        super::display::format_partial_outcome(
-            &self.inner.smiles,
-            self.inner.residual.cost,
-            self.inner.plan.steps().len(),
-            self.inner.plan.n_linearizations(),
-        )
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "PartialOutcome({:?}, residual_cost={})",
-            self.inner.smiles, self.inner.residual.cost
-        )
-    }
-}
-
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "PathCounters")]
 pub struct PyPathCounters {
     inner: PathCounters,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyPathCounters {
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = PathCountersView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
+    fn to_dict(&self) -> PathCountersDict {
+        PathCountersDict::from(&self.inner)
     }
 
     #[getter]
@@ -384,12 +321,16 @@ fn parse_find_path_config(
     })
 }
 
-/// Like ``find_path``, but also returns closest unreachable reaches.
+/// Like ``find_path``, but also returns the closest non-exact reaches.
 ///
-/// Returns ``(exact_hits, partials, counters, network)``. Search always
-/// records hops on a [`MetabolicNetwork`] (pass ``network=`` to extend one).
+/// Same return type as ``find_path``: ``(outcomes, counters, network)``.
+/// Exact hits come first (``residual_cost == 0``), then — only when they do
+/// not fill ``max_paths`` — closest partials by ascending ``residual_cost``;
+/// at most ``max_paths`` in total. Search always records hops on a
+/// [`MetabolicNetwork`] (pass ``network=`` to extend one).
 ///
 /// Releases the GIL for the Rust search (including ``network=``).
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "find_path_partial", signature = (
     reactant,
@@ -407,7 +348,7 @@ fn parse_find_path_config(
     normalize_tautomer=false,
     invert_target_tautomer=false,
 ))]
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 pub fn find_path_partial_py(
     py: Python<'_>,
     reactant: &str,
@@ -423,12 +364,7 @@ pub fn find_path_partial_py(
     network: Option<&Bound<'_, PyMetabolicNetwork>>,
     normalize_tautomer: bool,
     invert_target_tautomer: bool,
-) -> PyResult<(
-    Vec<PyPathOutcome>,
-    Vec<PyPartialPathOutcome>,
-    PyPathCounters,
-    PyMetabolicNetwork,
-)> {
+) -> PyResult<SearchResult> {
     let mut config = parse_find_path_config(
         score,
         max_paths,
@@ -441,46 +377,5 @@ pub fn find_path_partial_py(
     )?;
     config.normalize_tautomer = normalize_tautomer;
     config.invert_target_tautomer = invert_target_tautomer;
-    let rules = default_ruleset_rs();
-    let reactant = reactant.to_owned();
-    let target = target.to_owned();
-    let net_arc = match network {
-        Some(n) => n.borrow().inner.clone(),
-        None => Arc::new(Mutex::new(MetabolicNetwork::new())),
-    };
-
-    let (exact, partials, counters) = py
-        .detach({
-            let net_arc = net_arc.clone();
-            move || -> Result<_, String> {
-                let mut counters = PathCounters::default();
-                let mut guard = lock_network(&net_arc)?;
-                let result = find_path_partial(
-                    &reactant,
-                    &target,
-                    &rules,
-                    &mut counters,
-                    config,
-                    Some(&mut *guard),
-                    |_| true,
-                )
-                .map_err(|e| e.to_string())?;
-                let FindPathPartialResult { exact, partials } = result;
-                Ok((exact, partials, counters))
-            }
-        })
-        .map_err(PyValueError::new_err)?;
-
-    Ok((
-        exact
-            .into_iter()
-            .map(|h| PyPathOutcome { inner: h })
-            .collect(),
-        partials
-            .into_iter()
-            .map(|p| PyPartialPathOutcome { inner: p })
-            .collect(),
-        PyPathCounters { inner: counters },
-        PyMetabolicNetwork { inner: net_arc },
-    ))
+    run_search(py, reactant, target, config, network, true)
 }

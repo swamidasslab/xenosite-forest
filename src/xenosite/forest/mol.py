@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import ast
-from typing import Any
+from typing import TYPE_CHECKING, Any, Self
 
 from xenosite.forest._ext import load
+
+if TYPE_CHECKING:
+    from xenosite.forest._rust import ForestMol as _RustForestMol
+
+    # Type checkers see the Rust pyclass API (generated ``_rust.pyi``); at
+    # runtime the wrapper delegates through ``__getattr__``.
+    _Base = _RustForestMol
+else:
+    _Base = object
 
 
 def _lazy_rdkit() -> Any:
@@ -56,7 +65,7 @@ def _rdkit_to_smiles_preserving_atom_order(mol: Any) -> str:
     return smiles
 
 
-class ForestMol:
+class ForestMol(_Base):
     """Delegates to the Rust ``ForestMol`` pyclass; adds RDKit helpers.
 
     **Atom-index frame:** metabolize / emission ``site`` indexes are in the
@@ -70,6 +79,11 @@ class ForestMol:
     """
 
     __slots__ = ("_inner",)
+    _inner: _RustForestMol
+
+    if TYPE_CHECKING:
+
+        def __new__(cls, spec: str | Any) -> Self: ...
 
     def __init__(self, spec: str | Any) -> None:
         rust = load().ForestMol
@@ -118,7 +132,7 @@ class ForestMol:
         return cls(mol)
 
     @property
-    def _rust(self) -> Any:
+    def _rust(self) -> _RustForestMol:
         """Rust pyclass payload (for APIs that require the extension type)."""
 
         return self._inner

@@ -4,7 +4,7 @@ Attaches ``_repr_html_`` on Rust types after the extension loads. Text
 ``__str__`` / ``__repr__`` live in Rust (truncated). HTML stays here so RDKit
 drawings and light markup do not pull into the extension.
 
-PathOutcome / PartialOutcome lead with **StepPlan** (elementary steps + Maybe
+PathOutcome (exact or partial) leads with **StepPlan** (elementary steps + Maybe
 bags). Mol drawings omit atom numbers (RDKit cannot show ForestMol trace
 labels correctly). SOM / Maybe are color highlights only.
 """
@@ -448,6 +448,8 @@ def _step_plan_html(self: Any) -> str:
 def _path_outcome_html(self: Any) -> str:
     """StepPlan (+ Maybe) first; tagged pathway with SOM vs Maybe colors."""
 
+    if not self.is_exact:
+        return _partial_outcome_html(self)
     plan = self.plan
     hops = list(self.hops())
     maybe_bags = list(self.maybe())
@@ -491,7 +493,7 @@ def _partial_outcome_html(self: Any) -> str:
     tags = list(self.mol.atom_tags())
     stamp_end = int(self.mol.trace_counts()[0])
     head = (
-        f"<div><b>PartialOutcome</b> residual_cost={self.residual_cost}"
+        f"<div><b>PathOutcome</b> (partial) residual_cost={self.residual_cost}"
         f" · plan {len(plan)} · maybe {len(maybe_bags)}</div>"
     )
     return (
@@ -649,7 +651,6 @@ def install(rust: Any) -> None:
         "MetabolicNetwork": _network_html,
         "StepPlan": _step_plan_html,
         "PathOutcome": _path_outcome_html,
-        "PartialOutcome": _partial_outcome_html,
         "Emission": _emission_html,
         "RandomPathOutcome": _random_path_html,
         "PathCounters": _path_counters_html,

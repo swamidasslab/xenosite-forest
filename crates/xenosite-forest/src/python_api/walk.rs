@@ -2,8 +2,10 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+#[cfg(feature = "stubs")]
+use pyo3_stub_gen::derive::*;
 
-use crate::export::RandomPathOutcomeView;
+use crate::export::{PatternSummaryDict, RandomPathOutcomeDict, RandomPathStepDict};
 use crate::pathway::PathwayOptions;
 use crate::random_path::{RandomPathOutcome, random_path as random_path_rs, random_path_with};
 use crate::rules::phase_one as phase_one_rs;
@@ -11,11 +13,13 @@ use crate::ruleset::RuleSet;
 
 use super::rules::PyRuleSet;
 
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "RandomPathOutcome")]
 pub struct PyRandomPathOutcome {
     inner: RandomPathOutcome,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyRandomPathOutcome {
     #[getter]
@@ -28,21 +32,24 @@ impl PyRandomPathOutcome {
         self.inner.path.clone()
     }
 
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = RandomPathOutcomeView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
+    fn to_dict(&self) -> RandomPathOutcomeDict {
+        RandomPathOutcomeDict::from(&self.inner)
     }
 
-    fn steps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = RandomPathOutcomeView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view.steps)?.unbind().into_any())
+    fn steps(&self) -> Vec<RandomPathStepDict> {
+        self.inner
+            .steps
+            .iter()
+            .map(RandomPathStepDict::from)
+            .collect()
     }
 
-    fn patterns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = RandomPathOutcomeView::from(&self.inner);
-        Ok(pythonize::pythonize(py, &view.patterns)?
-            .unbind()
-            .into_any())
+    fn patterns(&self) -> Vec<PatternSummaryDict> {
+        self.inner
+            .patterns
+            .iter()
+            .map(PatternSummaryDict::from)
+            .collect()
     }
 
     fn __eq__(&self, other: Bound<'_, PyAny>) -> PyResult<bool> {
@@ -80,6 +87,7 @@ impl PyRandomPathOutcome {
 /// default; same knobs for StepSequence / PathOutcome ``apply``).
 ///
 /// Releases the GIL for the Rust walk.
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (
     reactant,

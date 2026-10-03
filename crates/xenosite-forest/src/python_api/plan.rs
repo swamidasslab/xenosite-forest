@@ -3,43 +3,20 @@
 use std::collections::BTreeSet;
 
 use pyo3::prelude::*;
+#[cfg(feature = "stubs")]
+use pyo3_stub_gen::derive::*;
 
-use crate::canonical_plan::{Deps, Maybe};
-
-/// Serialize [`Maybe`] bags for Python (``site`` / ``side`` / ``opens`` / ``span_sites``).
-pub(crate) fn maybe_to_py(py: Python<'_>, maybe: &Maybe) -> PyResult<Py<PyAny>> {
-    let rows: Vec<Py<PyAny>> = maybe
-        .entries
-        .iter()
-        .map(|e| {
-            let d = pyo3::types::PyDict::new(py);
-            let site: Vec<usize> = e.site.iter().copied().collect();
-            d.set_item("site", site)?;
-            d.set_item("side", &e.side)?;
-            let opens: Vec<Vec<usize>> = e
-                .opens
-                .iter()
-                .map(|o| o.iter().copied().collect())
-                .collect();
-            d.set_item("opens", opens)?;
-            let span: Vec<Vec<usize>> = e
-                .span_sites()
-                .into_iter()
-                .map(|s| s.iter().copied().collect())
-                .collect();
-            d.set_item("span_sites", span)?;
-            Ok(d.unbind().into_any())
-        })
-        .collect::<PyResult<_>>()?;
-    Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
-}
+use crate::canonical_plan::Deps;
+use crate::export::{MaybeEntryDict, PlanStepDict, StepPlanDict, maybe_entries, plan_steps};
 
 /// Elementary plan with precedes (Python ``StepPlan``).
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "StepPlan", unsendable)]
 pub struct PyStepPlan {
     pub(crate) inner: Deps,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyStepPlan {
     fn __len__(&self) -> usize {
@@ -54,25 +31,14 @@ impl PyStepPlan {
     ///
     /// Each row is a list of ``{"rule", "site"}`` like plan steps. Caps at
     /// 64 rows so accidental factorial explosions stay bounded.
-    fn linearizations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn linearizations(&self) -> Vec<Vec<PlanStepDict>> {
         const MAX: usize = 64;
-        let lins = self.inner.linearizations();
-        let rows: Vec<Py<PyAny>> = lins
+        self.inner
+            .linearizations()
             .iter()
             .take(MAX)
-            .map(|lin| {
-                let steps: Vec<Py<PyAny>> = lin
-                    .steps
-                    .iter()
-                    .map(|step| {
-                        let view = crate::export::PlanStepView::from(step);
-                        Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
-                    })
-                    .collect::<PyResult<_>>()?;
-                Ok(pyo3::types::PyList::new(py, steps)?.unbind().into_any())
-            })
-            .collect::<PyResult<_>>()?;
-        Ok(pyo3::types::PyList::new(py, rows)?.unbind().into_any())
+            .map(|lin| plan_steps(&lin.steps))
+            .collect()
     }
 
     fn allows(&self, site: Option<Vec<usize>>, side: Option<&str>) -> bool {
@@ -81,27 +47,17 @@ impl PyStepPlan {
     }
 
     /// Cleavage-side bags on this plan (`site` / `side` / `opens`).
-    fn maybe(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        maybe_to_py(py, self.inner.maybe())
+    fn maybe(&self) -> Vec<MaybeEntryDict> {
+        maybe_entries(self.inner.maybe())
     }
 
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let steps: Vec<Py<PyAny>> = self
-            .inner
-            .steps()
-            .iter()
-            .map(|step| {
-                let view = crate::export::PlanStepView::from(step);
-                Ok(pythonize::pythonize(py, &view)?.unbind().into_any())
-            })
-            .collect::<PyResult<_>>()?;
-        let d = pyo3::types::PyDict::new(py);
-        d.set_item("steps", steps)?;
-        d.set_item("n_linearizations", self.inner.n_linearizations())?;
-        let precedes: Vec<(usize, usize)> = self.inner.precedes().to_vec();
-        d.set_item("precedes", precedes)?;
-        d.set_item("maybe", maybe_to_py(py, self.inner.maybe())?)?;
-        Ok(d.unbind().into_any())
+    fn to_dict(&self) -> StepPlanDict {
+        StepPlanDict {
+            steps: plan_steps(self.inner.steps()),
+            n_linearizations: self.inner.n_linearizations(),
+            precedes: self.inner.precedes().to_vec(),
+            maybe: maybe_entries(self.inner.maybe()),
+        }
     }
 
     fn __str__(&self) -> String {

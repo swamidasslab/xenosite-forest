@@ -169,9 +169,10 @@ fn run_one(pair: &Pair, config: FindPathConfig) -> RowOut {
     row.edits = counters.mol_edits;
     row.bill = counters.billed();
     row.timed_out = counters.timed_out;
-    row.hit = !out.exact.is_empty();
-    row.has_partial = !out.partials.is_empty();
-    if let Some(p) = out.partials.first() {
+    let (exact, partials): (Vec<_>, Vec<_>) = out.into_iter().partition(|o| o.is_exact());
+    row.hit = !exact.is_empty();
+    row.has_partial = !partials.is_empty();
+    if let Some(p) = partials.first() {
         row.residual_cost = Some(p.residual.cost);
         row.residual_cats = p.residual.categories.clone();
         row.closest_smi = Some(p.smiles.clone());

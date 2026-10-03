@@ -147,21 +147,19 @@ def test_graph_node_and_edge_html_use_mol_trace():
 
 
 def test_partial_outcome_html_traces_mol():
-    exact, partials, _counters, net = find_path_partial(
-        "c1ccccc1", "CCO", max_paths=1, max_nodes=48
-    )
+    outcomes, _counters, net = find_path_partial("c1ccccc1", "CCO", max_paths=1, max_nodes=48)
     assert net.n_nodes() >= 1
-    # Prefer a partial when present; otherwise a hit still exercises plan HTML.
-    if partials:
-        part = partials[0]
-        html = part._repr_html_()
-        assert "PartialOutcome" in html
+    assert outcomes
+    out = outcomes[0]
+    html = out._repr_html_()
+    assert "PathOutcome" in html
+    if out.is_exact:
+        assert out.residual_cost == 0
+    else:
+        assert "(partial)" in html
         assert "trace" in html or "hop" in html or "start" in html
         assert "residual_cost" in html
-        assert part.residual_cost >= 0
-    else:
-        assert exact
-        assert "PathOutcome" in exact[0]._repr_html_()
+        assert out.residual_cost > 0
 
 
 def test_step_plan_linearizations_api():

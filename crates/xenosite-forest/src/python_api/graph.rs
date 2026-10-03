@@ -4,8 +4,11 @@ use std::sync::{Arc, Mutex};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+#[cfg(feature = "stubs")]
+use pyo3_stub_gen::derive::*;
 
-use crate::metabolic_network::{AttrMap, GraphValue, MetabolicNetwork, NODE_EXPANDED, NODE_SEALED};
+use crate::export::{AttrValue, GraphEdgeDict, GraphNodeDict, ResidualDict, attrs_view};
+use crate::metabolic_network::MetabolicNetwork;
 use crate::product_graph::{
     ProductGraphConfig, product_graph as product_graph_rs, product_graph_into,
 };
@@ -17,53 +20,15 @@ use super::mol::PyForestMol;
 use super::plan::PyStepPlan;
 use super::rules::PyRuleSet;
 
-fn graph_value_to_py(py: Python<'_>, v: &GraphValue) -> PyResult<Py<PyAny>> {
-    match v {
-        GraphValue::Bool(b) => Ok(pyo3::types::PyBool::new(py, *b)
-            .to_owned()
-            .into_any()
-            .unbind()),
-        GraphValue::I64(i) => Ok(pyo3::types::PyInt::new(py, *i)
-            .to_owned()
-            .into_any()
-            .unbind()),
-        GraphValue::String(s) => Ok(pyo3::types::PyString::new(py, s)
-            .to_owned()
-            .into_any()
-            .unbind()),
-    }
-}
-
-fn py_to_graph_value(value: &Bound<'_, PyAny>) -> PyResult<GraphValue> {
-    if let Ok(b) = value.extract::<bool>() {
-        return Ok(GraphValue::Bool(b));
-    }
-    if let Ok(i) = value.extract::<i64>() {
-        return Ok(GraphValue::I64(i));
-    }
-    if let Ok(s) = value.extract::<String>() {
-        return Ok(GraphValue::String(s));
-    }
-    Err(PyValueError::new_err(
-        "attr value must be bool, int, or str",
-    ))
-}
-
-fn attrs_to_dict(py: Python<'_>, attrs: &AttrMap) -> PyResult<Py<PyAny>> {
-    let d = pyo3::types::PyDict::new(py);
-    for (k, v) in attrs {
-        d.set_item(k, graph_value_to_py(py, v)?)?;
-    }
-    Ok(d.unbind().into_any())
-}
-
 /// View of one molecule row in a [`MetabolicNetwork`].
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "GraphNode", unsendable)]
 pub struct PyGraphNode {
     net: Arc<Mutex<MetabolicNetwork>>,
     idx: usize,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyGraphNode {
     #[getter]
@@ -106,25 +71,21 @@ impl PyGraphNode {
     }
 
     /// Read a node attr (well-known keys include ``sealed``, ``expanded``).
-    fn get_attr(&self, py: Python<'_>, key: &str) -> PyResult<Option<Py<PyAny>>> {
+    fn get_attr(&self, key: &str) -> PyResult<Option<AttrValue>> {
         let net = self.net.lock().map_err(|_| network_lock_err())?;
         let node = net.nodes.get(self.idx).ok_or_else(|| {
             PyValueError::new_err(format!("node index {} out of range", self.idx))
         })?;
-        match node.attrs.get(key) {
-            Some(v) => Ok(Some(graph_value_to_py(py, v)?)),
-            None => Ok(None),
-        }
+        Ok(node.attrs.get(key).map(AttrValue::from))
     }
 
     /// Set a node attr (bool / int / str). Mutates the live network.
-    fn set_attr(&self, key: &str, value: Bound<'_, PyAny>) -> PyResult<()> {
+    fn set_attr(&self, key: &str, value: AttrValue) -> PyResult<()> {
         let mut net = self.net.lock().map_err(|_| network_lock_err())?;
         let node = net.nodes.get_mut(self.idx).ok_or_else(|| {
             PyValueError::new_err(format!("node index {} out of range", self.idx))
         })?;
-        node.attrs
-            .insert(key.to_string(), py_to_graph_value(&value)?);
+        node.attrs.insert(key.to_string(), value.into());
         Ok(())
     }
 
@@ -136,28 +97,28 @@ impl PyGraphNode {
             .is_some_and(|n| n.attrs.contains_key(key)))
     }
 
-    fn __getitem__(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
-        self.get_attr(py, key)?
+    fn __getitem__(&self, key: &str) -> PyResult<AttrValue> {
+        self.get_attr(key)?
             .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.to_string()))
     }
 
-    fn __setitem__(&self, key: &str, value: Bound<'_, PyAny>) -> PyResult<()> {
+    fn __setitem__(&self, key: &str, value: AttrValue) -> PyResult<()> {
         self.set_attr(key, value)
     }
 
     /// Spine + attrs for notebooks / JSON (opt-in marshal).
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn to_dict(&self) -> PyResult<GraphNodeDict> {
         let net = self.net.lock().map_err(|_| network_lock_err())?;
         let node = net.nodes.get(self.idx).ok_or_else(|| {
             PyValueError::new_err(format!("node index {} out of range", self.idx))
         })?;
-        let d = pyo3::types::PyDict::new(py);
-        d.set_item("index", self.idx)?;
-        d.set_item("csmi", &node.csmi)?;
-        d.set_item(NODE_SEALED, node.sealed())?;
-        d.set_item(NODE_EXPANDED, node.expanded())?;
-        d.set_item("attrs", attrs_to_dict(py, &node.attrs)?)?;
-        Ok(d.unbind().into_any())
+        Ok(GraphNodeDict {
+            index: self.idx,
+            csmi: node.csmi.clone(),
+            sealed: node.sealed(),
+            expanded: node.expanded(),
+            attrs: attrs_view(&node.attrs),
+        })
     }
 
     fn n_inbound(&self) -> PyResult<usize> {
@@ -214,6 +175,7 @@ impl PyGraphNode {
 }
 
 /// One recorded parent→child hop (multipath slot on the child).
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "GraphEdge", unsendable)]
 pub struct PyGraphEdge {
     net: Arc<Mutex<MetabolicNetwork>>,
@@ -221,6 +183,7 @@ pub struct PyGraphEdge {
     slot: usize,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyGraphEdge {
     #[getter]
@@ -288,26 +251,22 @@ impl PyGraphEdge {
         Ok(self.hop()?.products.clone())
     }
 
-    fn get_attr(&self, py: Python<'_>, key: &str) -> PyResult<Option<Py<PyAny>>> {
+    fn get_attr(&self, key: &str) -> PyResult<Option<AttrValue>> {
         let net = self.net.lock().map_err(|_| network_lock_err())?;
         let edge = net.nodes[self.child_idx]
             .inbound
             .get(self.slot)
             .ok_or_else(|| PyValueError::new_err("inbound slot out of range"))?;
-        match edge.attrs.get(key) {
-            Some(v) => Ok(Some(graph_value_to_py(py, v)?)),
-            None => Ok(None),
-        }
+        Ok(edge.attrs.get(key).map(AttrValue::from))
     }
 
-    fn set_attr(&self, key: &str, value: Bound<'_, PyAny>) -> PyResult<()> {
+    fn set_attr(&self, key: &str, value: AttrValue) -> PyResult<()> {
         let mut net = self.net.lock().map_err(|_| network_lock_err())?;
         let edge = net.nodes[self.child_idx]
             .inbound
             .get_mut(self.slot)
             .ok_or_else(|| PyValueError::new_err("inbound slot out of range"))?;
-        edge.attrs
-            .insert(key.to_string(), py_to_graph_value(&value)?);
+        edge.attrs.insert(key.to_string(), value.into());
         Ok(())
     }
 
@@ -319,31 +278,31 @@ impl PyGraphEdge {
             .is_some_and(|e| e.attrs.contains_key(key)))
     }
 
-    fn __getitem__(&self, py: Python<'_>, key: &str) -> PyResult<Py<PyAny>> {
-        self.get_attr(py, key)?
+    fn __getitem__(&self, key: &str) -> PyResult<AttrValue> {
+        self.get_attr(key)?
             .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(key.to_string()))
     }
 
-    fn __setitem__(&self, key: &str, value: Bound<'_, PyAny>) -> PyResult<()> {
+    fn __setitem__(&self, key: &str, value: AttrValue) -> PyResult<()> {
         self.set_attr(key, value)
     }
 
-    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    fn to_dict(&self) -> PyResult<GraphEdgeDict> {
         let net = self.net.lock().map_err(|_| network_lock_err())?;
         let edge = net.nodes[self.child_idx]
             .inbound
             .get(self.slot)
             .ok_or_else(|| PyValueError::new_err("inbound slot out of range"))?;
-        let d = pyo3::types::PyDict::new(py);
-        d.set_item("child_index", self.child_idx)?;
-        d.set_item("inbound_slot", self.slot)?;
-        d.set_item("parent_index", edge.parent_idx)?;
-        d.set_item("rule", &edge.hop.rule)?;
-        d.set_item("pattern_name", &edge.hop.pattern_name)?;
-        d.set_item("site", edge.hop.site)?;
-        d.set_item("cleaves", edge.hop.cleaves)?;
-        d.set_item("attrs", attrs_to_dict(py, &edge.attrs)?)?;
-        Ok(d.unbind().into_any())
+        Ok(GraphEdgeDict {
+            child_index: self.child_idx,
+            inbound_slot: self.slot,
+            parent_index: edge.parent_idx,
+            rule: edge.hop.rule.clone(),
+            pattern_name: edge.hop.pattern_name.clone(),
+            site: edge.hop.site,
+            cleaves: edge.hop.cleaves,
+            attrs: attrs_view(&edge.attrs),
+        })
     }
 
     fn __str__(&self) -> String {
@@ -387,11 +346,13 @@ impl PyGraphEdge {
 
 /// Explored metabolic network (reactant root + hops). Mutated by search when
 /// passed as ``network=``.
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "MetabolicNetwork", unsendable)]
 pub struct PyMetabolicNetwork {
     pub(crate) inner: Arc<Mutex<MetabolicNetwork>>,
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyMetabolicNetwork {
     #[new]
@@ -567,24 +528,14 @@ impl PyMetabolicNetwork {
         }
     }
 
-    fn missed(&self, py: Python<'_>, csmi: &str, target: &str) -> PyResult<Option<Py<PyAny>>> {
+    fn missed(&self, csmi: &str, target: &str) -> PyResult<Option<ResidualDict>> {
         let residual = self
             .inner
             .lock()
             .map_err(|_| network_lock_err())?
             .missed(csmi, target)
             .map_err(py_err)?;
-        Ok(match residual {
-            None => None,
-            Some(r) => {
-                let d = pyo3::types::PyDict::new(py);
-                d.set_item("cost", r.cost)?;
-                d.set_item("n_extra", r.n_extra)?;
-                d.set_item("categories", r.categories.clone())?;
-                d.set_item("unresolvable", r.unresolvable)?;
-                Some(d.unbind().into_any())
-            }
-        })
+        Ok(residual.as_ref().map(ResidualDict::from))
     }
 }
 
@@ -615,9 +566,21 @@ fn mark_target_csmi(net: &mut MetabolicNetwork, target: Option<&str>) {
     }
 }
 
-/// BFS product exploration into a [`MetabolicNetwork`].
+/// BFS product exploration; returns a ``MetabolicNetwork``.
+///
+/// .. warning::
+///
+///    This can take a **very long time** and build a large graph even when
+///    ``max_nodes`` and ``max_depth`` are set. Use ``target=`` when you are
+///    exploring toward a single product CSMI.
+///
+/// Default ``ruleset`` is ``product_graph_ruleset()`` — QuinoneFormation,
+/// EpoxideHydration, and Phase I core, **without** Tautomerization (unlike
+/// ``find_path``'s ``default_ruleset()``). Pass ``network=`` to extend an
+/// existing graph (same object as ``find_path`` ``network=``).
 ///
 /// Releases the GIL for the Rust BFS (including ``network=``).
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "product_graph_bfs", signature = (
     start,
@@ -667,6 +630,7 @@ pub fn product_graph_bfs(
     })
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "product_graph_into", signature = (
     network,

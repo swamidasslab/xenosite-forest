@@ -74,8 +74,12 @@ jobs:
         run: cargo clippy -p xenosite-forest --all-targets --no-deps -- -D warnings
       - name: Clippy (python feature)
         run: cargo clippy -p xenosite-forest --all-targets --features python --no-deps -- -D warnings
+      - name: Clippy (stubs feature)
+        run: cargo clippy -p xenosite-forest --all-targets --features stubs --no-deps -- -D warnings
       - name: WASM
         run: cargo build -p xenosite-forest --target wasm32-unknown-unknown --features wasm
+      - name: Python stubs current (_rust.pyi)
+        run: make check-stubs
       - name: Test
         if: github.event_name != 'pull_request'
         run: make test-rust-smoke

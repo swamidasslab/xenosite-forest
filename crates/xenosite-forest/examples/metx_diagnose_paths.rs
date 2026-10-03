@@ -24,24 +24,25 @@ fn run(label: &str, r: &str, p: &str) {
     };
     let t0 = Instant::now();
     let out = find_path_partial(&r, &p, &set, &mut c, cfg, None, |_| true).unwrap();
+    let (exact, partials): (Vec<_>, Vec<_>) = out.into_iter().partition(|o| o.is_exact());
     println!(
         "\n{label}\n  hit={} bill={} nodes={} edits={} secs={:.2} timed_out={} exact={} partials={}",
-        !out.exact.is_empty(),
+        !exact.is_empty(),
         c.billed(),
         c.nodes,
         c.mol_edits,
         t0.elapsed().as_secs_f64(),
         c.timed_out,
-        out.exact.len(),
-        out.partials.len()
+        exact.len(),
+        partials.len()
     );
-    if let Some(h) = out.exact.first() {
+    if let Some(h) = exact.first() {
         println!("  path steps={}", h.steps.len());
         for s in &h.steps {
             println!("    {} @{} → {}", s.pattern_name, s.site, s.product);
         }
     }
-    if let Some(p) = out.partials.first() {
+    if let Some(p) = partials.first() {
         println!(
             "  closest cost={} cats={:?} smiles={}",
             p.residual.cost, p.residual.categories, p.smiles

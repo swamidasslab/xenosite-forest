@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyString;
+#[cfg(feature = "stubs")]
+use pyo3_stub_gen::derive::*;
 
 use crate::forest::Formula;
 use crate::forest_mol::ForestMol;
@@ -26,6 +28,7 @@ pub fn py_forest_mol_ref<'py>(mol: &Bound<'py, PyAny>) -> PyResult<PyRef<'py, Py
 }
 
 /// Python-visible formula. Nested `#[pyclass]` wrap of [`Formula`].
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
 #[pyclass(name = "Formula", frozen)]
 #[derive(Clone)]
 pub struct PyFormula {
@@ -49,7 +52,8 @@ impl From<&Formula> for PyFormula {
 /// `unsendable`: pyclass stays on one Python thread; payload `ForestMol` is Send
 /// (Arc caches) so pure-Rust doors can release the GIL.
 /// `#[new]` is `__init__`. Getters become Python properties.
-#[pyclass(name = "ForestMol", unsendable)]
+#[cfg_attr(feature = "stubs", gen_stub_pyclass)]
+#[pyclass(name = "ForestMol", unsendable, subclass)]
 pub struct PyForestMol {
     pub(crate) inner: ForestMol,
     csmi: Option<Py<PyString>>,
@@ -66,10 +70,11 @@ impl PyForestMol {
     }
 }
 
+#[cfg_attr(feature = "stubs", gen_stub_pymethods)]
 #[pymethods]
 impl PyForestMol {
     #[new]
-    fn new(smiles: &str) -> PyResult<Self> {
+    fn new(smiles: &str) -> PyResult<PyForestMol> {
         Ok(Self::wrap(ForestMol::parse(smiles).map_err(py_err)?))
     }
 
@@ -112,21 +117,21 @@ impl PyForestMol {
         self.formula = None;
     }
 
-    fn copy(&self, py: Python<'_>) -> Self {
+    fn copy(&self, py: Python<'_>) -> PyForestMol {
         let mut out = Self::wrap(self.inner.copy_mol());
         out.csmi = self.csmi.as_ref().map(|s| s.clone_ref(py));
         out.formula = self.formula.as_ref().map(|f| f.clone_ref(py));
         out
     }
 
-    fn edit_copy(&self) -> Self {
+    fn edit_copy(&self) -> PyForestMol {
         Self::wrap(self.inner.edit_copy())
     }
 
     /// Chematic tautomer pick adopted with Forest tracing.
     ///
     /// Returns ``(ForestMol, changed)``.
-    fn normalize_tautomer(&self) -> PyResult<(Self, bool)> {
+    fn normalize_tautomer(&self) -> PyResult<(PyForestMol, bool)> {
         let out = self.inner.normalize_tautomer().map_err(py_err)?;
         Ok((Self::wrap(out.mol), out.changed))
     }
@@ -194,6 +199,7 @@ impl PyForestMol {
 ///
 /// Returns ``(mol, changed)`` where ``mol`` is a :class:`ForestMol` and
 /// ``changed`` is whether the form differed from the input.
+#[cfg_attr(feature = "stubs", gen_stub_pyfunction)]
 #[pyfunction]
 pub fn normalize_tautomer(smiles: &str) -> PyResult<(PyForestMol, bool)> {
     let out = crate::normalize_tautomer(smiles).map_err(py_err)?;

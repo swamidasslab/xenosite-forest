@@ -186,18 +186,27 @@ impl PathStep {
     }
 }
 
-/// One reactant→target hit.
+/// One reactant→target reach: an exact hit, or (from [`find_path_partial`])
+/// the closest non-exact walk.
 #[derive(Clone, Debug)]
 pub struct PathOutcome {
     pub steps: Vec<PathStep>,
     /// Elementary plan with precedes and cleavage [`Maybe`] (on the plan).
     pub plan: Deps,
-    /// Tagged mol at the hit (same tags as search walk).
+    /// Tagged mol at the reach (same tags as search walk).
     pub mol: ForestMol,
     pub smiles: String,
+    /// Leftover disagreement with the target. Zero (`cost == 0`) for exact
+    /// hits; only [`find_path_partial`] returns `cost > 0`.
+    pub residual: crate::atom_diff::AtomDiffResidual,
 }
 
 impl PathOutcome {
+    /// `residual.cost == 0`: reached the target.
+    pub fn is_exact(&self) -> bool {
+        self.residual.cost == 0
+    }
+
     /// Cleavage-side bags on the plan (Python `PathOutcome.maybe`).
     pub fn maybe(&self) -> &Maybe {
         self.plan.maybe()
@@ -1373,7 +1382,10 @@ where
 }
 
 /// Search for exact paths; if the budget is exhausted without filling `max_paths`,
-/// also return up to `max_paths` closest non-exact reaches (end-of-search flush).
+/// also return the closest non-exact reaches (end-of-search flush).
+///
+/// Same element type as [`find_path`]: exact hits first (`residual.cost == 0`),
+/// then partials by ascending `residual.cost`; at most `max_paths` in total.
 pub fn find_path_partial<R, T, K>(
     reactant: R,
     target: T,
@@ -1382,7 +1394,7 @@ pub fn find_path_partial<R, T, K>(
     config: FindPathConfig,
     network: Option<&mut MetabolicNetwork>,
     keep: K,
-) -> Result<FindPathPartialResult, ForestError>
+) -> Result<Vec<PathOutcome>, ForestError>
 where
     R: IntoForestMol,
     T: IntoForestMol,
@@ -1393,36 +1405,17 @@ where
     // via `stop_after_sealed_basins` (calibrate on +GSH — premature stop hurts closest).
     let mut iter =
         find_path_with_network(reactant, target, ruleset, counters, config, network, keep)?;
-    let exact = iter.by_ref().collect::<Result<Vec<_>, _>>()?;
-    let mut partials = std::mem::take(&mut iter.search.closest);
+    let mut out = iter.by_ref().collect::<Result<Vec<_>, _>>()?;
     // Prefer exact: if exact filled max_paths, drop partials.
-    if exact.len() >= max_paths {
-        partials.clear();
-    } else {
+    if out.len() < max_paths {
+        let mut partials = std::mem::take(&mut iter.search.closest);
         // Do not repeat an exact CSMI as a partial.
-        let exact_csmi: HashSet<&str> = exact.iter().map(|e| e.smiles.as_str()).collect();
+        let exact_csmi: HashSet<&str> = out.iter().map(|e| e.smiles.as_str()).collect();
         partials.retain(|p| !exact_csmi.contains(p.smiles.as_str()));
-        let room = max_paths.saturating_sub(exact.len());
-        partials.truncate(room);
+        partials.truncate(max_paths - out.len());
+        out.extend(partials);
     }
-    Ok(FindPathPartialResult { exact, partials })
-}
-
-/// Closest / stuck reach for [`find_path_partial`] (end-of-search flush).
-#[derive(Clone, Debug)]
-pub struct PartialOutcome {
-    pub steps: Vec<PathStep>,
-    pub plan: Deps,
-    pub mol: ForestMol,
-    pub smiles: String,
-    pub residual: crate::atom_diff::AtomDiffResidual,
-}
-
-/// Exact hits plus end-of-search partials from [`find_path_partial`].
-#[derive(Clone, Debug, Default)]
-pub struct FindPathPartialResult {
-    pub exact: Vec<PathOutcome>,
-    pub partials: Vec<PartialOutcome>,
+    Ok(out)
 }
 
 /// Shared heap / seen / enqueue state for [`FindPath`] and [`find_path_partial`].
@@ -1436,7 +1429,7 @@ struct PathSearch<'g> {
     deadline: Option<Instant>,
     network: Option<&'g mut MetabolicNetwork>,
     /// Top-k closest non-exact walks by residual cost (for partial flush).
-    closest: Vec<PartialOutcome>,
+    closest: Vec<PathOutcome>,
     /// Sealed residual class keys (hard anti-retread).
     sealed_classes: HashSet<String>,
 }
@@ -1528,7 +1521,7 @@ impl<'g> PathSearch<'g> {
             }
             return;
         }
-        let outcome = PartialOutcome {
+        let outcome = PathOutcome {
             steps: walk.steps.clone(),
             plan: as_deps(walk.plan.clone()).with_maybe(Maybe::new(walk.maybe.clone())),
             mol: walk.mol.clone(),
@@ -1861,6 +1854,7 @@ where
                     plan,
                     mol: walk.mol,
                     smiles: here.as_ref().to_string(),
+                    residual: Default::default(),
                 };
                 self.yielded.push(outcome.clone());
                 return Some(Ok(outcome));
@@ -2332,6 +2326,7 @@ where
                     plan,
                     mol: walk.mol,
                     smiles: here.as_ref().to_string(),
+                    residual: Default::default(),
                 };
                 self.yielded.push(outcome.clone());
                 return Some(Ok(outcome));
@@ -3024,9 +3019,14 @@ mod tests {
             |_| true,
         )
         .unwrap();
-        assert!(out.exact.is_empty(), "exact={:?}", out.exact);
-        assert!(!out.partials.is_empty(), "expected closest partials");
-        assert!(out.partials[0].residual.cost > 0);
+        assert!(!out.is_empty(), "expected closest partials");
+        assert!(out.iter().all(|o| !o.is_exact()), "exact={out:?}");
+        assert!(out[0].residual.cost > 0);
+        assert!(
+            out.windows(2)
+                .all(|w| w[0].residual.cost <= w[1].residual.cost),
+            "partials ascend by residual cost"
+        );
         assert!(net.n_nodes() >= 1);
         assert!(net.root_csmi.is_some());
     }
@@ -3043,12 +3043,9 @@ mod tests {
         let rules = hydroxylation();
         let out =
             find_path_partial("CC", "CCO", &rules, &mut counters, cfg, None, |_| true).unwrap();
-        assert_eq!(out.exact.len(), 1);
-        assert!(
-            out.partials.is_empty(),
-            "exact filled max_paths: {:?}",
-            out.partials
-        );
+        assert_eq!(out.len(), 1, "exact filled max_paths: {out:?}");
+        assert!(out[0].is_exact());
+        assert_eq!(out[0].residual.cost, 0);
     }
 
     #[allow(dead_code)]
@@ -3667,6 +3664,7 @@ mod tests {
             plan: short,
             mol: ForestMol::parse("C").unwrap(),
             smiles: "C".into(),
+            residual: Default::default(),
         }];
         let mut counters = PathCounters::default();
         record_yield_plan_signals(&mut counters, &found, &twin, true);
@@ -3712,6 +3710,7 @@ mod tests {
             plan: first,
             mol: ForestMol::parse("C").unwrap(),
             smiles: "C".into(),
+            residual: Default::default(),
         }];
         let mut counters = PathCounters::default();
         record_yield_plan_signals(&mut counters, &found, &twin, true);
